@@ -231,15 +231,16 @@ int stom(int scrx,int scry,int *mapx,int *mapy) {
 }
 
 int gui_keymode(void) {
+    SDL_Keymod km;
     int ret=0;
 
-    if (GetAsyncKeyState(VK_SHIFT)&0x8000) ret|=SDL_KEYM_SHIFT;
-    if (GetAsyncKeyState(VK_CONTROL)&0x8000) ret|=SDL_KEYM_CTRL;
-    if (GetAsyncKeyState(VK_MENU)&0x8000) ret|=SDL_KEYM_ALT;
+    km=SDL_GetModState();
+    if (km&KMOD_SHIFT) ret|=SDL_KEYM_SHIFT;
+    if (km&KMOD_CTRL) ret|=SDL_KEYM_CTRL;
+    if (km&KMOD_ALT) ret|=SDL_KEYM_ALT;
 
     return ret;
 }
-
 
 // dx
 

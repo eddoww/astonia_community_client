@@ -174,7 +174,8 @@ int sdl_init(int width,int height,char *title,int monitor) {
             "C:/Windows/Fonts/arial.ttf",             // Windows (forward slash)
             "/c/Windows/Fonts/arial.ttf",             // MSYS2 path
             "res/arial.ttf",                          // Local bundled font
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  // Linux
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",    // Arch Linux
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  // Debian/Ubuntu
             "/System/Library/Fonts/Helvetica.ttc",    // macOS
             NULL
         };

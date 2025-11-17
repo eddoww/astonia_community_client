@@ -1511,7 +1511,8 @@ void display_pents(void) {
 
             default:	continue;
         }
-        if (context_action_enabled()) yoff=30;
+        // Offset pent text if action bar UI exists (regardless of whether icons are visible)
+        if (game_options&GO_ACTION) yoff=30;
         else yoff=0;
         dd_drawtext(dotx(DOT_BOT)+550,doty(DOT_BOT)-80+n*10-yoff,col,DD_SMALL|DD_FRAME,pent_str[n]+1);
     }

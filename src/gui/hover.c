@@ -175,6 +175,27 @@ void hover_invalidate_con(int slot) {
     hi[slot+INVENTORYSIZE].valid_till=0;
 }
 
+// Check if we have a cached description and display it to chat
+// Returns 1 if description was shown from cache, 0 if not cached
+int hover_show_cached_desc(int slot) {
+    int n;
+
+    if (slot<0 || slot>=INVENTORYSIZE+CONTAINERSIZE) return 0;
+
+    // Check if we have a valid cached description
+    if (hi[slot].valid_till<tick) return 0;
+    if (hi[slot].cnt==0) return 0;
+
+    // Display the cached description to chat
+    for (n=0; n<hi[slot].cnt; n++) {
+        if (hi[slot].desc[n]) {
+            addline("%s",hi[slot].desc[n]);
+        }
+    }
+
+    return 1;
+}
+
 static int display_hover(void) {
     int n,i,col,x,sx,sy,slot;
     char buf[4];

@@ -298,6 +298,8 @@ static char *nicenumber(int n) {
 static int display_hover_skill(void) {
     int sx,sy,height=0,width=200,v;
     int v1,v2,v3,base=0,cap=0,offense=0,defense=0,speed=0,armor=0,weapon=0,raisecost=0,immune=0,spells=0,tactics=0,athlete=0,unused=-1;
+    int equip_bonus=0,next_raise_cost=0;
+    float exp_percentage=0.0f;
 
     if (capbut!=-1) return 0; //dont display hover when dragging scrollthumb
 
@@ -309,12 +311,22 @@ static int display_hover_skill(void) {
         v2=game_skill[v].base2;
         v3=game_skill[v].base3;
 
+        // Calculate equipment bonus (difference between current and base)
+        equip_bonus=value[0][v]-value[1][v];
+        if (equip_bonus!=0) height+=10;  // Add line for equipment bonus
+
         if (game_skill[v].cost && v!=V_DEMON) {
             raisecost=raise_cost(v,value[1][v]);
+            next_raise_cost=raise_cost(v,value[1][v]+1);
             height+=10;
             if (experience-experience_used>=0) {
                 unused=experience-experience_used;
                 height+=10;
+                // Calculate percentage to next raise
+                if (next_raise_cost>0 && unused<next_raise_cost) {
+                    exp_percentage=(float)unused/(float)next_raise_cost*100.0f;
+                    height+=10;  // Add line for percentage
+                }
             }
         }
 
@@ -395,6 +407,16 @@ static int display_hover_skill(void) {
 
         sy=dd_drawtext_break(sx+4,sy+4,sx+width-8,0xffff,0,game_skilldesc[v])+10;
 
+        // Show base and current values with equipment bonus
+        if (equip_bonus!=0) {
+            if (equip_bonus>0) {
+                dd_drawtext_fmt(sx+4,sy,0xffff,0,"Base: %d, Current: %d (+%d from equipment)",value[1][v],value[0][v],equip_bonus);
+            } else {
+                dd_drawtext_fmt(sx+4,sy,0xffff,0,"Base: %d, Current: %d (%d from equipment)",value[1][v],value[0][v],equip_bonus);
+            }
+            sy+=10;
+        }
+
         if (base) {
             if (cap && v!=V_SPEED)
                 dd_drawtext_fmt(sx+4,sy,0xffff,0,"Gets +%d from (%s+%s+%s) (capped at %d)",base,basename(v1),basename(v2),basename(v3),cap);
@@ -447,6 +469,11 @@ static int display_hover_skill(void) {
             if (unused>=0) {
                 dd_drawtext_fmt(sx+4,sy,0xffff,0,"You have %s unused exp",nicenumber(unused));
                 sy+=10;
+                // Show percentage progress to next raise
+                if (exp_percentage>0.0f) {
+                    dd_drawtext_fmt(sx+4,sy,0xffff,0,"Progress to next raise: %.1f%%",exp_percentage);
+                    sy+=10;
+                }
             }
         }
 

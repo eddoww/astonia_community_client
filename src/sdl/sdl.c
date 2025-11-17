@@ -108,6 +108,7 @@ int sdl_init(int width,int height,char *title) {
 
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH,"1");
     SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4,"1");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"1");  // Use linear filtering for smoother texture scaling
 
     SDL_GetCurrentDisplayMode(0, &DM);
 

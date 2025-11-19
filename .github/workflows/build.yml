@@ -1,0 +1,190 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Checkout LFS objects
+      run: git lfs pull
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          clang \
+          libsdl2-dev \
+          libsdl2-mixer-dev \
+          libpng-dev \
+          libzip-dev \
+          zlib1g-dev
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        cache: true
+
+    - name: Build
+      run: make linux
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-build
+        path: |
+          bin/moac
+          bin/libastonia_net.so
+          bin/convert
+          bin/anicopy
+        retention-days: 30
+        if-no-files-found: error
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Checkout LFS objects
+      run: git lfs pull
+
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: CLANG64
+        update: true
+        install: >-
+          mingw-w64-clang-x86_64-clang
+          mingw-w64-clang-x86_64-SDL2
+          mingw-w64-clang-x86_64-SDL2_mixer
+          mingw-w64-clang-x86_64-libpng
+          mingw-w64-clang-x86_64-libzip
+          mingw-w64-clang-x86_64-dwarfstack
+          make
+          zip
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        target: x86_64-pc-windows-gnu
+        cache: true
+
+    - name: Build
+      run: make windows
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build
+        path: |
+          bin/moac.exe
+          bin/astonia_net.dll
+          bin/convert.exe
+          bin/anicopy.exe
+        retention-days: 30
+        if-no-files-found: error
+
+  build-macos-intel:
+    name: Build macOS (Intel)
+    runs-on: macos-13
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Checkout LFS objects
+      run: git lfs pull
+
+    - name: Install dependencies
+      run: |
+        brew install sdl2 sdl2_mixer libpng libzip zlib
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        target: x86_64-apple-darwin
+        cache: true
+
+    - name: Build
+      run: make macos
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-intel-build
+        path: |
+          bin/moac
+          bin/libastonia_net.dylib
+          bin/convert
+          bin/anicopy
+        retention-days: 30
+        if-no-files-found: error
+
+  build-macos-arm:
+    name: Build macOS (Apple Silicon)
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Checkout LFS objects
+      run: git lfs pull
+
+    - name: Install dependencies
+      run: |
+        brew install sdl2 sdl2_mixer libpng libzip zlib
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        target: aarch64-apple-darwin
+        cache: true
+
+    - name: Build
+      run: make macos
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-arm-build
+        path: |
+          bin/moac
+          bin/libastonia_net.dylib
+          bin/convert
+          bin/anicopy
+        retention-days: 30
+        if-no-files-found: error

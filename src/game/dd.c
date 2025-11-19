@@ -920,7 +920,7 @@ void dd_sceweup(void) {
 }
 
 void dd_text_lineup(void) {
-    int oldest_line, newest_line_visible;
+    int oldest_line;
 
     // Can't scroll up if all lines fit on screen
     if (textlines<=TEXTDISPLAYLINES) return;

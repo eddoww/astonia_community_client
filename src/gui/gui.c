@@ -8,8 +8,7 @@
  *
  */
 
-#include <windows.h>
-#include <psapi.h>
+#include <inttypes.h>
 #include <time.h>
 #include <SDL2/SDL.h>
 
@@ -23,7 +22,7 @@
 
 uint64_t gui_time_misc=0;
 
-__declspec(dllexport) int game_slowdown=0;
+DLL_EXPORT int game_slowdown=0;
 
 #define MAXHELP		24
 #define MAXQUEST2	10
@@ -47,19 +46,19 @@ int show_look=0;
 
 int gui_topoff;     // offset of the top bar *above* the top of the window (0 ... -38)
 
-__declspec(dllexport) unsigned short int healthcolor,manacolor,endurancecolor,shieldcolor;
-__declspec(dllexport) unsigned short int whitecolor,lightgraycolor,graycolor,darkgraycolor,blackcolor;
-__declspec(dllexport) unsigned short int lightredcolor,redcolor,darkredcolor;
-__declspec(dllexport) unsigned short int lightgreencolor,greencolor,darkgreencolor;
-__declspec(dllexport) unsigned short int lightbluecolor,bluecolor,darkbluecolor;
-__declspec(dllexport) unsigned short int textcolor;
-__declspec(dllexport) unsigned short int lightorangecolor,orangecolor,darkorangecolor;
+DLL_EXPORT unsigned short int healthcolor,manacolor,endurancecolor,shieldcolor;
+DLL_EXPORT unsigned short int whitecolor,lightgraycolor,graycolor,darkgraycolor,blackcolor;
+DLL_EXPORT unsigned short int lightredcolor,redcolor,darkredcolor;
+DLL_EXPORT unsigned short int lightgreencolor,greencolor,darkgreencolor;
+DLL_EXPORT unsigned short int lightbluecolor,bluecolor,darkbluecolor;
+DLL_EXPORT unsigned short int textcolor;
+DLL_EXPORT unsigned short int lightorangecolor,orangecolor,darkorangecolor;
 
 unsigned int now;
 
 int cur_cursor=0;
 int mousex=300,mousey=300,vk_rbut,vk_lbut,shift_override=0,control_override=0;
-__declspec(dllexport) int vk_shift,vk_control,vk_alt;
+DLL_EXPORT int vk_shift,vk_control,vk_alt;
 int mousedx,mousedy;
 int vk_item,vk_char,vk_spell;
 
@@ -67,7 +66,7 @@ int vk_special=0,vk_special_time=0;
 
 // globals wea
 
-__declspec(dllexport) int weatab[12]={9,6,8,11,0,1,2,4,5,3,7,10};
+DLL_EXPORT int weatab[12]={9,6,8,11,0,1,2,4,5,3,7,10};
 char weaname[12][32]={"RING","HAND","HAND","RING","NECK","HEAD","BACK","BODY","BELT","ARMS","LEGS","FEET"};
 
 KEYTAB keytab[]={
@@ -167,9 +166,9 @@ int takegold;                   // the amout of gold to take
 char hitsel[256];               // something in the text (dx_drawtext()) is selected
 int hittype=0;
 
-__declspec(dllexport) SKLTAB *skltab=NULL;
+DLL_EXPORT SKLTAB *skltab=NULL;
 int skltab_max=0;
-__declspec(dllexport) int skltab_cnt=0;
+DLL_EXPORT int skltab_cnt=0;
 
 int invoff,max_invoff;
 int conoff,max_conoff;
@@ -231,15 +230,16 @@ int stom(int scrx,int scry,int *mapx,int *mapy) {
 }
 
 int gui_keymode(void) {
+    SDL_Keymod km;
     int ret=0;
 
-    if (GetAsyncKeyState(VK_SHIFT)&0x8000) ret|=SDL_KEYM_SHIFT;
-    if (GetAsyncKeyState(VK_CONTROL)&0x8000) ret|=SDL_KEYM_CTRL;
-    if (GetAsyncKeyState(VK_MENU)&0x8000) ret|=SDL_KEYM_ALT;
+    km=SDL_GetModState();
+    if (km&KMOD_SHIFT) ret|=SDL_KEYM_SHIFT;
+    if (km&KMOD_CTRL) ret|=SDL_KEYM_CTRL;
+    if (km&KMOD_ALT) ret|=SDL_KEYM_ALT;
 
     return ret;
 }
-
 
 // dx
 
@@ -260,7 +260,7 @@ void dx_copysprite_emerald(int scrx,int scry,int emx,int emy) {
 
 
 int (*do_display_help)(int)=_do_display_help;
-__declspec(dllexport) int _do_display_help(int nr) {
+DLL_EXPORT int _do_display_help(int nr) {
     int x=dotx(DOT_HLP)+10,y=doty(DOT_HLP)+8,oldy;
 
     switch (nr) {
@@ -555,6 +555,8 @@ void display_wheel(void) {
     dd_pop_clip();
 }
 
+size_t get_memory_usage(void);
+
 static void display(void) {
     extern int memptrs[MAX_MEM];
     extern int memsize[MAX_MEM];
@@ -653,14 +655,11 @@ display_graphs:
         //static int frame_min=99,frame_max=0,frame_step=0;
         //static int tick_min=99,tick_max=0,tick_step=0;
         int px=800-110,py=35+(!(game_options&GO_SMALLTOP) ? 0 : gui_topoff);
-        PROCESS_MEMORY_COUNTERS mi;
-
-        GetProcessMemoryInfo(GetCurrentProcess(),&mi,sizeof(mi));
 
         //dd_drawtext_fmt(px,py+=10,0xffff,DD_SMALL|DD_LEFT|DD_FRAME|DD_NOCACHE,"skip %3.0f%%",100.0*skip/tota);
         //dd_drawtext_fmt(px,py+=10,0xffff,DD_SMALL|DD_LEFT|DD_FRAME|DD_NOCACHE,"idle %3.0f%%",100.0*idle/tota);
         //dd_drawtext_fmt(px,py+=10,IRGB(8,31,8),DD_LEFT|DD_FRAME|DD_NOCACHE,"Tex: %5.2f MB",mem_tex/(1024.0*1024.0));
-        dd_drawtext_fmt(px,py+=10,IRGB(8,31,8),DD_LEFT|DD_FRAME|DD_NOCACHE,"Mem: %5.2f MB",mi.WorkingSetSize/(1024.0*1024.0));
+        dd_drawtext_fmt(px,py+=10,IRGB(8,31,8),DD_LEFT|DD_FRAME|DD_NOCACHE,"Mem: %5.2f MB",get_memory_usage()/(1024.0*1024.0));
 
 #if 0
         if (pre_in>=pre_3) size=pre_in-pre_3;
@@ -699,12 +698,12 @@ display_graphs:
         dd_drawtext_fmt(px,py+=10,IRGB(8,31,8),DD_NOCACHE|DD_LEFT|DD_FRAME,"TT %d %d",tick_min,tick_max);
 #endif
         size=gui_frametime/2;
-        dd_drawtext_fmt(px,py+=10,IRGB(8,31,8),DD_NOCACHE|DD_LEFT|DD_FRAME,"Frametime %lld",gui_frametime);
+        dd_drawtext_fmt(px,py+=10,IRGB(8,31,8),DD_NOCACHE|DD_LEFT|DD_FRAME,"Frametime %" PRId64,gui_frametime);
         sdl_bargraph_add(sizeof(pre2_graph),pre2_graph,size<42?size:42);
         sdl_bargraph(px,py+=40,sizeof(pre2_graph),pre2_graph,x_offset,y_offset);
 
         size=gui_ticktime/2;
-        dd_drawtext_fmt(px,py+=10,IRGB(8,31,8),DD_NOCACHE|DD_LEFT|DD_FRAME,"Ticktime %lld",gui_ticktime);
+        dd_drawtext_fmt(px,py+=10,IRGB(8,31,8),DD_NOCACHE|DD_LEFT|DD_FRAME,"Ticktime %" PRId64,gui_ticktime);
         sdl_bargraph_add(sizeof(pre3_graph),pre3_graph,size<42?size:42);
         sdl_bargraph(px,py+=40,sizeof(pre3_graph),pre3_graph,x_offset,y_offset);
 #if 0
@@ -944,7 +943,7 @@ void set_cmd_key_states(void) {
     vk_spell=vk_alt;
 }
 
-__declspec(dllexport) int get_near_ground(int x,int y) {
+DLL_EXPORT int get_near_ground(int x,int y) {
     int mapx,mapy;
 
     if (!stom(x,y,&mapx,&mapy)) return -1;
@@ -954,7 +953,7 @@ __declspec(dllexport) int get_near_ground(int x,int y) {
     return mapmn(mapx,mapy);
 }
 
-__declspec(dllexport) int get_near_item(int x,int y,int flag,int looksize) {
+DLL_EXPORT int get_near_item(int x,int y,int flag,int looksize) {
     int mapx,mapy,sx,sy,ex,ey,mn,scrx,scry,nearest=-1;
     double dist,nearestdist=100000000;
 
@@ -988,7 +987,7 @@ __declspec(dllexport) int get_near_item(int x,int y,int flag,int looksize) {
     return nearest;
 }
 
-__declspec(dllexport) int get_near_char(int x,int y,int looksize) {
+DLL_EXPORT int get_near_char(int x,int y,int looksize) {
     int mapx,mapy,sx,sy,ex,ey,mn,scrx,scry,nearest=-1;
     double dist,nearestdist=100000000;
 
@@ -1085,7 +1084,7 @@ static void set_conoff(int bymouse,int ny) {
 }
 
 int (*get_skltab_index)(int n)=_get_skltab_index;
-__declspec(dllexport) int _get_skltab_index(int n) {
+DLL_EXPORT int _get_skltab_index(int n) {
     static int itab[V_MAX+1]={
         -1,
         0,1,2,                          // powers
@@ -1105,12 +1104,12 @@ __declspec(dllexport) int _get_skltab_index(int n) {
 }
 
 int (*get_skltab_sep)(int i)=_get_skltab_sep;
-__declspec(dllexport)int _get_skltab_sep(int i) {
+DLL_EXPORT int _get_skltab_sep(int i) {
     return (i==0 || i==3 || i==7 || i==12 || i==17 || i==25 || i==28 || i==42 || i==43);
 }
 
 int (*get_skltab_show)(int i)=_get_skltab_show;
-__declspec(dllexport)int _get_skltab_show(int i) {
+DLL_EXPORT int _get_skltab_show(int i) {
     return (i==V_WEAPON || i==V_ARMOR || i==V_SPEED || i==V_LIGHT);
 }
 
@@ -1345,13 +1344,10 @@ static void set_cmd_states(void) {
 
     plrmn=mapmn(MAPDX/2,MAPDY/2);
 
-    sprintf(buf,"%s - Astonia 3 v%d.%d.%d - (%u.%u.%u.%u:%u)",
+    sprintf(buf,"%s - Astonia 3 v%d.%d.%d - (%s:%u)",
             (map[plrmn].cn && player[map[plrmn].cn].name[0])?player[map[plrmn].cn].name:"Someone",
             (VERSION>>16)&255,(VERSION>>8)&255,(VERSION)&255,
-            (target_server>>24)&255,
-            (target_server>>16)&255,
-            (target_server>>8)&255,
-            (target_server>>0)&255,
+            target_server,
             target_port);
     if (strcmp(title,buf)) {
         strcpy(title,buf);
@@ -1935,25 +1931,6 @@ void gui_sdl_keyproc(int wparam) {
     }
 }
 
-void gui_sdl_draghack(void) {
-    if (butsel!=-1 && (but[butsel].flags&BUTF_CAPTURE)) {
-        SDL_Event eventSink;
-        while (SDL_PollEvent(&eventSink)) { /*clear event queue*/ }
-
-        //Windows code to fix dragging bug with window inactive
-        INPUT input[2];
-        ZeroMemory(input, sizeof(input));
-
-        input[0].type=INPUT_MOUSE;
-        input[0].mi.dwFlags=MOUSEEVENTF_LEFTUP;
-
-        input[1].type=INPUT_MOUSE;
-        input[1].mi.dwFlags=MOUSEEVENTF_LEFTDOWN;
-
-        SendInput(2, input, sizeof(INPUT)); //note: SDL_PushEvent doesn't work
-    }
-}
-
 void gui_sdl_mouseproc(int x,int y,int what,int clicks) {
     int delta,tmp;
     static int mdown=0;
@@ -2207,7 +2184,8 @@ int calc_tick_delay_normal(int size) {
 
 int main_loop(void) {
     void prefetch_game(int attick);
-    int tmp,timediff,ltick=0,attick;
+    int64_t timediff;
+    int tmp,ltick=0,attick;
     long long start;
     int do_one_tick=1;
     uint64_t gui_last_frame=0,gui_last_tick=0;
@@ -2247,7 +2225,9 @@ int main_loop(void) {
                     cl_ticker();
                 }
                 amod_tick();
+                #ifdef ENABLE_SHAREDMEM
                 sharedmem_update();
+                #endif
             }
         }
 

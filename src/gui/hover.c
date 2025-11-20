@@ -5,7 +5,7 @@
  *
  * Displays mouse-over (hover) texts.
  *
- * Add "log_char(cn,LOG_SYSTEM,0,"°c5.");" to the very end of int look_item() in tool.c!
+ * Add "log_char(cn,LOG_SYSTEM,0,"ï¿½c5.");" to the very end of int look_item() in tool.c!
  *
  */
 
@@ -21,13 +21,13 @@
 #include "../../src/sdl.h"
 #include "../../src/modder.h"
 
-__declspec(dllexport) char hover_bless_text[120];
-__declspec(dllexport) char hover_freeze_text[120];
-__declspec(dllexport) char hover_potion_text[120];
-__declspec(dllexport) char hover_rage_text[120];
-__declspec(dllexport) char hover_level_text[120];
-__declspec(dllexport) char hover_rank_text[120];
-__declspec(dllexport) char hover_time_text[120];
+DLL_EXPORT char hover_bless_text[120];
+DLL_EXPORT char hover_freeze_text[120];
+DLL_EXPORT char hover_potion_text[120];
+DLL_EXPORT char hover_rage_text[120];
+DLL_EXPORT char hover_level_text[120];
+DLL_EXPORT char hover_rank_text[120];
+DLL_EXPORT char hover_time_text[120];
 
 static int display_hover(void);
 static void display_hover_update(void);
@@ -248,7 +248,6 @@ static int display_hover(void) {
 
 static void display_hover_update(void) {
     static int ivsel=-1,wsel=-1,csel=-1,ssel=-1,soff=0,ioff=0,coff=0;
-    int x,y,i,v;
 
     if (ivsel!=invsel || wsel!=weasel || csel!=consel || ssel!=sklsel2 ||
         soff!=skloff  || ioff!=invoff || coff!=conoff) {
@@ -275,7 +274,7 @@ int tactics2spell(int val) {
     return val*0.125;
 }
 
-static char *basename(int v) {
+static char *vbasename(int v) {
     switch (v) {
         case V_WIS: return "WIS";
         case V_INT: return "INT";
@@ -397,8 +396,8 @@ static int display_hover_skill(void) {
 
         if (base) {
             if (cap && v!=V_SPEED)
-                dd_drawtext_fmt(sx+4,sy,0xffff,0,"Gets +%d from (%s+%s+%s) (capped at %d)",base,basename(v1),basename(v2),basename(v3),cap);
-            else dd_drawtext_fmt(sx+4,sy,0xffff,0,"Gets +%d from (%s+%s+%s)",base,basename(v1),basename(v2),basename(v3));
+                dd_drawtext_fmt(sx+4,sy,0xffff,0,"Gets +%d from (%s+%s+%s) (capped at %d)",base,vbasename(v1),vbasename(v2),vbasename(v3),cap);
+            else dd_drawtext_fmt(sx+4,sy,0xffff,0,"Gets +%d from (%s+%s+%s)",base,vbasename(v1),vbasename(v2),vbasename(v3));
             sy+=10;
         }
         if (v==V_SPEED && value[0][V_SPEEDSKILL]) {

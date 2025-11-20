@@ -36,10 +36,10 @@
 
 struct ddfont; typedef struct ddfont DDFONT;
 
-extern int sdl_cache_size;
-extern int sdl_scale;
-extern int sdl_frames;
-extern int sdl_multi;
+DLL_EXPORT extern int sdl_cache_size;
+DLL_EXPORT extern int sdl_scale;
+DLL_EXPORT extern int sdl_frames;
+DLL_EXPORT extern int sdl_multi;
 
 extern int sound_volume;
 
@@ -71,7 +71,7 @@ void sdl_rect(int sx,int sy,int ex,int ey,unsigned short int color,int clipsx,in
 void sdl_shaded_rect(int sx,int sy,int ex,int ey,unsigned short int color,unsigned short alpha,int clipsx,int clipsy,int clipex,int clipey,int x_offset,int y_offset);
 void sdl_pixel(int x,int y,unsigned short color,int x_offset,int y_offset);
 void sdl_line(int fx,int fy,int tx,int ty,unsigned short color,int clipsx,int clipsy,int clipex,int clipey,int x_offset,int y_offset);
-uint32_t *sdl_load_png(char *filename,int *dx,int *dy);
+DLL_EXPORT uint32_t *sdl_load_png(char *filename,int *dx,int *dy);
 void sdl_set_title(char *title);
 void *sdl_create_texture(int width,int height);
 void sdl_render_copy(void *tex,void *sr,void *dr);
@@ -80,7 +80,9 @@ int sdl_tex_xres(int stx);
 int sdl_tex_yres(int stx);
 void sdl_render_circle(int32_t centreX, int32_t centreY, int32_t radius,uint32_t color);
 void sdl_flush_textinput(void);
+#ifdef DEVELOPER
 void sdl_dump_spritecache(void);
+#endif
 void sdl_tex_alpha(int stx,int alpha);
 int sdl_check_mouse(void);
 

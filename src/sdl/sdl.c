@@ -8,13 +8,15 @@
  *
  */
 
+#include <inttypes.h>
 #include <stdint.h>
-#include <fcntl.h>
+#include <stdio.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 #include <png.h>
 #include <zip.h>
 
+#include "../../src/dll.h"
 #include "../../src/astonia.h"
 #include "../../src/sdl.h"
 #include "../../src/sdl/_sdl.h"
@@ -47,10 +49,10 @@ long long sdl_time_pre1=0;
 long long sdl_time_pre2=0;
 long long sdl_time_pre3=0;
 
-__declspec(dllexport) int sdl_scale=1;
-__declspec(dllexport) int sdl_frames=0;
-__declspec(dllexport) int sdl_multi=4;
-__declspec(dllexport) int sdl_cache_size=8000;
+DLL_EXPORT int sdl_scale=1;
+DLL_EXPORT int sdl_frames=0;
+DLL_EXPORT int sdl_multi=4;
+DLL_EXPORT int sdl_cache_size=8000;
 
 static zip_t *sdl_zip1=NULL;
 static zip_t *sdl_zip2=NULL;
@@ -64,7 +66,7 @@ static zip_t *sdl_zip2m=NULL;
 static SDL_sem *prework=NULL;
 static SDL_mutex *premutex=NULL;
 
-__declspec(dllexport) int __yres=YRES0;
+DLL_EXPORT int __yres=YRES0;
 
 static int sdlm_sprite=0;
 static int sdlm_scale=0;
@@ -138,16 +140,16 @@ int sdl_init(int width,int height,char *title) {
     }
 
     len=sizeof(struct sdl_image)*MAXSPRITE;
-    sdli=xcalloc(len*1,MEM_SDL_BASE);
+    sdli=xmalloc(len*1,MEM_SDL_BASE);
     if (!sdli) return fail("Out of memory in sdl_init");
 
-    sdlt_cache=xcalloc(MAX_TEXHASH*sizeof(int),MEM_SDL_BASE);
+    sdlt_cache=xmalloc(MAX_TEXHASH*sizeof(int),MEM_SDL_BASE);
     if (!sdlt_cache) return fail("Out of memory in sdl_init");
 
     for (i=0; i<MAX_TEXHASH; i++)
         sdlt_cache[i]=STX_NONE;
 
-    sdlt=xcalloc(MAX_TEXCACHE*sizeof(struct sdl_texture),MEM_SDL_BASE);
+    sdlt=xmalloc(MAX_TEXCACHE*sizeof(struct sdl_texture),MEM_SDL_BASE);
     if (!sdlt) return fail("Out of memory in sdl_init");
 
     for (i=0; i<MAX_TEXCACHE; i++) {
@@ -198,7 +200,7 @@ int sdl_init(int width,int height,char *title) {
         else if (YRES>=580) game_options=GO_DEFAULTS|GO_SMALLBOT;
         else game_options=GO_DEFAULTS|GO_SMALLBOT|GO_SMALLTOP;
     }
-    note("SDL using %dx%d scale %d, options=%llu",XRES,YRES,sdl_scale,game_options);
+    note("SDL using %dx%d scale %d, options=%" PRIu64,XRES,YRES,sdl_scale,game_options);
 
     sdl_create_cursors();
 
@@ -408,7 +410,7 @@ struct png_helper {
     png_infop info_ptr;
 };
 
-void png_helper_read(png_struct *ps,unsigned char *buf,long long unsigned len) {
+void png_helper_read(png_structp ps,png_bytep buf,png_size_t len) {
     zip_fread(png_get_io_ptr(ps),buf,len);
 }
 
@@ -1782,7 +1784,7 @@ SDL_Texture *sdl_maketext(const char *text,struct ddfont *font,uint32_t color,in
 #ifdef SDL_FAST_MALLOC
     pixel=calloc(sizex*MAXFONTHEIGHT,sizeof(uint32_t));
 #else
-    pixel=xcalloc(sizex*MAXFONTHEIGHT*sizeof(uint32_t),MEM_SDL_PIXEL2);
+    pixel=xmalloc(sizex*MAXFONTHEIGHT*sizeof(uint32_t),MEM_SDL_PIXEL2);
 #endif
     if (pixel==NULL) return NULL;
 
@@ -1877,7 +1879,7 @@ void sdl_dump_spritecache(void) {
 
     qsort(dumpidx,MAX_TEXCACHE,sizeof(int),dump_cmp);
 
-    if (game_options&GO_APPDATA) sprintf(filename,"%s\\Astonia\\%s",localdata,"sdlt.txt");
+    if (localdata) sprintf(filename,"%s%s",localdata,"sdlt.txt");
     else sprintf(filename,"%s","sdlt.txt");
     fp=fopen(filename,"w");
 
@@ -2185,13 +2187,15 @@ void sdl_loop(void) {
                 gui_sdl_mouseproc(event.wheel.x,event.wheel.y,SDL_MOUM_WHEEL,0);
                 break;
             case SDL_WINDOWEVENT:
+                #ifdef ENABLE_DRAGHACK
                 if (event.window.event==SDL_WINDOWEVENT_FOCUS_GAINED) {
                     int x, y;
                     Uint32 mouseState = SDL_GetMouseState(&x, &y);
                     if (mouseState&SDL_BUTTON(SDL_BUTTON_LEFT)) {
-                        gui_sdl_draghack();                        
+                        gui_sdl_draghack();
                     }
                 }
+                #endif
                 break;
         }
     }
@@ -2222,7 +2226,7 @@ int sdlt_yres(int stx) {
     return sdlt[stx].yres;
 }
 
-uint32_t *sdl_load_png(char *filename,int *dx,int *dy) {
+DLL_EXPORT uint32_t *sdl_load_png(char *filename,int *dx,int *dy) {
     int x,y,xres,yres,tmp,r,g,b,a;
     int format;
     unsigned char **row;
@@ -2311,21 +2315,21 @@ uint32_t *sdl_load_png(char *filename,int *dx,int *dy) {
    Windows cursor file: 32x32 pixels with 1 bit depth. */
 
 SDL_Cursor *sdl_create_cursor(char *filename) {
-    int handle;
+    FILE *fp;
     unsigned char mask[128],data[128],buf[326];
     unsigned char mask2[128*16],data2[128*16];
 
-    handle=open(filename,O_RDONLY|O_BINARY);
-    if (handle==-1) {
+    fp=fopen(filename,"rb");
+    if (!fp) {
         warn("SDL Error: Could not open cursor file %s.\n",filename);
         return NULL;
     }
 
-    if (read(handle,buf,326)!=326) {
+    if (fread(buf,1,326,fp)!=326) {
         warn("SDL Error: Read cursor file failed.\n");
         return NULL;
     }
-    close(handle);
+    fclose(fp);
 
     // translate .cur
     for (int i=0; i<32; i++) {

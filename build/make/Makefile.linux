@@ -7,7 +7,12 @@ DEBUG=-gdwarf-4
 SDL_CFLAGS=$(shell $(SDL_CONFIG) --cflags)
 CFLAGS=$(OPT) $(DEBUG) -Wall -Wno-pointer-sign -Wno-char-subscripts -fno-omit-frame-pointer -fvisibility=hidden $(SDL_CFLAGS) -Iinclude -Isrc
 CFLAGS_PIC=$(OPT) $(DEBUG) -Wall -Wno-pointer-sign -Wno-char-subscripts -fPIC -fno-omit-frame-pointer -fvisibility=hidden $(SDL_CFLAGS) -Iinclude -Isrc
-LDFLAGS=$(OPT) $(DEBUG) -rdynamic -Wl,-rpath,\$$ORIGIN
+# Allow building for system libraries (e.g., for package managers)
+ifdef SYSTEM_LIBS
+    LDFLAGS=$(OPT) $(DEBUG) -rdynamic
+else
+    LDFLAGS=$(OPT) $(DEBUG) -rdynamic -Wl,-rpath,\$$ORIGIN
+endif
 
 SDL_LIBS=$(shell $(SDL_CONFIG) --libs)
 LIBS = -lz -lpng -lzip $(SDL_LIBS) -lSDL2_mixer -lm

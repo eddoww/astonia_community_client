@@ -84,14 +84,14 @@ int sharedmem_init(void)
 	sm->pid = pid;
 	random_dungeon_tracker();
 #if 0
-    printf("base: %p\n",sm->base);
-    printf("key: %d\n",sm->key);
-    printf("isprite: %d\n",sm->isprite);
-    printf("offX: %d\n",sm->offX);
-    printf("offY: %d\n",sm->offY);
-    printf("flags: %d\n",sm->flags);
-    printf("fsprite: %d\n",sm->fsprite);
-    printf("swapped: %d\n",sm->swapped);
+	printf("base: %p\n",sm->base);
+	printf("key: %d\n",sm->key);
+	printf("isprite: %d\n",sm->isprite);
+	printf("offX: %d\n",sm->offX);
+	printf("offY: %d\n",sm->offY);
+	printf("flags: %d\n",sm->flags);
+	printf("fsprite: %d\n",sm->fsprite);
+	printf("swapped: %d\n",sm->swapped);
 #endif
 	return 0;
 }

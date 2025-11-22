@@ -118,8 +118,6 @@ static int textlength(char *text)
 
 int hover_capture_text(char *line)
 {
-	int len;
-
 	while (isspace(*line))
 		line++;
 
@@ -154,7 +152,7 @@ int hover_capture_text(char *line)
 	}
 
 	if (capture) {
-		len = textlength(line);
+		int len = textlength(line);
 		hi[last_invsel].valid_till = tick + MAXVALID;
 		hi[last_invsel].desc[last_line++] = xstrdup(line, MEM_TEMP11);
 		hi[last_invsel].cnt = last_line;
@@ -200,8 +198,8 @@ void hover_invalidate_con(int slot)
 
 static int display_hover(void)
 {
-	int n, i, col, x, sx, sy, slot;
 	char buf[4];
+	int slot;
 
 	if (invsel == -1) {
 		if (weasel == -1) {
@@ -222,12 +220,13 @@ static int display_hover(void)
 		// this would prevent idle logout
 		hi[slot].valid_till = max(hi[slot].valid_till, tick + TICKS);
 
-		sx = mousex - hi[slot].width / 2;
+		int sx = mousex - hi[slot].width / 2;
 		if (sx < dotx(DOT_TL))
 			sx = dotx(DOT_TL);
 		if (sx > dotx(DOT_BR) - hi[slot].width - 8)
 			sx = dotx(DOT_BR) - hi[slot].width - 8;
 
+		int sy;
 		if (mousey < YRES / 2)
 			sy = mousey + 16;
 		else
@@ -239,11 +238,11 @@ static int display_hover(void)
 
 		dd_shaded_rect(sx, sy, sx + hi[slot].width + 8, sy + hi[slot].cnt * 10 + 8, 0x0000, 150);
 
-		for (n = 0; n < hi[slot].cnt; n++) {
-			x = sx + 4;
-			col = IRGB(24, 24, 24);
+		for (int n = 0; n < hi[slot].cnt; n++) {
+			int x = sx + 4;
+			int col = IRGB(24, 24, 24);
 
-			for (i = 0; hi[slot].desc[n][i]; i++) {
+			for (int i = 0; hi[slot].desc[n][i]; i++) {
 				if (hi[slot].desc[n][i] == DDT) {
 					if (hi[slot].desc[n][i + 1] == 'c') {
 						if (isdigit(hi[slot].desc[n][i + 2])) {
@@ -278,7 +277,7 @@ static int display_hover(void)
 			last_line = 0;
 			last_look = 20;
 			last_invsel = slot;
-			for (i = 0; i < MAXDESC; i++)
+			for (int i = 0; i < MAXDESC; i++)
 				if (hi[slot].desc[i]) {
 					xfree(hi[slot].desc[i]);
 					hi[slot].desc[i] = NULL;
@@ -353,21 +352,21 @@ static char *nicenumber(int n)
 
 static int display_hover_skill(void)
 {
-	int sx, sy, height = 0, width = 200, v;
-	int v1, v2, v3, base = 0, cap = 0, offense = 0, defense = 0, speed = 0, armor = 0, weapon = 0, raisecost = 0,
-	                immune = 0, spells = 0, tactics = 0, athlete = 0, unused = -1;
-
 	if (capbut != -1)
 		return 0; // dont display hover when dragging scrollthumb
 
 	if (skltab && sklsel2 != -1 && tick - last_tick > HOVER_DELAY) {
-		v = skltab[sklsel2 + skloff].v;
+		int height = 0, width = 200;
+		int base = 0, cap = 0, offense = 0, defense = 0, speed = 0, armor = 0, weapon = 0, raisecost = 0;
+		int immune = 0, spells = 0, tactics = 0, athlete = 0, unused = -1;
+
+		int v = skltab[sklsel2 + skloff].v;
 		if (v < 0 || v >= *game_v_max)
 			return 0;
 
-		v1 = game_skill[v].base1;
-		v2 = game_skill[v].base2;
-		v3 = game_skill[v].base3;
+		int v1 = game_skill[v].base1;
+		int v2 = game_skill[v].base2;
+		int v3 = game_skill[v].base3;
 
 		if (game_skill[v].cost && v != V_DEMON) {
 			raisecost = raise_cost(v, value[1][v]);
@@ -447,13 +446,13 @@ static int display_hover_skill(void)
 
 		height += dd_drawtext_break_length(0, 0, width - 12, 0xffff, 0, game_skilldesc[v]);
 
-		sx = mousex + 8;
+		int sx = mousex + 8;
 		if (sx < dotx(DOT_TL))
 			sx = dotx(DOT_TL);
 		if (sx > dotx(DOT_BR) - width - 8)
 			sx = dotx(DOT_BR) - width - 8;
 
-		sy = mousey - height / 2 - 4;
+		int sy = mousey - height / 2 - 4;
 		if (sy < doty(DOT_TL))
 			sy = doty(DOT_TL);
 		if (sy > doty(DOT_BR) - height - 8)
@@ -517,7 +516,6 @@ static int display_hover_skill(void)
 			sy += 10;
 			if (unused >= 0) {
 				dd_drawtext_fmt(sx + 4, sy, 0xffff, 0, "You have %s unused exp", nicenumber(unused));
-				sy += 10;
 			}
 		}
 

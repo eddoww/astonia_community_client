@@ -701,10 +701,10 @@ static void set_map_cut(struct map *cmap)
 
 void set_map_straight(struct map *cmap)
 {
-	int i, mn, mna, vl, vr, vt, vb, wl, wr, wt, wb;
+	int i, mna, vl, vr, vt, vb, wl, wr, wt, wb;
 
 	for (i = 0; i < maxquick; i++) {
-		mn = quick[i].mn[4];
+		int mn = quick[i].mn[4];
 
 		if (!cmap[mn].rlight)
 			continue;
@@ -826,20 +826,19 @@ static int trans_y(int frx, int fry, int tox, int toy, int step, int start)
 
 static void display_game_spells(void)
 {
-	int i, mn, scrx, scry, x, y, dx, sprite, start;
+	int i, x, y, dx, sprite, start;
 	int nr, fn, e;
 	int mapx, mapy, mna, x1, y1, x2, y2, h1, h2, size, n;
 	DL *dl;
-	int light;
 	float alpha;
 
 	start = SDL_GetTicks();
 
 	for (i = 0; i < maxquick; i++) {
-		mn = quick[i].mn[4];
-		scrx = mapaddx + quick[i].cx;
-		scry = mapaddy + quick[i].cy;
-		light = map[mn].rlight;
+		int mn = quick[i].mn[4];
+		int scrx = mapaddx + quick[i].cx;
+		int scry = mapaddy + quick[i].cy;
+		int light = map[mn].rlight;
 
 		if (!light)
 			continue;
@@ -1298,7 +1297,7 @@ static char *roman(int nr)
 
 static void display_game_names(void)
 {
-	int i, mn, scrx, scry, x, y, col, frame;
+	int i, x, y, col, frame;
 	char *sign;
 	unsigned short clancolor[33];
 
@@ -1339,9 +1338,9 @@ static void display_game_names(void)
 	clancolor[32] = IRGB(31, 8, 31);
 
 	for (i = 0; i < maxquick; i++) {
-		mn = quick[i].mn[4];
-		scrx = mapaddx + quick[i].cx;
-		scry = mapaddy + quick[i].cy;
+		int mn = quick[i].mn[4];
+		int scrx = mapaddx + quick[i].cx;
+		int scry = mapaddy + quick[i].cy;
 
 		if (!map[mn].rlight)
 			continue;
@@ -1408,12 +1407,10 @@ static void display_game_names(void)
 
 static void display_game_act(void)
 {
-	int mn, scrx, scry, mapx, mapy;
-	char *actstr;
 	int acttyp;
 
 	// act
-	actstr = NULL;
+	const char *actstr = NULL;
 
 	switch (act) {
 	case PAC_MOVE:
@@ -1489,9 +1486,10 @@ static void display_game_act(void)
 	}
 
 	if (acttyp != -1 && actstr) {
-		mn = mapmn(actx - originx + MAPDX / 2, acty - originy + MAPDY / 2);
-		mapx = mn % MAPDX;
-		mapy = mn / MAPDX;
+		int mn = mapmn(actx - originx + MAPDX / 2, acty - originy + MAPDY / 2);
+		int mapx = mn % MAPDX;
+		int mapy = mn / MAPDX;
+		int scrx, scry;
 		mtos(mapx, mapy, &scrx, &scry);
 		if (acttyp == 0)
 			dl_next_set(GNDSEL_LAY, 5, scrx, scry, DDFX_NLIGHT);
@@ -1812,15 +1810,15 @@ void display_game_map(struct map *cmap)
 
 
 #if 0
-            // Disabled shaded lighting for items. It is often wrong and needs re-doing
-            if ((mna=quick[i].mn[3])!=0 && (cmap[mna].rlight)) dl->ddfx.ll=cmap[mna].rlight;
-            else dl->ddfx.ll=light;
-            if ((mna=quick[i].mn[5])!=0 && (cmap[mna].rlight)) dl->ddfx.rl=cmap[mna].rlight;
-            else dl->ddfx.rl=light;
-            if ((mna=quick[i].mn[1])!=0 && (cmap[mna].rlight)) dl->ddfx.ul=cmap[mna].rlight;
-            else dl->ddfx.ul=light;
-            if ((mna=quick[i].mn[7])!=0 && (cmap[mna].rlight)) dl->ddfx.dl=cmap[mna].rlight;
-            else dl->ddfx.dl=light;
+	        // Disabled shaded lighting for items. It is often wrong and needs re-doing
+	        if ((mna=quick[i].mn[3])!=0 && (cmap[mna].rlight)) dl->ddfx.ll=cmap[mna].rlight;
+	        else dl->ddfx.ll=light;
+	        if ((mna=quick[i].mn[5])!=0 && (cmap[mna].rlight)) dl->ddfx.rl=cmap[mna].rlight;
+	        else dl->ddfx.rl=light;
+	        if ((mna=quick[i].mn[1])!=0 && (cmap[mna].rlight)) dl->ddfx.ul=cmap[mna].rlight;
+	        else dl->ddfx.ul=light;
+	        if ((mna=quick[i].mn[7])!=0 && (cmap[mna].rlight)) dl->ddfx.dl=cmap[mna].rlight;
+	        else dl->ddfx.dl=light;
 #else
 			dl->ddfx.ll = dl->ddfx.rl = dl->ddfx.ul = dl->ddfx.dl = dl->ddfx.ml;
 #endif

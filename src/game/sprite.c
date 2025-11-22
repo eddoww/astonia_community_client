@@ -780,7 +780,7 @@ DLL_EXPORT int _is_mov_sprite(int sprite, int itemhint)
 	case 20153:
 	case 20154:
 	case 20155: // poor wood door
-		// case 20423: case 20424: case 20425: case 20426:         // funstuff_cdoor
+	            // case 20423: case 20424: case 20425: case 20426:         // funstuff_cdoor
 	case 20429:
 	case 20430:
 	case 20431:
@@ -3738,7 +3738,7 @@ DLL_EXPORT int _trans_asprite(int mn, int sprite, int attick, unsigned char *psc
 		sprite = sprite + 21302 - 59054;
 		cr = 10;
 		light = -20;
-		break; // krüge
+		break; // krÃ¼ge
 
 	case 59068:
 	case 59069:
@@ -3757,7 +3757,7 @@ DLL_EXPORT int _trans_asprite(int mn, int sprite, int attick, unsigned char *psc
 		sprite = sprite + 21302 - 59068;
 		cr = 15;
 		light = -30;
-		break; // krüge
+		break; // krÃ¼ge
 
 	case 59082:
 	case 59083:

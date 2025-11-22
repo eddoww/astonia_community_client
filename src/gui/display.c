@@ -39,18 +39,17 @@ void display_wear_lock(void)
 }
 void display_wear(void)
 {
-	int b, i, x, y, yt;
+	int b;
 	unsigned int sprite;
 	unsigned short c1, c2, c3, shine;
 	unsigned char scale, cr, cg, cb, light, sat;
 	DDFX fx;
 
 	for (b = BUT_WEA_BEG; b <= BUT_WEA_END; b++) {
-		i = b - BUT_WEA_BEG;
-
-		x = butx(b);
-		y = buty(b);
-		yt = y + 23;
+		int i = b - BUT_WEA_BEG;
+		int x = butx(b);
+		int y = buty(b);
+		int yt = y + 23;
 
 		dd_copysprite(opt_sprite(SPR_ITPAD), x, y, DDFX_NLIGHT, DD_CENTER);
 		if (i == weasel)
@@ -122,20 +121,18 @@ void display_wear(void)
 
 void display_look(void)
 {
-	int b, i, x, y; //,yt;
+	int b;
 	unsigned int sprite;
 	unsigned short c1, c2, c3, shine;
 	unsigned char scale, cr, cg, cb, light, sat;
 	DDFX fx;
-	static int look_anim = 4, look_step = 0, look_dir = 0;
 
 	dd_copysprite(opt_sprite(994), dotx(DOT_LOK), doty(DOT_LOK), DDFX_NLIGHT, DD_NORMAL);
 
 	for (b = BUT_WEA_BEG; b <= BUT_WEA_END; b++) {
-		i = b - BUT_WEA_BEG;
-
-		x = dotx(DOT_LOK) + but[b].x - dotx(DOT_WEA) + 30;
-		y = doty(DOT_LOK) + 20;
+		int i = b - BUT_WEA_BEG;
+		int x = dotx(DOT_LOK) + but[b].x - dotx(DOT_WEA) + 30;
+		int y = doty(DOT_LOK) + 20;
 
 		dd_copysprite(opt_sprite(SPR_ITPAD), x, y, DDFX_NLIGHT, DD_CENTER);
 		if (lookinv[weatab[i]]) {
@@ -164,13 +161,15 @@ void display_look(void)
 	dd_drawtext_break(dotx(DOT_LOK) + 70, doty(DOT_LOK) + 60, dotx(DOT_LOK) + 270, 0xffff, DD_LEFT, look_desc);
 
 	{
-		int csprite, scale, cr, cg, cb, light, sat, c1, c2, c3, shine;
+		static int look_anim = 4, look_step = 0, look_dir = 0;
+		int l_csprite, l_scale, l_cr, l_cg, l_cb, l_light, l_sat, l_c1, l_c2, l_c3, l_shine;
 
 		bzero(&fx, sizeof(fx));
 
-		csprite = trans_charno(looksprite, &scale, &cr, &cg, &cb, &light, &sat, &c1, &c2, &c3, &shine, tick);
+		l_csprite = trans_charno(
+		    looksprite, &l_scale, &l_cr, &l_cg, &l_cb, &l_light, &l_sat, &l_c1, &l_c2, &l_c3, &l_shine, tick);
 
-		fx.sprite = get_player_sprite(csprite, look_dir, look_anim, look_step, 16, tick);
+		fx.sprite = get_player_sprite(l_csprite, look_dir, look_anim, look_step, 16, tick);
 		look_step++;
 		if (look_step == 16) {
 			look_step = 0;
@@ -182,22 +181,22 @@ void display_look(void)
 					look_dir = 0;
 			}
 		}
-		fx.scale = scale;
-		fx.shine = shine;
-		fx.cr = cr;
-		fx.cg = cg;
-		fx.cb = cb;
-		fx.clight = light;
-		fx.sat = sat;
+		fx.scale = l_scale;
+		fx.shine = l_shine;
+		fx.cr = l_cr;
+		fx.cg = l_cg;
+		fx.cb = l_cb;
+		fx.clight = l_light;
+		fx.sat = l_sat;
 
 		if (looksprite < 120 || amod_is_playersprite(looksprite)) {
 			fx.c1 = lookc1;
 			fx.c2 = lookc2;
 			fx.c3 = lookc3;
 		} else {
-			fx.c1 = c1;
-			fx.c2 = c2;
-			fx.c3 = c3;
+			fx.c1 = l_c1;
+			fx.c2 = l_c2;
+			fx.c3 = l_c3;
 		}
 		fx.sink = 0;
 		fx.align = DD_OFFSET;
@@ -208,8 +207,7 @@ void display_look(void)
 
 void display_inventory(void)
 {
-	int b, i, x, y, yt;
-	int c; // ,fkey[4];
+	int b;
 	static char *fstr[4] = {"F1", "F2", "F3", "F4"};
 	unsigned int sprite;
 	unsigned short c1, c2, c3, shine;
@@ -219,14 +217,13 @@ void display_inventory(void)
 	// fkey[0]=fkey[1]=fkey[2]=fkey[3]=0;
 
 	for (b = BUT_INV_BEG; b <= BUT_INV_END; b++) {
-		i = 30 + invoff * INVDX + b - BUT_INV_BEG;
-		c = (i - 2) % 4;
-
-		x = butx(b);
-		y = buty(b);
+		int i = 30 + invoff * INVDX + b - BUT_INV_BEG;
+		int c = (i - 2) % 4;
+		int x = butx(b);
+		int y = buty(b);
 		if (y > doty(DOT_IN2) - 20)
 			break;
-		yt = y + 12;
+		int yt = y + 12;
 
 		dd_copysprite(opt_sprite(SPR_ITPAD), x, y, DDFX_NLIGHT, DD_CENTER);
 		if (i == invsel)
@@ -264,8 +261,7 @@ void display_inventory(void)
 
 void display_container(void)
 {
-	int b, i, x, y, yt;
-	unsigned short int color;
+	int b;
 	unsigned int sprite;
 	unsigned short c1, c2, c3, shine;
 	unsigned char scale, cr, cg, cb, light, sat;
@@ -278,11 +274,11 @@ void display_container(void)
 		dd_drawtext_fmt(dot[DOT_CON].x, dot[DOT_CON].y - 50 + 2, textcolor, DD_LEFT | DD_LARGE, "%s's Shop", con_name);
 
 	for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
-		i = conoff * CONDX + b - BUT_CON_BEG;
-
-		x = butx(b);
-		y = buty(b);
-		yt = y + 12;
+		int i = conoff * CONDX + b - BUT_CON_BEG;
+		int x = butx(b);
+		int y = buty(b);
+		int yt = y + 12;
+		unsigned short int color;
 
 		dd_copysprite(opt_sprite(SPR_ITPAD), x, y, DDFX_NLIGHT, DD_CENTER);
 		if (i == consel)
@@ -423,20 +419,19 @@ void display_scrollbars(void)
 
 void display_skill(void)
 {
-	int b, i, x, y, yt, bsx, bex, bsy, barsize, cn;
+	int b;
 	char buf[256];
-
-	cn = map[MAPDX * MAPDY / 2].cn;
+	int cn = map[MAPDX * MAPDY / 2].cn;
 
 	for (b = BUT_SKL_BEG; b <= BUT_SKL_END; b++) {
-		i = skloff + b - BUT_SKL_BEG;
-
-		x = butx(b);
-		y = buty(b);
-		yt = y - 4;
-		bsx = x + 10;
-		bex = x + SKLWIDTH;
-		bsy = y + 4;
+		int i = skloff + b - BUT_SKL_BEG;
+		int x = butx(b);
+		int y = buty(b);
+		int yt = y - 4;
+		int bsx = x + 10;
+		int bex = x + SKLWIDTH;
+		int bsy = y + 4;
+		int barsize;
 
 		if (y + 4 > doty(DOT_SK2))
 			continue;
@@ -544,8 +539,8 @@ void display_keys(void)
 
 void display_tutor(void)
 {
-	int x, y, n, mx = dotx(DOT_TUT) + 406, my = doty(DOT_TUT) + 80;
-	char *ptr, buf[80];
+	int mx = dotx(DOT_TUT) + 406, my = doty(DOT_TUT) + 80;
+	char buf[80];
 
 	if (!show_tutor)
 		return;
@@ -557,9 +552,9 @@ void display_tutor(void)
 	dd_line(dotx(DOT_TUT), doty(DOT_TUT) + 90, dotx(DOT_TUT) + 410, doty(DOT_TUT) + 90, IRGB(12, 10, 4));
 	dd_line(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT), doty(DOT_TUT) + 90, IRGB(12, 10, 4));
 
-	x = dotx(DOT_TUT) + 6;
-	y = doty(DOT_TUT) + 4;
-	ptr = tutor_text;
+	int x = dotx(DOT_TUT) + 6;
+	int y = doty(DOT_TUT) + 4;
+	const char *ptr = tutor_text;
 	while (*ptr) {
 		while (*ptr == ' ')
 			ptr++;
@@ -572,7 +567,7 @@ void display_tutor(void)
 		}
 		while (*ptr == ' ')
 			ptr++;
-		n = 0;
+		int n = 0;
 		while (*ptr && *ptr != ' ' && *ptr != '$' && n < 79)
 			buf[n++] = *ptr++;
 		buf[n] = 0;
@@ -692,9 +687,7 @@ void display_mode(void)
 
 void display_selfspells(void)
 {
-	int n, nr, cn, step;
-
-	cn = map[mapmn(MAPDX / 2, MAPDY / 2)].cn;
+	int cn = map[mapmn(MAPDX / 2, MAPDY / 2)].cn;
 	if (!cn)
 		return;
 
@@ -702,14 +695,14 @@ void display_selfspells(void)
 	sprintf(hover_freeze_text, "Freeze: Not active");
 	sprintf(hover_potion_text, "Potion: Not active");
 
-	for (n = 0; n < 4; n++) {
-		nr = find_cn_ceffect(cn, n);
+	for (int n = 0; n < 4; n++) {
+		int nr = find_cn_ceffect(cn, n);
 		if (nr == -1)
 			continue;
 
 		switch (ceffect[nr].generic.type) {
-		case 9:
-			step = 50 - 50 * (ceffect[nr].bless.stop - tick) / (ceffect[nr].bless.stop - ceffect[nr].bless.start);
+		case 9: {
+			int step = 50 - 50 * (ceffect[nr].bless.stop - tick) / (ceffect[nr].bless.stop - ceffect[nr].bless.start);
 			dd_push_clip();
 			dd_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
 			if (ceffect[nr].bless.stop - tick < 24 * 30 && (tick & 4))
@@ -719,17 +712,20 @@ void display_selfspells(void)
 			dd_pop_clip();
 			sprintf(hover_bless_text, "Bless: %ds to go", (ceffect[nr].bless.stop - tick) / 24);
 			break;
-		case 11:
-			step = 50 - 50 * (ceffect[nr].freeze.stop - tick) / (ceffect[nr].freeze.stop - ceffect[nr].freeze.start);
+		}
+		case 11: {
+			int step =
+			    50 - 50 * (ceffect[nr].freeze.stop - tick) / (ceffect[nr].freeze.stop - ceffect[nr].freeze.start);
 			dd_push_clip();
 			dd_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
 			dd_copysprite(997, dotx(DOT_SSP) + 1 * 10, doty(DOT_SSP) + step, DDFX_NLIGHT, DD_NORMAL);
 			dd_pop_clip();
 			sprintf(hover_freeze_text, "Freeze: %ds to go", (ceffect[nr].freeze.stop - tick) / 24);
 			break;
-
-		case 14:
-			step = 50 - 50 * (ceffect[nr].potion.stop - tick) / (ceffect[nr].potion.stop - ceffect[nr].potion.start);
+		}
+		case 14: {
+			int step =
+			    50 - 50 * (ceffect[nr].potion.stop - tick) / (ceffect[nr].potion.stop - ceffect[nr].potion.start);
 			dd_push_clip();
 			dd_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
 			if (step >= 40 && (tick & 4))
@@ -740,25 +736,25 @@ void display_selfspells(void)
 			sprintf(hover_potion_text, "Potion: %ds to go", (ceffect[nr].potion.stop - tick) / 24);
 			break;
 		}
+		}
 	}
 }
 
 void display_exp(void)
 {
-	int level, step, total, expe, cn, clevel, nlevel;
 	static int last_exp = 0, exp_ticker = 0;
 
 	sprintf(hover_level_text, "Level: unknown");
 
-	cn = map[MAPDX * MAPDY / 2].cn;
-	level = player[cn].level;
+	int cn = map[MAPDX * MAPDY / 2].cn;
+	int level = player[cn].level;
 
-	expe = experience;
-	clevel = exp2level(expe);
-	nlevel = level + 1;
+	int expe = experience;
+	int clevel = exp2level(expe);
+	int nlevel = level + 1;
 
-	step = level2exp(nlevel) - expe;
-	total = level2exp(nlevel) - level2exp(clevel);
+	int step = level2exp(nlevel) - expe;
+	int total = level2exp(nlevel) - level2exp(clevel);
 	if (step > total)
 		step = total; // ugh. fix for level 1 with 0 exp
 
@@ -1086,10 +1082,9 @@ static char *locked_desc = "Change the keys assigned to the icons.";
 
 void display_action(void)
 {
-	int i, y;
+	static int hoover_start = 0, hoover_sel = 0, hoover_start2 = 0;
 	char buf[4];
 	DDFX fx;
-	static int hoover_start = 0, hoover_sel = 0, hoover_start2 = 0;
 
 	if (!context_key_enabled()) {
 		hoover_sel = 0;
@@ -1109,7 +1104,7 @@ void display_action(void)
 	fx.scale = 80;
 	fx.sat = 14;
 	if (context_action_enabled()) {
-		for (i = 0; i < MAXACTIONSLOT; i++) {
+		for (int i = 0; i < MAXACTIONSLOT; i++) {
 			if (!has_action_skill(i))
 				continue;
 			fx.sprite = 800 + i;
@@ -1121,7 +1116,7 @@ void display_action(void)
 						dd_drawtext(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - 30, IRGB(31, 31, 31),
 						    DD_FRAME | DD_CENTER, action_text[i]);
 					} else { // display name and desc after hovering for a short while
-						y = 40 + dd_drawtext_break_length(0, 0, 120, IRGB(31, 31, 31), 0, action_desc[i]);
+						int y = 40 + dd_drawtext_break_length(0, 0, 120, IRGB(31, 31, 31), 0, action_desc[i]);
 						dd_shaded_rect(butx(BUT_ACT_BEG + i) - 64, buty(BUT_ACT_BEG + i) - y - 4,
 						    butx(BUT_ACT_BEG + i) + 64, buty(BUT_ACT_BEG + i) - 15, 0, 130);
 						dd_drawtext(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - y, IRGB(31, 31, 31),
@@ -1157,7 +1152,7 @@ void display_action(void)
 						dd_drawtext(butx(BUT_ACT_BEG + i) + 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
 						    DD_FRAME | DD_CENTER, buf);
 					}
-					y = 30;
+					int y = 30;
 					if (action_row[0][i] > ' ' && action_row[1][i] > ' ') {
 						if (row == 0)
 							dd_drawtext(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - y, IRGB(31, 31, 31),
@@ -1193,8 +1188,8 @@ void display_action(void)
 				dd_drawtext(butx(BUT_ACT_LCK), buty(BUT_ACT_LCK) - 30, IRGB(31, 31, 31), DD_FRAME | DD_CENTER,
 				    act_lck ? "Assign Keys" : "Lock Keys");
 			} else { // display name and desc after hovering for a short while
-				y = 40 +
-				    dd_drawtext_break_length(0, 0, 120, IRGB(31, 31, 31), 0, act_lck ? locked_desc : unlocked_desc);
+				int y = 40 +
+				        dd_drawtext_break_length(0, 0, 120, IRGB(31, 31, 31), 0, act_lck ? locked_desc : unlocked_desc);
 				dd_shaded_rect(butx(BUT_ACT_LCK) - 64, buty(BUT_ACT_LCK) - y - 4, butx(BUT_ACT_LCK) + 64,
 				    buty(BUT_ACT_LCK) - 15, 0, 130);
 				dd_drawtext(butx(BUT_ACT_LCK), buty(BUT_ACT_LCK) - y, IRGB(31, 31, 31), DD_FRAME | DD_CENTER | DD_BIG,

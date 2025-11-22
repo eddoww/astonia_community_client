@@ -181,19 +181,21 @@ int sdl_init(int width, int height, char *title)
 	if (width != XRES || height != YRES) {
 		int tmp_scale = 1, off = 0;
 
-		if (width / XRES >= 4 && height / YRES0 >= 4)
+		if (width / XRES >= 4 && height / YRES0 >= 4) {
 			sdl_scale = 4;
-		else if (width / XRES >= 3 && height / YRES0 >= 3)
+		} else if (width / XRES >= 3 && height / YRES0 >= 3) {
 			sdl_scale = 3;
-		else if (width / XRES >= 2 && height / YRES0 >= 2)
+		} else if (width / XRES >= 2 && height / YRES0 >= 2) {
 			sdl_scale = 2;
+		}
 
-		if (width / XRES >= 4 && height / YRES2 >= 4)
+		if (width / XRES >= 4 && height / YRES2 >= 4) {
 			tmp_scale = 4;
-		else if (width / XRES >= 3 && height / YRES2 >= 3)
+		} else if (width / XRES >= 3 && height / YRES2 >= 3) {
 			tmp_scale = 3;
-		else if (width / XRES >= 2 && height / YRES2 >= 2)
+		} else if (width / XRES >= 2 && height / YRES2 >= 2) {
 			tmp_scale = 2;
+		}
 
 		if (tmp_scale > sdl_scale || height < YRES0) {
 			sdl_scale = tmp_scale;
@@ -213,12 +215,13 @@ int sdl_init(int width, int height, char *title)
 		dd_set_offset((width / sdl_scale - XRES) / 2, (height / sdl_scale - YRES) / 2);
 	}
 	if (game_options & GO_NOTSET) {
-		if (YRES >= 620)
+		if (YRES >= 620) {
 			game_options = GO_DEFAULTS;
-		else if (YRES >= 580)
+		} else if (YRES >= 580) {
 			game_options = GO_DEFAULTS | GO_SMALLBOT;
-		else
+		} else {
 			game_options = GO_DEFAULTS | GO_SMALLBOT | GO_SMALLTOP;
+		}
 	}
 	note("SDL using %dx%d scale %d, options=%" PRIu64, XRES, YRES, sdl_scale, game_options);
 
@@ -243,6 +246,8 @@ int sdl_init(int width, int height, char *title)
 		sdl_zip2 = zip_open("res/gx4.zip", ZIP_RDONLY, NULL);
 		sdl_zip2p = zip_open("res/gx4_patch.zip", ZIP_RDONLY, NULL);
 		sdl_zip2m = zip_open("res/gx4_mod.zip", ZIP_RDONLY, NULL);
+		break;
+	default:
 		break;
 	}
 
@@ -475,14 +480,16 @@ int png_load_helper(struct png_helper *p)
 
 	p->png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 	if (!p->png_ptr) {
-		fclose(fp);
+		if (fp)
+			fclose(fp);
 		warn("create read\n");
 		return -1;
 	}
 
 	p->info_ptr = png_create_info_struct(p->png_ptr);
 	if (!p->info_ptr) {
-		fclose(fp);
+		if (fp)
+			fclose(fp);
 		png_destroy_read_struct(&p->png_ptr, (png_infopp)NULL, (png_infopp)NULL);
 		warn("create info1\n");
 		return -1;
@@ -498,7 +505,8 @@ int png_load_helper(struct png_helper *p)
 
 	p->row = png_get_rows(p->png_ptr, p->info_ptr);
 	if (!p->row) {
-		fclose(fp);
+		if (fp)
+			fclose(fp);
 		png_destroy_read_struct(&p->png_ptr, &p->info_ptr, (png_infopp)NULL);
 		warn("read row\n");
 		return -1;
@@ -509,34 +517,38 @@ int png_load_helper(struct png_helper *p)
 
 	tmp = png_get_rowbytes(p->png_ptr, p->info_ptr);
 
-	if (tmp == p->xres * 3)
+	if (tmp == p->xres * 3) {
 		p->bpp = 24;
-	else if (tmp == p->xres * 4)
+	} else if (tmp == p->xres * 4) {
 		p->bpp = 32;
-	else {
-		fclose(fp);
+	} else {
+		if (fp)
+			fclose(fp);
 		png_destroy_read_struct(&p->png_ptr, &p->info_ptr, (png_infopp)NULL);
 		warn("rowbytes!=xres*4 (%d, %d, %s)", tmp, p->xres, p->filename);
 		return -1;
 	}
 
 	if (png_get_bit_depth(p->png_ptr, p->info_ptr) != 8) {
-		fclose(fp);
+		if (fp)
+			fclose(fp);
 		png_destroy_read_struct(&p->png_ptr, &p->info_ptr, (png_infopp)NULL);
 		warn("bit depth!=8\n");
 		return -1;
 	}
 	if (png_get_channels(p->png_ptr, p->info_ptr) != p->bpp / 8) {
-		fclose(fp);
+		if (fp)
+			fclose(fp);
 		png_destroy_read_struct(&p->png_ptr, &p->info_ptr, (png_infopp)NULL);
 		warn("channels!=format\n");
 		return -1;
 	}
 
-	if (p->zip)
+	if (p->zip) {
 		zip_fclose(zp);
-	else
+	} else {
 		fclose(fp);
+	}
 
 	return 0;
 }
@@ -611,25 +623,26 @@ int sdl_load_image_png_(struct sdl_image *si, char *filename, zip_t *zip)
 	for (y = 0; y < si->yres; y++) {
 		for (x = 0; x < si->xres; x++) {
 			if (p.bpp == 32) {
-				if (sx + x >= p.xres || sy + y >= p.yres)
+				if (sx + x >= p.xres || sy + y >= p.yres) {
 					r = g = b = a = 0;
-				else {
+				} else {
 					r = p.row[(sy + y)][(sx + x) * 4 + 0];
 					g = p.row[(sy + y)][(sx + x) * 4 + 1];
 					b = p.row[(sy + y)][(sx + x) * 4 + 2];
 					a = p.row[(sy + y)][(sx + x) * 4 + 3];
 				}
 			} else {
-				if (sx + x >= p.xres || sy + y >= p.yres)
+				if (sx + x >= p.xres || sy + y >= p.yres) {
 					r = g = b = a = 0;
-				else {
+				} else {
 					r = p.row[(sy + y)][(sx + x) * 3 + 0];
 					g = p.row[(sy + y)][(sx + x) * 3 + 1];
 					b = p.row[(sy + y)][(sx + x) * 3 + 2];
-					if (r == 255 && g == 0 && b == 255)
+					if (r == 255 && g == 0 && b == 255) {
 						a = 0;
-					else
+					} else {
 						a = 255;
+					}
 				}
 			}
 
@@ -640,8 +653,9 @@ int sdl_load_image_png_(struct sdl_image *si, char *filename, zip_t *zip)
 				r = min(255, r * 255 / a);
 				g = min(255, g * 255 / a);
 				b = min(255, b * 255 / a);
-			} else
+			} else {
 				r = g = b = 0;
+			}
 
 			c = IRGBA(r, g, b, a);
 
@@ -727,10 +741,11 @@ int sdl_load_image_png(struct sdl_image *si, char *filename, zip_t *zip, int smo
 				r = p.row[(sy + y)][(sx + x) * 3 + 0];
 				g = p.row[(sy + y)][(sx + x) * 3 + 1];
 				b = p.row[(sy + y)][(sx + x) * 3 + 2];
-				if (r == 255 && g == 0 && b == 255)
+				if (r == 255 && g == 0 && b == 255) {
 					a = 0;
-				else
+				} else {
 					a = 255;
+				}
 			}
 
 			if (r == 255 && g == 0 && b == 255)
@@ -795,8 +810,9 @@ int sdl_load_image_png(struct sdl_image *si, char *filename, zip_t *zip, int smo
 	if (sdl_scale > 1 && smoothify) {
 		sdl_smoothify(si->pixel, si->xres * sdl_scale, si->yres * sdl_scale, sdl_scale);
 		sdl_premulti(si->pixel, si->xres * sdl_scale, si->yres * sdl_scale, sdl_scale);
-	} else
+	} else {
 		sdl_premulti(si->pixel, si->xres * sdl_scale, si->yres * sdl_scale, sdl_scale);
+	}
 
 	png_load_helper_exit(&p);
 
@@ -842,9 +858,9 @@ int sdl_load_image(struct sdl_image *si, int sprite)
 	}
 
 #if 0
-    // get patch png
-    sprintf(filename,"../gfxp/x%d/%08d/%08d.png",sdl_scale,(sprite/1000)*1000,sprite);
-    if (sdl_load_image_png_(si,filename,NULL)==0) return 0;
+	// get patch png
+	sprintf(filename,"../gfxp/x%d/%08d/%08d.png",sdl_scale,(sprite/1000)*1000,sprite);
+	if (sdl_load_image_png_(si,filename,NULL)==0) return 0;
 #endif
 
 	// get high res from archive
@@ -859,9 +875,9 @@ int sdl_load_image(struct sdl_image *si, int sprite)
 	}
 
 #if 0
-    // get high res from base png folder
-    sprintf(filename,"../gfx/x%d/%08d/%08d.png",sdl_scale,(sprite/1000)*1000,sprite);
-    if (sdl_load_image_png_(si,filename,NULL)==0) return 0;
+	// get high res from base png folder
+	sprintf(filename,"../gfx/x%d/%08d/%08d.png",sdl_scale,(sprite/1000)*1000,sprite);
+	if (sdl_load_image_png_(si,filename,NULL)==0) return 0;
 #endif
 
 	// get standard from archive
@@ -876,11 +892,11 @@ int sdl_load_image(struct sdl_image *si, int sprite)
 	}
 
 #if 0
-    // get standard from base png folder
-    sprintf(filename,"../gfx/x1/%08d/%08d.png",(sprite/1000)*1000,sprite);
-    if (sdl_load_image_png(si,filename,NULL,do_smoothify(sprite))==0) return 0;
-    sprintf(filename,"../gfxp/x1/%08d/%08d.png",(sprite/1000)*1000,sprite);
-    if (sdl_load_image_png(si,filename,NULL,do_smoothify(sprite))==0) return 0;
+	// get standard from base png folder
+	sprintf(filename,"../gfx/x1/%08d/%08d.png",(sprite/1000)*1000,sprite);
+	if (sdl_load_image_png(si,filename,NULL,do_smoothify(sprite))==0) return 0;
+	sprintf(filename,"../gfxp/x1/%08d/%08d.png",(sprite/1000)*1000,sprite);
+	if (sdl_load_image_png(si,filename,NULL,do_smoothify(sprite))==0) return 0;
 #endif
 
 	sprintf(filename, "%08d.png", sprite);
@@ -939,8 +955,9 @@ static inline int light_calc(int val, int light)
 			d -= 2;
 		}
 		return (v1 * m + v2) / d;
-	} else
+	} else {
 		return val * light / 15;
+	}
 }
 
 static inline uint32_t sdl_light(int light, uint32_t irgb)
@@ -1269,10 +1286,11 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 	uint32_t irgb;
 	long long start;
 
-	if (si->xres == 0 || si->yres == 0)
+	if (si->xres == 0 || si->yres == 0) {
 		scale = 100; // !!! needs better handling !!!
-	else
+	} else {
 		scale = st->scale;
+	}
 
 	// hack to adjust the size of mages to old client levels
 	// this was originally done during loading from PAKs.
@@ -1292,10 +1310,11 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 		st->yoff = si->yoff;
 	}
 
-	if (st->sink)
+	if (st->sink) {
 		sink = min(st->sink, max(0, st->yres - 4));
-	else
+	} else {
 		sink = 0;
+	}
 
 	if (!preload || preload == 1) {
 		if (st->flags & SF_DIDALLOC) {
@@ -1368,9 +1387,10 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 
 					irgb = si->pixel[(int)(floor(ix) + floor(iy) * si->xres * sdl_scale)];
 
-					if (st->c1 || st->c2 || st->c3)
+					if (st->c1 || st->c2 || st->c3) {
 						irgb = sdl_colorize_pix2(irgb, st->c1, st->c2, st->c3, floor(ix), floor(iy), si->xres, si->yres,
 						    si->pixel, st->sprite);
+					}
 					dba = IGET_A(irgb) * low_x * low_y;
 					dbr = IGET_R(irgb) * low_x * low_y;
 					dbg = IGET_G(irgb) * low_x * low_y;
@@ -1378,9 +1398,10 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 
 					irgb = si->pixel[(int)(ceil(ix) + floor(iy) * si->xres * sdl_scale)];
 
-					if (st->c1 || st->c2 || st->c3)
+					if (st->c1 || st->c2 || st->c3) {
 						irgb = sdl_colorize_pix2(irgb, st->c1, st->c2, st->c3, ceil(ix), floor(iy), si->xres, si->yres,
 						    si->pixel, st->sprite);
+					}
 					dba += IGET_A(irgb) * high_x * low_y;
 					dbr += IGET_R(irgb) * high_x * low_y;
 					dbg += IGET_G(irgb) * high_x * low_y;
@@ -1388,9 +1409,10 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 
 					irgb = si->pixel[(int)(floor(ix) + ceil(iy) * si->xres * sdl_scale)];
 
-					if (st->c1 || st->c2 || st->c3)
+					if (st->c1 || st->c2 || st->c3) {
 						irgb = sdl_colorize_pix2(irgb, st->c1, st->c2, st->c3, floor(ix), ceil(iy), si->xres, si->yres,
 						    si->pixel, st->sprite);
+					}
 					dba += IGET_A(irgb) * low_x * high_y;
 					dbr += IGET_R(irgb) * low_x * high_y;
 					dbg += IGET_G(irgb) * low_x * high_y;
@@ -1398,9 +1420,10 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 
 					irgb = si->pixel[(int)(ceil(ix) + ceil(iy) * si->xres * sdl_scale)];
 
-					if (st->c1 || st->c2 || st->c3)
+					if (st->c1 || st->c2 || st->c3) {
 						irgb = sdl_colorize_pix2(irgb, st->c1, st->c2, st->c3, ceil(ix), ceil(iy), si->xres, si->yres,
 						    si->pixel, st->sprite);
+					}
 					dba += IGET_A(irgb) * high_x * high_y;
 					dbr += IGET_R(irgb) * high_x * high_y;
 					dbg += IGET_G(irgb) * high_x * high_y;
@@ -1410,9 +1433,10 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 
 				} else {
 					irgb = si->pixel[x + y * si->xres * sdl_scale];
-					if (st->c1 || st->c2 || st->c3)
+					if (st->c1 || st->c2 || st->c3) {
 						irgb = sdl_colorize_pix2(
 						    irgb, st->c1, st->c2, st->c3, x, y, si->xres, si->yres, si->pixel, st->sprite);
+					}
 				}
 
 				if (st->cr || st->cg || st->cb || st->light || st->sat)
@@ -1436,29 +1460,33 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 							r2 = IGET_R(sdl_light(st->ll, irgb));
 							g2 = IGET_G(sdl_light(st->ll, irgb));
 							b2 = IGET_B(sdl_light(st->ll, irgb));
-						} else
+						} else {
 							v2 = 0;
+						}
 						if (x / 2 > 20 * sdl_scale - y) {
 							v3 = (x / 2 - (20 * sdl_scale - y));
 							r3 = IGET_R(sdl_light(st->rl, irgb));
 							g3 = IGET_G(sdl_light(st->rl, irgb));
 							b3 = IGET_B(sdl_light(st->rl, irgb));
-						} else
+						} else {
 							v3 = 0;
+						}
 						if (x / 2 > y) {
 							v4 = (x / 2 - y);
 							r4 = IGET_R(sdl_light(st->ul, irgb));
 							g4 = IGET_G(sdl_light(st->ul, irgb));
 							b4 = IGET_B(sdl_light(st->ul, irgb));
-						} else
+						} else {
 							v4 = 0;
+						}
 						if (x / 2 < y) {
 							v5 = -(x / 2 - y);
 							r5 = IGET_R(sdl_light(st->dl, irgb));
 							g5 = IGET_G(sdl_light(st->dl, irgb));
 							b5 = IGET_B(sdl_light(st->dl, irgb));
-						} else
+						} else {
 							v5 = 0;
+						}
 
 						v1 = 20 * sdl_scale - (v2 + v3 + v4 + v5);
 						r1 = IGET_R(sdl_light(st->ml, irgb));
@@ -1471,32 +1499,37 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 							r2 = IGET_R(sdl_light(st->ll, irgb));
 							g2 = IGET_G(sdl_light(st->ll, irgb));
 							b2 = IGET_B(sdl_light(st->ll, irgb));
-						} else
+						} else {
 							v2 = 0;
+						}
 						if (x > 10 * sdl_scale && x < 20 * sdl_scale) {
 							v3 = (x - 10 * sdl_scale) * 2 - 2;
 							r3 = IGET_R(sdl_light(st->rl, irgb));
 							g3 = IGET_G(sdl_light(st->rl, irgb));
 							b3 = IGET_B(sdl_light(st->rl, irgb));
-						} else
+						} else {
 							v3 = 0;
+						}
 						if (x > 20 * sdl_scale && x < 30 * sdl_scale) {
 							v5 = (10 * sdl_scale - (x - 20 * sdl_scale)) * 2 - 2;
 							r5 = IGET_R(sdl_light(st->dl, irgb));
 							g5 = IGET_G(sdl_light(st->dl, irgb));
 							b5 = IGET_B(sdl_light(st->dl, irgb));
-						} else
+						} else {
 							v5 = 0;
+						}
 						if (x > 30 * sdl_scale) {
-							if (x < 40 * sdl_scale)
+							if (x < 40 * sdl_scale) {
 								v4 = (x - 30 * sdl_scale) * 2 - 2;
-							else
+							} else {
 								v4 = 0;
+							}
 							r4 = IGET_R(sdl_light(st->ul, irgb));
 							g4 = IGET_G(sdl_light(st->ul, irgb));
 							b4 = IGET_B(sdl_light(st->ul, irgb));
-						} else
+						} else {
 							v4 = 0;
+						}
 
 						v1 = 20 * sdl_scale - (v2 + v3 + v4 + v5) / 2;
 						r1 = IGET_R(sdl_light(st->ml, irgb));
@@ -1506,15 +1539,21 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 
 					div = v1 + v2 + v3 + v4 + v5;
 
-					a = IGET_A(irgb);
-					r = (r1 * v1 + r2 * v2 + r3 * v3 + r4 * v4 + r5 * v5) / div;
-					g = (g1 * v1 + g2 * v2 + g3 * v3 + g4 * v4 + g5 * v5) / div;
-					b = (b1 * v1 + b2 * v2 + b3 * v3 + b4 * v4 + b5 * v5) / div;
+					if (div == 0) {
+						a = 0;
+						r = g = b = 0;
+					} else {
+						a = IGET_A(irgb);
+						r = (r1 * v1 + r2 * v2 + r3 * v3 + r4 * v4 + r5 * v5) / div;
+						g = (g1 * v1 + g2 * v2 + g3 * v3 + g4 * v4 + g5 * v5) / div;
+						b = (b1 * v1 + b2 * v2 + b3 * v3 + b4 * v4 + b5 * v5) / div;
+					}
 
 					irgb = IRGBA(r, g, b, a);
 
-				} else
+				} else {
 					irgb = sdl_light(st->ml, irgb);
+				}
 
 				if (sink) {
 					if (st->yres * sdl_scale - sink * sdl_scale < y)
@@ -1529,10 +1568,11 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 		}
 		st->flags |= SF_DIDMAKE;
 
-		if (preload)
+		if (preload) {
 			sdl_time_preload += SDL_GetTicks64() - start;
-		else
+		} else {
 			sdl_time_make += SDL_GetTicks64() - start;
+		}
 	}
 
 	if (!preload || preload == 3) {
@@ -1561,8 +1601,9 @@ static void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 			}
 			SDL_UpdateTexture(texture, NULL, st->pixel, st->xres * sizeof(uint32_t) * sdl_scale);
 			SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-		} else
+		} else {
 			texture = NULL;
+		}
 #ifdef SDL_FAST_MALLOC
 		free(st->pixel);
 #else
@@ -1628,12 +1669,15 @@ static inline unsigned int hashfunc_text(const char *text, int color, int flags)
 			t2 = text[2];
 			if (text[2]) {
 				t3 = text[3];
-			} else
+			} else {
 				t3 = 0;
-		} else
+			}
+		} else {
 			t2 = t3 = 0;
-	} else
+		}
+	} else {
 		t1 = t2 = t3 = 0;
+	}
 
 	hash = (t0 << 0) ^ (t1 << 3) ^ (t2 << 6) ^ (t3 << 9) ^ ((uint32_t)color << 0) ^ ((uint32_t)flags << 5);
 
@@ -1661,8 +1705,9 @@ static void not_busy_or_panic(struct sdl_texture *st)
 				exit(42);
 			}
 		}
-	} else
+	} else {
 		st->flags |= SF_BUSY;
+	}
 }
 
 static void unbusy(struct sdl_texture *st)
@@ -1681,10 +1726,11 @@ int sdl_tx_load(int sprite, int sink, int freeze, int scale, int cr, int cg, int
 	int stx, ptx, ntx, panic = 0;
 	int hash;
 
-	if (!text)
+	if (!text) {
 		hash = hashfunc(sprite, ml, ll, rl, ul, dl);
-	else
+	} else {
 		hash = hashfunc_text(text, text_color, text_flags);
+	}
 
 	if (sprite >= MAXSPRITE || sprite < 0) {
 		note("illegal sprite %d wanted in sdl_tx_load", sprite);
@@ -1710,7 +1756,7 @@ int sdl_tx_load(int sprite, int sink, int freeze, int scale, int cr, int cg, int
 				continue;
 			if (!(sdlt[stx].tex))
 				continue; // text does not go through the preloader, so if the texture is empty maketext failed earlier.
-			if (!sdlt[stx].text || strcmp(sdlt[stx].text, text))
+			if (!sdlt[stx].text || strcmp(sdlt[stx].text, text) != 0)
 				continue;
 			if (sdlt[stx].text_flags != text_flags)
 				continue;
@@ -1847,10 +1893,11 @@ int sdl_tx_load(int sprite, int sink, int freeze, int scale, int cr, int cg, int
 		ntx = sdlt[stx].hnext;
 		ptx = sdlt[stx].hprev;
 
-		if (ptx == STX_NONE)
+		if (ptx == STX_NONE) {
 			sdlt_cache[hash] = ntx;
-		else
+		} else {
 			sdlt[ptx].hnext = sdlt[stx].hnext;
+		}
 
 		if (ntx != STX_NONE)
 			sdlt[ntx].hprev = sdlt[stx].hprev;
@@ -1886,11 +1933,11 @@ int sdl_tx_load(int sprite, int sink, int freeze, int scale, int cr, int cg, int
 		if (sdlt[stx].flags & SF_SPRITE)
 			not_busy_or_panic(sdlt + stx);
 
-		if (sdlt[stx].flags & SF_SPRITE)
+		if (sdlt[stx].flags & SF_SPRITE) {
 			hash2 = hashfunc(sdlt[stx].sprite, sdlt[stx].ml, sdlt[stx].ll, sdlt[stx].rl, sdlt[stx].ul, sdlt[stx].dl);
-		else if (sdlt[stx].flags & SF_TEXT)
+		} else if (sdlt[stx].flags & SF_TEXT) {
 			hash2 = hashfunc_text(sdlt[stx].text, sdlt[stx].text_color, sdlt[stx].text_flags);
-		else {
+		} else {
 			hash2 = 0;
 			warn("weird entry in texture cache!");
 		}
@@ -1939,8 +1986,9 @@ int sdl_tx_load(int sprite, int sink, int freeze, int scale, int cr, int cg, int
 #endif
 
 		sdlt[stx].flags = 0;
-	} else
+	} else {
 		texc_used++;
+	}
 
 	// build
 	if (text) {
@@ -1959,8 +2007,9 @@ int sdl_tx_load(int sprite, int sink, int freeze, int scale, int cr, int cg, int
 			SDL_QueryTexture(sdlt[stx].tex, NULL, NULL, &w, &h);
 			sdlt[stx].xres = w;
 			sdlt[stx].yres = h;
-		} else
+		} else {
 			sdlt[stx].xres = sdlt[stx].yres = 0;
+		}
 	} else {
 		if (preload != 1)
 			sdl_ic_load(sprite);
@@ -2009,9 +2058,9 @@ int sdl_tx_load(int sprite, int sink, int freeze, int scale, int cr, int cg, int
 	if (fortick)
 		sdlt[stx].fortick = fortick;
 
-	if (preload)
+	if (preload) {
 		texc_pre++;
-	else if (sprite) { // Do not count missed text sprites. Those are expected.
+	} else if (sprite) { // Do not count missed text sprites. Those are expected.
 		texc_miss++;
 	}
 
@@ -2080,8 +2129,8 @@ void sdl_blit(int stx, int sx, int sy, int clipsx, int clipsy, int clipex, int c
 #define DD__SHADEFONT 128
 #define DD__FRAMEFONT 256
 
-#define R16TO32(color) (int)((((color >> 10) & 31) / 31.0f) * 255.0f)
-#define G16TO32(color) (int)((((color >> 5) & 31) / 31.0f) * 255.0f)
+#define R16TO32(color) (int)(((((color) >> 10) & 31) / 31.0f) * 255.0f)
+#define G16TO32(color) (int)(((((color) >> 5) & 31) / 31.0f) * 255.0f)
 #define B16TO32(color) (int)((((color) & 31) / 31.0f) * 255.0f)
 
 #define MAXFONTHEIGHT 64
@@ -2188,17 +2237,22 @@ int dump_cmp(const void *ca, const void *cb)
 	if (sdlt[b].flags & SF_TEXT)
 		return -1;
 
-	if ((tmp = sdlt[a].sprite - sdlt[b].sprite) != 0)
+	if (((tmp = sdlt[a].sprite - sdlt[b].sprite) != 0)) {
 		return tmp;
+	}
 
-	if ((tmp = sdlt[a].ml - sdlt[b].ml) != 0)
+	if (((tmp = sdlt[a].ml - sdlt[b].ml) != 0)) {
 		return tmp;
-	if ((tmp = sdlt[a].ll - sdlt[b].ll) != 0)
+	}
+	if (((tmp = sdlt[a].ll - sdlt[b].ll) != 0)) {
 		return tmp;
-	if ((tmp = sdlt[a].rl - sdlt[b].rl) != 0)
+	}
+	if (((tmp = sdlt[a].rl - sdlt[b].rl) != 0)) {
 		return tmp;
-	if ((tmp = sdlt[a].ul - sdlt[b].ul) != 0)
+	}
+	if (((tmp = sdlt[a].ul - sdlt[b].ul) != 0)) {
 		return tmp;
+	}
 
 	return sdlt[a].dl - sdlt[b].dl;
 }
@@ -2216,32 +2270,37 @@ void sdl_dump_spritecache(void)
 
 	qsort(dumpidx, MAX_TEXCACHE, sizeof(int), dump_cmp);
 
-	if (localdata)
+	if (localdata) {
 		sprintf(filename, "%s%s", localdata, "sdlt.txt");
-	else
+	} else {
 		sprintf(filename, "%s", "sdlt.txt");
+	}
 	fp = fopen(filename, "w");
+	if (fp == NULL) {
+		xfree(dumpidx);
+		return;
+	}
 
 	for (i = 0; i < MAX_TEXCACHE; i++) {
 		n = dumpidx[i];
 		if (!sdlt[n].flags)
 			break;
 
-		if (sdlt[n].flags & SF_TEXT)
+		if (sdlt[n].flags & SF_TEXT) {
 			text++;
-		else {
-			if (i == 0)
+		} else {
+			if (i == 0 || sdlt[dumpidx[i]].sprite != sdlt[dumpidx[i - 1]].sprite) {
 				uni++;
-			else if (sdlt[dumpidx[i]].sprite != sdlt[dumpidx[i - 1]].sprite)
-				uni++;
+			}
 			cnt++;
 		}
 
-		if (sdlt[n].flags & SF_SPRITE)
+		if (sdlt[n].flags & SF_SPRITE) {
 			fprintf(fp, "Sprite: %6d (%7d) %s%s%s%s%s\n", sdlt[n].sprite, sdlt[n].fortick,
 			    (sdlt[n].flags & SF_USED) ? "SF_USED " : "", (sdlt[n].flags & SF_DIDALLOC) ? "SF_DIDALLOC " : "",
 			    (sdlt[n].flags & SF_DIDMAKE) ? "SF_DIDMAKE " : "", (sdlt[n].flags & SF_DIDTEX) ? "SF_DIDTEX " : "",
 			    (sdlt[n].flags & SF_BUSY) ? "SF_BUSY " : "");
+		}
 
 		/*fprintf(fp,"Sprite: %6d, Lights: %2d,%2d,%2d,%2d,%2d, Light: %3d, Colors: %3d,%3d,%3d, Colors: %4X,%4X,%4X,
 		   Sink: %2d, Freeze: %2d, Scale: %3d, Sat: %3d, Shine: %3d, %dx%d\n", sdlt[n].sprite, sdlt[n].ml, sdlt[n].ll,
@@ -2262,9 +2321,10 @@ void sdl_dump_spritecache(void)
 		       sdlt[n].shine,
 		       sdlt[n].xres,
 		       sdlt[n].yres);*/
-		if (sdlt[n].flags & SF_TEXT)
+		if (sdlt[n].flags & SF_TEXT) {
 			fprintf(fp, "Color: %08X, Flags: %04X, Font: %p, Text: %s (%dx%d)\n", sdlt[n].text_color,
 			    sdlt[n].text_flags, sdlt[n].text_font, sdlt[n].text, sdlt[n].xres, sdlt[n].yres);
+		}
 
 		size += sdlt[n].xres * sdlt[n].yres * sizeof(uint32_t);
 	}
@@ -2325,10 +2385,11 @@ int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char
 		dx += font[*c].dim;
 
 	if (tex) {
-		if (flags & DD_CENTER)
+		if (flags & DD_CENTER) {
 			sx -= dx / 2;
-		else if (flags & DD_RIGHT)
+		} else if (flags & DD_RIGHT) {
 			sx -= dx;
+		}
 
 		sdl_blit_tex(tex, sx, sy, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
 
@@ -2588,6 +2649,8 @@ void sdl_loop(void)
 			}
 #endif
 			break;
+		default:
+			break;
 		}
 	}
 }
@@ -2670,11 +2733,11 @@ DLL_EXPORT uint32_t *sdl_load_png(char *filename, int *dx, int *dy)
 
 	tmp = png_get_rowbytes(png_ptr, info_ptr);
 
-	if (tmp == xres * 3)
+	if (tmp == xres * 3) {
 		format = 3;
-	else if (tmp == xres * 4)
+	} else if (tmp == xres * 4) {
 		format = 4;
-	else {
+	} else {
 		fclose(fp);
 		png_destroy_read_struct(&png_ptr, &info_ptr, (png_infopp)NULL);
 		warn("rowbytes!=xres*4 (%d)", tmp);
@@ -2725,8 +2788,9 @@ DLL_EXPORT uint32_t *sdl_load_png(char *filename, int *dx, int *dy)
 					r = min(255, r * 255 / a);
 					g = min(255, g * 255 / a);
 					b = min(255, b * 255 / a);
-				} else
+				} else {
 					r = g = b = 0;
+				}
 
 				pixel[x + y * xres] = IRGBA(r, g, b, a);
 			}
@@ -2803,14 +2867,16 @@ SDL_Cursor *sdl_create_cursor(char *filename)
 				data2[i2] |= b2;
 				mask2[i2] |= b2;
 			} else {
-				if (data[i1] & b1)
+				if (data[i1] & b1) {
 					data2[i2] |= b2;
-				else
+				} else {
 					data2[i2] &= ~b2;
-				if (mask[i1] & b1)
+				}
+				if (mask[i1] & b1) {
 					mask2[i2] |= b2;
-				else
+				} else {
 					mask2[i2] &= ~b2;
+				}
 			}
 		}
 	}
@@ -2998,20 +3064,23 @@ int sdl_pre_do(int curtick)
 	sdl_pre_3();
 	sdl_time_pre3 += SDL_GetTicks64() - start;
 
-	if (pre_in >= pre_1)
+	if (pre_in >= pre_1) {
 		size = pre_in - pre_1;
-	else
+	} else {
 		size = MAXPRE + pre_in - pre_1;
+	}
 
-	if (pre_1 >= pre_2)
+	if (pre_1 >= pre_2) {
 		size += pre_1 - pre_2;
-	else
+	} else {
 		size += MAXPRE + pre_1 - pre_2;
+	}
 
-	if (pre_2 >= pre_3)
+	if (pre_2 >= pre_3) {
 		size += pre_2 - pre_3;
-	else
+	} else {
 		size += MAXPRE + pre_2 - pre_3;
+	}
 
 	return size;
 }
@@ -3046,10 +3115,11 @@ void sdl_bargraph(int sx, int sy, int dx, unsigned char *data, int x_offset, int
 	int n;
 
 	for (n = 0; n < dx; n++) {
-		if (data[n] > 40)
+		if (data[n] > 40) {
 			SDL_SetRenderDrawColor(sdlren, 255, 80, 80, 127);
-		else
+		} else {
 			SDL_SetRenderDrawColor(sdlren, 80, 255, 80, 127);
+		}
 
 		SDL_RenderDrawLine(sdlren, (sx + n + x_offset) * sdl_scale, (sy + y_offset) * sdl_scale,
 		    (sx + n + x_offset) * sdl_scale, (sy - data[n] + y_offset) * sdl_scale);

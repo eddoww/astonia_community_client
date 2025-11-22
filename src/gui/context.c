@@ -88,13 +88,13 @@ static void makemenu(void)
 	menu.linecnt = 0;
 
 #if 0
-    if (csel!=MAPDX*MAPDY/2) {
-        sprintf(menu.line[menu.linecnt],"Walk");
-        menu.cmd[menu.linecnt]=CMD_MAP_MOVE;
-        menu.opt1[menu.linecnt]=originx-MAPDX/2+msel%MAPDX;
-        menu.opt2[menu.linecnt]=originy-MAPDY/2+msel/MAPDX;
-        menu.linecnt++;
-    }
+	if (csel!=MAPDX*MAPDY/2) {
+	    sprintf(menu.line[menu.linecnt],"Walk");
+	    menu.cmd[menu.linecnt]=CMD_MAP_MOVE;
+	    menu.opt1[menu.linecnt]=originx-MAPDX/2+msel%MAPDX;
+	    menu.opt2[menu.linecnt]=originy-MAPDY/2+msel/MAPDX;
+	    menu.linecnt++;
+	}
 #endif
 
 	if (isel != -1) {

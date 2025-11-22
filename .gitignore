@@ -36,3 +36,6 @@ target
 
 # Mac :(
 .DS_STORE
+
+# Temporary Dockerfile (copied during build)
+/Dockerfile.appimage

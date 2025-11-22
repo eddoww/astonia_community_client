@@ -7,7 +7,9 @@
  *
  */
 
-#include <winsock2.h>
+#include "../../src/dll.h"
+#include "../../include/astonia_net.h"
+#include <SDL2/SDL_timer.h>
 #include <time.h>
 #include <zlib.h>
 #include <SDL2/SDL.h>
@@ -23,25 +25,27 @@
 int display_gfx=0,display_time=0;
 static int rec_bytes=0;
 static int sent_bytes=0;
-static int sock=-1;
+static astonia_sock *sock = NULL;
 int sockstate=0;
 static unsigned int socktime=0;
 int socktimeout=0;
 static int change_area=0;
 int kicked_out=0;
-static unsigned int unique=0;
-static unsigned int usum=0;
+unsigned int unique=0;
+#ifdef STORE_UNIQUE
+unsigned int usum=0;
+#endif
 int target_port=5556;
-__declspec(dllexport) int target_server=0;
-__declspec(dllexport) char password[16];
+DLL_EXPORT char *target_server=NULL;
+DLL_EXPORT char password[16];
 static int zsinit;
 static struct z_stream_s zs;
 
-__declspec(dllexport) char username[40];
-__declspec(dllexport) int tick;
-__declspec(dllexport) int mirror=0;
-__declspec(dllexport) int realtime;
-__declspec(dllexport) int protocol_version=0;
+DLL_EXPORT char username[40];
+DLL_EXPORT int tick;
+DLL_EXPORT int mirror=0;
+DLL_EXPORT int realtime;
+DLL_EXPORT int protocol_version=0;
 
 int newmirror=0;
 int lasttick;           // ticks in inbuf
@@ -61,56 +65,98 @@ static unsigned char inbuf[MAX_INBUF];
 static int outused;
 static unsigned char outbuf[MAX_OUTBUF];
 
-__declspec(dllexport) int act;
-__declspec(dllexport) int actx;
-__declspec(dllexport) int acty;
+DLL_EXPORT int act;
+DLL_EXPORT int actx;
+DLL_EXPORT int acty;
 
-__declspec(dllexport) unsigned int cflags;        // current item flags
-__declspec(dllexport) unsigned int csprite;       // and sprite
+DLL_EXPORT unsigned int cflags;        // current item flags
+DLL_EXPORT unsigned int csprite;       // and sprite
 
-__declspec(dllexport) int originx;
-__declspec(dllexport) int originy;
-__declspec(dllexport) struct map map[MAPDX*MAPDY];
-__declspec(dllexport) struct map map2[MAPDX*MAPDY];
+DLL_EXPORT int originx;
+DLL_EXPORT int originy;
+DLL_EXPORT struct map map[MAPDX*MAPDY];
+DLL_EXPORT struct map map2[MAPDX*MAPDY];
 
-__declspec(dllexport) int value[2][V_MAX];
-__declspec(dllexport) int item[INVENTORYSIZE];
-__declspec(dllexport) int item_flags[INVENTORYSIZE];
-__declspec(dllexport) int hp;
-__declspec(dllexport) int mana;
-__declspec(dllexport) int rage;
-__declspec(dllexport) int endurance;
-__declspec(dllexport) int lifeshield;
-__declspec(dllexport) int experience;
-__declspec(dllexport) int experience_used;
-__declspec(dllexport) int mil_exp;
-__declspec(dllexport) int gold;
+DLL_EXPORT int value[2][V_MAX];
+DLL_EXPORT int item[INVENTORYSIZE];
+DLL_EXPORT int item_flags[INVENTORYSIZE];
+DLL_EXPORT int hp;
+DLL_EXPORT int mana;
+DLL_EXPORT int rage;
+DLL_EXPORT int endurance;
+DLL_EXPORT int lifeshield;
+DLL_EXPORT int experience;
+DLL_EXPORT int experience_used;
+DLL_EXPORT int mil_exp;
+DLL_EXPORT int gold;
 
-__declspec(dllexport) struct player player[MAXCHARS];
+DLL_EXPORT struct player player[MAXCHARS];
 
-__declspec(dllexport) union ceffect ceffect[MAXEF];
-__declspec(dllexport) unsigned char ueffect[MAXEF];
+DLL_EXPORT union ceffect ceffect[MAXEF];
+DLL_EXPORT unsigned char ueffect[MAXEF];
 
-__declspec(dllexport) int con_type;
-__declspec(dllexport) char con_name[80];
-__declspec(dllexport) int con_cnt;
-__declspec(dllexport) int container[CONTAINERSIZE];
-__declspec(dllexport) int price[CONTAINERSIZE];
-__declspec(dllexport) int itemprice[CONTAINERSIZE];
-__declspec(dllexport) int cprice;
+DLL_EXPORT int con_type;
+DLL_EXPORT char con_name[80];
+DLL_EXPORT int con_cnt;
+DLL_EXPORT int container[CONTAINERSIZE];
+DLL_EXPORT int price[CONTAINERSIZE];
+DLL_EXPORT int itemprice[CONTAINERSIZE];
+DLL_EXPORT int cprice;
 
-__declspec(dllexport) int lookinv[12];
-__declspec(dllexport) int looksprite,lookc1,lookc2,lookc3;
-__declspec(dllexport) char look_name[80];
-__declspec(dllexport) char look_desc[1024];
+DLL_EXPORT int lookinv[12];
+DLL_EXPORT int looksprite,lookc1,lookc2,lookc3;
+DLL_EXPORT char look_name[80];
+DLL_EXPORT char look_desc[1024];
 
-__declspec(dllexport) char pent_str[7][80];
+DLL_EXPORT char pent_str[7][80];
 
-__declspec(dllexport) int pspeed=0;   // 0=normal   1=fast      2=stealth     - like the server
+DLL_EXPORT int pspeed=0;   // 0=normal   1=fast      2=stealth     - like the server
 
 int may_teleport[64+32];
 
-__declspec(dllexport) int frames_per_second=TICKS;
+DLL_EXPORT int frames_per_second=TICKS;
+
+// Unaligned load/store helpers
+static inline uint32_t load_ulong(const void *p) { 
+    unsigned long v;
+    memcpy(&v, p, sizeof v);
+    return v;
+}
+static inline uint32_t load_u32(const void *p) { 
+    uint32_t v;
+    memcpy(&v, p, sizeof v);
+    return v; 
+}
+static inline uint16_t load_u16(const void *p) { 
+    uint16_t v;
+    memcpy(&v, p, sizeof v);
+    return v; 
+}
+static inline int16_t  load_i16(const void *p) { 
+    int16_t v;
+    memcpy(&v, p, sizeof v);
+    return v; 
+}
+static inline void store_u16(void *p, uint16_t v) { 
+    memcpy(p, &v, sizeof v); 
+}
+static inline void store_u32(void *p, uint32_t v) { 
+    memcpy(p, &v, sizeof v); 
+}
+
+static inline unsigned short net_read16(const void *p) {
+    const unsigned char *b = (const unsigned char*)p;
+    return (unsigned short)((b[0] << 8) | b[1]);
+}
+
+static inline void ipv4_be_to_string(uint32_t be, char out[16]) {
+    unsigned char o0 = (unsigned char)((be >> 24) & 0xFF);
+    unsigned char o1 = (unsigned char)((be >> 16) & 0xFF);
+    unsigned char o2 = (unsigned char)((be >>  8) & 0xFF);
+    unsigned char o3 = (unsigned char)((be      ) & 0xFF);
+    /* out must be at least 16 bytes (xxx.xxx.xxx.xxx\0) */
+    snprintf(out, 16, "%u.%u.%u.%u", (unsigned)o0, (unsigned)o1, (unsigned)o2, (unsigned)o3);
+}
 
 int sv_map01(unsigned char *buf,int *last,struct map *cmap) {
     int p,c;
@@ -127,22 +173,22 @@ int sv_map01(unsigned char *buf,int *last,struct map *cmap) {
         c=*last+*(unsigned char *)(buf+1);
     } else {
         p=3;
-        c=*(unsigned short *)(buf+1);
+        c=load_u16(buf+1);
     }
 
     if (c>MAPDX*MAPDY || c<0) { fail("sv_map01 illegal call with c=%d\n",c); exit(-1); }
 
     if (buf[0]&1) {
-        cmap[c].ef[0]=*(unsigned int *)(buf+p); p+=4;
+        cmap[c].ef[0]=load_u32(buf+p); p+=4;
     }
     if (buf[0]&2) {
-        cmap[c].ef[1]=*(unsigned int *)(buf+p); p+=4;
+        cmap[c].ef[1]=load_u32(buf+p); p+=4;
     }
     if (buf[0]&4) {
-        cmap[c].ef[2]=*(unsigned int *)(buf+p); p+=4;
+        cmap[c].ef[2]=load_u32(buf+p); p+=4;
     }
     if (buf[0]&8) {
-        cmap[c].ef[3]=*(unsigned int *)(buf+p); p+=4;
+        cmap[c].ef[3]=load_u32(buf+p); p+=4;
     }
 
     *last=c;
@@ -164,14 +210,14 @@ int sv_map10(unsigned char *buf,int *last,struct map *cmap) {
         c=*last+*(unsigned char *)(buf+1);
     } else {
         p=3;
-        c=*(unsigned short *)(buf+1);
+        c=load_u16(buf+1);
     }
 
     if (c>MAPDX*MAPDY || c<0) { fail("sv_map10 illegal call with c=%d\n",c); exit(-1); }
 
     if (buf[0]&1) {
-        cmap[c].csprite=*(unsigned int *)(buf+p); p+=4;
-        cmap[c].cn=*(unsigned short *)(buf+p); p+=2;
+        cmap[c].csprite=load_u32(buf+p); p+=4;
+        cmap[c].cn=load_u16(buf+p); p+=2;
     }
     if (buf[0]&2) {
         cmap[c].action=*(unsigned char *)(buf+p); p++;
@@ -214,28 +260,28 @@ int sv_map11(unsigned char *buf,int *last,struct map *cmap) {
         c=*last+*(unsigned char *)(buf+1);
     } else {
         p=3;
-        c=*(unsigned short *)(buf+1);
+        c=load_u16(buf+1);
     }
 
     if (c>MAPDX*MAPDY || c<0) { fail("sv_map11 illegal call with c=%d\n",c); exit(-1); }
 
     if (buf[0]&1) {
-        tmp32=*(unsigned int *)(buf+p); p+=4;
+        tmp32=load_u32(buf+p); p+=4;
         cmap[c].gsprite=(unsigned short int)(tmp32&0x0000FFFF);
         cmap[c].gsprite2=(unsigned short int)(tmp32>>16);
     }
     if (buf[0]&2) {
-        tmp32=*(unsigned int *)(buf+p); p+=4;
+        tmp32=load_u32(buf+p); p+=4;
         cmap[c].fsprite=(unsigned short int)(tmp32&0x0000FFFF);
         cmap[c].fsprite2=(unsigned short int)(tmp32>>16);
     }
     if (buf[0]&4) {
-        cmap[c].isprite=*(unsigned int *)(buf+p); p+=4;
+        cmap[c].isprite=load_u32(buf+p); p+=4;
         if (cmap[c].isprite&0x80000000) {
             cmap[c].isprite&=~0x80000000;
-            cmap[c].ic1=*(unsigned short *)(buf+p); p+=2;
-            cmap[c].ic2=*(unsigned short *)(buf+p); p+=2;
-            cmap[c].ic3=*(unsigned short *)(buf+p); p+=2;
+            cmap[c].ic1=load_u16(buf+p); p+=2;
+            cmap[c].ic2=load_u16(buf+p); p+=2;
+            cmap[c].ic3=load_u16(buf+p); p+=2;
         } else {
             cmap[c].ic1=0;
             cmap[c].ic2=0;
@@ -244,7 +290,7 @@ int sv_map11(unsigned char *buf,int *last,struct map *cmap) {
     }
     if (buf[0]&8) {
         if (*(unsigned char *)(buf+p)) {
-            cmap[c].flags=*(unsigned short *)(buf+p); p+=2;
+            cmap[c].flags=load_u16(buf+p); p+=2;
         } else {
             cmap[c].flags=*(unsigned char *)(buf+p); p++;
         }
@@ -258,7 +304,7 @@ int sv_map11(unsigned char *buf,int *last,struct map *cmap) {
 int svl_ping(char *buf) {
     int t,diff;
 
-    t=*(unsigned int *)(buf+1);
+    t=load_u32(buf+1);
     diff=SDL_GetTicks()-t;
     addline("RTT1: %.2fms",diff/1000.0);
 
@@ -268,7 +314,7 @@ int svl_ping(char *buf) {
 int sv_ping(char *buf) {
     int t,diff;
 
-    t=*(unsigned int *)(buf+1);
+    t=load_u32(buf+1);
     diff=SDL_GetTicks()-t;
     addline("RTT2: %.2fms",diff/1000.0);
 
@@ -314,29 +360,29 @@ void sv_setval(unsigned char *buf,int nr) {
     n=buf[1];
     if (n<0 || n>=(*game_v_max)) return;
 
-    if (nr!=0 || n!=V_PROFESSION) value[nr][n]=*(short *)(buf+2);
+    if (nr!=0 || n!=V_PROFESSION) value[nr][n]=load_i16(buf+2);
 
     update_skltab=1;
 }
 
 void sv_sethp(unsigned char *buf) {
-    hp=*(short *)(buf+1);
+    hp=load_i16(buf+1);
 }
 
 void sv_endurance(unsigned char *buf) {
-    endurance=*(short *)(buf+1);
+    endurance=load_i16(buf+1);
 }
 
 void sv_lifeshield(unsigned char *buf) {
-    lifeshield=*(short *)(buf+1);
+    lifeshield=load_i16(buf+1);
 }
 
 void sv_setmana(unsigned char *buf) {
-    mana=*(short *)(buf+1);
+    mana=load_i16(buf+1);
 }
 
 void sv_setrage(unsigned char *buf) {
-    rage=*(short *)(buf+1);
+    rage=load_i16(buf+1);
 }
 
 void sv_setitem(unsigned char *buf) {
@@ -345,27 +391,27 @@ void sv_setitem(unsigned char *buf) {
     n=buf[1];
     if (n<0 || n>=INVENTORYSIZE) return;
 
-    item[n]=*(unsigned int *)(buf+2);
-    item_flags[n]=*(unsigned int *)(buf+6);
+    item[n]=load_u32(buf+2);
+    item_flags[n]=load_u32(buf+6);
 
     hover_invalidate_inv(n);
 }
 
 void sv_setorigin(unsigned char *buf) {
-    originx=*(unsigned short int *)(buf+1);
-    originy=*(unsigned short int *)(buf+3);
+    originx=load_u16(buf+1);
+    originy=load_u16(buf+3);
 }
 
 void sv_settick(unsigned char *buf) {
-    tick=*(unsigned int *)(buf+1);
+    tick=load_u32(buf+1);
 }
 
 void sv_mirror(unsigned char *buf) {
-    mirror=newmirror=*(unsigned int *)(buf+1);
+    mirror=newmirror=load_u32(buf+1);
 }
 
 void sv_realtime(unsigned char *buf) {
-    realtime=*(unsigned int *)(buf+1);
+    realtime=load_u32(buf+1);
 }
 
 void sv_speedmode(unsigned char *buf) {
@@ -377,15 +423,15 @@ void sv_fightmode(unsigned char *buf) {
 }
 
 void sv_setcitem(unsigned char *buf) {
-    csprite=*(unsigned int *)(buf+1);
-    cflags=*(unsigned int *)(buf+5);
+    csprite=load_u32(buf+1);
+    cflags=load_u32(buf+5);
 }
 
 void sv_act(unsigned char *buf) {
 
-    act=*(unsigned short int *)(buf+1);
-    actx=*(unsigned short int *)(buf+3);
-    acty=*(unsigned short int *)(buf+5);
+    act=load_u16(buf+1);
+    actx=load_u16(buf+3);
+    acty=load_u16(buf+5);
 
     if (act) teleporter=0;
 }
@@ -394,7 +440,7 @@ int sv_text(unsigned char *buf) {
     int len;
     char line[1024];
 
-    len=*(unsigned short *)(buf+1);
+    len=load_u16(buf+1);
     if (len<1000) {
         memcpy(line,buf+3,len);
         line[len]=0;
@@ -434,7 +480,7 @@ int sv_text(unsigned char *buf) {
 int svl_text(unsigned char *buf) {
     int len;
 
-    len=*(unsigned short *)(buf+1);
+    len=load_u16(buf+1);
     return len+3;
 }
 
@@ -484,7 +530,7 @@ int sv_name(unsigned char *buf) {
     int len,cn;
 
     len=buf[12];
-    cn=*(unsigned short *)(buf+1);
+    cn=load_u16(buf+1);
 
     if (cn<1 || cn>=MAXCHARS) addline("illegal cn %d in sv_name",cn);
     else {
@@ -492,9 +538,9 @@ int sv_name(unsigned char *buf) {
         player[cn].name[len]=0;
 
         player[cn].level=*(unsigned char *)(buf+3);
-        player[cn].c1=*(unsigned short *)(buf+4);
-        player[cn].c2=*(unsigned short *)(buf+6);
-        player[cn].c3=*(unsigned short *)(buf+8);
+        player[cn].c1=load_u16(buf+4);
+        player[cn].c2=load_u16(buf+6);
+        player[cn].c3=load_u16(buf+8);
         player[cn].clan=*(unsigned char *)(buf+10);
         player[cn].pk_status=*(unsigned char *)(buf+11);
     }
@@ -563,7 +609,10 @@ int sv_ceffect(unsigned char *buf) {
     int nr,type,len=0; //,fn,arg;
 
     nr=buf[1];
-    type=((struct cef_generic *)(buf+2))->type;
+
+    struct cef_generic tmp;
+    memcpy(&tmp, buf + 2, sizeof tmp);
+    type=tmp.type;
 
     switch (type) {
         case 1:		len=sizeof(struct cef_shield); break;
@@ -617,7 +666,10 @@ int svl_ceffect(unsigned char *buf) {
     int nr,type,len=0;
 
     nr=buf[1];
-    type=((struct cef_generic *)(buf+2))->type;
+
+    struct cef_generic tmp;
+    memcpy(&tmp, buf + 2, sizeof tmp);
+    type=tmp.type;
 
     switch (type) {
         case 1:		len=sizeof(struct cef_shield); break;
@@ -661,7 +713,7 @@ void sv_container(unsigned char *buf) {
     nr=buf[1];
     if (nr<0 || nr>=CONTAINERSIZE) { fail("illegal nr %d in sv_container!",nr);  exit(-1); }
 
-    container[nr]=*(unsigned int *)(buf+2);
+    container[nr]=load_u32(buf+2);
     hover_invalidate_con(nr);
 }
 
@@ -671,7 +723,7 @@ void sv_price(unsigned char *buf) {
     nr=buf[1];
     if (nr<0 || nr>=CONTAINERSIZE) { fail("illegal nr %d in sv_price!",nr);  exit(-1); }
 
-    price[nr]=*(unsigned int *)(buf+2);
+    price[nr]=load_u32(buf+2);
 }
 
 void sv_itemprice(unsigned char *buf) {
@@ -680,15 +732,15 @@ void sv_itemprice(unsigned char *buf) {
     nr=buf[1];
     if (nr<0 || nr>=CONTAINERSIZE) { fail("illegal nr %d in sv_itemprice!",nr);  exit(-1); }
 
-    itemprice[nr]=*(unsigned int *)(buf+2);
+    itemprice[nr]=load_u32(buf+2);
 }
 
 void sv_cprice(unsigned char *buf) {
-    cprice=*(unsigned int *)(buf+1);
+    cprice=load_u32(buf+1);
 }
 
 void sv_gold(unsigned char *buf) {
-    gold=*(unsigned int *)(buf+1);
+    gold=load_u32(buf+1);
 }
 
 void sv_concnt(unsigned char *buf) {
@@ -705,23 +757,23 @@ void sv_contype(unsigned char *buf) {
 }
 
 void sv_exp(unsigned char *buf) {
-    experience=*(unsigned long *)(buf+1);
+    experience=load_ulong(buf+1);
     update_skltab=1;
 }
 
 void sv_exp_used(unsigned char *buf) {
-    experience_used=*(unsigned long *)(buf+1);
+    experience_used=load_ulong(buf+1);
     update_skltab=1;
 }
 
 void sv_mil_exp(unsigned char *buf) {
-    mil_exp=*(unsigned long *)(buf+1);
+    mil_exp=load_ulong(buf+1);
 }
 
 void sv_cycles(unsigned char *buf) {
     int c;
 
-    c=*(unsigned long *)(buf+1);
+    c=load_ulong(buf+1);
 
     server_cycles=server_cycles*0.99+c*0.01;
 }
@@ -729,12 +781,12 @@ void sv_cycles(unsigned char *buf) {
 void sv_lookinv(unsigned char *buf) {
     int n;
 
-    looksprite=*(unsigned int *)(buf+1);
-    lookc1=*(unsigned int *)(buf+5);
-    lookc2=*(unsigned int *)(buf+9);
-    lookc3=*(unsigned int *)(buf+13);
+    looksprite=load_u32(buf+1);
+    lookc1=load_u32(buf+5);
+    lookc2=load_u32(buf+9);
+    lookc3=load_u32(buf+13);
     for (n=0; n<12; n++) {
-        lookinv[n]=*(unsigned int *)(buf+17+n*4);
+        lookinv[n]=load_u32(buf+17+n*4);
     }
     show_look=1;
 }
@@ -745,9 +797,9 @@ void sv_server(unsigned char *buf) {
     // address. BUT the vanilla server has a wrong IP hardcoded and this breaks the clients
     // for the most common case of a single host running all areas. So. Commented out:
 
-    //target_server=*(unsigned int *)(buf+1);
+    //target_server=load_u32(buf+1);
 
-    target_port=*(unsigned short *)(buf+5);
+    target_port=load_u16(buf+5);
 }
 
 void sv_logindone(void) {
@@ -758,9 +810,9 @@ void sv_logindone(void) {
 void sv_special(unsigned char *buf) {
     unsigned int type,opt1,opt2;
 
-    type=*(unsigned int *)(buf+1);
-    opt1=*(unsigned int *)(buf+5);
-    opt2=*(unsigned int *)(buf+9);
+    type=load_u32(buf+1);
+    opt1=load_u32(buf+5);
+    opt2=load_u32(buf+9);
 
     switch (type) {
         case 0:		display_gfx=opt1; display_time=tick; break;
@@ -793,8 +845,8 @@ void sv_prof(unsigned char *buf) {
     update_skltab=1;
 }
 
-__declspec(dllexport) struct quest quest[MAXQUEST];
-__declspec(dllexport) struct shrine_ppd shrine;
+DLL_EXPORT struct quest quest[MAXQUEST];
+DLL_EXPORT struct shrine_ppd shrine;
 
 void sv_questlog(unsigned char *buf) {
     int size;
@@ -805,35 +857,15 @@ void sv_questlog(unsigned char *buf) {
     memcpy(&shrine,buf+1+size,sizeof(struct shrine_ppd));
 }
 
-static void save_unique(void) {
-    HKEY hk;
-
-    if (RegCreateKey(HKEY_CURRENT_USER,"Software\\Microsoft\\Notepad",&hk)!=ERROR_SUCCESS) return;
-
-    unique=unique^0xfe2abc82;
-    usum=unique^0x3e5fba04;
-
-    RegSetValueEx(hk,"fInput1",0,REG_DWORD,(void *)&unique,4);
-    RegSetValueEx(hk,"fInput2",0,REG_DWORD,(void *)&usum,4);
-}
-
-static void load_unique(void) {
-    HKEY hk;
-    int size=4,type;
-
-    if (RegCreateKey(HKEY_CURRENT_USER,"Software\\Microsoft\\Notepad",&hk)!=ERROR_SUCCESS) return;
-
-    RegQueryValueEx(hk,"fInput1",0,(void *)&type,(void *)&unique,(void *)&size);
-    RegQueryValueEx(hk,"fInput2",0,(void *)&type,(void *)&usum,(void *)&size);
-
-    if ((unique^0x3e5fba04)!=usum) unique=usum=0;
-    else unique=unique^0xfe2abc82;
-}
+void save_unique(void);
+void load_unique(void);
 
 void sv_unique(unsigned char *buf) {
-    if (unique!=*(unsigned int *)(buf+1)) {
-        unique=*(unsigned int *)(buf+1);
+    if (unique!=load_u32(buf+1)) {
+        unique=load_u32(buf+1);
+        #ifdef STORE_UNIQUE
         save_unique();
+        #endif
     }
 }
 
@@ -963,7 +995,7 @@ int prefetch(unsigned char *buf,int size) {
                                                 len=10; break;
 
                 case SV_SETORIGIN:              len=5; break;
-                case SV_SETTICK:                prefetch_tick=*(unsigned int *)(buf+1); len=5; break;
+                case SV_SETTICK:                prefetch_tick=load_u32(buf+1); len=5; break;
                 case SV_SETCITEM:               if (game_options&GO_PREDICT) sv_setcitem(buf);
                                                 len=9; break;
 
@@ -1028,7 +1060,7 @@ int prefetch(unsigned char *buf,int size) {
     return prefetch_tick;
 }
 
-__declspec(dllexport) void client_send(void *buf,int len) {
+DLL_EXPORT void client_send(void *buf,int len) {
     if (len>MAX_OUTBUF-outused) return;
 
     memcpy(outbuf+outused,buf,len);
@@ -1039,8 +1071,8 @@ void cmd_move(int x,int y) {
     char buf[16];
 
     buf[0]=CL_MOVE;
-    *(unsigned short int *)(buf+1)=x;
-    *(unsigned short int *)(buf+3)=y;
+    store_u16(buf+1, x);
+    store_u16(buf+3, y);
     client_send(buf,5);
 }
 
@@ -1048,7 +1080,7 @@ void cmd_ping(void) {
     char buf[16];
 
     buf[0]=CL_PING;
-    *(unsigned int *)(buf+1)=SDL_GetTicks();
+    store_u32((unsigned char*)buf+1, (uint32_t)SDL_GetTicks());
     client_send(buf,5);
 }
 
@@ -1085,8 +1117,8 @@ void cmd_take(int x,int y) {
     char buf[16];
 
     buf[0]=CL_TAKE;
-    *(unsigned short int *)(buf+1)=x;
-    *(unsigned short int *)(buf+3)=y;
+    store_u16(buf+1, x);
+    store_u16(buf+3, y);
     client_send(buf,5);
 }
 
@@ -1094,8 +1126,8 @@ void cmd_look_map(int x,int y) {
     char buf[16];
 
     buf[0]=CL_LOOK_MAP;
-    *(unsigned short int *)(buf+1)=x;
-    *(unsigned short int *)(buf+3)=y;
+    store_u16(buf+1, x);
+    store_u16(buf+3, y);
     client_send(buf,5);
 }
 
@@ -1103,8 +1135,8 @@ void cmd_look_item(int x,int y) {
     char buf[16];
 
     buf[0]=CL_LOOK_ITEM;
-    *(unsigned short int *)(buf+1)=x;
-    *(unsigned short int *)(buf+3)=y;
+    store_u16(buf+1, x);
+    store_u16(buf+3, y);
     client_send(buf,5);
 }
 
@@ -1120,7 +1152,7 @@ void cmd_look_char(int cn) {
     char buf[16];
 
     buf[0]=CL_LOOK_CHAR;
-    *(unsigned short *)(buf+1)=cn;
+    store_u16(buf+1, cn);
     client_send(buf,3);
 }
 
@@ -1128,8 +1160,8 @@ void cmd_use(int x,int y) {
     char buf[16];
 
     buf[0]=CL_USE;
-    *(unsigned short int *)(buf+1)=x;
-    *(unsigned short int *)(buf+3)=y;
+    store_u16(buf+1, x);
+    store_u16(buf+3, y);
     client_send(buf,5);
 }
 
@@ -1137,8 +1169,8 @@ void cmd_drop(int x,int y) {
     char buf[16];
 
     buf[0]=CL_DROP;
-    *(unsigned short int *)(buf+1)=x;
-    *(unsigned short int *)(buf+3)=y;
+    store_u16(buf+1, x);
+    store_u16(buf+3, y);
     client_send(buf,5);
 }
 
@@ -1175,7 +1207,7 @@ void cmd_kill(int cn) {
     char buf[16];
 
     buf[0]=CL_KILL;
-    *(unsigned short int *)(buf+1)=cn;
+    store_u16(buf+1, cn);
     client_send(buf,3);
 }
 
@@ -1183,7 +1215,7 @@ void cmd_give(int cn) {
     char buf[16];
 
     buf[0]=CL_GIVE;
-    *(unsigned short int *)(buf+1)=cn;
+    store_u16(buf+1, cn);
     client_send(buf,3);
 }
 
@@ -1194,7 +1226,7 @@ void cmd_some_spell(int spell,int x,int y,int chr) {
         case CL_BLESS:
         case CL_HEAL:
             buf[0]=spell;
-            *(unsigned short *)(buf+1)=chr;
+            store_u16(buf+1, chr);
             len=3;
             break;
 
@@ -1202,11 +1234,11 @@ void cmd_some_spell(int spell,int x,int y,int chr) {
         case CL_BALL:
             buf[0]=spell;
             if (x) {
-                *(unsigned short *)(buf+1)=x;
-                *(unsigned short *)(buf+3)=y;
+                store_u16(buf+1, x);
+                store_u16(buf+3, y);
             } else {
-                *(unsigned short *)(buf+1)=0;
-                *(unsigned short *)(buf+3)=chr;
+                store_u16(buf+1, 0);
+                store_u16(buf+3, chr);
             }
 
             len=5;
@@ -1232,7 +1264,7 @@ void cmd_raise(int vn) {
     char buf[16];
 
     buf[0]=CL_RAISE;
-    *(unsigned short int *)(buf+1)=vn;
+    store_u16(buf+1, vn);
     client_send(buf,3);
 }
 
@@ -1240,7 +1272,7 @@ void cmd_take_gold(int vn) {
     char buf[16];
 
     buf[0]=CL_TAKE_GOLD;
-    *(unsigned int *)(buf+1)=vn;
+    store_u32(buf+1, vn);
     client_send(buf,5);
 }
 
@@ -1401,7 +1433,7 @@ void bzero_client(int part) {
 }
 
 int close_client(void) {
-    if (sock!=-1) { closesocket(sock); sock=-1; }
+    if (sock) { astonia_net_close(sock); sock=NULL; }
     if (zsinit) { inflateEnd(&zs); zsinit=0; }
 
     sockstate=0;
@@ -1428,24 +1460,20 @@ void decrypt(char *name,char *password) {
     }
 }
 
-void send_info(int sock) {
-    struct sockaddr_in addr;
-    int len;
-    char buf[80];
+void send_info(astonia_sock *s) {
+    char buf[12] = {0};
+    uint32_t local_ip, peer_ip;
+    astonia_net_local_ipv4(s, &local_ip);
+    astonia_net_peer_ipv4(s, &peer_ip);
+    store_u32(buf + 0, local_ip);
+    store_u32(buf + 4, peer_ip);
 
-    len=sizeof(addr);
-    getsockname(sock,(struct sockaddr *)&addr,&len);
-    *(unsigned int *)(buf+0)=addr.sin_addr.s_addr;
-
-    len=sizeof(addr);
-    getpeername(sock,(struct sockaddr *)&addr,&len);
-    *(unsigned int *)(buf+4)=addr.sin_addr.s_addr;
-
+    #ifdef STORE_UNIQUE
     load_unique();
+    #endif
 
-    *(unsigned int *)(buf+8)=unique;
-
-    send(sock,buf,12,0);
+    store_u32(buf+8, unique);
+    (void)astonia_net_send(s, buf, 12);
 }
 
 int poll_network(void) {
@@ -1458,14 +1486,10 @@ int poll_network(void) {
 
     // create nonblocking socket
     if (sockstate==0 && !kicked_out) {
-
-        struct sockaddr_in addr;
-        unsigned long one=1;
-
         if (SDL_GetTicks()<socktime) return 0;
 
         // reset socket
-        if (sock!=-1) { closesocket(sock); sock=-1; }
+        if (sock) { astonia_net_close(sock); sock=NULL; }
         if (zsinit) { inflateEnd(&zs); zsinit=0; }
 
         change_area=0;
@@ -1478,32 +1502,21 @@ int poll_network(void) {
             socktimeout=time(NULL);
         }
 
-        // create socket
-        if ((sock=socket(PF_INET,SOCK_STREAM,0))==INVALID_SOCKET) {
-            fail("creating socket failed (%d)",WSAGetLastError());
-            sock=-1;
-            sockstate=-1;   // fail - no retry
+        // connect to server (non-blocking); require hostname string
+        if (target_server == NULL) {
+            fail("Server URL not specified.");
+            sockstate=-3;   // fail - no retry
             return -1;
         }
 
-        // set to nonblocking
-        if (ioctlsocket(sock,FIONBIO,&one)==-1) {
-            fail("ioctlsocket(non-blocking) failed (%d)\n",WSAGetLastError());
-            sockstate=-2;   // fail - no retry
+        sock = astonia_net_connect(target_server, (unsigned short)target_port, 0);
+        if (!sock) {
+            fail("creating socket failed");
+            sockstate=0;
+            socktime=SDL_GetTicks()+5000;
             return -1;
         }
 
-        // connect to server
-        addr.sin_family=AF_INET;
-        addr.sin_port=htons(target_port);
-        addr.sin_addr.s_addr=htonl(target_server);
-        if ((connect(sock,(struct sockaddr *)&addr,sizeof(addr)))) {
-            if (WSAGetLastError()!=WSAEWOULDBLOCK) {
-                fail("connect failed (%d)\n",WSAGetLastError());
-                sockstate=-3;   // fail - no retry
-                return -1;
-            }
-        }
         // statechange
         sockstate=1;
         // return 0;
@@ -1511,39 +1524,32 @@ int poll_network(void) {
 
     // wait until connect is ok
     if (sockstate==1) {
-
-        struct fd_set outset,errset;
-        struct timeval timeout;
-
         if (SDL_GetTicks()<socktime) return 0;
 
-
-        FD_ZERO(&outset);
-        FD_ZERO(&errset);
-        FD_SET((unsigned int)sock,&outset);
-        FD_SET((unsigned int)sock,&errset);
-
-        timeout.tv_sec=0;
-        timeout.tv_usec=50;
-        n=select(sock+1,NULL,&outset,&errset,&timeout);
-        if (n==0) {
-            // timed out
+        n = astonia_net_poll(sock, 2, 50);
+        if (n==0) {                      /* timeout -> try next frame */
             socktime=SDL_GetTicks()+50;
             return 0;
-        }
-
-        if (FD_ISSET(sock,&errset)) {
-            note("select connect failed (%d)",WSAGetLastError());
+        } else if (n<0 || (n & 2)==0) {  /* error or not writable */
+            note("connect failed");
             sockstate=0;
             socktime=SDL_GetTicks()+5000;
             return -1;
         }
 
-        if (!FD_ISSET(sock,&outset)) {
-            note("can we see this (select without timeout and none set) ?");
-            sockstate=-4;   // fail - no retry
-            return -1;
+#ifdef DEVELOPER
+        {
+            uint32_t be = 0;
+            char ip[16] = "unknown";
+            if (astonia_net_peer_ipv4(sock, &be) == 0 && be != 0) {
+                ipv4_be_to_string(be, ip);
+                note("Using login server at %s (%s):%u", target_server, ip, (unsigned)target_port);
+            } else {
+                // Could be IPv6 or not yet retrievable; still log the hostname.
+                note("Using login server at %s:%u", target_server, (unsigned)target_port);
+            }
         }
+#endif
 
         // statechange
         sockstate=2;
@@ -1563,16 +1569,16 @@ int poll_network(void) {
 
         bzero(tmp,sizeof(tmp));
         strcpy(tmp,username);
-        send(sock,tmp,40,0);
+        astonia_net_send(sock,tmp,40);
 
         // send password
         bzero(tmp,sizeof(tmp));
         strcpy(tmp,password);
         decrypt(username,tmp);
-        send(sock,tmp,16,0);
+        astonia_net_send(sock,tmp,16);
 
-        *(unsigned int *)(tmp)=(0x8fd46100|0x01);   // magic code + version 1
-        send(sock,tmp,4,0);
+        store_u32(tmp, 0x8fd46100|0x01);   // magic code + version 1
+        astonia_net_send(sock,tmp,4);
         send_info(sock);
 
         // statechange
@@ -1603,32 +1609,36 @@ int poll_network(void) {
     }
 
     // send
-    if (outused && sockstate==4) {
-        n=send(sock,outbuf,outused,0);
-
-        if (n<=0) {
-            addline("connection lost during write (%d)\n",WSAGetLastError());
-            sockstate=0;
-            socktimeout=time(NULL);
+    if (outused && sockstate==4 && sock) {
+        n=(int)astonia_net_send(sock,outbuf,outused);
+        if (n==0) {
+            addline("connection lost during write\n");
+            sockstate=0; socktimeout=time(NULL);
             return -1;
+        } else if (n<0) {
+            // would-block -> no progress this frame
+            n=0;
+        } else {
+            memmove(outbuf,outbuf+n,outused-n);
+            outused-=n;
+            sent_bytes+=n;
         }
-
-        memmove(outbuf,outbuf+n,outused-n);
-        outused-=n;
-        sent_bytes+=n;
     }
 
     // recv
-    n=recv(sock,(char *)inbuf+inused,MAX_INBUF-inused,0);
-    if (n<=0) {
-        if (WSAGetLastError()!=WSAEWOULDBLOCK) {
-            addline("connection lost during read (%d)\n",WSAGetLastError());
-            sockstate=0;
-            socktimeout=time(NULL);
-            return -1;
+    n=0;
+    if (sock && astonia_net_poll(sock, 1, 0)>0) {
+        n=(int)astonia_net_recv(sock,(char *)inbuf+inused,MAX_INBUF-inused);
+        if (n<0) {
+            n=0; /* would-block */
+        } else if (n==0) {
+            addline("connection lost during read\n");
+            sockstate=0; socktimeout=time(NULL); return -1;
         }
-        return 0;
+    } else {
+        return 0; /* no data this frame */
     }
+     
     inused+=n;
     rec_bytes+=n;
 
@@ -1637,7 +1647,7 @@ int poll_network(void) {
         if (inused>=lastticksize+1 && *(inbuf+lastticksize)&0x40) {
             lastticksize+=1+(*(inbuf+lastticksize)&0x3F);
         } else if (inused>=lastticksize+2) {
-            lastticksize+=2+(ntohs(*(unsigned short *)(inbuf+lastticksize))&0x3FFF);
+            lastticksize+=2+(net_read16(inbuf+lastticksize)&0x3FFF);
         } else break;
 
         lasttick++;
@@ -1676,7 +1686,7 @@ int next_tick(void) {
         if (inused<ticksize) return 0;
         indone=1;
     } else if (inused>=2 && !(*(inbuf)&0x40)) {
-        ticksize=2+(ntohs(*(unsigned short *)(inbuf))&0x3FFF);
+        ticksize=2+(net_read16(inbuf)&0x3FFF);
         if (inused<ticksize) return 0;
         indone=2;
     } else {
@@ -1750,23 +1760,23 @@ void cl_ticker(void) {
     char buf[256];
 
     buf[0]=CL_TICKER;
-    *(unsigned int *)(buf+1)=tick;
+    store_u32(buf+1, tick);
     client_send(buf,5);
 }
 
 // X exp yield level Y
-__declspec(dllexport) int exp2level(int val) {
+DLL_EXPORT int exp2level(int val) {
     if (val<1) return 1;
 
     return max(1,(int)(sqrt(sqrt(val))));
 }
 
 // to reach level X you need Y exp
-__declspec(dllexport) int level2exp(int level) {
+DLL_EXPORT int level2exp(int level) {
     return pow(level,4);
 }
 
-__declspec(dllexport) int mapmn(int x,int y) {
+DLL_EXPORT int mapmn(int x,int y) {
     if (x<0 || y<0 || x>=MAPDX || y>=MAPDY) {
         return -1;
     }

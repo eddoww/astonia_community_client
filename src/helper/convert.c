@@ -23,16 +23,20 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <ctype.h>
-#include <sys/stat.h>
-#ifdef STANDALONE
-#define SDL_MAIN_HANDLED
-#endif
-#include <SDL2/SDL.h>
 #include <png.h>
 #include <zip.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#define mkdir(pathname,mode) _mkdir(pathname)
+#else
+#include <sys/stat.h>
+#endif
+
 #ifndef STANDALONE
+#include <SDL2/SDL.h>
 #include "../../src/sdl/_sdl.h"
 #endif
 
@@ -70,7 +74,7 @@ struct sdl_image {
     int16_t xoff,yoff;
 };
 
-void png_helper_read(png_struct *ps,unsigned char *buf,long long unsigned len) {
+void png_helper_read(png_structp ps,png_bytep buf,png_size_t len) {
     zip_fread(png_get_io_ptr(ps),buf,len);
 }
 
@@ -399,12 +403,12 @@ int main(int argc,char *args[]) {
     p.filename=args[1];
     sprite=atoi(args[2]);
 
-    mkdir("../gfxp");
+    mkdir("../gfxp",0777);
     for (s=1; s<5; s++) {
         sprintf(buf,"../gfxp/x%d",s);
-        mkdir(buf);
+        mkdir(buf,0777);
         sprintf(buf,"../gfxp/x%d/%08d",s,(sprite/1000)*1000);
-        mkdir(buf);
+        mkdir(buf,0777);
     }
 
     if (tolower(args[3][0])=='w') {

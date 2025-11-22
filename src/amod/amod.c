@@ -7,6 +7,7 @@
  *
  */
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -21,15 +22,21 @@
 #include "quests.c"
 #endif
 
-__declspec(dllexport) char *amod_version(void) {
+#ifdef _WIN32
+#define MOAC_EXE "bin\\moac.exe"
+#else
+#define MOAC_EXE "bin/moac"
+#endif
+
+DLL_EXPORT char *amod_version(void) {
     return "Restart Demo 0.4";
 }
 
-__declspec(dllexport) void amod_gamestart(void) {
+DLL_EXPORT void amod_gamestart(void) {
     note("Restart Client Demo v0.4 loaded.");
 }
 
-__declspec(dllexport) int amod_client_cmd(char *buf) {
+DLL_EXPORT int amod_client_cmd(char *buf) {
     static unsigned long long option_ovr=0;
 
     if (!strncmp(buf, "#slow",5)) {
@@ -39,12 +46,12 @@ __declspec(dllexport) int amod_client_cmd(char *buf) {
 
     if (!strncmp(buf, "#option ", 8)) {
     	option_ovr=strtoull(&buf[8],NULL,10);
-        addline("Old options=%llu, new options=%llu",game_options,option_ovr);
+        addline("Old options=%" PRIu64 ", new options=%llu",game_options,option_ovr);
     	return 1;
     }
 
     if (!strncmp(buf,"#reset",6)) {
-        char opt[20][100];
+        char opt[20][258];
         sprintf(opt[0],"-u%s",username);
         sprintf(opt[1],"-p%s",password);
         sprintf(opt[2],"-d%s",server_url);
@@ -56,12 +63,12 @@ __declspec(dllexport) int amod_client_cmd(char *buf) {
         sprintf(opt[8],"-m%d",sdl_multi);
         sprintf(opt[9],"-t%d",server_port);
 
-        printf("bin\\moac.exe ");
+        printf(MOAC_EXE);
         for (int i=0; i<10; i++) {
-            printf("%s ",opt[i]);
+            printf(" %s",opt[i]);
         }
         printf("\n");
-        execl("bin\\moac.exe","bin\\moac.exe",opt[0],opt[1],opt[2],opt[3],opt[4],opt[5],opt[6],opt[7],opt[8],opt[9],NULL);
+        execl(MOAC_EXE,MOAC_EXE,opt[0],opt[1],opt[2],opt[3],opt[4],opt[5],opt[6],opt[7],opt[8],opt[9],NULL);
     }
 
     if (!strncmp(buf,"#echo",5)) {
@@ -71,19 +78,19 @@ __declspec(dllexport) int amod_client_cmd(char *buf) {
     return 0;
 }
 
-__declspec(dllexport) int amod_keydown(int key) {
+DLL_EXPORT int amod_keydown(int key) {
     return 0;
 }
-__declspec(dllexport) int amod_keyup(int key) {
+DLL_EXPORT int amod_keyup(int key) {
     return 0;
 }
 
-__declspec(dllexport) int amod_is_playersprite(int sprite) {
+DLL_EXPORT int amod_is_playersprite(int sprite) {
     return (sprite==800 || sprite==801);
 }
 
 
-__declspec(dllexport) int amod_process(char *buf) {
+DLL_EXPORT int amod_process(char *buf) {
     switch (buf[0]) {
         case SV_MOD1:
             addline("process got sv_mod1");
@@ -91,18 +98,18 @@ __declspec(dllexport) int amod_process(char *buf) {
     }
     return 0;
 }
-__declspec(dllexport) int amod_prefetch(char *buf) {
+DLL_EXPORT int amod_prefetch(char *buf) {
     switch (buf[0]) {
         case SV_MOD1:   return 5;
     }
     return 0;
 }
 
-__declspec(dllexport) void amod_frame(void) {
+DLL_EXPORT void amod_frame(void) {
 
 }
 
-__declspec(dllexport) int do_display_help(int nr) {
+DLL_EXPORT int do_display_help(int nr) {
     int x=dotx(DOT_HLP)+10,y=doty(DOT_HLP)+8;
 
     switch (nr) {

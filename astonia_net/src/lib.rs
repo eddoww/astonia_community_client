@@ -29,7 +29,10 @@ fn resolve_one(host: &str, port: u16) -> Option<SocketAddr> {
     if let Ok(ip) = host.parse::<IpAddr>() {
         Some(SocketAddr::new(ip, port))
     } else {
-        (host, port).to_socket_addrs().ok().and_then(|mut it| it.next())
+        (host, port)
+            .to_socket_addrs()
+            .ok()
+            .and_then(|mut it| it.next())
     }
 }
 
@@ -99,8 +102,7 @@ fn drive_connect(s: &mut AstoniaSock, total_to: Option<Duration>) -> io::Result<
                     // Connected, allow poll to re-register for READABLE | WRITABLE
                     return Ok(true);
                 }
-                Err(ref e) if is_still_connecting(e) =>
-                {
+                Err(ref e) if is_still_connecting(e) => {
                     continue; // keep looping within timeout
                 }
                 Err(e) => return Err(e),
@@ -130,7 +132,11 @@ fn try_recv_into(s: &MioTcp, buf: &mut [u8]) -> io::Result<usize> {
         #[cfg(unix)]
         unsafe {
             let n = libc::recv(s.as_raw_fd(), buf.as_mut_ptr() as *mut _, buf.len(), 0);
-            if n >= 0 { Ok(n as usize) } else { Err(io::Error::last_os_error()) }
+            if n >= 0 {
+                Ok(n as usize)
+            } else {
+                Err(io::Error::last_os_error())
+            }
         }
 
         #[cfg(windows)]
@@ -143,7 +149,11 @@ fn try_recv_into(s: &MioTcp, buf: &mut [u8]) -> io::Result<usize> {
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
             );
-            if n >= 0 { Ok(n as usize) } else { Err(io::Error::last_os_error()) }
+            if n >= 0 {
+                Ok(n as usize)
+            } else {
+                Err(io::Error::last_os_error())
+            }
         }
     })
 }
@@ -154,7 +164,11 @@ fn try_send_from(s: &MioTcp, buf: &[u8]) -> io::Result<usize> {
         #[cfg(unix)]
         unsafe {
             let n = libc::send(s.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), 0);
-            if n >= 0 { Ok(n as usize) } else { Err(io::Error::last_os_error()) }
+            if n >= 0 {
+                Ok(n as usize)
+            } else {
+                Err(io::Error::last_os_error())
+            }
         }
 
         #[cfg(windows)]
@@ -167,7 +181,11 @@ fn try_send_from(s: &MioTcp, buf: &[u8]) -> io::Result<usize> {
                 std::ptr::null(),
                 0,
             );
-            if n >= 0 { Ok(n as usize) } else { Err(io::Error::last_os_error()) }
+            if n >= 0 {
+                Ok(n as usize)
+            } else {
+                Err(io::Error::last_os_error())
+            }
         }
     })
 }
@@ -239,10 +257,14 @@ pub extern "C" fn astonia_net_poll(
     mask: c_int,
     timeout_ms: c_int,
 ) -> c_int {
-    let Some(s) = (unsafe { sock.as_mut() }) else { return -1; };
+    let Some(s) = (unsafe { sock.as_mut() }) else {
+        return -1;
+    };
 
     // nothing requested – avoid work
-    if mask == 0 { return 0; }
+    if mask == 0 {
+        return 0;
+    }
 
     // If still connecting, drive connect using the provided timeout.
     if s.connecting {
@@ -265,8 +287,15 @@ pub extern "C" fn astonia_net_poll(
     }
 
     // Always re-register in poll no matter what.
-    if s.poll.registry().reregister(&mut s.mio, TOKEN, Interest::READABLE | Interest::WRITABLE).is_err() {
-        let _ = s.poll.registry().register(&mut s.mio, TOKEN, Interest::READABLE | Interest::WRITABLE);
+    if s.poll
+        .registry()
+        .reregister(&mut s.mio, TOKEN, Interest::READABLE | Interest::WRITABLE)
+        .is_err()
+    {
+        let _ =
+            s.poll
+                .registry()
+                .register(&mut s.mio, TOKEN, Interest::READABLE | Interest::WRITABLE);
     }
 
     // Normal event poll.
@@ -295,8 +324,12 @@ pub extern "C" fn astonia_net_poll(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn astonia_net_recv(sock: *mut AstoniaSock, dst: *mut u8, cap: usize) -> isize {
-    let Some(s) = (unsafe { sock.as_mut() }) else { return -1; };
-    if dst.is_null() || cap == 0 { return 0; }
+    let Some(s) = (unsafe { sock.as_mut() }) else {
+        return -1;
+    };
+    if dst.is_null() || cap == 0 {
+        return 0;
+    }
     let buf = unsafe { std::slice::from_raw_parts_mut(dst, cap) };
 
     match try_recv_into(&s.mio, buf) {
@@ -308,8 +341,12 @@ pub extern "C" fn astonia_net_recv(sock: *mut AstoniaSock, dst: *mut u8, cap: us
 
 #[unsafe(no_mangle)]
 pub extern "C" fn astonia_net_send(sock: *mut AstoniaSock, src: *const u8, len: usize) -> isize {
-    let Some(s) = (unsafe { sock.as_mut() }) else { return -1; };
-    if src.is_null() || len == 0 { return 0; }
+    let Some(s) = (unsafe { sock.as_mut() }) else {
+        return -1;
+    };
+    if src.is_null() || len == 0 {
+        return 0;
+    }
     let buf = unsafe { std::slice::from_raw_parts(src, len) };
 
     match try_send_from(&s.mio, buf) {
@@ -322,7 +359,9 @@ pub extern "C" fn astonia_net_send(sock: *mut AstoniaSock, src: *const u8, len: 
 #[unsafe(no_mangle)]
 pub extern "C" fn astonia_net_local_ipv4(sock: *mut AstoniaSock, out_be: *mut u32) -> c_int {
     use std::net::SocketAddr;
-    let Some(s) = (unsafe { sock.as_mut() }) else { return -1; };
+    let Some(s) = (unsafe { sock.as_mut() }) else {
+        return -1;
+    };
     let local = match s.mio.local_addr() {
         Ok(a) => a,
         Err(_) => return -1,
@@ -331,16 +370,22 @@ pub extern "C" fn astonia_net_local_ipv4(sock: *mut AstoniaSock, out_be: *mut u3
         SocketAddr::V4(v4) => v4,
         SocketAddr::V6(_) => return -1,
     };
-    if out_be.is_null() { return -1; }
+    if out_be.is_null() {
+        return -1;
+    }
     let be = u32::from_be_bytes(v4.ip().octets());
-    (unsafe { *out_be = be; });
+    (unsafe {
+        *out_be = be;
+    });
     0
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn astonia_net_peer_ipv4(sock: *mut AstoniaSock, out_be: *mut u32) -> c_int {
     use std::net::SocketAddr;
-    let Some(s) = (unsafe { sock.as_mut() }) else { return -1; };
+    let Some(s) = (unsafe { sock.as_mut() }) else {
+        return -1;
+    };
     let peer = match s.mio.peer_addr() {
         Ok(a) => a,
         Err(_) => return -1,
@@ -349,9 +394,13 @@ pub extern "C" fn astonia_net_peer_ipv4(sock: *mut AstoniaSock, out_be: *mut u32
         SocketAddr::V4(v4) => v4,
         SocketAddr::V6(_) => return -1,
     };
-    if out_be.is_null() { return -1; }
+    if out_be.is_null() {
+        return -1;
+    }
     let be = u32::from_be_bytes(v4.ip().octets());
-    (unsafe { *out_be = be; });
+    (unsafe {
+        *out_be = be;
+    });
     0
 }
 

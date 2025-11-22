@@ -163,9 +163,176 @@ jobs:
         path: macos_client.tar.gz
         retention-days: 90
 
+  build-appimage-release:
+    name: Build AppImage Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        lfs: true
+
+    - name: Checkout LFS objects
+      run: git lfs pull
+
+    - name: Build in Arch Linux container
+      run: |
+        docker run --rm \
+          -v "$PWD:/workspace" \
+          -w /workspace \
+          archlinux:latest \
+          /bin/bash -c '
+            set -e
+            
+            # Update and install dependencies
+            pacman -Syu --noconfirm
+            pacman -S --noconfirm \
+              base-devel \
+              git \
+              curl \
+              wget \
+              file \
+              sdl3 \
+              sdl2-compat \
+              sdl2_mixer \
+              libpng \
+              libzip \
+              zlib \
+              patchelf \
+              desktop-file-utils
+            
+            # Install Rust
+            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+            source "$HOME/.cargo/env"
+            
+            # Build the application
+            make linux
+            
+            # Strip debug symbols
+            strip bin/moac
+            strip bin/libastonia_net.so
+            strip bin/amod.so
+            
+            echo "Build complete"
+          '
+
+    - name: Download linuxdeploy tools
+      run: |
+        wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+        chmod +x linuxdeploy-x86_64.AppImage
+
+    - name: Create AppDir structure
+      run: |
+        mkdir -p AppDir/usr/bin
+        mkdir -p AppDir/usr/lib
+        mkdir -p AppDir/usr/share/applications
+        mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+        mkdir -p AppDir/usr/share/astonia
+        
+        # Copy binaries
+        cp bin/moac AppDir/usr/bin/
+        cp bin/libastonia_net.so AppDir/usr/lib/
+        cp bin/amod.so AppDir/usr/lib/
+        
+        # Copy resources
+        cp -r res AppDir/usr/share/astonia/
+        
+        # Create a wrapper script that sets up the environment
+        cat > AppDir/usr/bin/moac-wrapper << 'EOF'
+        #!/bin/bash
+        # Get the AppImage's AppDir location
+        APPDIR="${APPDIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+        
+        # Set library path
+        export LD_LIBRARY_PATH="$APPDIR/usr/lib:${LD_LIBRARY_PATH}"
+        
+        # Change to the resource directory
+        cd "$APPDIR/usr/share/astonia" || exit 1
+        
+        # Execute the actual binary
+        exec "$APPDIR/usr/bin/moac" "$@"
+        EOF
+        chmod +x AppDir/usr/bin/moac-wrapper
+        
+        # Create desktop file (pointing to wrapper)
+        cat > AppDir/astonia.desktop << 'EOF'
+        [Desktop Entry]
+        Type=Application
+        Name=Astonia Community Client
+        Comment=Community-maintained client for Astonia 3
+        Exec=moac-wrapper
+        Icon=astonia
+        Categories=Game;
+        Terminal=false
+        EOF
+        
+        # Convert .ico to .png for better compatibility
+        # If ImageMagick is available, convert; otherwise use as-is
+        if command -v convert &> /dev/null; then
+          convert res/moa3.ico[0] AppDir/astonia.png || cp res/moa3.ico AppDir/astonia.png
+        else
+          cp res/moa3.ico AppDir/astonia.png
+        fi
+
+    - name: Create AppImage
+      run: |
+        # Run in the same Arch container to ensure we bundle libraries
+        docker run --rm \
+          -v "$PWD:/workspace" \
+          -w /workspace \
+          archlinux:latest \
+          /bin/bash -c '
+            set -e
+            
+            # Install dependencies
+            pacman -Syu --noconfirm
+            pacman -S --noconfirm \
+              sdl3 \
+              sdl2-compat \
+              sdl2_mixer \
+              libpng \
+              libzip \
+              zlib \
+              patchelf \
+              file \
+              fuse2 \
+              imagemagick
+            
+            # Make linuxdeploy executable
+            chmod +x linuxdeploy-x86_64.AppImage
+            
+            # Extract linuxdeploy (since FUSE might not work in container)
+            ./linuxdeploy-x86_64.AppImage --appimage-extract
+            
+            # Bundle the application with all dependencies
+            OUTPUT=astonia-client \
+            ARCH=x86_64 \
+            ./squashfs-root/AppRun \
+              --appdir=AppDir \
+              --executable=AppDir/usr/bin/moac-wrapper \
+              --desktop-file=AppDir/astonia.desktop \
+              --icon-file=AppDir/astonia.png \
+              --library=/usr/lib/libSDL3.so.0 \
+              --library=/usr/lib/libSDL2-2.0.so.0 \
+              --library=/usr/lib/libSDL2_mixer-2.0.so.0 \
+              --output appimage
+            
+            echo "AppImage created successfully"
+            ls -lh *.AppImage
+          '
+
+    - name: Upload AppImage
+      uses: actions/upload-artifact@v4
+      with:
+        name: appimage-release
+        path: astonia-client.AppImage
+        retention-days: 90
+
   create-release:
     name: Create GitHub Release
-    needs: [build-linux-release, build-windows-release, build-macos-release]
+    needs: [build-linux-release, build-windows-release, build-macos-release, build-appimage-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -210,6 +377,11 @@ jobs:
       with:
         name: macos-release
 
+    - name: Download AppImage release
+      uses: actions/download-artifact@v4
+      with:
+        name: appimage-release
+
     - name: Extract version and compute SHA256
       id: vars
       run: |
@@ -217,8 +389,10 @@ jobs:
         TAG_NAME="${GITHUB_REF_NAME}"
         echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
         
-        # Strip leading 'v' if present for pkgver
+        # Strip leading 'v' if present and sanitize for pkgver
+        # pkgver cannot contain hyphens, only alphanumeric and periods
         PKGVER="${TAG_NAME#v}"
+        PKGVER="${PKGVER//-/.}"  # Replace hyphens with periods
         echo "pkgver=${PKGVER}" >> $GITHUB_OUTPUT
         
         # Compute SHA256 of the source tarball (for PKGBUILD)
@@ -256,6 +430,7 @@ jobs:
           linux_client.tar.gz
           windows_client.zip
           macos_client.tar.gz
+          astonia-client.AppImage
           pkgbuild.tar.gz
         draft: false
         prerelease: false

@@ -60,6 +60,15 @@ convert:
 anicopy:
 	@$(MAKE) -f build/make/Makefile.$(PLATFORM) anicopy
 
+# Code quality targets
+sanitizer:
+	@echo "Building with AddressSanitizer/UBSan for $(PLATFORM)..."
+	@$(MAKE) -f build/make/Makefile.$(PLATFORM) sanitizer
+
+coverage:
+	@echo "Building with coverage instrumentation for $(PLATFORM)..."
+	@$(MAKE) -f build/make/Makefile.$(PLATFORM) coverage
+
 # Zig build target
 zig-build:
 	cp build/build.zig .
@@ -83,4 +92,4 @@ docker-linux-dev:
 	docker build -f Dockerfile.linux-dev -t astonia-linux-dev .
 	docker run --rm -it -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/app" -w /app astonia-linux-dev
 
-.PHONY: all windows linux macos clean distrib amod convert anicopy zig-build docker-linux docker-windows docker-windows-dev
+.PHONY: all windows linux macos clean distrib amod convert anicopy zig-build docker-linux docker-windows docker-windows-dev sanitizer coverage

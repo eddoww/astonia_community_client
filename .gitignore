@@ -36,3 +36,16 @@ target
 
 # Mac :(
 .DS_STORE
+
+# Code quality and analysis artifacts
+*.gcda
+*.gcno
+*.gcov
+coverage.info
+coverage-filtered.info
+coverage-html/
+valgrind-report.txt
+asan-report.txt.*
+ubsan-report.txt.*
+*-sanitizer.o
+*-coverage.o

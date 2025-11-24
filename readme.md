@@ -92,3 +92,13 @@ make distrib    # Create distribution package
 make amod       # Build mod (src/amod/)
 make clean      # Clean up build assets
 ```
+
+## Development & Quality Checks
+
+Run quality checks locally before committing (same checks as CI pipeline):
+
+```bash
+make lint       # Auto-fix code formatting
+make check      # Run all quality checks
+```
+

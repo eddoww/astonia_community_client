@@ -7,8 +7,9 @@ on:
     branches: [ main ]
 
 jobs:
-  clang-format:
-    name: C Code Formatting
+  # Format checking for C and Rust code
+  format-check:
+    name: Format Check
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -16,15 +17,29 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Run clang-format check
-      uses: jidicula/clang-format-action@v4.16.0
-      with:
-        clang-format-version: 21
-        check-path: 'src'
-        fallback-style: 'llvm'
+    - name: Install clang-format-21
+      run: |
+        # Add LLVM repository for clang-format-21
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main"
+        sudo apt-get update
+        sudo apt-get install -y clang-format-21
+        # Verify installation
+        clang-format-21 --version
 
-  clang-tidy:
-    name: C Static Analysis
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: nightly
+        components: rustfmt
+        cache: false
+
+    - name: Run format check script
+      run: scripts/check-format.sh
+
+  # Static analysis for C code
+  static-analysis:
+    name: Static Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -34,16 +49,25 @@ jobs:
 
     - name: Install dependencies
       run: |
+        # Add LLVM repository for clang-21 tools
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main"
         sudo apt-get update
         sudo apt-get install -y \
-          clang-tidy \
-          clang \
+          clang-21 \
+          clang-tidy-21 \
+          clang-format-21 \
           bear \
+          cppcheck \
           libsdl2-dev \
           libsdl2-mixer-dev \
           libpng-dev \
           libzip-dev \
           zlib1g-dev
+        # Create symlinks for version-agnostic names
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-21 100
+        sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-21 100
+        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-21 100
 
     - name: Setup Rust
       uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -52,27 +76,20 @@ jobs:
         cache: true
         cache-workspaces: astonia_net
 
-    - name: Generate compile_commands.json
-      run: |
-        make clean
-        bear -- make
+    - name: Run static analysis script
+      run: scripts/check-static-analysis.sh
 
-    - name: Run clang-tidy
-      run: |
-        find src -type f -name "*.c" -print0 | \
-        xargs -0 clang-tidy > clang-tidy-report.txt 2>&1 || true
-        echo "clang-tidy analysis complete. Report generated."
-
-    - name: Upload clang-tidy report
+    - name: Upload analysis reports
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: clang-tidy-report
-        path: clang-tidy-report.txt
+        name: static-analysis-reports
+        path: build/logs/*.log
         retention-days: 90
 
-  cppcheck:
-    name: C Additional Analysis
+  # Rust quality checks
+  rust-checks:
+    name: Rust Quality Checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -80,59 +97,31 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install cppcheck
-      run: sudo apt-get update && sudo apt-get install -y cppcheck
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy, rustfmt
+        cache: true
+        cache-workspaces: astonia_net
 
-    - name: Run cppcheck
-      run: |
-        cppcheck --enable=warning,performance,portability \
-          --error-exitcode=1 \
-          --inline-suppr \
-          --suppress=missingIncludeSystem \
-          -Iinclude \
-          src/
+    - name: Run Rust check script
+      run: scripts/check-rust.sh
 
-  rustfmt:
-    name: Rust Code Formatting
+  # File consistency checks
+  file-checks:
+    name: File Consistency
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: nightly
-          components: rustfmt
-          cache: false
+    - name: Run file consistency script
+      run: scripts/check-files.sh
 
-      - name: Check Rust formatting
-        run: cargo fmt --check
-        working-directory: astonia_net
-
-  clippy:
-    name: Rust Linting
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: clippy
-          cache: true
-          cache-workspaces: astonia_net
-
-      - name: Run clippy
-        run: cargo clippy -- -D warnings
-        working-directory: astonia_net
-
+  # Sanitizer build test
   sanitizer:
     name: AddressSanitizer/UBSan Build
     runs-on: ubuntu-latest
@@ -144,14 +133,19 @@ jobs:
 
     - name: Install dependencies
       run: |
+        # Add LLVM repository for clang-21
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main"
         sudo apt-get update
         sudo apt-get install -y \
-          clang \
+          clang-21 \
           libsdl2-dev \
           libsdl2-mixer-dev \
           libpng-dev \
           libzip-dev \
           zlib1g-dev
+        # Create symlink for clang
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-21 100
 
     - name: Setup Rust
       uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -170,46 +164,3 @@ jobs:
         echo "Sanitizer build successful!"
         ls -lh bin/moac-sanitizer
         file bin/moac-sanitizer
-
-  file-consistency:
-    name: File Consistency Checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Check line endings (LF only)
-      run: |
-        echo "Checking for CRLF line endings..."
-        if git ls-files -z '*.c' '*.h' '*.rs' '*.toml' '*.md' '*.sh' 'Makefile*' | \
-           xargs -0 file | grep -i "CRLF"; then
-          echo "ERROR: Found files with CRLF line endings"
-          exit 1
-        fi
-        echo "✓ All text files use LF line endings"
-
-    - name: Check file encoding (UTF-8)
-      run: |
-        echo "Checking file encoding..."
-        if git ls-files -z '*.c' '*.h' '*.rs' '*.toml' '*.md' | \
-           xargs -0 file -i | grep -v "charset=utf-8\|charset=us-ascii"; then
-          echo "ERROR: Found files with non-UTF-8 encoding"
-          exit 1
-        fi
-        echo "✓ All text files use UTF-8 encoding"
-
-    - name: Check for tabs vs spaces consistency
-      run: |
-        echo "Checking tabs/spaces consistency..."
-        # C files should use tabs (check existing style)
-        TABS_IN_C=$(git ls-files 'src/**/*.c' | head -5 | xargs grep -l $'^\t' | wc -l)
-        if [ "$TABS_IN_C" -gt 0 ]; then
-          echo "C code appears to use tabs - checking consistency..."
-          if git ls-files 'src/**/*.c' | xargs grep -l '^    ' | head -1; then
-            echo "WARNING: Found C files with leading spaces (expecting tabs)"
-            # Don't fail for now, just warn
-          fi
-        fi
-        echo "✓ File consistency checks passed"

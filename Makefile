@@ -115,5 +115,7 @@ zen4-appimage:
 	@echo ""
 	@echo "To run: chmod +x astonia-client-zen4.AppImage && ./astonia-client.AppImage"
 
+# Include quality checks makefile (see build/make/Makefile.quality)
+include build/make/Makefile.quality
 
-.PHONY: all windows linux macos clean distrib amod convert anicopy zig-build docker-linux docker-windows docker-windows-dev linux-appimage
+.PHONY: all windows linux macos clean distrib amod convert anicopy zig-build docker-linux docker-windows docker-windows-dev linux-appimage docker-linux-dev

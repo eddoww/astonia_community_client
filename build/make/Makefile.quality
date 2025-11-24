@@ -1,0 +1,246 @@
+# Quality checks Makefile (replicates .github/workflows/quality.yml)
+#
+# This file contains all quality check targets for local development.
+# It is included by the root Makefile.
+#
+# Usage:
+#   make lint         - Auto-fix C and Rust formatting
+#   make format-check - Check formatting without fixing
+#   make quality      - Run all quality checks (like CI pipeline)
+#   make check-clang-format  - Check C formatting only
+#   make check-clang-tidy    - Run C static analysis
+#   make check-cppcheck      - Run C additional analysis
+#   make check-rustfmt       - Check Rust formatting
+#   make check-clippy        - Run Rust linting
+#   make check-files         - Check file consistency
+
+# Check if clang-format-21 is available
+CLANG_FORMAT := $(shell which clang-format-21 2>/dev/null || which clang-format 2>/dev/null)
+CLANG_FORMAT_VERSION := $(shell $(CLANG_FORMAT) --version 2>/dev/null | grep -oP 'version \K[0-9]+' || echo "0")
+
+# Log directory for quality check outputs
+LOG_DIR := build/logs
+$(shell mkdir -p $(LOG_DIR))
+
+# Lint target - auto-fix formatting
+lint:
+	@echo "=== Auto-fixing Code Formatting ==="
+	@echo ""
+	@echo "Fixing C code formatting..."
+	@if [ -z "$(CLANG_FORMAT)" ]; then \
+		echo "ERROR: clang-format not found. Please install clang-format version 21."; \
+		echo "See docs/QUALITY_CHECKS.md for installation instructions."; \
+		exit 1; \
+	fi
+	@if [ "$(CLANG_FORMAT_VERSION)" != "21" ]; then \
+		echo "WARNING: Using clang-format version $(CLANG_FORMAT_VERSION), pipeline uses version 21"; \
+		echo "See docs/QUALITY_CHECKS.md for installation instructions."; \
+	fi
+	@find src -type f \( -name "*.c" -o -name "*.h" \) -exec $(CLANG_FORMAT) -i --style=file {} \;
+	@echo "  ✓ C code formatted"
+	@echo ""
+	@echo "Fixing Rust code formatting..."
+	@if [ -d "astonia_net" ]; then \
+		cd astonia_net && cargo fmt && \
+		echo "  ✓ Rust code formatted"; \
+	else \
+		echo "  - Rust directory not found, skipping"; \
+	fi
+	@echo ""
+	@echo "=== Formatting Complete ==="
+
+# Format check - verify without modifying
+format-check: check-clang-format check-rustfmt
+
+# Individual check targets
+check-clang-format:
+	@echo ">>> Checking C Code Formatting"
+	@if [ -z "$(CLANG_FORMAT)" ]; then \
+		echo "ERROR: clang-format not found. Please install clang-format version 21."; \
+		echo "See docs/QUALITY_CHECKS.md for installation instructions."; \
+		exit 1; \
+	fi
+	@if [ "$(CLANG_FORMAT_VERSION)" != "21" ]; then \
+		echo "WARNING: Using clang-format version $(CLANG_FORMAT_VERSION), pipeline uses version 21"; \
+		echo "See docs/QUALITY_CHECKS.md for installation instructions."; \
+	fi
+	@FAILED=0; \
+	rm -f $(LOG_DIR)/clang-format.log; \
+	for file in $$(find src -type f \( -name "*.c" -o -name "*.h" \)); do \
+		if ! $(CLANG_FORMAT) --dry-run -Werror --style=file "$$file" 2>/dev/null; then \
+			if [ $$FAILED -eq 0 ]; then \
+				echo "ERROR: The following files need formatting:" | tee $(LOG_DIR)/clang-format.log; \
+			fi; \
+			echo "  - $$file" | tee -a $(LOG_DIR)/clang-format.log; \
+			FAILED=1; \
+		fi; \
+	done; \
+	if [ $$FAILED -eq 1 ]; then \
+		echo "" | tee -a $(LOG_DIR)/clang-format.log; \
+		echo "Run 'make lint' to fix formatting issues" | tee -a $(LOG_DIR)/clang-format.log; \
+		echo "  → Full report: $(LOG_DIR)/clang-format.log"; \
+		exit 1; \
+	else \
+		echo "  ✓ All C files are properly formatted"; \
+	fi
+	@echo ""
+
+check-clang-tidy:
+	@echo ">>> Running C Static Analysis (clang-tidy)"
+	@if ! command -v clang-tidy >/dev/null 2>&1; then \
+		echo "WARNING: clang-tidy not installed, skipping"; \
+		echo "Install with: sudo apt-get install clang-tidy"; \
+		echo ""; \
+		exit 0; \
+	fi
+	@if ! command -v bear >/dev/null 2>&1; then \
+		echo "WARNING: bear not installed, cannot generate compile_commands.json"; \
+		echo "Install with: sudo apt-get install bear"; \
+		echo ""; \
+		exit 0; \
+	fi
+	@echo "Generating compile_commands.json..."
+	@$(MAKE) clean >/dev/null 2>&1
+	@bear -- $(MAKE) >/dev/null 2>&1 || true
+	@echo "Running clang-tidy analysis..."
+	@find src -type f -name "*.c" -print0 | \
+		xargs -0 clang-tidy > $(LOG_DIR)/clang-tidy.log 2>&1 || true
+	@if grep -q "warning:\|error:" $(LOG_DIR)/clang-tidy.log; then \
+		echo "  ⚠ Issues found:"; \
+		grep "warning:\|error:" $(LOG_DIR)/clang-tidy.log | head -20; \
+		TOTAL=$$(grep -c "warning:\|error:" $(LOG_DIR)/clang-tidy.log); \
+		if [ $$TOTAL -gt 20 ]; then \
+			echo "... and $$(($$TOTAL - 20)) more"; \
+		fi; \
+		echo "  → Full report: $(LOG_DIR)/clang-tidy.log"; \
+	else \
+		echo "  ✓ No issues found"; \
+		rm -f $(LOG_DIR)/clang-tidy.log; \
+	fi
+	@echo ""
+
+check-cppcheck:
+	@echo ">>> Running C Additional Analysis (cppcheck)"
+	@if ! command -v cppcheck >/dev/null 2>&1; then \
+		echo "WARNING: cppcheck not installed, skipping"; \
+		echo "Install with: sudo apt-get install cppcheck"; \
+		echo ""; \
+		exit 0; \
+	fi
+	@cppcheck --enable=warning,performance,portability \
+		--inline-suppr \
+		--suppress=missingIncludeSystem \
+		-Iinclude \
+		src/ > $(LOG_DIR)/cppcheck.log 2>&1 || true
+	@if grep -qE "(error|warning):" $(LOG_DIR)/cppcheck.log; then \
+		echo "  ✗ cppcheck found issues:"; \
+		grep -E "(error|warning):" $(LOG_DIR)/cppcheck.log | head -20; \
+		TOTAL=$$(grep -cE "(error|warning):" $(LOG_DIR)/cppcheck.log); \
+		if [ $$TOTAL -gt 20 ]; then \
+			echo "... and $$(($$TOTAL - 20)) more"; \
+		fi; \
+		echo "  → Full report: $(LOG_DIR)/cppcheck.log"; \
+		exit 1; \
+	else \
+		echo "  ✓ No issues found"; \
+		rm -f $(LOG_DIR)/cppcheck.log; \
+	fi
+	@echo ""
+
+check-rustfmt:
+	@echo ">>> Checking Rust Code Formatting"
+	@if [ ! -d "astonia_net" ]; then \
+		echo "  - Rust directory not found, skipping"; \
+		echo ""; \
+		exit 0; \
+	fi
+	@if ! command -v cargo >/dev/null 2>&1; then \
+		echo "WARNING: cargo not installed, skipping"; \
+		echo ""; \
+		exit 0; \
+	fi
+	@cd astonia_net && \
+	if cargo fmt --check > ../$(LOG_DIR)/rustfmt.log 2>&1; then \
+		echo "  ✓ Rust code is properly formatted"; \
+		rm -f ../$(LOG_DIR)/rustfmt.log; \
+	else \
+		echo "ERROR: Rust code needs formatting"; \
+		cat ../$(LOG_DIR)/rustfmt.log; \
+		echo "  → Full report: $(LOG_DIR)/rustfmt.log"; \
+		echo "Run 'make lint' to fix formatting issues"; \
+		exit 1; \
+	fi
+	@echo ""
+
+check-clippy:
+	@echo ">>> Running Rust Linting (clippy)"
+	@if [ ! -d "astonia_net" ]; then \
+		echo "  - Rust directory not found, skipping"; \
+		echo ""; \
+		exit 0; \
+	fi
+	@if ! command -v cargo >/dev/null 2>&1; then \
+		echo "WARNING: cargo not installed, skipping"; \
+		echo ""; \
+		exit 0; \
+	fi
+	@cd astonia_net && \
+	if cargo clippy -- -D warnings > ../$(LOG_DIR)/clippy.log 2>&1; then \
+		echo "  ✓ No clippy warnings"; \
+		rm -f ../$(LOG_DIR)/clippy.log; \
+	else \
+		echo "  ✗ clippy found issues"; \
+		cat ../$(LOG_DIR)/clippy.log; \
+		echo "  → Full report: $(LOG_DIR)/clippy.log"; \
+		exit 1; \
+	fi
+	@echo ""
+
+check-files:
+	@echo ">>> Checking File Consistency"
+	@FAILED=0; \
+	echo "Checking for CRLF line endings..."; \
+	if git ls-files -z '*.c' '*.h' '*.rs' '*.toml' '*.md' '*.sh' 'Makefile*' 2>/dev/null | \
+	   xargs -0 file 2>/dev/null | grep -i "CRLF" >/dev/null; then \
+		echo "ERROR: Found files with CRLF line endings:" | tee $(LOG_DIR)/file-consistency.log; \
+		git ls-files -z '*.c' '*.h' '*.rs' '*.toml' '*.md' '*.sh' 'Makefile*' 2>/dev/null | \
+		   xargs -0 file 2>/dev/null | grep -i "CRLF" | tee -a $(LOG_DIR)/file-consistency.log; \
+		echo "Fix with: dos2unix <file>" | tee -a $(LOG_DIR)/file-consistency.log; \
+		FAILED=1; \
+	else \
+		echo "  ✓ All text files use LF line endings"; \
+	fi; \
+	echo "Checking file encoding..."; \
+	if git ls-files -z '*.c' '*.h' '*.rs' '*.toml' '*.md' 2>/dev/null | \
+	   xargs -0 file -i 2>/dev/null | grep -v "charset=utf-8\|charset=us-ascii" >/dev/null; then \
+		if [ $$FAILED -eq 0 ]; then \
+			echo "ERROR: Found files with non-UTF-8 encoding:" | tee $(LOG_DIR)/file-consistency.log; \
+		else \
+			echo "ERROR: Found files with non-UTF-8 encoding:" | tee -a $(LOG_DIR)/file-consistency.log; \
+		fi; \
+		git ls-files -z '*.c' '*.h' '*.rs' '*.toml' '*.md' 2>/dev/null | \
+		   xargs -0 file -i 2>/dev/null | grep -v "charset=utf-8\|charset=us-ascii" | tee -a $(LOG_DIR)/file-consistency.log; \
+		FAILED=1; \
+	else \
+		echo "  ✓ All text files use UTF-8 encoding"; \
+	fi; \
+	if [ $$FAILED -eq 1 ]; then \
+		echo ""; \
+		echo "  → Full report: $(LOG_DIR)/file-consistency.log"; \
+		exit 1; \
+	else \
+		rm -f $(LOG_DIR)/file-consistency.log; \
+	fi
+	@echo ""
+
+# Run all quality checks (mimics CI pipeline)
+quality: check-clang-format check-clang-tidy check-cppcheck check-rustfmt check-clippy check-files
+	@echo "================================"
+	@echo "  All Quality Checks Passed!"
+	@echo "================================"
+
+# Alias for quality
+check: quality
+
+.PHONY: lint format-check quality check \
+	check-clang-format check-clang-tidy check-cppcheck check-rustfmt check-clippy check-files

@@ -15,7 +15,7 @@
 #   make check-files          - Check file consistency only
 
 # Determine project root (this Makefile is in build/make/, included from root)
-PROJECT_ROOT := $(shell cd $(dir $(lastword $(MAKEFILE_LIST)))/../.. && pwd)
+PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 
 # ============================================================================
 # Auto-Format Code (lint)

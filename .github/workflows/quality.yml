@@ -7,9 +7,9 @@ on:
     branches: [ main ]
 
 jobs:
-  # Format checking for C and Rust code
+  # Format checking for C code only
   format-check:
-    name: Format Check
+    name: C Format Check
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -27,15 +27,8 @@ jobs:
         # Verify installation
         clang-format-21 --version
 
-    - name: Setup Rust
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: nightly
-        components: rustfmt
-        cache: false
-
-    - name: Run format check script
-      run: scripts/check-format.sh
+    - name: Run C format check script
+      run: scripts/check-format-c.sh
 
   # Static analysis for C code
   static-analysis:
@@ -87,9 +80,30 @@ jobs:
         path: build/logs/*.log
         retention-days: 90
 
-  # Rust quality checks
-  rust-checks:
-    name: Rust Quality Checks
+  # Rust formatting check
+  rust-format-check:
+    name: Rust Format Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        components: rustfmt
+        cache: true
+        cache-workspaces: astonia_net
+
+    - name: Run Rust format check script
+      run: scripts/check-format-rust.sh
+
+  # Rust linting (clippy)
+  rust-lint-check:
+    name: Rust Linting (clippy)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -101,12 +115,12 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         toolchain: stable
-        components: clippy, rustfmt
+        components: clippy
         cache: true
         cache-workspaces: astonia_net
 
-    - name: Run Rust check script
-      run: scripts/check-rust.sh
+    - name: Run Rust linting script
+      run: scripts/check-clippy.sh
 
   # File consistency checks
   file-checks:

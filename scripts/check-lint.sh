@@ -1,33 +1,33 @@
 #!/bin/bash
 set -e
 
-# Format checking script for all languages (C and Rust)
-# Used by local development (make format-check)
-# For CI pipeline, use check-format-c.sh and check-format-rust.sh separately
-# Exit code 0 = all formatted correctly, 1 = formatting issues found
+# Linting check script for all languages (C and Rust)
+# Used by local development (make check-lint)
+# For CI pipeline, use check-static-analysis.sh and check-clippy.sh separately
+# Exit code 0 = no issues, 1 = issues found
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 echo "========================================"
-echo "  Code Format Checker (All Languages)"
+echo "  Code Linting Checker (All Languages)"
 echo "========================================"
 echo ""
 
 FAILED=0
 
 # ============================================================================
-# C Code Formatting Check (delegates to check-format-c.sh)
+# C Code Linting (delegates to check-static-analysis.sh)
 # ============================================================================
-if ! bash "$SCRIPT_DIR/check-format-c.sh"; then
+if ! bash "$SCRIPT_DIR/check-static-analysis.sh"; then
     FAILED=1
 fi
 
 # ============================================================================
-# Rust Code Formatting Check (delegates to check-format-rust.sh)
+# Rust Code Linting (delegates to check-clippy.sh)
 # ============================================================================
-if ! bash "$SCRIPT_DIR/check-format-rust.sh"; then
+if ! bash "$SCRIPT_DIR/check-clippy.sh"; then
     FAILED=1
 fi
 
@@ -36,12 +36,12 @@ fi
 # ============================================================================
 if [ $FAILED -eq 1 ]; then
     echo "========================================"
-    echo "  ✗ Format Check FAILED"
+    echo "  ✗ Linting Check FAILED"
     echo "========================================"
     exit 1
 else
     echo "========================================"
-    echo "  ✓ Format Check PASSED"
+    echo "  ✓ Linting Check PASSED"
     echo "========================================"
     exit 0
 fi

@@ -3,7 +3,7 @@
 # Usage:
 #   make                - Build for current platform (auto-detect)
 #   make windows        - Build for Windows
-#   make linux          - Build for Linux  
+#   make linux          - Build for Linux
 #   make macos          - Build for macOS
 #   make zig-build      - Build with zig for current platform
 #   make docker-linux   - Build Linux in Docker container

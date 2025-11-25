@@ -24,7 +24,7 @@ FAILED_CHECKS=()
 # ============================================================================
 
 echo "═══════════════════════════════════════════════════════════════"
-echo "  [1/4] Format Checks"
+echo "  [1/3] Format Checks"
 echo "═══════════════════════════════════════════════════════════════"
 if ! scripts/check-format.sh; then
     FAILED=1
@@ -33,25 +33,16 @@ fi
 echo ""
 
 echo "═══════════════════════════════════════════════════════════════"
-echo "  [2/4] Static Analysis"
+echo "  [2/3] Linting Checks"
 echo "═══════════════════════════════════════════════════════════════"
-if ! scripts/check-static-analysis.sh; then
+if ! scripts/check-lint.sh; then
     FAILED=1
-    FAILED_CHECKS+=("Static Analysis")
+    FAILED_CHECKS+=("Linting Check")
 fi
 echo ""
 
 echo "═══════════════════════════════════════════════════════════════"
-echo "  [3/4] Rust Checks"
-echo "═══════════════════════════════════════════════════════════════"
-if ! scripts/check-rust.sh; then
-    FAILED=1
-    FAILED_CHECKS+=("Rust Checks")
-fi
-echo ""
-
-echo "═══════════════════════════════════════════════════════════════"
-echo "  [4/4] File Consistency"
+echo "  [3/3] File Consistency"
 echo "═══════════════════════════════════════════════════════════════"
 if ! scripts/check-files.sh; then
     FAILED=1

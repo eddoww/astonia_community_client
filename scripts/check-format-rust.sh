@@ -1,23 +1,19 @@
 #!/bin/bash
 set -e
 
-# Rust quality checks: formatting (rustfmt) and linting (clippy)
-# Used by both CI pipeline and local development
-# Exit code 0 = all checks passed, 1 = issues found
-#
-# This script can be called standalone or from check-format.sh
+# Rust code formatting check (rustfmt only)
+# Used by CI pipeline for parallel Rust formatting checks
+# For local development, use check-format.sh instead (checks all languages)
+# Exit code 0 = all formatted correctly, 1 = formatting issues found
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Only show header if called standalone (not from another script)
-if [ -z "$CALLED_FROM_CHECK_FORMAT" ]; then
-    echo "========================================"
-    echo "  Rust Quality Checks"
-    echo "========================================"
-    echo ""
-fi
+echo "========================================"
+echo "  Rust Code Format Checker"
+echo "========================================"
+echo ""
 
 # Check if Rust code exists
 if [ ! -d "astonia_net" ]; then
@@ -27,7 +23,7 @@ if [ ! -d "astonia_net" ]; then
 fi
 
 if ! command -v cargo >/dev/null 2>&1; then
-    echo "WARNING: cargo not installed, skipping Rust checks"
+    echo "WARNING: cargo not installed, skipping Rust formatting check"
     echo ""
     exit 0
 fi
@@ -56,34 +52,16 @@ fi
 echo ""
 
 # ============================================================================
-# Rust Linting (clippy)
-# ============================================================================
-echo ">>> Running Rust Linting (clippy)"
-
-if cd astonia_net && cargo clippy -- -D warnings > "../$LOG_DIR/clippy.log" 2>&1; then
-    echo "  ✓ No clippy warnings"
-    rm -f "../$LOG_DIR/clippy.log"
-    cd "$PROJECT_ROOT"
-else
-    echo "  ✗ clippy found issues:"
-    cat "../$LOG_DIR/clippy.log"
-    echo "  → Full report: $LOG_DIR/clippy.log"
-    cd "$PROJECT_ROOT"
-    FAILED=1
-fi
-echo ""
-
-# ============================================================================
 # Summary
 # ============================================================================
 if [ $FAILED -eq 1 ]; then
     echo "========================================"
-    echo "  ✗ Rust Checks FAILED"
+    echo "  ✗ Rust Format Check FAILED"
     echo "========================================"
     exit 1
 else
     echo "========================================"
-    echo "  ✓ Rust Checks PASSED"
+    echo "  ✓ Rust Format Check PASSED"
     echo "========================================"
     exit 0
 fi

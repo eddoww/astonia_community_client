@@ -1,23 +1,19 @@
 #!/bin/bash
 set -e
 
-# Rust quality checks: formatting (rustfmt) and linting (clippy)
-# Used by both CI pipeline and local development
-# Exit code 0 = all checks passed, 1 = issues found
-#
-# This script can be called standalone or from check-format.sh
+# Rust linting check (clippy only)
+# Used by CI pipeline for parallel Rust linting checks
+# For local development, use check-lint.sh instead (checks all languages)
+# Exit code 0 = no issues, 1 = issues found
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Only show header if called standalone (not from another script)
-if [ -z "$CALLED_FROM_CHECK_FORMAT" ]; then
-    echo "========================================"
-    echo "  Rust Quality Checks"
-    echo "========================================"
-    echo ""
-fi
+echo "========================================"
+echo "  Rust Linting (clippy)"
+echo "========================================"
+echo ""
 
 # Check if Rust code exists
 if [ ! -d "astonia_net" ]; then
@@ -27,7 +23,7 @@ if [ ! -d "astonia_net" ]; then
 fi
 
 if ! command -v cargo >/dev/null 2>&1; then
-    echo "WARNING: cargo not installed, skipping Rust checks"
+    echo "WARNING: cargo not installed, skipping Rust linting"
     echo ""
     exit 0
 fi
@@ -35,25 +31,6 @@ fi
 FAILED=0
 LOG_DIR="build/logs"
 mkdir -p "$LOG_DIR"
-
-# ============================================================================
-# Rust Formatting Check (rustfmt)
-# ============================================================================
-echo ">>> Checking Rust Code Formatting"
-
-if cd astonia_net && cargo fmt --check > "../$LOG_DIR/rustfmt.log" 2>&1; then
-    echo "  ✓ Rust code properly formatted"
-    rm -f "../$LOG_DIR/rustfmt.log"
-    cd "$PROJECT_ROOT"
-else
-    echo "ERROR: Rust code needs formatting"
-    cat "../$LOG_DIR/rustfmt.log"
-    echo "  → Full report: $LOG_DIR/rustfmt.log"
-    echo "Run 'make lint' or 'cargo fmt' to fix"
-    cd "$PROJECT_ROOT"
-    FAILED=1
-fi
-echo ""
 
 # ============================================================================
 # Rust Linting (clippy)
@@ -78,12 +55,12 @@ echo ""
 # ============================================================================
 if [ $FAILED -eq 1 ]; then
     echo "========================================"
-    echo "  ✗ Rust Checks FAILED"
+    echo "  ✗ Rust Linting FAILED"
     echo "========================================"
     exit 1
 else
     echo "========================================"
-    echo "  ✓ Rust Checks PASSED"
+    echo "  ✓ Rust Linting PASSED"
     echo "========================================"
     exit 0
 fi

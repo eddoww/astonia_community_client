@@ -3,16 +3,20 @@
 # This file delegates to scripts in scripts/ directory.
 # The scripts are shared between local development and CI pipeline.
 #
-# Usage:
-#   make lint         - Auto-fix C and Rust formatting
-#   make format-check - Check formatting without fixing
-#   make quality      - Run all quality checks (like CI pipeline)
+# Primary targets:
+#   make lint    - Auto-fix formatting for all code
+#   make check   - Check formatting + linting (no fixes)
+#   make quality - All checks (formatting + linting + file consistency)
 #
-# Individual check targets (for granular testing):
-#   make check-format         - Check code formatting only
-#   make check-static-analysis - Run C static analysis only
-#   make check-rust           - Run Rust checks only
-#   make check-files          - Check file consistency only
+# Individual targets:
+#   make check-format    - Check formatting only (all languages)
+#   make check-lint      - Check linting only (all languages)
+#   make check-files     - Check file consistency only
+#
+# Language-specific targets (for CI parallel execution):
+#   make check-format-c    - Check C formatting only
+#   make check-format-rust - Check Rust formatting only
+#   make check-clippy      - Check Rust linting only
 
 # Determine project root (this Makefile is in build/make/, included from root)
 PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
@@ -24,39 +28,57 @@ lint:
 	@bash $(PROJECT_ROOT)/scripts/format-code.sh
 
 # ============================================================================
-# Individual Check Targets
+# Check (formatting + linting, no fixes)
 # ============================================================================
+check:
+	@echo "========================================"
+	@echo "  Running Formatting + Linting Checks"
+	@echo "========================================"
+	@echo ""
+	@bash $(PROJECT_ROOT)/scripts/check-format.sh && \
+	bash $(PROJECT_ROOT)/scripts/check-lint.sh
+
+# ============================================================================
+# Format Checking
+# ============================================================================
+# Check all languages
 format-check check-format:
 	@bash $(PROJECT_ROOT)/scripts/check-format.sh
 
+# Check C only (CI)
+check-format-c:
+	@bash $(PROJECT_ROOT)/scripts/check-format-c.sh
+
+# Check Rust only (CI)
+check-format-rust:
+	@bash $(PROJECT_ROOT)/scripts/check-format-rust.sh
+
+# ============================================================================
+# Linting Checking
+# ============================================================================
+# Check all languages
+check-lint:
+	@bash $(PROJECT_ROOT)/scripts/check-lint.sh
+
+# Check Rust linting only (CI)
+check-clippy:
+	@bash $(PROJECT_ROOT)/scripts/check-clippy.sh
+
+# C linting (alias for backward compatibility)
 check-static-analysis:
 	@bash $(PROJECT_ROOT)/scripts/check-static-analysis.sh
 
-check-rust:
-	@bash $(PROJECT_ROOT)/scripts/check-rust.sh
-
+# ============================================================================
+# File Consistency
+# ============================================================================
 check-files:
 	@bash $(PROJECT_ROOT)/scripts/check-files.sh
 
 # ============================================================================
-# Run All Quality Checks (master target)
+# Quality (all checks: formatting + linting + files)
 # ============================================================================
 quality:
 	@bash $(PROJECT_ROOT)/scripts/check-quality.sh
 
-# Alias for quality
-check: quality
-
-# Alias for backward compatibility
-tests: quality
-
-# Legacy individual targets (for backward compatibility)
-check-clang-format: format-check
-check-clang-tidy: check-static-analysis
-check-cppcheck: check-static-analysis
-check-rustfmt: check-rust
-check-clippy: check-rust
-
-.PHONY: lint format-check check-format quality check tests \
-	check-static-analysis check-rust check-files \
-	check-clang-format check-clang-tidy check-cppcheck check-rustfmt check-clippy
+.PHONY: lint check format-check check-format check-format-c check-format-rust \
+	check-lint check-clippy check-static-analysis check-files quality

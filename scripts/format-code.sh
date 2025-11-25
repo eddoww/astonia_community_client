@@ -53,7 +53,7 @@ elif ! command -v cargo >/dev/null 2>&1; then
     echo "WARNING: cargo not installed, skipping Rust formatting"
     echo ""
 else
-    cd astonia_net && cargo fmt
+    cd astonia_net && cargo fmt -- --emit files
     echo "  ✓ Rust code formatted"
     cd "$PROJECT_ROOT"
     echo ""

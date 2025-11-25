@@ -2529,6 +2529,19 @@ void sdl_exit(void)
 #ifdef DEVELOPER
 	sdl_dump_spritecache();
 #endif
+
+	// Clean up SDL resources before SDL_Quit()
+	if (sdlren) {
+		SDL_DestroyRenderer(sdlren);
+		sdlren = NULL;
+	}
+	if (sdlwnd) {
+		SDL_DestroyWindow(sdlwnd);
+		sdlwnd = NULL;
+	}
+
+	// Explicitly quit SDL - this will free all SDL-allocated memory using mi_free
+	SDL_Quit();
 }
 
 int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char *text, struct ddfont *font, int clipsx,
@@ -3239,14 +3252,10 @@ int sdl_pre_2(void)
 				}
 
 				// Load PNG from zip (blocking I/O, but now in background thread)
-				// note("sdl_pre_2: About to call sdl_ic_load for sprite %d", sdlt[pre[i].stx].sprite);
 				sdl_ic_load(sdlt[pre[i].stx].sprite);
-				// note("sdl_pre_2: sdl_ic_load completed for sprite %d", sdlt[pre[i].stx].sprite);
 
 				// Allocate pixel buffer
-				// note("sdl_pre_2: About to call sdl_make stage 1 for sprite %d", sdlt[pre[i].stx].sprite);
 				sdl_make(sdlt + pre[i].stx, sdli + sdlt[pre[i].stx].sprite, 1);
-				// note("sdl_pre_2: sdl_make stage 1 completed for sprite %d", sdlt[pre[i].stx].sprite);
 
 				if (sdl_multi) {
 					SDL_LockMutex(premutex);

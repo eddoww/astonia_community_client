@@ -66,6 +66,7 @@ static zip_t *sdl_zip2m = NULL;
 
 static SDL_sem *prework = NULL;
 static SDL_mutex *premutex = NULL;
+static SDL_Thread **prethreads = NULL;
 
 DLL_EXPORT int __yres = YRES0;
 
@@ -276,10 +277,11 @@ int sdl_init(int width, int height, char *title)
 
 		prework = SDL_CreateSemaphore(0);
 		premutex = SDL_CreateMutex();
+		prethreads = xmalloc(sdl_multi * sizeof(SDL_Thread *), MEM_SDL_BASE);
 
 		for (n = 0; n < sdl_multi; n++) {
 			sprintf(buf, "moac background worker %d", n);
-			SDL_CreateThread(sdl_pre_backgnd, buf, (void *)(long long)n);
+			prethreads[n] = SDL_CreateThread(sdl_pre_backgnd, buf, (void *)(long long)n);
 		}
 	}
 
@@ -2481,6 +2483,27 @@ void sdl_dump_spritecache(void)
 
 void sdl_exit(void)
 {
+	int n;
+
+	if (sdl_multi && prethreads) {
+		for (n = 0; n < sdl_multi; n++) {
+			SDL_SemPost(prework);
+		}
+		for (n = 0; n < sdl_multi; n++) {
+			SDL_WaitThread(prethreads[n], NULL);
+		}
+		xfree(prethreads);
+		prethreads = NULL;
+		if (prework) {
+			SDL_DestroySemaphore(prework);
+			prework = NULL;
+		}
+		if (premutex) {
+			SDL_DestroyMutex(premutex);
+			premutex = NULL;
+		}
+	}
+
 	if (sdl_zip1) {
 		zip_close(sdl_zip1);
 	}
@@ -3159,16 +3182,29 @@ int sdl_pre_1(void)
 		return 0; // prefetch buffer is empty
 	}
 
-	if (!(sdlt[pre[pre_1].stx].flags & SF_DIDALLOC)) {
-		sdl_ic_load(sdlt[pre[pre_1].stx].sprite);
-
-		sdl_make(sdlt + pre[pre_1].stx, sdli + sdlt[pre[pre_1].stx].sprite, 1);
-
+	// Advance pre_1 only when I/O + allocation is complete
+	// The actual I/O work is done in sdl_pre_2() (background threads when sdl_multi > 0)
+	// This prevents blocking the render thread with zip/PNG I/O operations
+	if (pre[pre_1].stx != STX_NONE && (sdlt[pre[pre_1].stx].flags & SF_DIDALLOC)) {
+		pre_1 = (pre_1 + 1) % MAXPRE;
 		if (sdl_multi) {
-			SDL_SemPost(prework);
+			SDL_SemPost(prework); // Signal background threads to process
 		}
+		return 1;
 	}
-	pre_1 = (pre_1 + 1) % MAXPRE;
+
+	// If sdl_multi is disabled, do the work synchronously (old behavior)
+	if (!sdl_multi && pre[pre_1].stx != STX_NONE && !(sdlt[pre[pre_1].stx].flags & SF_DIDALLOC)) {
+		sdl_ic_load(sdlt[pre[pre_1].stx].sprite);
+		sdl_make(sdlt + pre[pre_1].stx, sdli + sdlt[pre[pre_1].stx].sprite, 1);
+		pre_1 = (pre_1 + 1) % MAXPRE;
+		return 1;
+	}
+
+	// Signal background threads to do the I/O work
+	if (sdl_multi) {
+		SDL_SemPost(prework);
+	}
 
 	return 1;
 }
@@ -3187,10 +3223,52 @@ int sdl_pre_2(void)
 		}
 
 		// printf("Preload2: Slot %d, STX %d, flags %X\n",i,pre[i].stx,pre[i].stx!=-1 ? sdlt[pre[i].stx].flags : 0);
-		if (pre[i].stx != STX_NONE && !(sdlt[pre[i].stx].flags & (SF_DIDMAKE | SF_BUSY)) &&
-		    (sdlt[pre[i].stx].flags & SF_DIDALLOC)) {
+		if (pre[i].stx == STX_NONE) {
+			if (sdl_multi) {
+				SDL_UnlockMutex(premutex);
+			}
+			continue;
+		}
+
+		// Stage 1: Load image from zip/PNG (I/O - now in background thread to avoid blocking render)
+		if (!(sdlt[pre[i].stx].flags & SF_DIDALLOC)) {
+			if (!(sdlt[pre[i].stx].flags & SF_BUSY)) {
+				sdlt[pre[i].stx].flags |= SF_BUSY;
+				if (sdl_multi) {
+					SDL_UnlockMutex(premutex);
+				}
+
+				// Load PNG from zip (blocking I/O, but now in background thread)
+				// note("sdl_pre_2: About to call sdl_ic_load for sprite %d", sdlt[pre[i].stx].sprite);
+				sdl_ic_load(sdlt[pre[i].stx].sprite);
+				// note("sdl_pre_2: sdl_ic_load completed for sprite %d", sdlt[pre[i].stx].sprite);
+
+				// Allocate pixel buffer
+				// note("sdl_pre_2: About to call sdl_make stage 1 for sprite %d", sdlt[pre[i].stx].sprite);
+				sdl_make(sdlt + pre[i].stx, sdli + sdlt[pre[i].stx].sprite, 1);
+				// note("sdl_pre_2: sdl_make stage 1 completed for sprite %d", sdlt[pre[i].stx].sprite);
+
+				if (sdl_multi) {
+					SDL_LockMutex(premutex);
+				}
+				sdlt[pre[i].stx].flags &= ~SF_BUSY;
+				sdlt[pre[i].stx].flags |= SF_DIDALLOC;
+				if (sdl_multi) {
+					SDL_UnlockMutex(premutex);
+				}
+				work = 1;
+				break;
+			} else {
+				if (sdl_multi) {
+					SDL_UnlockMutex(premutex);
+				}
+				continue; // Skip if already being processed
+			}
+		}
+
+		// Stage 2: Make texture
+		if (!(sdlt[pre[i].stx].flags & (SF_DIDMAKE | SF_BUSY)) && (sdlt[pre[i].stx].flags & SF_DIDALLOC)) {
 			// printf("Preload2: Slot %d, sprite %d (%d, %d, %d, %d)\n",i,pre[i].sprite,pre_in,pre_1,pre_2,pre_3);
-			// fflush(stdout);
 
 			sdlt[pre[i].stx].flags |= SF_BUSY;
 			if (sdl_multi) {

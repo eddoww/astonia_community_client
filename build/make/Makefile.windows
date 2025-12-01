@@ -34,16 +34,143 @@ else
     $(warning WARNING: Could not detect CLANG64 installation. Build may fail or use wrong libraries.)
     $(warning Set CLANG64_PREFIX environment variable to your clang64 installation path if needed.)
 endif
-WINDRES=windres
-LDD=ldd
-CC=clang
-OPT=-O3
-DEBUG=-gdwarf-4
-SDL_CFLAGS=$(shell $(SDL_CONFIG) --cflags)
-SDL_PREFIX=$(shell $(SDL_CONFIG) --prefix)
-CFLAGS=$(OPT) $(DEBUG) -Wall -Wno-pointer-sign -Wno-char-subscripts -fno-omit-frame-pointer -flto -fvisibility=hidden -DSTORE_UNIQUE -DENABLE_CRASH_HANDLER -DENABLE_SHAREDMEM -DENABLE_DRAGHACK $(SDL_CFLAGS) -I$(SDL_PREFIX)/include -Iinclude -Isrc
-LDFLAGS=$(OPT) $(DEBUG) -Wl,-subsystem,windows
-LDFLAGS_CONSOLE=$(OPT) $(DEBUG) -Wl,-subsystem,console
+# ============================================================================
+# Build Configuration Variables
+# ============================================================================
+
+# Toolchain (can be overridden by Docker ENV)
+WINDRES ?= windres
+LDD ?= ldd
+CC ?= clang
+CXX ?= clang++
+AR ?= llvm-ar
+RANLIB ?= llvm-ranlib
+
+# Build type configuration
+OPT ?= -O3
+DEBUG ?= -gdwarf-4
+
+# Cross-compilation configuration (from Docker ENV or defaults)
+TARGET ?= x86_64-w64-mingw32
+SYSROOT ?= /clang64
+WIN32_WINNT ?= 0x0601
+
+# SDL configuration
+SDL_CFLAGS ?= $(shell $(SDL_CONFIG) --cflags)
+SDL_PREFIX ?= $(shell $(SDL_CONFIG) --prefix)
+
+# ============================================================================
+# Compiler and Linker Flag Components
+# ============================================================================
+
+# Cross-compilation flags
+CROSS_FLAGS = --target=$(TARGET) --sysroot=$(SYSROOT)
+
+# Windows platform flags
+PLATFORM_FLAGS = -fms-extensions -D_WIN32 -D_WIN32_WINNT=$(WIN32_WINNT)
+
+# Runtime library configuration
+# Note: Resource dir needed for cross-compilation to find Windows compiler-rt
+RTLIB_FLAGS = --rtlib=compiler-rt -resource-dir=$(SYSROOT)/lib/clang/21
+
+# Warning flags - comprehensive but with necessary suppressions
+WARNING_FLAGS = -Wall -Wextra \
+    -Wno-pointer-sign \
+    -Wno-char-subscripts \
+    -Wformat-security \
+    -Wformat-nonliteral \
+    -Winit-self
+
+# Security/hardening flags
+SECURITY_FLAGS = -fstack-protector-strong \
+    -D_FORTIFY_SOURCE=2
+
+# Optimization and debugging flags
+OPT_FLAGS = $(OPT) $(DEBUG) -fno-omit-frame-pointer
+
+# Visibility control for DLL symbols
+VISIBILITY_FLAGS = -fvisibility=hidden
+
+# Link-Time Optimization (ThinLTO for faster builds)
+LTO_FLAGS = -flto=thin
+
+# Project feature flags
+FEATURE_FLAGS = -DSTORE_UNIQUE \
+    -DENABLE_CRASH_HANDLER \
+    -DENABLE_SHAREDMEM \
+    -DENABLE_DRAGHACK
+
+# ============================================================================
+# CFLAGS Assembly
+# ============================================================================
+
+ifndef CFLAGS
+    # Local build - construct from components
+    CFLAGS = $(CROSS_FLAGS) \
+             $(PLATFORM_FLAGS) \
+             $(RTLIB_FLAGS) \
+             $(WARNING_FLAGS) \
+             $(SECURITY_FLAGS) \
+             $(OPT_FLAGS) \
+             $(VISIBILITY_FLAGS) \
+             $(LTO_FLAGS) \
+             $(FEATURE_FLAGS) \
+             $(SDL_CFLAGS) \
+             -I$(SDL_PREFIX)/include \
+             -Iinclude \
+             -Isrc
+else
+    # Docker environment - append project-specific flags only
+    # (Cross-compilation flags already set in ENV)
+    CFLAGS += $(WARNING_FLAGS) \
+              $(SECURITY_FLAGS) \
+              $(OPT_FLAGS) \
+              $(VISIBILITY_FLAGS) \
+              $(LTO_FLAGS) \
+              $(FEATURE_FLAGS)
+endif
+
+# ============================================================================
+# LDFLAGS Assembly
+# ============================================================================
+
+# Linker flags for cross-compilation
+LINKER_FLAGS = --target=$(TARGET) \
+               --sysroot=$(SYSROOT) \
+               -fuse-ld=lld \
+               --rtlib=compiler-rt \
+               -resource-dir=$(SYSROOT)/lib/clang/21
+
+# Link-Time Optimization (must match CFLAGS)
+LDFLAGS_LTO = -flto=thin
+
+# Windows subsystem selection
+SUBSYSTEM_GUI = -Wl,-subsystem,windows
+SUBSYSTEM_CONSOLE = -Wl,-subsystem,console
+
+# Security hardening for linker
+LDFLAGS_SECURITY = -Wl,--dynamicbase \
+                   -Wl,--nxcompat \
+                   -Wl,--high-entropy-va
+
+# Debug information
+LDFLAGS_DEBUG = $(DEBUG)
+
+# Main LDFLAGS
+ifndef LDFLAGS
+    LDFLAGS = $(LINKER_FLAGS) \
+              $(LDFLAGS_LTO) \
+              $(LDFLAGS_DEBUG) \
+              $(LDFLAGS_SECURITY) \
+              $(SUBSYSTEM_GUI)
+endif
+
+# Console subsystem variant for debugging
+LDFLAGS_CONSOLE ?= $(LINKER_FLAGS) \
+                   $(LDFLAGS_LTO) \
+                   $(LDFLAGS_DEBUG) \
+                   $(LDFLAGS_SECURITY) \
+                   $(SUBSYSTEM_CONSOLE)
 
 SDL_LIBS=$(shell $(SDL_CONFIG) --libs)
 LIBS = -lwsock32 -lws2_32 -lpsapi -lz -lpng -lzip -ldwarfstack $(SDL_LIBS) -lSDL2_mixer
@@ -67,6 +194,11 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 
 bin/moac.exe lib/moac.a:	$(OBJS) $(ASTONIA_NET_LIB)
 			$(CC) $(LDFLAGS) -Wl,--out-implib,lib/moac.a -o bin/moac.exe $(OBJS) $(ASTONIA_NET_LIB) $(LIBS)
+			@echo "Copying Rust DLL to bin directory..."
+			@cp $(ASTONIA_NET_DIR)/target/$(ASTONIA_NET_TGT)/release/astonia_net.dll bin/ || { echo "Failed to copy DLL"; exit 1; }
+			@echo "Build completed successfully!"
+			@echo "Output: bin/moac.exe, bin/astonia_net.dll"
+			@ls -lh bin/moac.exe bin/astonia_net.dll
 
 bin/moac_dbg.exe lib/moac_dbg.a:	$(OBJS) $(ASTONIA_NET_LIB)
 			$(CC) $(LDFLAGS_CONSOLE) -Wl,--out-implib,lib/moac_dbg.a -o bin/moac_dbg.exe $(OBJS) $(ASTONIA_NET_LIB) $(LIBS)

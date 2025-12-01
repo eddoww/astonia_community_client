@@ -21,6 +21,58 @@ else
     PLATFORM := windows
 endif
 
+# ============================================================================
+# Configuration Variables
+# ============================================================================
+
+# List of all platforms for iteration
+ALL_PLATFORMS := windows linux macos
+
+# Docker configuration
+DOCKER_CONTAINER_DIR := build/containers
+DOCKER_RUN_FLAGS := --rm -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/app" -w /app
+DOCKER_RUN_FLAGS_INTERACTIVE := --rm -it -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/app" -w /app
+
+# ============================================================================
+# Reusable Makefile Functions
+# ============================================================================
+
+# Function: docker-build-and-run
+# Usage: $(call docker-build-and-run,dockerfile-name,image-tag,run-flags,[build-args])
+# Args:
+#   $1 = Dockerfile name (e.g., Dockerfile.linux)
+#   $2 = Docker image tag (e.g., astonia-linux-build)
+#   $3 = Docker run flags (e.g., $(DOCKER_RUN_FLAGS))
+#   $4 = Optional build arguments (e.g., --build-arg ZEN4=1)
+define docker-build-and-run
+	@echo "Building Docker image: $(2)..."
+	cp $(DOCKER_CONTAINER_DIR)/$(1) .
+	docker build -f $(1) -t $(2) $(4) .
+	docker run $(3) $(2)
+	rm -f $(1)
+endef
+
+# Function: docker-build-and-run-appimage
+# Usage: $(call docker-build-and-run-appimage,image-tag,output-name,[build-args])
+# Args:
+#   $1 = Docker image tag (e.g., astonia-appimage-build)
+#   $2 = Output AppImage name (e.g., astonia-client.AppImage)
+#   $3 = Optional build arguments (e.g., --build-arg ZEN4=1)
+define docker-build-and-run-appimage
+	@echo "Building Linux AppImage..."
+	cp $(DOCKER_CONTAINER_DIR)/Dockerfile.appimage .
+	docker build -f Dockerfile.appimage -t $(1) $(3) .
+	rm -f Dockerfile.appimage
+	docker run --rm -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/output" $(1)
+	mv astonia-client-*.AppImage $(2)
+	@echo ""
+	@echo "============================================"
+	@echo "AppImage created: $(2)"
+	@echo "============================================"
+	@echo ""
+	@echo "To run: chmod +x $(2) && ./$(2)"
+endef
+
 # Default target - build for detected platform
 all:
 	@echo "Building for $(PLATFORM)..."
@@ -42,9 +94,7 @@ macos:
 # Clean for all platforms
 clean:
 	@echo "Cleaning all platforms..."
-	@$(MAKE) -f build/make/Makefile.windows clean 2>/dev/null || true
-	@$(MAKE) -f build/make/Makefile.linux clean 2>/dev/null || true
-	@$(MAKE) -f build/make/Makefile.macos clean 2>/dev/null || true
+	@$(foreach platform,$(ALL_PLATFORMS),$(MAKE) -f build/make/Makefile.$(platform) clean 2>/dev/null || true;)
 
 # Distribution target (delegates to platform-specific Makefile)
 distrib:
@@ -76,53 +126,33 @@ zig-build:
 	zig build --release=fast install --prefix .
 	rm -f build.zig
 
-# Docker build for Linux
+# ============================================================================
+# Docker Build Targets
+# ============================================================================
+
+# Docker build for Linux (production)
 docker-linux:
-	cp build/containers/Dockerfile.linux .
-	docker build -f Dockerfile.linux -t astonia-linux-build .
-	docker run --rm -i -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/app" -w /app astonia-linux-build
-	rm -f Dockerfile.linux
+	$(call docker-build-and-run,Dockerfile.linux,astonia-linux-build,$(DOCKER_RUN_FLAGS))
 
+# Docker build for Windows (production)
 docker-windows:
-	docker build -f Dockerfile.windows-build -t astonia-windows-build .
-	docker run --rm -i -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/app" -w /app astonia-windows-build
+	$(call docker-build-and-run,Dockerfile.windows-build,astonia-windows-build,$(DOCKER_RUN_FLAGS))
 
+# Docker development environment for Windows (interactive)
 docker-windows-dev:
-	docker build -f Dockerfile.windows-dev -t astonia-windows-dev .
-	docker run --rm -it -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/app" -w /app astonia-windows-dev
+	$(call docker-build-and-run,Dockerfile.windows-dev,astonia-windows-dev,$(DOCKER_RUN_FLAGS_INTERACTIVE))
 
+# Docker development environment for Linux (interactive)
 docker-linux-dev:
-	docker build -f Dockerfile.linux-dev -t astonia-linux-dev .
-	docker run --rm -it -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/app" -w /app astonia-linux-dev
+	$(call docker-build-and-run,Dockerfile.linux-dev,astonia-linux-dev,$(DOCKER_RUN_FLAGS_INTERACTIVE))
 
 # Build Linux AppImage (portable, works on all distributions)
 appimage:
-	@echo "Building Linux AppImage..."
-	cp build/containers/Dockerfile.appimage .
-	docker build -f Dockerfile.appimage -t astonia-appimage-build .
-	rm -f Dockerfile.appimage
-	docker run --rm -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/output" astonia-appimage-build
-	mv astonia-client-*.AppImage astonia-client.AppImage
-	@echo ""
-	@echo "============================================"
-	@echo "AppImage created successfully!"
-	@echo "============================================"
-	@echo ""
-	@echo "To run: chmod +x astonia-client.AppImage && ./astonia-client.AppImage"
+	$(call docker-build-and-run-appimage,astonia-appimage-build,astonia-client.AppImage)
 
+# Build Linux AppImage with Zen4 optimizations
 zen4-appimage:
-	@echo "Building Linux AppImage..."
-	cp build/containers/Dockerfile.appimage .
-	docker build -f Dockerfile.appimage -t astonia-appimage-build --build-arg ZEN4=1 .
-	rm -f Dockerfile.appimage
-	docker run --rm -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/output" astonia-appimage-build
-	mv astonia-client-*.AppImage astonia-client-zen4.AppImage
-	@echo ""
-	@echo "============================================"
-	@echo "Zen4 AppImage created successfully!"
-	@echo "============================================"
-	@echo ""
-	@echo "To run: chmod +x astonia-client-zen4.AppImage && ./astonia-client.AppImage"
+	$(call docker-build-and-run-appimage,astonia-appimage-build,astonia-client-zen4.AppImage,--build-arg ZEN4=1)
 
 # Include quality checks makefile (see build/make/Makefile.quality)
 include build/make/Makefile.quality

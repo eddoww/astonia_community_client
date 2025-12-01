@@ -154,7 +154,30 @@ appimage:
 zen4-appimage:
 	$(call docker-build-and-run-appimage,astonia-appimage-build,astonia-client-zen4.AppImage,--build-arg ZEN4=1)
 
+# Docker distribution builds - create distribution packages
+docker-distrib-windows:
+	@echo "Building Windows distribution package in Docker..."
+	$(call docker-build-and-run,Dockerfile.windows-build,astonia-windows-build,$(DOCKER_RUN_FLAGS))
+	@echo "Creating distribution package..."
+	@cp $(DOCKER_CONTAINER_DIR)/Dockerfile.windows-build .
+	@docker build -f Dockerfile.windows-build -t astonia-windows-build . > /dev/null 2>&1
+	@docker run --rm -v "$(PWD):/app" -w /app --entrypoint make astonia-windows-build -f build/make/Makefile.windows distrib
+	@rm -f Dockerfile.windows-build
+	@echo "Windows distribution created: windows_client.zip"
+	@ls -lh windows_client.zip
+
+docker-distrib-linux:
+	@echo "Building Linux distribution package in Docker..."
+	$(call docker-build-and-run,Dockerfile.linux,astonia-linux-build,$(DOCKER_RUN_FLAGS))
+	@echo "Creating distribution package..."
+	@cp $(DOCKER_CONTAINER_DIR)/Dockerfile.linux .
+	@docker build -f Dockerfile.linux -t astonia-linux-build . > /dev/null 2>&1
+	@docker run --rm -v "$(PWD):/app" -w /app --entrypoint make astonia-linux-build -f build/make/Makefile.linux distrib
+	@rm -f Dockerfile.linux
+	@echo "Linux distribution created: linux_client.tar.gz"
+	@ls -lh linux_client.tar.gz
+
 # Include quality checks makefile (see build/make/Makefile.quality)
 include build/make/Makefile.quality
 
-.PHONY: all windows linux macos clean distrib amod convert anicopy zig-build docker-linux docker-windows docker-windows-dev docker-linux-dev appimage zen4-appimage sanitizer coverage
+.PHONY: all windows linux macos clean distrib amod convert anicopy zig-build docker-linux docker-windows docker-windows-dev docker-linux-dev docker-distrib-windows docker-distrib-linux appimage zen4-appimage sanitizer coverage

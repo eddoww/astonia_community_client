@@ -17,6 +17,7 @@ RUN pacman -Syu --noconfirm \
     make \
     clang \
     lld \
+    zip \
     && pacman -Scc --noconfirm
 
 # Install Clang Windows cross-compilation toolchain

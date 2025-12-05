@@ -9,11 +9,11 @@
 
 #include "../widget.h"
 
-// Text alignment
+// Text alignment (matches RENDER_TEXT_* constants)
 typedef enum {
-	LABEL_ALIGN_LEFT = RENDER_TEXT_LEFT,
-	LABEL_ALIGN_CENTER = RENDER_TEXT_CENTER,
-	LABEL_ALIGN_RIGHT = RENDER_TEXT_RIGHT
+	LABEL_ALIGN_LEFT = 0, // RENDER_TEXT_LEFT
+	LABEL_ALIGN_CENTER = 1, // RENDER_TEXT_CENTER
+	LABEL_ALIGN_RIGHT = 2 // RENDER_TEXT_RIGHT
 } LabelAlignment;
 
 // Label-specific data

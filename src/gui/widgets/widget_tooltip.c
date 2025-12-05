@@ -5,6 +5,7 @@
  */
 
 #include <string.h>
+#include <stdio.h>
 #include <SDL2/SDL.h>
 
 #include "../../astonia.h"

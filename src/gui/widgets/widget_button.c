@@ -5,6 +5,7 @@
  */
 
 #include <string.h>
+#include <stdio.h>
 
 #include "../../astonia.h"
 #include "../widget.h"

@@ -12,6 +12,10 @@
 #include "widget_manager.h"
 #include "game/game.h"
 
+// Widget chrome constants
+#define TITLEBAR_HEIGHT    20
+#define RESIZE_HANDLE_SIZE 8
+
 // Widget ID counter for unique IDs
 static int next_widget_id = 1;
 
@@ -479,11 +483,17 @@ void widget_screen_to_local(Widget *widget, int screen_x, int screen_y, int *loc
 
 int widget_hit_test(Widget *widget, int local_x, int local_y)
 {
+	int min_y, max_y;
+
 	if (!widget || !widget->visible) {
 		return 0;
 	}
 
-	return (local_x >= 0 && local_x < widget->width && local_y >= 0 && local_y < widget->height);
+	// Account for title bar if present
+	min_y = widget->has_titlebar ? -TITLEBAR_HEIGHT : 0;
+	max_y = widget->height;
+
+	return (local_x >= 0 && local_x < widget->width && local_y >= min_y && local_y < max_y);
 }
 
 Widget *widget_find_at_position(Widget *root, int screen_x, int screen_y)
@@ -565,9 +575,6 @@ void widget_set_minimized(Widget *widget, int minimized)
 // Widget Rendering Helpers
 // =============================================================================
 
-#define TITLEBAR_HEIGHT    20
-#define RESIZE_HANDLE_SIZE 8
-
 void widget_render_chrome(Widget *widget)
 {
 	int screen_x, screen_y;
@@ -624,21 +631,30 @@ void widget_render_chrome(Widget *widget)
 		render_line(min_x + 3, min_y + 10, min_x + 11, min_y + 10, IRGB(25, 25, 25));
 	}
 
-	// Draw window border
-	render_line(screen_x, screen_y, screen_x, screen_y + widget->height, border_color);
-	render_line(screen_x + widget->width, screen_y, screen_x + widget->width, screen_y + widget->height, border_color);
-	render_line(screen_x, screen_y + widget->height, screen_x + widget->width, screen_y + widget->height, border_color);
+	// Draw window border (only when not minimized)
+	if (!widget->minimized) {
+		render_line(screen_x, screen_y, screen_x, screen_y + widget->height, border_color);
+		render_line(
+		    screen_x + widget->width, screen_y, screen_x + widget->width, screen_y + widget->height, border_color);
+		render_line(
+		    screen_x, screen_y + widget->height, screen_x + widget->width, screen_y + widget->height, border_color);
+	}
 
-	// Draw resize handles if resizable
+	// Draw resize handles if resizable (make them very visible)
 	if (widget->resizable && !widget->minimized) {
-		// Just draw corner handles for now
-		int corner_size = RESIZE_HANDLE_SIZE;
+		int handle_size = 12; // Larger handle for easier grabbing
+		unsigned short handle_color = IRGB(20, 20, 25); // Brighter color
 
-		// Bottom-right corner
-		render_line(screen_x + widget->width - corner_size, screen_y + widget->height, screen_x + widget->width,
-		    screen_y + widget->height, border_color);
-		render_line(screen_x + widget->width, screen_y + widget->height - corner_size, screen_x + widget->width,
-		    screen_y + widget->height, border_color);
+		// Bottom-right corner - draw a visible triangle/grip pattern
+		for (int i = 0; i < 3; i++) {
+			int offset = i * 4;
+			render_line(screen_x + widget->width - handle_size + offset, screen_y + widget->height,
+			    screen_x + widget->width, screen_y + widget->height - handle_size + offset, handle_color);
+		}
+
+		// Also draw a filled rectangle in the corner for extra visibility
+		render_rect(screen_x + widget->width - handle_size, screen_y + widget->height - handle_size,
+		    screen_x + widget->width, screen_y + widget->height, IRGB(12, 12, 15));
 	}
 }
 
@@ -670,8 +686,8 @@ int widget_get_resize_handle(Widget *widget, int screen_x, int screen_y)
 	local_x = screen_x - wx;
 	local_y = screen_y - wy;
 
-	// Check corner and edge handles
-	int handle_size = RESIZE_HANDLE_SIZE;
+	// Check corner and edge handles (use larger size for easier grabbing)
+	int handle_size = 12;
 
 	// Bottom-right corner
 	if (local_x >= widget->width - handle_size && local_x <= widget->width && local_y >= widget->height - handle_size &&

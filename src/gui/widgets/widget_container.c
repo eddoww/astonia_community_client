@@ -252,6 +252,11 @@ static void container_render(Widget *self)
 	// Get screen position
 	widget_get_screen_position(self, &screen_x, &screen_y);
 
+	// Render window chrome first (title bar, borders)
+	if (self->has_titlebar && !self->minimized) {
+		widget_render_chrome(self);
+	}
+
 	// Draw background if enabled
 	if (data->draw_background) {
 		render_rect(screen_x, screen_y, screen_x + self->width, screen_y + self->height, data->bg_color);

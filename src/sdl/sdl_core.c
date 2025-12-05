@@ -546,13 +546,14 @@ void sdl_loop(void)
 			gui_sdl_keyproc(event.key.keysym.sym);
 			break;
 		case SDL_KEYUP:
-			context_keyup(event.key.keysym.sym);
+			// Block keyup events if widget has focus (so game doesn't process key releases)
+			if (!widget_demo_is_enabled() || !widget_demo_handle_key(event.key.keysym.sym, 0)) {
+				context_keyup(event.key.keysym.sym);
+			}
 			break;
 		case SDL_TEXTINPUT:
-			// Forward text input to widget demo first
-			if (widget_demo_is_enabled()) {
-				widget_demo_handle_text_input(event.text.text);
-			} else {
+			// Forward text input to widget demo first, fall back to old GUI if not handled
+			if (!widget_demo_is_enabled() || !widget_demo_handle_text_input(event.text.text)) {
 				cmd_proc(event.text.text[0]);
 			}
 			break;

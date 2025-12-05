@@ -28,6 +28,7 @@
 static Widget *demo_container = NULL;
 static Widget *demo_button1 = NULL;
 static Widget *demo_button2 = NULL;
+static Widget *demo_button3 = NULL;
 static Widget *demo_label = NULL;
 static Widget *demo_progressbar = NULL;
 static Widget *demo_textinput = NULL;
@@ -36,6 +37,7 @@ static Widget *demo_tooltip = NULL;
 static int demo_initialized = 0;
 static int demo_enabled = 0; // Toggle with F11
 static int click_count = 0;
+static int button3_hovered = 0; // Track if button3 is currently hovered
 
 // Button callbacks
 static void on_button1_click(Widget *button, void *param)
@@ -54,6 +56,19 @@ static void on_button2_click(Widget *button, void *param)
 {
 	// Toggle text input visibility
 	widget_set_visible(demo_textinput, !demo_textinput->visible);
+
+	// Update layout to reposition widgets
+	if (demo_container) {
+		widget_container_update_layout(demo_container);
+	}
+}
+
+static void on_button3_click(Widget *button, void *param)
+{
+	// Reset counter and progress bar
+	click_count = 0;
+	widget_label_set_text(demo_label, "Widget System Test");
+	widget_progressbar_set_value(demo_progressbar, 0.0f);
 }
 
 static void on_textinput_submit(Widget *input, const char *text, void *param)
@@ -81,12 +96,24 @@ void widget_demo_init(void)
 	}
 
 	// Create container for demo widgets (top-right area)
-	demo_container = widget_container_create(550, 50, 240, 250);
+	demo_container = widget_container_create(550, 50, 240, 300);
 	if (!demo_container) {
 		return;
 	}
 	widget_container_set_layout(demo_container, LAYOUT_VERTICAL);
 	widget_container_set_spacing(demo_container, 10, 8); // padding=10, spacing=8
+	widget_container_set_background(demo_container, IRGB(5, 5, 7), 1); // Enable dark background
+
+	// Enable window chrome (title bar, dragging, resizing, minimizing)
+	widget_set_window_chrome(
+	    demo_container, 1, 1, 1, 1, 1); // has_titlebar, draggable, resizable, minimizable, closable
+	widget_set_title(demo_container, "Widget Demo");
+
+	// Add container to root widget so it gets rendered
+	Widget *root = widget_manager_get_root();
+	if (root) {
+		widget_add_child(root, demo_container);
+	}
 
 	// Create label
 	demo_label = widget_label_create(0, 0, 220, 20, "Widget System Test");
@@ -110,6 +137,13 @@ void widget_demo_init(void)
 		widget_add_child(demo_container, demo_button2);
 	}
 
+	// Create button 3 (Hover me for tooltip)
+	demo_button3 = widget_button_create(0, 0, 220, 30, "Hover Me!");
+	if (demo_button3) {
+		widget_button_set_callback(demo_button3, on_button3_click, NULL);
+		widget_add_child(demo_container, demo_button3);
+	}
+
 	// Create progress bar
 	demo_progressbar = widget_progressbar_create(0, 0, 220, 20, PROGRESSBAR_HORIZONTAL);
 	if (demo_progressbar) {
@@ -128,12 +162,24 @@ void widget_demo_init(void)
 		widget_set_visible(demo_textinput, 0); // Start hidden
 	}
 
-	// Create tooltip for button1
+	// Create tooltip for button3
 	demo_tooltip = widget_tooltip_create(0, 0);
 	if (demo_tooltip) {
-		widget_tooltip_set_text(demo_tooltip, "Click to increment counter\nand update progress bar");
-		widget_tooltip_set_delay(demo_tooltip, 500);
+		widget_tooltip_set_text(demo_tooltip,
+		    "Hover tooltip test!\nClick to reset counter\nDrag the title bar to move\nResize from edges/corners");
+		widget_tooltip_set_delay(demo_tooltip, 300);
+
+		// Add tooltip to root widget
+		if (root) {
+			widget_add_child(root, demo_tooltip);
+		}
 	}
+
+	// Update container layout now that all children are added
+	widget_container_update_layout(demo_container);
+
+	// Rebuild z-order list to ensure all widgets (including tooltip) are included
+	widget_manager_rebuild_z_order();
 
 	demo_initialized = 1;
 	demo_enabled = 1; // Enable by default for testing
@@ -173,10 +219,19 @@ void widget_demo_toggle(void)
 		return;
 	}
 
-	demo_enabled = !demo_enabled;
-	if (demo_container) {
-		widget_set_visible(demo_container, demo_enabled);
+	// If container was closed with X button, it's hidden but demo_enabled may still be 1
+	// In that case, just show it again instead of toggling
+	if (demo_container && !demo_container->visible) {
+		widget_set_visible(demo_container, 1);
+		demo_enabled = 1;
+	} else {
+		// Normal toggle
+		demo_enabled = !demo_enabled;
+		if (demo_container) {
+			widget_set_visible(demo_container, demo_enabled);
+		}
 	}
+
 	if (demo_tooltip) {
 		widget_set_visible(demo_tooltip, 0); // Hide tooltip when toggling
 	}
@@ -194,24 +249,27 @@ void widget_demo_update(int dt)
 	// Update widget manager (handles animations, tooltips, etc.)
 	widget_manager_update(dt);
 
-	// Show tooltip when hovering over button1
-	if (demo_button1 && demo_tooltip && demo_enabled) {
+	// Show tooltip when hovering over button3 (use state tracking to avoid resetting timer)
+	if (demo_button3 && demo_tooltip && demo_enabled) {
 		int screen_x, screen_y;
-		widget_get_screen_position(demo_button1, &screen_x, &screen_y);
+		widget_get_screen_position(demo_button3, &screen_x, &screen_y);
 
-		if (mousex >= screen_x && mousex <= screen_x + demo_button1->width && mousey >= screen_y &&
-		    mousey <= screen_y + demo_button1->height) {
-			// Mouse is over button1
-			if (!demo_tooltip->visible) {
-				widget_tooltip_show_at_mouse(demo_tooltip, mousex, mousey);
-			} else {
+		int is_over = (mousex >= screen_x && mousex <= screen_x + demo_button3->width && mousey >= screen_y &&
+		               mousey <= screen_y + demo_button3->height);
+
+		if (is_over && !button3_hovered) {
+			// Just started hovering - show tooltip (starts delay timer)
+			widget_tooltip_show_at_mouse(demo_tooltip, mousex, mousey);
+			button3_hovered = 1;
+		} else if (is_over && button3_hovered) {
+			// Still hovering - just update position (don't reset timer)
+			if (demo_tooltip->visible) {
 				widget_tooltip_update_position(demo_tooltip, mousex, mousey);
 			}
-		} else {
-			// Mouse is not over button1
-			if (demo_tooltip->visible) {
-				widget_tooltip_hide(demo_tooltip);
-			}
+		} else if (!is_over && button3_hovered) {
+			// Stopped hovering - hide tooltip
+			widget_tooltip_hide(demo_tooltip);
+			button3_hovered = 0;
 		}
 	}
 }
@@ -262,27 +320,48 @@ void widget_demo_handle_mouse_motion(int x, int y)
  */
 int widget_demo_handle_key(int key, int down)
 {
+	Widget *focused;
+
 	if (!demo_initialized || !demo_enabled) {
 		return 0;
 	}
 
-	// Forward to widget manager
+	// If a text input widget has focus, block ALL keypresses from reaching the game
+	focused = widget_manager_get_focus();
+	if (focused && focused->type == WIDGET_TYPE_TEXTINPUT) {
+		// Let widget manager handle special keys (arrows, backspace, etc.)
+		widget_manager_handle_key(key, down ? 1 : 0);
+		return 1; // Always consume the key to prevent game from processing it
+	}
+
+	// Forward to widget manager for other widgets
 	return widget_manager_handle_key(key, down ? 1 : 0);
 }
 
 /**
  * Handle text input events
+ * Returns 1 if handled, 0 if not (allows old GUI to process)
  */
-void widget_demo_handle_text_input(const char *text)
+int widget_demo_handle_text_input(const char *text)
 {
+	Widget *focused;
+
 	if (!demo_initialized || !demo_enabled || !text) {
-		return;
+		return 0;
+	}
+
+	// Only process text input if a text input widget has focus
+	focused = widget_manager_get_focus();
+	if (!focused || focused->type != WIDGET_TYPE_TEXTINPUT) {
+		return 0; // Not handled, let old GUI process it
 	}
 
 	// Send each character to the widget manager
 	for (int i = 0; text[i]; i++) {
-		widget_manager_handle_key((int)(unsigned char)text[i], 1);
+		widget_manager_handle_text((int)(unsigned char)text[i]);
 	}
+
+	return 1; // Handled by widget
 }
 
 /**

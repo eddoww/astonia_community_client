@@ -304,16 +304,16 @@ void gui_sdl_mouseproc(int x, int y, int what, int clicks)
 	int widget_y = y / sdl_scale - render_offset_y();
 
 	// Forward mouse events to widget demo (if enabled, it gets first priority)
-	if (what == SDL_MOUM_LEFT_DOWN && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_LEFT, 1)) {
+	if (what == SDL_MOUM_LDOWN && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_LEFT, 1)) {
 		return; // Widget handled it
 	}
-	if (what == SDL_MOUM_LEFT_UP && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_LEFT, 0)) {
+	if (what == SDL_MOUM_LUP && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_LEFT, 0)) {
 		return; // Widget handled it
 	}
-	if (what == SDL_MOUM_RIGHT_DOWN && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_RIGHT, 1)) {
+	if (what == SDL_MOUM_RDOWN && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_RIGHT, 1)) {
 		return; // Widget handled it
 	}
-	if (what == SDL_MOUM_RIGHT_UP && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_RIGHT, 0)) {
+	if (what == SDL_MOUM_RUP && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_RIGHT, 0)) {
 		return; // Widget handled it
 	}
 

@@ -27,7 +27,7 @@ static void add_to_z_order_recursive(WidgetManager *mgr, Widget *widget)
 {
 	Widget *child;
 
-	if (!widget || !widget->visible) {
+	if (!widget) {
 		return;
 	}
 
@@ -99,7 +99,8 @@ int widget_manager_init(int screen_width, int screen_height)
 	// Zero initialize
 	bzero(g_widget_manager, sizeof(WidgetManager));
 
-	// Create root widget (full screen container)
+	// Create root widget (full screen - needed for widget_find_at_position to work)
+	// The root check in handle_mouse prevents it from blocking game clicks
 	g_widget_manager->root = widget_create(WIDGET_TYPE_CONTAINER, 0, 0, screen_width, screen_height);
 	if (!g_widget_manager->root) {
 		fail("widget_manager_init: failed to create root widget");
@@ -187,6 +188,31 @@ Widget *widget_manager_get_root(void)
 // =============================================================================
 
 /**
+ * Check if a widget is effectively visible (including parent chain)
+ */
+static int is_widget_effectively_visible(Widget *widget)
+{
+	Widget *w;
+
+	if (!widget) {
+		return 0;
+	}
+
+	// Check this widget and all parents
+	for (w = widget; w; w = w->parent) {
+		if (!w->visible) {
+			return 0;
+		}
+		// Also check if parent is minimized
+		if (w->parent && w->parent->minimized) {
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+/**
  * Render a single widget and its children
  */
 static void render_widget_recursive(Widget *widget)
@@ -232,13 +258,15 @@ void widget_manager_render(void)
 	// Render widgets in z-order (back to front)
 	for (i = 0; i < g_widget_manager->z_order_count; i++) {
 		Widget *widget = g_widget_manager->z_order_list[i];
-		if (widget->visible) {
-			if (widget->render) {
+		// Check effective visibility (widget and all parents must be visible)
+		if (is_widget_effectively_visible(widget)) {
+			// Render content (skip if minimized)
+			if (!widget->minimized && widget->render) {
 				widget->render(widget);
 			}
 
-			// Render window chrome
-			if (widget->has_titlebar && !widget->minimized) {
+			// Render window chrome (always render if has titlebar, even when minimized)
+			if (widget->has_titlebar) {
 				widget_render_chrome(widget);
 			}
 		}
@@ -313,25 +341,32 @@ int widget_manager_handle_mouse(int x, int y, int button, int action)
 		target = widget_find_at_position(g_widget_manager->root, x, y);
 	}
 
-	if (!target) {
-		return 0;
-	}
-
-	// Update hover state
+	// Update hover state (do this before checking if target is NULL)
 	if (g_widget_manager->hovered != target) {
+		// Call on_mouse_move for the widget losing hover
 		if (g_widget_manager->hovered) {
 			g_widget_manager->hovered->hover = 0;
 			widget_mark_dirty(g_widget_manager->hovered);
+			if (g_widget_manager->hovered->on_mouse_move) {
+				int hx, hy;
+				widget_screen_to_local(g_widget_manager->hovered, x, y, &hx, &hy);
+				g_widget_manager->hovered->on_mouse_move(g_widget_manager->hovered, hx, hy);
+			}
 		}
 		g_widget_manager->hovered = target;
-		target->hover = 1;
-		widget_mark_dirty(target);
+		if (target) {
+			target->hover = 1;
+			widget_mark_dirty(target);
+			// Call on_mouse_move for the widget gaining hover
+			if (target->on_mouse_move) {
+				int tx, ty;
+				widget_screen_to_local(target, x, y, &tx, &ty);
+				target->on_mouse_move(target, tx, ty);
+			}
+		}
 	}
 
-	// Convert to widget-local coordinates
-	widget_screen_to_local(target, x, y, &local_x, &local_y);
-
-	// Handle window dragging
+	// Handle window dragging (check BEFORE target validation - drag continues even if mouse leaves widget)
 	if (g_widget_manager->dragging_widget) {
 		if (action == MOUSE_ACTION_MOVE) {
 			int new_x = x - g_widget_manager->drag_offset_x;
@@ -344,7 +379,7 @@ int widget_manager_handle_mouse(int x, int y, int button, int action)
 		}
 	}
 
-	// Handle window resizing
+	// Handle window resizing (check BEFORE target validation - resize continues even if mouse leaves widget)
 	if (g_widget_manager->resizing_widget) {
 		if (action == MOUSE_ACTION_MOVE) {
 			Widget *widget = g_widget_manager->resizing_widget;
@@ -370,16 +405,53 @@ int widget_manager_handle_mouse(int x, int y, int button, int action)
 		}
 	}
 
+	// Now validate target (after drag/resize checks, so those can continue even if mouse leaves widget)
+	if (!target) {
+		return 0;
+	}
+
+	// Don't block events if the only target is the root widget (should be transparent to clicks)
+	if (target == g_widget_manager->root) {
+		return 0;
+	}
+
+	// Convert to widget-local coordinates
+	widget_screen_to_local(target, x, y, &local_x, &local_y);
+
 	// Route event to widget
 	if (action == MOUSE_ACTION_DOWN) {
-		// Check for title bar drag start
-		if (target->draggable && target->has_titlebar) {
+		// Check for title bar interactions
+		if (target->has_titlebar) {
 			int wx, wy;
 			widget_get_screen_position(target, &wx, &wy);
 			if (y >= wy - 20 && y < wy) { // In title bar
-				widget_manager_start_drag(target, x - target->x, y - target->y);
-				widget_bring_to_front(target);
-				return 1;
+				// Check for close button click
+				if (target->closable) {
+					int close_x = wx + target->width - 16;
+					int close_y = wy - 20 + 2;
+					if (x >= close_x && x < close_x + 14 && y >= close_y && y < close_y + 14) {
+						widget_set_visible(target, 0);
+						return 1;
+					}
+				}
+
+				// Check for minimize button click
+				if (target->minimizable) {
+					int min_x = wx + target->width - (target->closable ? 32 : 16);
+					int min_y = wy - 20 + 2;
+					if (x >= min_x && x < min_x + 14 && y >= min_y && y < min_y + 14) {
+						target->minimized = !target->minimized;
+						widget_mark_dirty(target);
+						return 1;
+					}
+				}
+
+				// Start drag if not clicking a button
+				if (target->draggable) {
+					widget_manager_start_drag(target, x - wx, y - wy);
+					widget_bring_to_front(target);
+					return 1;
+				}
 			}
 		}
 
@@ -404,16 +476,19 @@ int widget_manager_handle_mouse(int x, int y, int button, int action)
 		}
 
 		target->pressed = 1;
+		handled = 1; // Always block the event - we found a target widget
 	} else if (action == MOUSE_ACTION_UP) {
 		if (target->on_mouse_up) {
 			handled = target->on_mouse_up(target, local_x, local_y, button);
 		}
 
 		target->pressed = 0;
+		handled = 1; // Always block the event - we found a target widget
 	} else if (action == MOUSE_ACTION_MOVE) {
 		if (target->on_mouse_move) {
 			handled = target->on_mouse_move(target, local_x, local_y);
 		}
+		// Don't force handled=1 for MOVE, allow widgets to decide
 	}
 
 	return handled;

@@ -62,8 +62,9 @@ int widget_demo_handle_key(int key, int down);
 /**
  * Handle text input events (for text input widgets)
  * @param text UTF-8 text input
+ * @return 1 if event was handled by widgets, 0 otherwise
  */
-void widget_demo_handle_text_input(const char *text);
+int widget_demo_handle_text_input(const char *text);
 
 /**
  * Check if widget demo is enabled

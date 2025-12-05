@@ -12,6 +12,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/widget_demo.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -221,11 +222,22 @@ void display(void)
 	display_minimap();
 	display_citem();
 	context_display(mousex, mousey);
+
+	// Widget demo (F11 to toggle)
+	static int widget_demo_initialized = 0;
+	if (!widget_demo_initialized) {
+		widget_demo_init();
+		widget_demo_initialized = 1;
+	}
+	int duration_ms = SDL_GetTicks64() - start;
+	widget_demo_update(duration_ms); // Use frame duration as delta time
+	widget_demo_render();
+
 	display_helpandquest(); // display last because it is on top
 
 display_graphs:;
 
-	int duration = SDL_GetTicks64() - start;
+	int duration = duration_ms;
 
 	if (display_vc) {
 		extern long long texc_miss, texc_pre; // mem_tex,

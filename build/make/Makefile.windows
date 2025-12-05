@@ -188,7 +188,7 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 			src/game/resource.o src/helper/helper.o\
 			src/gui/dots.o src/gui/display.o src/gui/teleport.o src/gui/color.o src/gui/cmd.o\
 			src/gui/questlog.o src/gui/context.o src/gui/hover.o src/gui/minimap.o\
-			src/gui/widget.o src/gui/widget_manager.o\
+			src/gui/widget.o src/gui/widget_manager.o src/gui/widget_demo.o\
 			src/gui/widgets/widget_container.o src/gui/widgets/widget_button.o src/gui/widgets/widget_label.o\
 			src/gui/widgets/widget_itemslot.o src/gui/widgets/widget_progressbar.o\
 			src/gui/widgets/widget_textinput.o src/gui/widgets/widget_tooltip.o\
@@ -254,6 +254,7 @@ src/gui/gui_map.o:		src/gui/gui_map.c src/astonia.h src/gui/gui.h src/gui/gui_pr
 # Widget system
 src/gui/widget.o:	src/gui/widget.c src/gui/widget.h src/astonia.h src/game/game.h
 src/gui/widget_manager.o:	src/gui/widget_manager.c src/gui/widget_manager.h src/gui/widget.h src/astonia.h src/game/game.h
+src/gui/widget_demo.o:	src/gui/widget_demo.c src/gui/widget_demo.h src/gui/widget.h src/gui/widget_manager.h src/gui/gui.h src/gui/gui_private.h src/astonia.h src/game/game.h
 
 # Widget types
 src/gui/widgets/widget_container.o:	src/gui/widgets/widget_container.c src/gui/widgets/widget_container.h src/gui/widget.h src/gui/widget_manager.h src/astonia.h src/game/game.h

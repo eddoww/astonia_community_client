@@ -13,6 +13,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/widget_demo.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -24,6 +25,11 @@ void gui_sdl_keyproc(int wparam)
 
 	if (wparam != SDLK_ESCAPE && wparam != SDLK_F12 && amod_keydown(wparam)) {
 		return;
+	}
+
+	// Forward key events to widget demo (if enabled, it gets first priority)
+	if (widget_demo_handle_key(wparam, 1)) {
+		return; // Widget handled it
 	}
 
 	switch (wparam) {
@@ -96,11 +102,17 @@ void gui_sdl_keyproc(int wparam)
 		return;
 
 	case SDLK_F11:
-		if (display_help) {
-			display_help = 0;
+		// Ctrl+F11 or Shift+F11 toggles widget demo
+		if (SDL_GetModState() & (KMOD_CTRL | KMOD_SHIFT)) {
+			widget_demo_toggle();
 		} else {
-			display_quest = 0;
-			display_help = 1;
+			// Regular F11 toggles help
+			if (display_help) {
+				display_help = 0;
+			} else {
+				display_quest = 0;
+				display_help = 1;
+			}
 		}
 		return;
 	case SDLK_F12:
@@ -287,10 +299,29 @@ void gui_sdl_mouseproc(int x, int y, int what, int clicks)
 	int delta, tmp;
 	static int mdown = 0;
 
+	// Scale mouse coordinates before passing to widgets
+	int widget_x = x / sdl_scale - render_offset_x();
+	int widget_y = y / sdl_scale - render_offset_y();
+
+	// Forward mouse events to widget demo (if enabled, it gets first priority)
+	if (what == SDL_MOUM_LEFT_DOWN && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_LEFT, 1)) {
+		return; // Widget handled it
+	}
+	if (what == SDL_MOUM_LEFT_UP && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_LEFT, 0)) {
+		return; // Widget handled it
+	}
+	if (what == SDL_MOUM_RIGHT_DOWN && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_RIGHT, 1)) {
+		return; // Widget handled it
+	}
+	if (what == SDL_MOUM_RIGHT_UP && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_RIGHT, 0)) {
+		return; // Widget handled it
+	}
+
 	switch (what) {
 	case SDL_MOUM_NONE:
 		mousex = x;
 		mousey = y;
+		widget_demo_handle_mouse_motion(widget_x, widget_y);
 
 		if (capbut != -1) {
 			if (mousex != XRES / 2 || mousey != YRES / 2) {

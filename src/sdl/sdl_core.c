@@ -18,6 +18,7 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "gui/widget_demo.h"
 
 // SDL window and renderer
 SDL_Window *sdlwnd = NULL;
@@ -548,7 +549,12 @@ void sdl_loop(void)
 			context_keyup(event.key.keysym.sym);
 			break;
 		case SDL_TEXTINPUT:
-			cmd_proc(event.text.text[0]);
+			// Forward text input to widget demo first
+			if (widget_demo_is_enabled()) {
+				widget_demo_handle_text_input(event.text.text);
+			} else {
+				cmd_proc(event.text.text[0]);
+			}
 			break;
 		case SDL_MOUSEMOTION:
 			gui_sdl_mouseproc(event.motion.x, event.motion.y, SDL_MOUM_NONE, 0);

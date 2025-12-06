@@ -720,11 +720,14 @@ int widget_manager_handle_mouse(int x, int y, int button, int action)
 			}
 		}
 
-		// Bring to front on click
-		widget_bring_to_front(target);
+		// For pass-through widgets (like viewport), don't change focus/z-order
+		if (!target->cap_pass_through_mouse) {
+			// Bring to front on click
+			widget_bring_to_front(target);
 
-		// Set focus
-		widget_manager_set_focus(target);
+			// Set focus
+			widget_manager_set_focus(target);
+		}
 
 		// Check for double-click
 		{
@@ -765,14 +768,21 @@ int widget_manager_handle_mouse(int x, int y, int button, int action)
 		}
 
 		target->pressed = 1;
-		handled = 1; // Always block the event - we found a target widget
+		// For pass-through widgets, respect the widget handler's return value
+		// For regular widgets, always block the event
+		if (!target->cap_pass_through_mouse) {
+			handled = 1;
+		}
 	} else if (action == MOUSE_ACTION_UP) {
 		if (target->on_mouse_up) {
 			handled = target->on_mouse_up(target, local_x, local_y, button);
 		}
 
 		target->pressed = 0;
-		handled = 1; // Always block the event - we found a target widget
+		// For pass-through widgets, respect the widget handler's return value
+		if (!target->cap_pass_through_mouse) {
+			handled = 1;
+		}
 	} else if (action == MOUSE_ACTION_MOVE) {
 		if (target->on_mouse_move) {
 			handled = target->on_mouse_move(target, local_x, local_y);

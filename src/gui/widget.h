@@ -102,6 +102,7 @@ struct widget {
 	unsigned int cap_has_layout : 1; // Widget supports automatic child layout (like container)
 	unsigned int cap_has_children : 1; // Widget can have children
 	unsigned int cap_scrollable : 1; // Widget supports scrolling content
+	unsigned int cap_pass_through_mouse : 1; // Mouse events pass to layer below (e.g., game map)
 
 	// === Window Chrome (optional per widget) ===
 	unsigned int has_titlebar : 1; // Show title bar

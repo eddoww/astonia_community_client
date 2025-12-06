@@ -363,7 +363,7 @@ void widget_manager_render(void)
 static void update_hover_state(void)
 {
 	Widget *target;
-	int cursor = SDL_CUR_ARROW;
+	int cursor;
 
 	if (!g_widget_manager || !g_widget_manager->root) {
 		return;
@@ -421,6 +421,9 @@ static void update_hover_state(void)
 	}
 
 	// Determine appropriate cursor based on state
+	// Use -1 to indicate "no widget cursor needed, let game handle it"
+	cursor = -1;
+
 	if (g_widget_manager->resizing_widget) {
 		// Currently resizing - show resize cursor
 		cursor = resize_handle_to_cursor(g_widget_manager->resize_handle);
@@ -437,7 +440,7 @@ static void update_hover_state(void)
 		}
 
 		// Check for title bar hover (for draggable widgets)
-		if (cursor == SDL_CUR_ARROW && target->has_titlebar && target->draggable) {
+		if (cursor == -1 && target->has_titlebar && target->draggable) {
 			int wx, wy;
 			widget_get_screen_position(target, &wx, &wy);
 			if (mousey >= wy - 20 && mousey < wy) {
@@ -462,7 +465,7 @@ static void update_hover_state(void)
 		}
 
 		// Cursor based on widget type
-		if (cursor == SDL_CUR_ARROW) {
+		if (cursor == -1) {
 			switch (target->type) {
 			case WIDGET_TYPE_BUTTON:
 				cursor = SDL_CUR_HAND;
@@ -471,13 +474,17 @@ static void update_hover_state(void)
 				cursor = SDL_CUR_IBEAM;
 				break;
 			default:
+				// No special cursor for this widget type - let game handle it
 				break;
 			}
 		}
 	}
 
-	// Set the cursor
-	sdl_set_cursor(cursor);
+	// Only set cursor if we have a specific widget cursor to show
+	// Otherwise let the game's cursor logic take over
+	if (cursor >= 0) {
+		sdl_set_cursor(cursor);
+	}
 }
 
 void widget_manager_update(int dt)

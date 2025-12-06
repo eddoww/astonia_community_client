@@ -20,6 +20,7 @@
 #include "sdl/sdl_private.h"
 #include "gui/widget.h"
 #include "gui/widget_manager.h"
+#include "gui/widgets/widget_volume.h"
 
 // SDL window and renderer
 SDL_Window *sdlwnd = NULL;
@@ -453,8 +454,11 @@ int sdl_render(void)
 
 void sdl_exit(void)
 {
-	// Cleanup widget system
+	// Cleanup widget system first (saves positions while widgets still exist)
 	widget_manager_cleanup();
+
+	// Cleanup volume widget (saves volume settings)
+	widget_volume_cleanup();
 
 	// Signal workers to quit and join them
 	if (sdl_multi && prethreads) {

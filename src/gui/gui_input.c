@@ -16,6 +16,7 @@
 #include "gui/widget.h"
 #include "gui/widget_manager.h"
 #include "gui/widget_demo.h"
+#include "gui/widgets/widget_volume.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -95,11 +96,17 @@ void gui_sdl_keyproc(int wparam)
 		return;
 
 	case SDLK_F9:
-		if (display_quest) {
-			display_quest = 0;
+		// Shift+F9 toggles volume control
+		if (SDL_GetModState() & KMOD_SHIFT) {
+			widget_volume_toggle();
 		} else {
-			display_help = 0;
-			display_quest = 1;
+			// Regular F9 toggles quest log
+			if (display_quest) {
+				display_quest = 0;
+			} else {
+				display_help = 0;
+				display_quest = 1;
+			}
 		}
 		return;
 
@@ -123,6 +130,7 @@ void gui_sdl_keyproc(int wparam)
 			}
 		}
 		return;
+
 	case SDLK_F12:
 		quit = 1;
 		return;

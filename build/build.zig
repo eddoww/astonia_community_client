@@ -52,7 +52,6 @@ pub fn build(b: *std.Build) void {
         // Widget System
         "src/gui/widget.c",
         "src/gui/widget_manager.c",
-        "src/gui/widget_demo.c",
 
         // Base Widgets
         "src/gui/widgets/widget_container.c",
@@ -63,6 +62,10 @@ pub fn build(b: *std.Build) void {
         "src/gui/widgets/widget_textinput.c",
         "src/gui/widgets/widget_tooltip.c",
         "src/gui/widgets/widget_slider.c",
+
+        // Game Widgets
+        "src/gui/widget_demo.c",
+        "src/gui/widgets/widget_volume.c",
 
         // CLIENT
         "src/client/client.c",

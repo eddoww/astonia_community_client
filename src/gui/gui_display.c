@@ -14,6 +14,7 @@
 #include "gui/gui_private.h"
 #include "gui/widget_manager.h"
 #include "gui/widget_demo.h"
+#include "gui/widgets/widget_volume.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -231,6 +232,8 @@ void display(void)
 		if (widget_manager_init(800, 600)) {
 			// Then initialize the demo widgets (optional, can be toggled with Ctrl/Shift+F11)
 			widget_demo_init();
+			// Initialize volume control widget
+			widget_volume_init();
 			// Load saved widget positions and state
 			widget_manager_load_state();
 		}

@@ -12,6 +12,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/widget_manager.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -85,6 +86,11 @@ void set_button_flags(void)
 static void set_cmd_cursor(int cmd)
 {
 	int cursor;
+
+	// Don't override cursor if widget system is controlling it (drag/resize)
+	if (widget_manager_is_cursor_controlled()) {
+		return;
+	}
 
 	// cursor
 	switch (cmd) {

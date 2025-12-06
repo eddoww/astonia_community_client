@@ -298,6 +298,14 @@ void widget_manager_start_resize(Widget *widget, int handle, int mouse_x, int mo
  */
 void widget_manager_stop_resize(void);
 
+/**
+ * Check if the widget system is currently controlling the cursor
+ * Returns 1 if a widget is being dragged or resized
+ *
+ * @return 1 if widget system controls cursor, 0 otherwise
+ */
+DLL_EXPORT int widget_manager_is_cursor_controlled(void);
+
 // =============================================================================
 // Widget Manager Modal Dialogs
 // =============================================================================

@@ -1152,6 +1152,16 @@ void widget_manager_stop_resize(void)
 	g_widget_manager->resize_handle = -1;
 }
 
+int widget_manager_is_cursor_controlled(void)
+{
+	if (!g_widget_manager) {
+		return 0;
+	}
+
+	// Cursor is controlled by widget system during drag or resize operations
+	return (g_widget_manager->dragging_widget != NULL || g_widget_manager->resizing_widget != NULL);
+}
+
 // =============================================================================
 // Widget Manager Modal Dialogs
 // =============================================================================

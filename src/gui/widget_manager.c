@@ -1485,7 +1485,11 @@ static void parse_json_widget(const char *json_text, int *count)
 					(*count)++;
 				}
 			}
-			return;
+			// Reset state for next widget object
+			name[0] = '\0';
+			x = y = width = height = 0;
+			visible = 1;
+			minimized = 0;
 		}
 
 		ptr++;

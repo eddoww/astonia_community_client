@@ -62,6 +62,10 @@ Widget *widget_container_create(int x, int y, int width, int height)
 	widget->on_resize = container_on_resize;
 	widget->on_destroy = container_on_destroy;
 
+	// Set capability flags - containers support layout and children
+	widget->cap_has_layout = 1;
+	widget->cap_has_children = 1;
+
 	// Set name
 	snprintf(widget->name, sizeof(widget->name), "container_%d", widget->id);
 
@@ -72,7 +76,7 @@ void widget_container_set_layout(Widget *container, LayoutMode mode)
 {
 	ContainerData *data;
 
-	if (!container || container->type != WIDGET_TYPE_CONTAINER) {
+	if (!container || !container->cap_has_layout) {
 		return;
 	}
 
@@ -92,7 +96,7 @@ void widget_container_set_spacing(Widget *container, int padding, int spacing)
 {
 	ContainerData *data;
 
-	if (!container || container->type != WIDGET_TYPE_CONTAINER) {
+	if (!container || !container->cap_has_layout) {
 		return;
 	}
 
@@ -111,7 +115,7 @@ void widget_container_set_grid_columns(Widget *container, int columns)
 {
 	ContainerData *data;
 
-	if (!container || container->type != WIDGET_TYPE_CONTAINER) {
+	if (!container || !container->cap_has_layout) {
 		return;
 	}
 
@@ -131,7 +135,7 @@ void widget_container_set_scrollable(Widget *container, int scrollable)
 {
 	ContainerData *data;
 
-	if (!container || container->type != WIDGET_TYPE_CONTAINER) {
+	if (!container || !container->cap_has_layout) {
 		return;
 	}
 
@@ -147,7 +151,7 @@ void widget_container_set_background(Widget *container, unsigned short color, in
 {
 	ContainerData *data;
 
-	if (!container || container->type != WIDGET_TYPE_CONTAINER) {
+	if (!container || !container->cap_has_layout) {
 		return;
 	}
 
@@ -168,7 +172,7 @@ void widget_container_update_layout(Widget *container)
 	int x, y;
 	int row, col;
 
-	if (!container || container->type != WIDGET_TYPE_CONTAINER) {
+	if (!container || !container->cap_has_layout) {
 		return;
 	}
 

@@ -96,6 +96,13 @@ struct widget {
 	// === Tab Navigation ===
 	int tab_index; // Tab order (lower = earlier, -1 = not in tab order)
 
+	// === Capability Flags ===
+	// These define what a widget CAN do, regardless of its specific type.
+	// Allows widgets to inherit behaviors without strict type hierarchies.
+	unsigned int cap_has_layout : 1; // Widget supports automatic child layout (like container)
+	unsigned int cap_has_children : 1; // Widget can have children
+	unsigned int cap_scrollable : 1; // Widget supports scrolling content
+
 	// === Window Chrome (optional per widget) ===
 	unsigned int has_titlebar : 1; // Show title bar
 	unsigned int draggable : 1; // Can drag to move

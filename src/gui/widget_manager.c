@@ -11,7 +11,9 @@
 #include "astonia.h"
 #include "widget.h"
 #include "widget_manager.h"
+#include "widgets/widget_tooltip.h"
 #include "game/game.h"
+#include "gui/gui_private.h" // for mousex, mousey
 
 // Global widget manager instance
 static WidgetManager *g_widget_manager = NULL;
@@ -141,6 +143,22 @@ int widget_manager_init(int screen_width, int screen_height)
 	g_widget_manager->resizing_widget = NULL;
 	g_widget_manager->resize_handle = -1;
 	g_widget_manager->modal_widget = NULL;
+
+	// Tooltip management - create internal tooltip widget
+	// NOTE: We do NOT add it to the widget hierarchy so it doesn't participate in hit testing
+	// We manage rendering and updates manually
+	g_widget_manager->tooltip_widget = widget_tooltip_create(0, 0);
+	if (g_widget_manager->tooltip_widget) {
+		widget_set_visible(g_widget_manager->tooltip_widget, 0);
+		widget_tooltip_set_delay(g_widget_manager->tooltip_widget, 0); // We handle delay ourselves
+		// Don't add to root - we manage it separately to avoid hit-testing issues
+	}
+	g_widget_manager->tooltip_target = NULL;
+	g_widget_manager->tooltip_hover_start = 0;
+	g_widget_manager->tooltip_visible = 0;
+	g_widget_manager->mouse_x = 0;
+	g_widget_manager->mouse_y = 0;
+
 	g_widget_manager->frame_count = 0;
 	g_widget_manager->widget_count = 1; // Root widget
 	g_widget_manager->last_update_time = SDL_GetTicks();
@@ -158,6 +176,12 @@ void widget_manager_cleanup(void)
 
 	// Save widget state before cleanup
 	widget_manager_save_state();
+
+	// Destroy internal tooltip widget (not part of hierarchy)
+	if (g_widget_manager->tooltip_widget) {
+		widget_destroy(g_widget_manager->tooltip_widget);
+		g_widget_manager->tooltip_widget = NULL;
+	}
 
 	// Destroy all widgets (root will recursively destroy children)
 	if (g_widget_manager->root) {
@@ -267,6 +291,7 @@ void widget_manager_render(void)
 	// Render widgets in z-order (back to front)
 	for (i = 0; i < g_widget_manager->z_order_count; i++) {
 		Widget *widget = g_widget_manager->z_order_list[i];
+
 		// Check effective visibility (widget and all parents must be visible)
 		if (is_widget_effectively_visible(widget)) {
 			// Render content (skip if minimized)
@@ -287,16 +312,129 @@ void widget_manager_render(void)
 		// This will be implemented when we have ItemSlot widget
 	}
 
+	// Render internal tooltip LAST so it's always on top
+	if (g_widget_manager->tooltip_widget && g_widget_manager->tooltip_widget->visible) {
+		if (g_widget_manager->tooltip_widget->render) {
+			g_widget_manager->tooltip_widget->render(g_widget_manager->tooltip_widget);
+		}
+	}
+
 	g_widget_manager->needs_full_redraw = 0;
 	g_widget_manager->frame_count++;
+}
+
+/**
+ * Update hover state based on current mouse position
+ * Called every frame to ensure hover tracking works even without explicit mouse events
+ */
+static void update_hover_state(void)
+{
+	Widget *target;
+
+	if (!g_widget_manager || !g_widget_manager->root) {
+		return;
+	}
+
+	// Track mouse position for tooltip
+	g_widget_manager->mouse_x = mousex;
+	g_widget_manager->mouse_y = mousey;
+
+	// Find widget at current mouse position
+	target = widget_find_at_position(g_widget_manager->root, mousex, mousey);
+
+	// Treat root as "no target" for hover purposes
+	if (target == g_widget_manager->root) {
+		target = NULL;
+	}
+
+	// Update hover state if target changed
+	if (g_widget_manager->hovered != target) {
+		// Call on_mouse_leave for the widget losing hover
+		if (g_widget_manager->hovered) {
+			g_widget_manager->hovered->hover = 0;
+			widget_mark_dirty(g_widget_manager->hovered);
+
+			// Call on_mouse_leave callback
+			if (g_widget_manager->hovered->on_mouse_leave) {
+				g_widget_manager->hovered->on_mouse_leave(g_widget_manager->hovered);
+			}
+		}
+
+		g_widget_manager->hovered = target;
+
+		// Hide tooltip when hover target changes - always hide regardless of tooltip_visible flag
+		if (g_widget_manager->tooltip_widget) {
+			widget_set_visible(g_widget_manager->tooltip_widget, 0);
+		}
+		g_widget_manager->tooltip_visible = 0;
+		g_widget_manager->tooltip_target = NULL;
+
+		if (target) {
+			target->hover = 1;
+			widget_mark_dirty(target);
+
+			// Call on_mouse_enter callback
+			if (target->on_mouse_enter) {
+				target->on_mouse_enter(target);
+			}
+
+			// Start tooltip hover timer if widget has tooltip
+			if (target->tooltip_text[0] != '\0') {
+				g_widget_manager->tooltip_target = target;
+				g_widget_manager->tooltip_hover_start = SDL_GetTicks();
+			}
+		}
+	}
 }
 
 void widget_manager_update(int dt)
 {
 	int i;
+	unsigned int now;
 
 	if (!g_widget_manager) {
 		return;
+	}
+
+	now = SDL_GetTicks();
+
+	// Update hover state every frame based on current mouse position
+	update_hover_state();
+
+	// Handle automatic tooltip display
+	if (g_widget_manager->tooltip_target && g_widget_manager->tooltip_widget) {
+		Widget *target = g_widget_manager->tooltip_target;
+
+		// Double-check that mouse is still over the target widget (safeguard against timing issues)
+		Widget *current_hover =
+		    widget_find_at_position(g_widget_manager->root, g_widget_manager->mouse_x, g_widget_manager->mouse_y);
+		if (current_hover != target) {
+			// Mouse moved away from target - hide tooltip and clear state
+			widget_set_visible(g_widget_manager->tooltip_widget, 0);
+			g_widget_manager->tooltip_visible = 0;
+			g_widget_manager->tooltip_target = NULL;
+		} else if (!g_widget_manager->tooltip_visible) {
+			// Check if tooltip delay has elapsed
+			unsigned int elapsed = now - g_widget_manager->tooltip_hover_start;
+			int delay = target->tooltip_delay;
+
+			if (elapsed >= (unsigned int)delay) {
+				// Show tooltip
+				widget_tooltip_set_text(g_widget_manager->tooltip_widget, target->tooltip_text);
+				widget_tooltip_show_at_mouse(
+				    g_widget_manager->tooltip_widget, g_widget_manager->mouse_x, g_widget_manager->mouse_y);
+				widget_set_visible(g_widget_manager->tooltip_widget, 1);
+				g_widget_manager->tooltip_visible = 1;
+			}
+		} else {
+			// Update tooltip position if visible
+			widget_tooltip_update_position(
+			    g_widget_manager->tooltip_widget, g_widget_manager->mouse_x, g_widget_manager->mouse_y);
+		}
+	} else if (g_widget_manager->tooltip_visible && g_widget_manager->tooltip_widget) {
+		// Hide tooltip if target is gone
+		widget_set_visible(g_widget_manager->tooltip_widget, 0);
+		g_widget_manager->tooltip_visible = 0;
 	}
 
 	// Update all widgets
@@ -307,7 +445,12 @@ void widget_manager_update(int dt)
 		}
 	}
 
-	g_widget_manager->last_update_time = SDL_GetTicks();
+	// Update internal tooltip widget (not in z_order_list)
+	if (g_widget_manager->tooltip_widget && g_widget_manager->tooltip_widget->update) {
+		g_widget_manager->tooltip_widget->update(g_widget_manager->tooltip_widget, dt);
+	}
+
+	g_widget_manager->last_update_time = now;
 }
 
 void widget_manager_request_redraw(void)
@@ -350,37 +493,40 @@ int widget_manager_handle_mouse(int x, int y, int button, int action)
 		target = widget_find_at_position(g_widget_manager->root, x, y);
 	}
 
-	// Update hover state (do this before checking if target is NULL)
-	if (g_widget_manager->hovered != target) {
-		// Call on_mouse_move for the widget losing hover
-		if (g_widget_manager->hovered) {
-			g_widget_manager->hovered->hover = 0;
-			widget_mark_dirty(g_widget_manager->hovered);
-			if (g_widget_manager->hovered->on_mouse_move) {
-				int hx, hy;
-				widget_screen_to_local(g_widget_manager->hovered, x, y, &hx, &hy);
-				g_widget_manager->hovered->on_mouse_move(g_widget_manager->hovered, hx, hy);
-			}
-		}
-		g_widget_manager->hovered = target;
-		if (target) {
-			target->hover = 1;
-			widget_mark_dirty(target);
-			// Call on_mouse_move for the widget gaining hover
-			if (target->on_mouse_move) {
-				int tx, ty;
-				widget_screen_to_local(target, x, y, &tx, &ty);
-				target->on_mouse_move(target, tx, ty);
-			}
-		}
-	}
+	// Note: Hover state is now tracked in widget_manager_update() every frame
+	// using the global mousex/mousey variables
 
 	// Handle window dragging (check BEFORE target validation - drag continues even if mouse leaves widget)
 	if (g_widget_manager->dragging_widget) {
 		if (action == MOUSE_ACTION_MOVE) {
+			Widget *drag_w = g_widget_manager->dragging_widget;
 			int new_x = x - g_widget_manager->drag_offset_x;
 			int new_y = y - g_widget_manager->drag_offset_y;
-			widget_set_position(g_widget_manager->dragging_widget, new_x, new_y);
+
+			// Apply screen boundary constraints
+			// Keep at least 50 pixels of the widget visible on screen
+			int min_visible = 50;
+			int screen_w = g_widget_manager->root->width;
+			int screen_h = g_widget_manager->root->height;
+			int titlebar_h = drag_w->has_titlebar ? 20 : 0;
+
+			// Clamp X: keep min_visible pixels on screen
+			if (new_x < -drag_w->width + min_visible) {
+				new_x = -drag_w->width + min_visible;
+			}
+			if (new_x > screen_w - min_visible) {
+				new_x = screen_w - min_visible;
+			}
+
+			// Clamp Y: can't drag title bar off the top, keep min_visible on bottom
+			if (new_y < titlebar_h) {
+				new_y = titlebar_h;
+			}
+			if (new_y > screen_h - min_visible) {
+				new_y = screen_h - min_visible;
+			}
+
+			widget_set_position(drag_w, new_x, new_y);
 			return 1;
 		} else if (action == MOUSE_ACTION_UP && button == MOUSE_BUTTON_LEFT) {
 			widget_manager_stop_drag();

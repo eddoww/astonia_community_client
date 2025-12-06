@@ -77,6 +77,10 @@ Widget *widget_create(WidgetType type, int x, int y, int width, int height)
 	// Theming
 	widget->skin_id = 0;
 
+	// Tooltip (disabled by default)
+	widget->tooltip_text[0] = '\0';
+	widget->tooltip_delay = 500; // 500ms default delay
+
 	// No virtual functions set (child types will set these)
 	widget->render = NULL;
 	widget->on_mouse_down = NULL;
@@ -88,6 +92,8 @@ Widget *widget_create(WidgetType type, int x, int y, int width, int height)
 	widget->on_text_input = NULL;
 	widget->on_focus_gain = NULL;
 	widget->on_focus_lost = NULL;
+	widget->on_mouse_enter = NULL;
+	widget->on_mouse_leave = NULL;
 	widget->on_resize = NULL;
 	widget->on_destroy = NULL;
 	widget->update = NULL;
@@ -720,4 +726,31 @@ int widget_get_resize_handle(Widget *widget, int screen_x, int screen_y)
 	}
 
 	return -1; // No handle
+}
+
+// =============================================================================
+// Widget Tooltip
+// =============================================================================
+
+void widget_set_tooltip_text(Widget *widget, const char *text)
+{
+	if (!widget) {
+		return;
+	}
+
+	if (text && text[0]) {
+		strncpy(widget->tooltip_text, text, sizeof(widget->tooltip_text) - 1);
+		widget->tooltip_text[sizeof(widget->tooltip_text) - 1] = '\0';
+	} else {
+		widget->tooltip_text[0] = '\0';
+	}
+}
+
+void widget_set_tooltip_delay(Widget *widget, int delay_ms)
+{
+	if (!widget) {
+		return;
+	}
+
+	widget->tooltip_delay = delay_ms;
 }

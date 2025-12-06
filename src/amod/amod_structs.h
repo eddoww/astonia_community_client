@@ -584,6 +584,10 @@ struct widget {
 	// === Theming ===
 	int skin_id;
 
+	// === Tooltip ===
+	char tooltip_text[256]; // Tooltip text (empty = no tooltip)
+	int tooltip_delay; // Delay in ms before showing tooltip (default 500)
+
 	// === Virtual Functions (set these to handle events) ===
 	void (*render)(Widget *self);
 	int (*on_mouse_down)(Widget *self, int x, int y, int button);
@@ -595,6 +599,8 @@ struct widget {
 	int (*on_text_input)(Widget *self, int character);
 	void (*on_focus_gain)(Widget *self);
 	void (*on_focus_lost)(Widget *self);
+	void (*on_mouse_enter)(Widget *self);
+	void (*on_mouse_leave)(Widget *self);
 	void (*on_resize)(Widget *self, int new_width, int new_height);
 	void (*on_destroy)(Widget *self);
 	void (*update)(Widget *self, int dt);

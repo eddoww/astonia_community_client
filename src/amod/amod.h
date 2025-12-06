@@ -109,6 +109,9 @@ DLL_IMPORT void widget_set_name(Widget *widget, const char *name);
 DLL_IMPORT void widget_set_window_chrome(
     Widget *widget, int has_titlebar, int draggable, int resizable, int minimizable, int closable);
 DLL_IMPORT void widget_set_minimized(Widget *widget, int minimized);
+// widget tooltip
+DLL_IMPORT void widget_set_tooltip_text(Widget *widget, const char *text);
+DLL_IMPORT void widget_set_tooltip_delay(Widget *widget, int delay_ms);
 
 // --------- Widget Manager ---------
 DLL_IMPORT int widget_manager_init(int screen_width, int screen_height);

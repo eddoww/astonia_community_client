@@ -18,6 +18,8 @@ static void button_render(Widget *self);
 static int button_on_mouse_down(Widget *self, int x, int y, int button);
 static int button_on_mouse_up(Widget *self, int x, int y, int button);
 static int button_on_mouse_move(Widget *self, int x, int y);
+static void button_on_mouse_enter(Widget *self);
+static void button_on_mouse_leave(Widget *self);
 static void button_on_destroy(Widget *self);
 
 Widget *widget_button_create(int x, int y, int width, int height, const char *text)
@@ -70,6 +72,8 @@ Widget *widget_button_create(int x, int y, int width, int height, const char *te
 	widget->on_mouse_down = button_on_mouse_down;
 	widget->on_mouse_up = button_on_mouse_up;
 	widget->on_mouse_move = button_on_mouse_move;
+	widget->on_mouse_enter = button_on_mouse_enter;
+	widget->on_mouse_leave = button_on_mouse_leave;
 	widget->on_destroy = button_on_destroy;
 
 	// Set name
@@ -317,6 +321,46 @@ static int button_on_mouse_move(Widget *self, int x, int y)
 	}
 
 	return 0;
+}
+
+static void button_on_mouse_enter(Widget *self)
+{
+	ButtonData *data;
+
+	if (!self) {
+		return;
+	}
+
+	data = (ButtonData *)self->user_data;
+	if (!data) {
+		return;
+	}
+
+	// Set hover state (but don't override pressed state)
+	if (data->state != BUTTON_STATE_PRESSED) {
+		data->state = BUTTON_STATE_HOVER;
+		widget_mark_dirty(self);
+	}
+}
+
+static void button_on_mouse_leave(Widget *self)
+{
+	ButtonData *data;
+
+	if (!self) {
+		return;
+	}
+
+	data = (ButtonData *)self->user_data;
+	if (!data) {
+		return;
+	}
+
+	// Reset to normal state (but don't override pressed state if dragging)
+	if (data->state != BUTTON_STATE_PRESSED) {
+		data->state = BUTTON_STATE_NORMAL;
+		widget_mark_dirty(self);
+	}
 }
 
 static void button_on_destroy(Widget *self)

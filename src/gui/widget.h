@@ -106,6 +106,10 @@ struct widget {
 	// === Theming ===
 	int skin_id; // Theme/skin identifier
 
+	// === Tooltip ===
+	char tooltip_text[256]; // Tooltip text (empty = no tooltip)
+	int tooltip_delay; // Delay in ms before showing tooltip (default 500)
+
 	// === Virtual Functions (polymorphic behavior) ===
 
 	/**
@@ -166,6 +170,16 @@ struct widget {
 	 * Called when widget loses focus
 	 */
 	void (*on_focus_lost)(Widget *self);
+
+	/**
+	 * Called when mouse enters widget area
+	 */
+	void (*on_mouse_enter)(Widget *self);
+
+	/**
+	 * Called when mouse leaves widget area
+	 */
+	void (*on_mouse_leave)(Widget *self);
 
 	/**
 	 * Called when widget is resized
@@ -432,6 +446,27 @@ DLL_EXPORT void widget_set_window_chrome(
  * @param minimized 1 to minimize, 0 to restore
  */
 DLL_EXPORT void widget_set_minimized(Widget *widget, int minimized);
+
+// =============================================================================
+// Widget Tooltip
+// =============================================================================
+
+/**
+ * Set tooltip text for a widget
+ * When the mouse hovers over this widget, the tooltip will be shown
+ *
+ * @param widget Widget to modify
+ * @param text Tooltip text (NULL or empty to disable)
+ */
+DLL_EXPORT void widget_set_tooltip_text(Widget *widget, const char *text);
+
+/**
+ * Set tooltip delay for a widget
+ *
+ * @param widget Widget to modify
+ * @param delay_ms Delay in milliseconds before showing tooltip (default 500)
+ */
+DLL_EXPORT void widget_set_tooltip_delay(Widget *widget, int delay_ms);
 
 // =============================================================================
 // Widget Rendering Helpers

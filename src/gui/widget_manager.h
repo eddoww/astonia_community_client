@@ -45,6 +45,13 @@ struct widget_manager {
 	// === Modal Dialog Support ===
 	Widget *modal_widget; // Current modal widget (blocks others)
 
+	// === Tooltip Management ===
+	Widget *tooltip_widget; // Internal tooltip widget for automatic tooltips
+	Widget *tooltip_target; // Widget that triggered the current tooltip
+	unsigned int tooltip_hover_start; // Time when hover started (SDL_GetTicks())
+	int tooltip_visible; // Is the automatic tooltip currently visible
+	int mouse_x, mouse_y; // Last known mouse position
+
 	// === Performance Tracking ===
 	int frame_count; // Total frames rendered
 	int widget_count; // Total widgets in hierarchy

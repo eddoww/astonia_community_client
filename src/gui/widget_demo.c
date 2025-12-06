@@ -32,12 +32,10 @@ static Widget *demo_button3 = NULL;
 static Widget *demo_label = NULL;
 static Widget *demo_progressbar = NULL;
 static Widget *demo_textinput = NULL;
-static Widget *demo_tooltip = NULL;
 
 static int demo_initialized = 0;
 static int demo_enabled = 0; // Toggle with F11
 static int click_count = 0;
-static int button3_hovered = 0; // Track if button3 is currently hovered
 
 // Button callbacks
 static void on_button1_click(Widget *button, void *param)
@@ -138,10 +136,14 @@ void widget_demo_init(void)
 		widget_add_child(demo_container, demo_button2);
 	}
 
-	// Create button 3 (Hover me for tooltip)
+	// Create button 3 (Hover me for tooltip - uses built-in tooltip support)
 	demo_button3 = widget_button_create(0, 0, 220, 30, "Hover Me!");
 	if (demo_button3) {
 		widget_button_set_callback(demo_button3, on_button3_click, NULL);
+		// Use the new built-in tooltip support instead of manual tooltip widget
+		widget_set_tooltip_text(demo_button3,
+		    "Hover tooltip test!\nClick to reset counter\nDrag the title bar to move\nResize from edges/corners");
+		widget_set_tooltip_delay(demo_button3, 300);
 		widget_add_child(demo_container, demo_button3);
 	}
 
@@ -163,23 +165,13 @@ void widget_demo_init(void)
 		widget_set_visible(demo_textinput, 0); // Start hidden
 	}
 
-	// Create tooltip for button3
-	demo_tooltip = widget_tooltip_create(0, 0);
-	if (demo_tooltip) {
-		widget_tooltip_set_text(demo_tooltip,
-		    "Hover tooltip test!\nClick to reset counter\nDrag the title bar to move\nResize from edges/corners");
-		widget_tooltip_set_delay(demo_tooltip, 300);
-
-		// Add tooltip to root widget
-		if (root) {
-			widget_add_child(root, demo_tooltip);
-		}
-	}
+	// Note: Tooltips are now handled automatically by the widget_manager
+	// when widget_set_tooltip_text() is used on widgets
 
 	// Update container layout now that all children are added
 	widget_container_update_layout(demo_container);
 
-	// Rebuild z-order list to ensure all widgets (including tooltip) are included
+	// Rebuild z-order list to ensure all widgets are included
 	widget_manager_rebuild_z_order();
 
 	demo_initialized = 1;
@@ -199,10 +191,6 @@ void widget_demo_cleanup(void)
 	if (demo_container) {
 		widget_destroy(demo_container);
 		demo_container = NULL;
-	}
-	if (demo_tooltip) {
-		widget_destroy(demo_tooltip);
-		demo_tooltip = NULL;
 	}
 
 	demo_initialized = 0;
@@ -231,15 +219,12 @@ void widget_demo_toggle(void)
 			widget_set_visible(demo_container, demo_enabled);
 		}
 	}
-
-	if (demo_tooltip) {
-		widget_set_visible(demo_tooltip, 0); // Hide tooltip when toggling
-	}
 }
 
 /**
  * Update widget demo (call every frame)
  * Note: widget_manager_update() is called externally, this only handles demo-specific logic
+ * Note: Tooltip handling is now automatic via widget_set_tooltip_text()
  */
 void widget_demo_update(int dt)
 {
@@ -247,33 +232,8 @@ void widget_demo_update(int dt)
 		return;
 	}
 
-	// Show tooltip when hovering over button3 (use state tracking to avoid resetting timer)
-	if (demo_button3 && demo_tooltip && demo_enabled) {
-		int screen_x, screen_y;
-		widget_get_screen_position(demo_button3, &screen_x, &screen_y);
-
-		// Don't detect hover if parent container is minimized
-		int parent_minimized = (demo_container && demo_container->minimized);
-
-		int is_over = !parent_minimized &&
-		              (mousex >= screen_x && mousex <= screen_x + demo_button3->width && mousey >= screen_y &&
-		               mousey <= screen_y + demo_button3->height);
-
-		if (is_over && !button3_hovered) {
-			// Just started hovering - show tooltip (starts delay timer)
-			widget_tooltip_show_at_mouse(demo_tooltip, mousex, mousey);
-			button3_hovered = 1;
-		} else if (is_over && button3_hovered) {
-			// Still hovering - just update position (don't reset timer)
-			if (demo_tooltip->visible) {
-				widget_tooltip_update_position(demo_tooltip, mousex, mousey);
-			}
-		} else if (!is_over && button3_hovered) {
-			// Stopped hovering - hide tooltip
-			widget_tooltip_hide(demo_tooltip);
-			button3_hovered = 0;
-		}
-	}
+	// Tooltips are now handled automatically by widget_manager
+	// No manual tooltip code needed here anymore!
 }
 
 /**

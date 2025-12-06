@@ -12,6 +12,10 @@
 
 #include "widget.h"
 
+// Double-click detection constants
+#define DOUBLE_CLICK_TIME_MS  400 // Max time between clicks (milliseconds)
+#define DOUBLE_CLICK_DISTANCE 4 // Max distance in pixels between clicks
+
 // Widget manager singleton structure
 struct widget_manager {
 	// === Widget Hierarchy ===
@@ -51,6 +55,12 @@ struct widget_manager {
 	unsigned int tooltip_hover_start; // Time when hover started (SDL_GetTicks())
 	int tooltip_visible; // Is the automatic tooltip currently visible
 	int mouse_x, mouse_y; // Last known mouse position
+
+	// === Double-Click Detection ===
+	Widget *last_click_widget; // Widget that received the last click
+	unsigned int last_click_time; // Time of last click (SDL_GetTicks())
+	int last_click_x, last_click_y; // Position of last click (screen coords)
+	int last_click_button; // Button of last click
 
 	// === Performance Tracking ===
 	int frame_count; // Total frames rendered

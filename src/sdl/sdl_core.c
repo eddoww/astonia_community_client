@@ -25,8 +25,8 @@
 SDL_Window *sdlwnd = NULL;
 SDL_Renderer *sdlren = NULL;
 
-// Cursors
-static SDL_Cursor *curs[20];
+// Cursors (includes game cursors 0-18 and widget system cursors 19-25)
+static SDL_Cursor *curs[SDL_CUR_MAX];
 
 // Zip archives for graphics
 zip_t *sdl_zip1 = NULL;
@@ -795,6 +795,16 @@ int sdl_create_cursors(void)
 		error = 1;
 	}
 
+	// Create SDL system cursors for widget system
+	curs[SDL_CUR_ARROW] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
+	curs[SDL_CUR_HAND] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
+	curs[SDL_CUR_IBEAM] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM);
+	curs[SDL_CUR_SIZEWE] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEWE);
+	curs[SDL_CUR_SIZENS] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENS);
+	curs[SDL_CUR_SIZENWSE] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE);
+	curs[SDL_CUR_SIZENESW] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENESW);
+	curs[SDL_CUR_SIZEALL] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEALL);
+
 	if (error) {
 		fail("Failed to load one or more cursor files");
 		return 0;
@@ -805,7 +815,7 @@ int sdl_create_cursors(void)
 
 void sdl_set_cursor(int cursor)
 {
-	if (cursor < SDL_CUR_c_only || cursor > SDL_CUR_c_get) {
+	if (cursor < 0 || cursor >= SDL_CUR_MAX) {
 		return;
 	}
 	if (!curs[cursor]) {

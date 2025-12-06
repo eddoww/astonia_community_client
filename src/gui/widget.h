@@ -89,6 +89,10 @@ struct widget {
 	unsigned int dirty : 1; // Needs redraw
 	unsigned int hover : 1; // Mouse is over widget
 	unsigned int pressed : 1; // Mouse button pressed on widget
+	unsigned int focusable : 1; // Widget can receive keyboard focus (tab navigation)
+
+	// === Tab Navigation ===
+	int tab_index; // Tab order (lower = earlier, -1 = not in tab order)
 
 	// === Window Chrome (optional per widget) ===
 	unsigned int has_titlebar : 1; // Show title bar
@@ -129,6 +133,13 @@ struct widget {
 	 * @return 1 if event was handled, 0 otherwise
 	 */
 	int (*on_mouse_up)(Widget *self, int x, int y, int button);
+
+	/**
+	 * Handle mouse double-click event
+	 * Called when two clicks occur within DOUBLE_CLICK_TIME_MS at similar position
+	 * @return 1 if event was handled, 0 otherwise
+	 */
+	int (*on_double_click)(Widget *self, int x, int y, int button);
 
 	/**
 	 * Handle mouse move event
@@ -467,6 +478,29 @@ DLL_EXPORT void widget_set_tooltip_text(Widget *widget, const char *text);
  * @param delay_ms Delay in milliseconds before showing tooltip (default 500)
  */
 DLL_EXPORT void widget_set_tooltip_delay(Widget *widget, int delay_ms);
+
+// =============================================================================
+// Widget Tab Navigation
+// =============================================================================
+
+/**
+ * Set whether a widget can receive keyboard focus via tab navigation
+ *
+ * @param widget Widget to modify
+ * @param focusable 1 if widget can receive focus, 0 otherwise
+ */
+DLL_EXPORT void widget_set_focusable(Widget *widget, int focusable);
+
+/**
+ * Set widget tab index for tab navigation order
+ *
+ * Lower indices are focused first. Widgets with the same tab_index
+ * are navigated in tree order. Use -1 to exclude from tab order.
+ *
+ * @param widget Widget to modify
+ * @param tab_index Tab order index (-1 = not in tab order)
+ */
+DLL_EXPORT void widget_set_tab_index(Widget *widget, int tab_index);
 
 // =============================================================================
 // Widget Rendering Helpers

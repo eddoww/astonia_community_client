@@ -14,6 +14,7 @@
 #include "widgets/widget_tooltip.h"
 #include "game/game.h"
 #include "gui/gui_private.h" // for mousex, mousey
+#include "sdl/sdl.h" // for cursor functions
 
 // Global widget manager instance
 static WidgetManager *g_widget_manager = NULL;
@@ -23,6 +24,31 @@ static WidgetManager *g_widget_manager = NULL;
 // =============================================================================
 
 static void widget_manager_save_state(void);
+
+/**
+ * Map resize handle index to cursor type
+ * Handle indexes: 0=top-left, 1=top, 2=top-right, 3=right,
+ *                 4=bottom-right, 5=bottom, 6=bottom-left, 7=left
+ */
+static int resize_handle_to_cursor(int handle)
+{
+	switch (handle) {
+	case 0: // top-left
+	case 4: // bottom-right
+		return SDL_CUR_SIZENWSE;
+	case 2: // top-right
+	case 6: // bottom-left
+		return SDL_CUR_SIZENESW;
+	case 1: // top
+	case 5: // bottom
+		return SDL_CUR_SIZENS;
+	case 3: // right
+	case 7: // left
+		return SDL_CUR_SIZEWE;
+	default:
+		return SDL_CUR_ARROW;
+	}
+}
 
 // =============================================================================
 // Internal Helper Functions
@@ -158,6 +184,13 @@ int widget_manager_init(int screen_width, int screen_height)
 	g_widget_manager->tooltip_visible = 0;
 	g_widget_manager->mouse_x = 0;
 	g_widget_manager->mouse_y = 0;
+
+	// Double-click detection
+	g_widget_manager->last_click_widget = NULL;
+	g_widget_manager->last_click_time = 0;
+	g_widget_manager->last_click_x = 0;
+	g_widget_manager->last_click_y = 0;
+	g_widget_manager->last_click_button = 0;
 
 	g_widget_manager->frame_count = 0;
 	g_widget_manager->widget_count = 1; // Root widget
@@ -330,6 +363,7 @@ void widget_manager_render(void)
 static void update_hover_state(void)
 {
 	Widget *target;
+	int cursor = SDL_CUR_ARROW;
 
 	if (!g_widget_manager || !g_widget_manager->root) {
 		return;
@@ -385,6 +419,65 @@ static void update_hover_state(void)
 			}
 		}
 	}
+
+	// Determine appropriate cursor based on state
+	if (g_widget_manager->resizing_widget) {
+		// Currently resizing - show resize cursor
+		cursor = resize_handle_to_cursor(g_widget_manager->resize_handle);
+	} else if (g_widget_manager->dragging_widget) {
+		// Currently dragging - show move cursor
+		cursor = SDL_CUR_SIZEALL;
+	} else if (target) {
+		// Check for resize handle hover
+		if (target->resizable && !target->minimized) {
+			int handle = widget_get_resize_handle(target, mousex, mousey);
+			if (handle >= 0) {
+				cursor = resize_handle_to_cursor(handle);
+			}
+		}
+
+		// Check for title bar hover (for draggable widgets)
+		if (cursor == SDL_CUR_ARROW && target->has_titlebar && target->draggable) {
+			int wx, wy;
+			widget_get_screen_position(target, &wx, &wy);
+			if (mousey >= wy - 20 && mousey < wy) {
+				// In title bar - check not on close/minimize buttons
+				int on_button = 0;
+				if (target->closable) {
+					int close_x = wx + target->width - 16;
+					if (mousex >= close_x && mousex < close_x + 14) {
+						on_button = 1;
+					}
+				}
+				if (!on_button && target->minimizable) {
+					int min_x = wx + target->width - (target->closable ? 32 : 16);
+					if (mousex >= min_x && mousex < min_x + 14) {
+						on_button = 1;
+					}
+				}
+				if (!on_button) {
+					cursor = SDL_CUR_SIZEALL;
+				}
+			}
+		}
+
+		// Cursor based on widget type
+		if (cursor == SDL_CUR_ARROW) {
+			switch (target->type) {
+			case WIDGET_TYPE_BUTTON:
+				cursor = SDL_CUR_HAND;
+				break;
+			case WIDGET_TYPE_TEXTINPUT:
+				cursor = SDL_CUR_IBEAM;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
+	// Set the cursor
+	sdl_set_cursor(cursor);
 }
 
 void widget_manager_update(int dt)
@@ -625,9 +718,42 @@ int widget_manager_handle_mouse(int x, int y, int button, int action)
 		// Set focus
 		widget_manager_set_focus(target);
 
-		// Call widget handler
-		if (target->on_mouse_down) {
-			handled = target->on_mouse_down(target, local_x, local_y, button);
+		// Check for double-click
+		{
+			unsigned int now = SDL_GetTicks();
+			int is_double_click = 0;
+
+			if (g_widget_manager->last_click_widget == target && g_widget_manager->last_click_button == button &&
+			    (now - g_widget_manager->last_click_time) <= DOUBLE_CLICK_TIME_MS) {
+				// Check if click position is close enough
+				int dx = x - g_widget_manager->last_click_x;
+				int dy = y - g_widget_manager->last_click_y;
+				if (dx >= -DOUBLE_CLICK_DISTANCE && dx <= DOUBLE_CLICK_DISTANCE && dy >= -DOUBLE_CLICK_DISTANCE &&
+				    dy <= DOUBLE_CLICK_DISTANCE) {
+					is_double_click = 1;
+				}
+			}
+
+			if (is_double_click) {
+				// Call double-click handler
+				if (target->on_double_click) {
+					handled = target->on_double_click(target, local_x, local_y, button);
+				}
+				// Reset click tracking after double-click to prevent triple-click from registering
+				g_widget_manager->last_click_widget = NULL;
+				g_widget_manager->last_click_time = 0;
+			} else {
+				// Call regular mouse down handler
+				if (target->on_mouse_down) {
+					handled = target->on_mouse_down(target, local_x, local_y, button);
+				}
+				// Update click tracking for potential double-click
+				g_widget_manager->last_click_widget = target;
+				g_widget_manager->last_click_time = now;
+				g_widget_manager->last_click_x = x;
+				g_widget_manager->last_click_y = y;
+				g_widget_manager->last_click_button = button;
+			}
 		}
 
 		target->pressed = 1;
@@ -767,10 +893,105 @@ Widget *widget_manager_get_focus(void)
 	return g_widget_manager->focused;
 }
 
+/**
+ * Helper to collect focusable widgets recursively
+ */
+static void collect_focusable_widgets(Widget *widget, Widget **list, int *count, int max_count)
+{
+	Widget *child;
+
+	if (!widget || !widget->visible || !widget->enabled) {
+		return;
+	}
+
+	// Add this widget if it's focusable
+	if (widget->focusable && *count < max_count) {
+		list[(*count)++] = widget;
+	}
+
+	// Recurse into children
+	for (child = widget->first_child; child; child = child->next_sibling) {
+		collect_focusable_widgets(child, list, count, max_count);
+	}
+}
+
+/**
+ * Compare widgets for tab order sorting
+ */
+static int tab_order_compare(const void *a, const void *b)
+{
+	Widget *wa = *(Widget **)a;
+	Widget *wb = *(Widget **)b;
+
+	// Widgets with tab_index -1 go to the end
+	if (wa->tab_index == -1 && wb->tab_index != -1) {
+		return 1;
+	}
+	if (wa->tab_index != -1 && wb->tab_index == -1) {
+		return -1;
+	}
+
+	// Sort by tab_index (lower first)
+	if (wa->tab_index != wb->tab_index) {
+		return wa->tab_index - wb->tab_index;
+	}
+
+	// Same tab_index: maintain original collection order (tree order)
+	return 0;
+}
+
 void widget_manager_focus_next(int reverse)
 {
-	// TODO: Implement tab navigation
-	// For now, do nothing
+	Widget *focusable[256]; // Max 256 focusable widgets
+	int count = 0;
+	int current_idx = -1;
+	int next_idx;
+	int i;
+
+	if (!g_widget_manager || !g_widget_manager->root) {
+		return;
+	}
+
+	// Collect all focusable widgets
+	collect_focusable_widgets(g_widget_manager->root, focusable, &count, 256);
+
+	if (count == 0) {
+		return; // No focusable widgets
+	}
+
+	// Sort by tab order
+	qsort(focusable, count, sizeof(Widget *), tab_order_compare);
+
+	// Find current focused widget in the list
+	if (g_widget_manager->focused) {
+		for (i = 0; i < count; i++) {
+			if (focusable[i] == g_widget_manager->focused) {
+				current_idx = i;
+				break;
+			}
+		}
+	}
+
+	// Calculate next index
+	if (current_idx == -1) {
+		// No current focus, start at beginning or end
+		next_idx = reverse ? count - 1 : 0;
+	} else if (reverse) {
+		// Move backwards
+		next_idx = current_idx - 1;
+		if (next_idx < 0) {
+			next_idx = count - 1; // Wrap to end
+		}
+	} else {
+		// Move forwards
+		next_idx = current_idx + 1;
+		if (next_idx >= count) {
+			next_idx = 0; // Wrap to beginning
+		}
+	}
+
+	// Set focus to the next widget
+	widget_manager_set_focus(focusable[next_idx]);
 }
 
 // =============================================================================

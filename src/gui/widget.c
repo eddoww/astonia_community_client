@@ -61,6 +61,8 @@ Widget *widget_create(WidgetType type, int x, int y, int width, int height)
 	widget->dirty = 1; // New widgets need initial draw
 	widget->hover = 0;
 	widget->pressed = 0;
+	widget->focusable = 0; // Not focusable by default (widgets opt-in)
+	widget->tab_index = -1; // Not in tab order by default
 
 	// Window chrome disabled by default
 	widget->has_titlebar = 0;
@@ -85,6 +87,7 @@ Widget *widget_create(WidgetType type, int x, int y, int width, int height)
 	widget->render = NULL;
 	widget->on_mouse_down = NULL;
 	widget->on_mouse_up = NULL;
+	widget->on_double_click = NULL;
 	widget->on_mouse_move = NULL;
 	widget->on_mouse_wheel = NULL;
 	widget->on_key_down = NULL;
@@ -753,4 +756,26 @@ void widget_set_tooltip_delay(Widget *widget, int delay_ms)
 	}
 
 	widget->tooltip_delay = delay_ms;
+}
+
+// =============================================================================
+// Widget Tab Navigation
+// =============================================================================
+
+void widget_set_focusable(Widget *widget, int focusable)
+{
+	if (!widget) {
+		return;
+	}
+
+	widget->focusable = focusable ? 1 : 0;
+}
+
+void widget_set_tab_index(Widget *widget, int tab_index)
+{
+	if (!widget) {
+		return;
+	}
+
+	widget->tab_index = tab_index;
 }

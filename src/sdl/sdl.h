@@ -2,6 +2,8 @@
  * Part of Astonia Client (c) Daniel Brockhaus. Please read license.txt.
  */
 
+// Widget system cursors (using SDL system cursors)
+#define SDL_CUR_ARROW     0 // Default arrow cursor
 #define SDL_CUR_c_only    1
 #define SDL_CUR_c_take    2
 #define SDL_CUR_c_drop    3
@@ -20,6 +22,16 @@
 #define SDL_CUR_c_say     16
 #define SDL_CUR_c_junk    17
 #define SDL_CUR_c_get     18
+
+// Widget system cursors (using SDL system cursors, starting at 19)
+#define SDL_CUR_HAND     19 // Hand/pointer for clickable elements
+#define SDL_CUR_IBEAM    20 // Text cursor for input fields
+#define SDL_CUR_SIZEWE   21 // Horizontal resize (left-right)
+#define SDL_CUR_SIZENS   22 // Vertical resize (up-down)
+#define SDL_CUR_SIZENWSE 23 // Diagonal resize NW-SE
+#define SDL_CUR_SIZENESW 24 // Diagonal resize NE-SW
+#define SDL_CUR_SIZEALL  25 // Move/drag cursor
+#define SDL_CUR_MAX      26 // Maximum cursor index
 
 #define SDL_KEYM_SHIFT 1
 #define SDL_KEYM_CTRL  2

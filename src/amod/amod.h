@@ -112,6 +112,9 @@ DLL_IMPORT void widget_set_minimized(Widget *widget, int minimized);
 // widget tooltip
 DLL_IMPORT void widget_set_tooltip_text(Widget *widget, const char *text);
 DLL_IMPORT void widget_set_tooltip_delay(Widget *widget, int delay_ms);
+// widget tab navigation
+DLL_IMPORT void widget_set_focusable(Widget *widget, int focusable);
+DLL_IMPORT void widget_set_tab_index(Widget *widget, int tab_index);
 
 // --------- Widget Manager ---------
 DLL_IMPORT int widget_manager_init(int screen_width, int screen_height);

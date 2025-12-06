@@ -103,6 +103,9 @@ Widget *widget_textinput_create(int x, int y, int width, int height)
 	// Set name
 	snprintf(widget->name, sizeof(widget->name), "textinput_%d", widget->id);
 
+	// Text inputs are focusable by default (for tab navigation)
+	widget->focusable = 1;
+
 	return widget;
 }
 

@@ -567,6 +567,10 @@ struct widget {
 	unsigned int dirty : 1;
 	unsigned int hover : 1;
 	unsigned int pressed : 1;
+	unsigned int focusable : 1; // Widget can receive keyboard focus (tab navigation)
+
+	// === Tab Navigation ===
+	int tab_index; // Tab order (lower = earlier, -1 = not in tab order)
 
 	// === Window Chrome ===
 	unsigned int has_titlebar : 1;
@@ -592,6 +596,7 @@ struct widget {
 	void (*render)(Widget *self);
 	int (*on_mouse_down)(Widget *self, int x, int y, int button);
 	int (*on_mouse_up)(Widget *self, int x, int y, int button);
+	int (*on_double_click)(Widget *self, int x, int y, int button);
 	int (*on_mouse_move)(Widget *self, int x, int y);
 	int (*on_mouse_wheel)(Widget *self, int x, int y, int delta);
 	int (*on_key_down)(Widget *self, int key);

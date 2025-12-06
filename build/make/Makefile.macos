@@ -187,3 +187,16 @@ distrib: distrib-stage
 amod:		bin/amod.dylib bin/moac
 convert:	bin/convert
 anicopy:	bin/anicopy
+
+appbundle: bin/moac
+	@echo "Building macOS .app bundle..."
+	@build/tools/package_macos.sh
+
+# Optionally sign the .app locally using a key in your login keychain
+sign: appbundle
+	@if [ -z "$(SIGN_IDENTITY)" ]; then \
+	  echo "ERROR: SIGN_IDENTITY is not set."; \
+	  echo "       Use: make macos-sign SIGN_IDENTITY=\"Apple Development: Your Name (TEAMID)\""; \
+	  exit 1; \
+	fi
+	@SIGN_IDENTITY="$(SIGN_IDENTITY)" build/tools/sign_macos_app.sh

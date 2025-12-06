@@ -2,6 +2,8 @@
  * Part of Astonia Client (c) Daniel Brockhaus. Please read license.txt.
  */
 
+#include <stdint.h>
+
 #ifndef min
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
@@ -499,6 +501,7 @@ struct shrine_ppd {
 typedef struct widget Widget;
 typedef struct widget_manager WidgetManager;
 
+// Widget type identifiers
 typedef enum {
 	WIDGET_TYPE_BASE = 0, // base widget (for custom implementations)
 	WIDGET_TYPE_CONTAINER, // container for grouping widgets
@@ -536,3 +539,67 @@ typedef enum {
 } MouseButton;
 
 typedef enum { MOUSE_ACTION_DOWN = 1, MOUSE_ACTION_UP = 2, MOUSE_ACTION_MOVE = 3 } MouseAction;
+
+// Widget structure - allows mods to access widget properties and set callbacks
+struct widget {
+	// === Identity ===
+	int id;
+	WidgetType type;
+	char name[64];
+
+	// === Hierarchy ===
+	Widget *parent;
+	Widget *first_child;
+	Widget *last_child;
+	Widget *next_sibling;
+	Widget *prev_sibling;
+
+	// === Layout & Positioning ===
+	int x, y;
+	int width, height;
+	int min_width, min_height;
+	int max_width, max_height;
+
+	// === State Flags ===
+	unsigned int visible : 1;
+	unsigned int enabled : 1;
+	unsigned int focused : 1;
+	unsigned int dirty : 1;
+	unsigned int hover : 1;
+	unsigned int pressed : 1;
+
+	// === Window Chrome ===
+	unsigned int has_titlebar : 1;
+	unsigned int draggable : 1;
+	unsigned int resizable : 1;
+	unsigned int minimizable : 1;
+	unsigned int closable : 1;
+	unsigned int minimized : 1;
+	unsigned int modal : 1;
+	char title[128];
+
+	// === Z-Order ===
+	int z_order;
+
+	// === Theming ===
+	int skin_id;
+
+	// === Virtual Functions (set these to handle events) ===
+	void (*render)(Widget *self);
+	int (*on_mouse_down)(Widget *self, int x, int y, int button);
+	int (*on_mouse_up)(Widget *self, int x, int y, int button);
+	int (*on_mouse_move)(Widget *self, int x, int y);
+	int (*on_mouse_wheel)(Widget *self, int x, int y, int delta);
+	int (*on_key_down)(Widget *self, int key);
+	int (*on_key_up)(Widget *self, int key);
+	int (*on_text_input)(Widget *self, int character);
+	void (*on_focus_gain)(Widget *self);
+	void (*on_focus_lost)(Widget *self);
+	void (*on_resize)(Widget *self, int new_width, int new_height);
+	void (*on_destroy)(Widget *self);
+	void (*update)(Widget *self, int dt);
+
+	// === User Data ===
+	void *user_data;
+	int user_data_size;
+};

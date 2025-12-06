@@ -335,4 +335,15 @@ DLL_EXPORT int widget_manager_get_widget_count(void);
  */
 void widget_manager_print_hierarchy(Widget *root, int indent);
 
+// =============================================================================
+// Widget State Persistence
+// =============================================================================
+
+/**
+ * Load widget positions and state from disk
+ * Should be called after widgets are created and initialized
+ * Widgets are matched by name, so ensure widgets have unique names
+ */
+DLL_EXPORT void widget_manager_load_state(void);
+
 #endif // WIDGET_MANAGER_H

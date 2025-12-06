@@ -17,6 +17,12 @@
 static WidgetManager *g_widget_manager = NULL;
 
 // =============================================================================
+// Forward Declarations
+// =============================================================================
+
+static void widget_manager_save_state(void);
+
+// =============================================================================
 // Internal Helper Functions
 // =============================================================================
 
@@ -149,6 +155,9 @@ void widget_manager_cleanup(void)
 	if (!g_widget_manager) {
 		return;
 	}
+
+	// Save widget state before cleanup
+	widget_manager_save_state();
 
 	// Destroy all widgets (root will recursively destroy children)
 	if (g_widget_manager->root) {
@@ -873,4 +882,320 @@ void widget_manager_print_hierarchy(Widget *root, int indent)
 	for (child = root->first_child; child; child = child->next_sibling) {
 		widget_manager_print_hierarchy(child, indent + 1);
 	}
+}
+
+// =============================================================================
+// Widget State Persistence
+// =============================================================================
+
+/**
+ * Get the widget state file path
+ * Returns a newly allocated string that must be freed with SDL_free
+ */
+static char *get_widget_state_path(void)
+{
+	char *base_path;
+	char *full_path;
+	size_t path_len;
+
+	// Use SDL_GetPrefPath for cross-platform config directory
+	base_path = SDL_GetPrefPath(ORG_NAME, APP_NAME);
+	if (!base_path) {
+		// Fallback to current directory
+		base_path = SDL_strdup("./");
+		if (!base_path) {
+			return NULL;
+		}
+	}
+
+	// Allocate space for full path
+	path_len = strlen(base_path) + strlen("widgets.json") + 1;
+	full_path = SDL_malloc(path_len);
+	if (!full_path) {
+		SDL_free(base_path);
+		return NULL;
+	}
+
+	// Construct full path
+	SDL_snprintf(full_path, path_len, "%swidgets.json", base_path);
+	SDL_free(base_path);
+
+	return full_path;
+}
+
+/**
+ * Recursively save widget state to JSON file
+ */
+static void save_widget_state_recursive(FILE *fp, Widget *widget, int *count, int *first)
+{
+	Widget *child;
+
+	if (!widget || !fp) {
+		return;
+	}
+
+	// Only save widgets that have titlebar (windows) or are draggable
+	if (widget->has_titlebar || widget->draggable) {
+		if (!(*first)) {
+			fprintf(fp, ",\n");
+		}
+		*first = 0;
+
+		fprintf(fp, "    {\n");
+		fprintf(fp, "      \"name\": \"%s\",\n", widget->name);
+		fprintf(fp, "      \"x\": %d,\n", widget->x);
+		fprintf(fp, "      \"y\": %d,\n", widget->y);
+		fprintf(fp, "      \"width\": %d,\n", widget->width);
+		fprintf(fp, "      \"height\": %d,\n", widget->height);
+		fprintf(fp, "      \"visible\": %s,\n", widget->visible ? "true" : "false");
+		fprintf(fp, "      \"minimized\": %s\n", widget->minimized ? "true" : "false");
+		fprintf(fp, "    }");
+		(*count)++;
+	}
+
+	// Save children
+	for (child = widget->first_child; child; child = child->next_sibling) {
+		save_widget_state_recursive(fp, child, count, first);
+	}
+}
+
+/**
+ * Save widget positions and state to disk in JSON format
+ * Called automatically on cleanup
+ *
+ * Format:
+ * {
+ *   "widgets": [
+ *     {
+ *       "name": "WindowName",
+ *       "x": 100,
+ *       "y": 200,
+ *       "width": 300,
+ *       "height": 400,
+ *       "visible": true,
+ *       "minimized": false
+ *     }
+ *   ]
+ * }
+ */
+static void widget_manager_save_state(void)
+{
+	FILE *fp;
+	char *path;
+	int count = 0;
+	int first = 1;
+
+	if (!g_widget_manager || !g_widget_manager->root) {
+		return;
+	}
+
+	path = get_widget_state_path();
+	if (!path) {
+		warn("widget_manager_save_state: failed to get state file path");
+		return;
+	}
+
+	fp = fopen(path, "w");
+	if (!fp) {
+		warn("widget_manager_save_state: failed to open %s for writing", path);
+		SDL_free(path);
+		return;
+	}
+
+	// Write JSON header
+	fprintf(fp, "{\n");
+	fprintf(fp, "  \"widgets\": [\n");
+
+	// Write widget data
+	save_widget_state_recursive(fp, g_widget_manager->root, &count, &first);
+
+	// Write JSON footer
+	fprintf(fp, "\n  ]\n");
+	fprintf(fp, "}\n");
+
+	fclose(fp);
+	note("Saved state for %d widgets to %s", count, path);
+	SDL_free(path);
+}
+
+/**
+ * Simple JSON parser for widget state
+ * Handles basic JSON structure - not a full JSON parser
+ */
+static void parse_json_widget(const char *json_text, int *count)
+{
+	const char *ptr = json_text;
+	char name[64] = {0};
+	int x = 0, y = 0, width = 0, height = 0;
+	int visible = 1, minimized = 0;
+
+	// Parse JSON object looking for our fields
+	while (*ptr) {
+		// Skip whitespace
+		while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n' || *ptr == '\r') {
+			ptr++;
+		}
+
+		if (*ptr == '"') {
+			ptr++; // Skip opening quote
+			char key[32];
+			int i = 0;
+
+			// Read key name
+			while (*ptr && *ptr != '"' && i < 31) {
+				key[i++] = *ptr++;
+			}
+			key[i] = '\0';
+
+			if (*ptr == '"') {
+				ptr++; // Skip closing quote
+			}
+
+			// Skip to colon
+			while (*ptr && *ptr != ':') {
+				ptr++;
+			}
+			if (*ptr == ':') {
+				ptr++;
+			}
+
+			// Skip whitespace
+			while (*ptr == ' ' || *ptr == '\t') {
+				ptr++;
+			}
+
+			// Parse value based on key
+			if (strcmp(key, "name") == 0 && *ptr == '"') {
+				ptr++; // Skip opening quote
+				i = 0;
+				while (*ptr && *ptr != '"' && i < 63) {
+					name[i++] = *ptr++;
+				}
+				name[i] = '\0';
+			} else if (strcmp(key, "x") == 0) {
+				x = atoi(ptr);
+			} else if (strcmp(key, "y") == 0) {
+				y = atoi(ptr);
+			} else if (strcmp(key, "width") == 0) {
+				width = atoi(ptr);
+			} else if (strcmp(key, "height") == 0) {
+				height = atoi(ptr);
+			} else if (strcmp(key, "visible") == 0) {
+				visible = (strncmp(ptr, "true", 4) == 0) ? 1 : 0;
+			} else if (strcmp(key, "minimized") == 0) {
+				minimized = (strncmp(ptr, "true", 4) == 0) ? 1 : 0;
+			}
+		}
+
+		// Check for end of object
+		if (*ptr == '}') {
+			// Apply widget state if we have a name
+			if (name[0] != '\0') {
+				Widget *widget = widget_manager_find_by_name(name);
+				if (widget) {
+					widget_set_position(widget, x, y);
+					widget_set_size(widget, width, height);
+					widget_set_visible(widget, visible);
+					widget_set_minimized(widget, minimized);
+					(*count)++;
+				}
+			}
+			return;
+		}
+
+		ptr++;
+	}
+}
+
+/**
+ * Load and apply widget state from disk
+ * Should be called after widgets are created
+ */
+DLL_EXPORT void widget_manager_load_state(void)
+{
+	FILE *fp;
+	char *path;
+	char *file_contents = NULL;
+	long file_size;
+	int count = 0;
+
+	if (!g_widget_manager || !g_widget_manager->root) {
+		return;
+	}
+
+	path = get_widget_state_path();
+	if (!path) {
+		note("widget_manager_load_state: failed to get state file path");
+		return;
+	}
+
+	fp = fopen(path, "rb");
+	if (!fp) {
+		note("widget_manager_load_state: no saved state found at %s", path);
+		SDL_free(path);
+		return;
+	}
+
+	// Get file size
+	fseek(fp, 0, SEEK_END);
+	file_size = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+
+	// Read entire file
+	file_contents = SDL_malloc(file_size + 1);
+	if (!file_contents) {
+		warn("widget_manager_load_state: failed to allocate memory");
+		fclose(fp);
+		SDL_free(path);
+		return;
+	}
+
+	if (fread(file_contents, 1, file_size, fp) != (size_t)file_size) {
+		warn("widget_manager_load_state: failed to read file");
+		SDL_free(file_contents);
+		fclose(fp);
+		SDL_free(path);
+		return;
+	}
+	file_contents[file_size] = '\0';
+	fclose(fp);
+
+	// Parse JSON - look for widget objects
+	const char *ptr = file_contents;
+	while (*ptr) {
+		// Find start of widget object
+		if (*ptr == '{') {
+			// Find end of this object
+			const char *obj_start = ptr;
+			int brace_count = 1;
+			ptr++;
+
+			while (*ptr && brace_count > 0) {
+				if (*ptr == '{') {
+					brace_count++;
+				} else if (*ptr == '}') {
+					brace_count--;
+				}
+				ptr++;
+			}
+
+			// Extract and parse this object
+			if (brace_count == 0) {
+				size_t obj_len = ptr - obj_start;
+				char *obj_text = SDL_malloc(obj_len + 1);
+				if (obj_text) {
+					memcpy(obj_text, obj_start, obj_len);
+					obj_text[obj_len] = '\0';
+					parse_json_widget(obj_text, &count);
+					SDL_free(obj_text);
+				}
+			}
+		} else {
+			ptr++;
+		}
+	}
+
+	SDL_free(file_contents);
+	note("Loaded state for %d widgets from %s", count, path);
+	SDL_free(path);
 }

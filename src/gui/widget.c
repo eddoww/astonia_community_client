@@ -543,6 +543,16 @@ void widget_set_title(Widget *widget, const char *title)
 	widget_mark_dirty(widget);
 }
 
+void widget_set_name(Widget *widget, const char *name)
+{
+	if (!widget || !name) {
+		return;
+	}
+
+	strncpy(widget->name, name, sizeof(widget->name) - 1);
+	widget->name[sizeof(widget->name) - 1] = '\0';
+}
+
 void widget_set_window_chrome(
     Widget *widget, int has_titlebar, int draggable, int resizable, int minimizable, int closable)
 {

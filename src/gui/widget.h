@@ -405,6 +405,14 @@ DLL_EXPORT Widget *widget_find_at_position(Widget *root, int screen_x, int scree
 DLL_EXPORT void widget_set_title(Widget *widget, const char *title);
 
 /**
+ * Set widget name (used for identification and state persistence)
+ *
+ * @param widget Widget to modify
+ * @param name New name (max 63 characters)
+ */
+DLL_EXPORT void widget_set_name(Widget *widget, const char *name);
+
+/**
  * Enable/disable window chrome features
  *
  * @param widget Widget to modify

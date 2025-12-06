@@ -5,6 +5,10 @@
 #include "../dll.h"
 #include "amod_structs.h"
 
+// =============================================================================
+// MOD LIFECYCLE FUNCTIONS
+// =============================================================================
+
 void amod_init(void);
 void amod_exit(void);
 char *amod_version(void);
@@ -72,6 +76,75 @@ DLL_IMPORT int mil_rank(int exp);
 // client / server communication
 DLL_IMPORT void client_send(void *buf, int len);
 
+// --------- Widget System ---------
+// types defined in amod_structs.h: Widget, WidgetManager, WidgetType, MouseButton, MouseAction
+// widget creation and destruction
+DLL_IMPORT Widget *widget_create(WidgetType type, int x, int y, int width, int height);
+DLL_IMPORT void widget_destroy(Widget *widget);
+// widget hierarchy
+DLL_IMPORT int widget_add_child(Widget *parent, Widget *child);
+DLL_IMPORT int widget_remove_child(Widget *parent, Widget *child);
+DLL_IMPORT Widget *widget_find_child(Widget *parent, const char *name, int recursive);
+DLL_IMPORT Widget *widget_get_root(Widget *widget);
+// widget state
+DLL_IMPORT void widget_set_visible(Widget *widget, int visible);
+DLL_IMPORT void widget_set_enabled(Widget *widget, int enabled);
+DLL_IMPORT void widget_set_focus(Widget *widget);
+DLL_IMPORT void widget_mark_dirty(Widget *widget);
+DLL_IMPORT void widget_bring_to_front(Widget *widget);
+DLL_IMPORT void widget_send_to_back(Widget *widget);
+// widget layout and positioning
+DLL_IMPORT void widget_set_position(Widget *widget, int x, int y);
+DLL_IMPORT void widget_set_size(Widget *widget, int width, int height);
+DLL_IMPORT void widget_set_bounds(Widget *widget, int x, int y, int width, int height);
+DLL_IMPORT void widget_get_screen_position(Widget *widget, int *screen_x, int *screen_y);
+DLL_IMPORT void widget_local_to_screen(Widget *widget, int local_x, int local_y, int *screen_x, int *screen_y);
+DLL_IMPORT void widget_screen_to_local(Widget *widget, int screen_x, int screen_y, int *local_x, int *local_y);
+// widget hit testing
+DLL_IMPORT int widget_hit_test(Widget *widget, int local_x, int local_y);
+DLL_IMPORT Widget *widget_find_at_position(Widget *root, int screen_x, int screen_y);
+// widget window chrome (title bar, drag, resize)
+DLL_IMPORT void widget_set_title(Widget *widget, const char *title);
+DLL_IMPORT void widget_set_name(Widget *widget, const char *name);
+DLL_IMPORT void widget_set_window_chrome(
+    Widget *widget, int has_titlebar, int draggable, int resizable, int minimizable, int closable);
+DLL_IMPORT void widget_set_minimized(Widget *widget, int minimized);
+
+// --------- Widget Manager ---------
+DLL_IMPORT int widget_manager_init(int screen_width, int screen_height);
+DLL_IMPORT void widget_manager_cleanup(void);
+DLL_IMPORT WidgetManager *widget_manager_get(void);
+DLL_IMPORT Widget *widget_manager_get_root(void);
+// widget manager rendering
+DLL_IMPORT void widget_manager_render(void);
+DLL_IMPORT void widget_manager_update(int dt);
+DLL_IMPORT void widget_manager_request_redraw(void);
+// widget manager input routing
+DLL_IMPORT int widget_manager_handle_mouse(int x, int y, int button, int action);
+DLL_IMPORT int widget_manager_handle_mouse_wheel(int x, int y, int delta);
+DLL_IMPORT int widget_manager_handle_key(int key, int down);
+DLL_IMPORT int widget_manager_handle_text(int character);
+// widget manager focus
+DLL_IMPORT void widget_manager_set_focus(Widget *widget);
+DLL_IMPORT Widget *widget_manager_get_focus(void);
+DLL_IMPORT void widget_manager_focus_next(int reverse);
+// widget manager z-order
+DLL_IMPORT void widget_manager_bring_to_front(Widget *widget);
+DLL_IMPORT void widget_manager_send_to_back(Widget *widget);
+// widget manager drag and drop
+DLL_IMPORT void widget_manager_start_item_drag(Widget *source_widget, void *data, int data_type);
+DLL_IMPORT void *widget_manager_stop_item_drag(Widget *target_widget);
+DLL_IMPORT int widget_manager_is_item_dragging(void);
+DLL_IMPORT void *widget_manager_get_drag_data(int *out_type);
+// widget manager modal
+DLL_IMPORT void widget_manager_set_modal(Widget *widget);
+DLL_IMPORT Widget *widget_manager_get_modal(void);
+// widget manager utilities
+DLL_IMPORT Widget *widget_manager_find_by_id(int id);
+DLL_IMPORT Widget *widget_manager_find_by_name(const char *name);
+DLL_IMPORT int widget_manager_get_widget_count(void);
+// widget manager state persistence
+DLL_IMPORT void widget_manager_load_state(void);
 
 // ---------- Client exported data structures -------------
 DLL_IMPORT extern int skltab_cnt;

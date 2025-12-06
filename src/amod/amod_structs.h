@@ -494,3 +494,45 @@ struct shrine_ppd {
 	unsigned int used[MAXSHRINE / 32];
 	unsigned char continuity;
 };
+
+// --------- Widget System Types ---------
+typedef struct widget Widget;
+typedef struct widget_manager WidgetManager;
+
+typedef enum {
+	WIDGET_TYPE_BASE = 0, // base widget (for custom implementations)
+	WIDGET_TYPE_CONTAINER, // container for grouping widgets
+	WIDGET_TYPE_BUTTON, // clickable button
+	WIDGET_TYPE_LABEL, // text label
+	WIDGET_TYPE_TEXTINPUT, // text input field
+	WIDGET_TYPE_ITEMSLOT, // item slot (for inventory-like displays)
+	WIDGET_TYPE_SCROLLCONTAINER, // scrollable container
+	WIDGET_TYPE_GRID, // grid layout container
+	WIDGET_TYPE_PROGRESSBAR, // progress/health bar
+	WIDGET_TYPE_TOOLTIP, // tooltip widget
+	WIDGET_TYPE_VIEWPORT, // game viewport
+	WIDGET_TYPE_CHAT, // chat widget
+	WIDGET_TYPE_INVENTORY, // inventory widget
+	WIDGET_TYPE_EQUIPMENT, // equipment widget
+	WIDGET_TYPE_SKILLS, // skills widget
+	WIDGET_TYPE_TRADING, // trading widget
+	WIDGET_TYPE_CHARLOOK, // character look widget
+	WIDGET_TYPE_MINIMAP, // minimap widget
+	WIDGET_TYPE_QUESTLOG, // quest log widget
+	WIDGET_TYPE_HELP, // help widget
+	WIDGET_TYPE_STATBARS, // stat bars widget
+	WIDGET_TYPE_HOTBAR, // hotbar widget
+	WIDGET_TYPE_TELEPORTER, // teleporter widget
+	WIDGET_TYPE_COLORPICKER, // color picker widget
+	WIDGET_TYPE_CUSTOM // custom widget (use user_data for state)
+} WidgetType;
+
+typedef enum {
+	MOUSE_BUTTON_LEFT = 1,
+	MOUSE_BUTTON_MIDDLE = 2,
+	MOUSE_BUTTON_RIGHT = 3,
+	MOUSE_BUTTON_WHEEL_UP = 4,
+	MOUSE_BUTTON_WHEEL_DOWN = 5
+} MouseButton;
+
+typedef enum { MOUSE_ACTION_DOWN = 1, MOUSE_ACTION_UP = 2, MOUSE_ACTION_MOVE = 3 } MouseAction;

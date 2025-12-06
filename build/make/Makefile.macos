@@ -69,6 +69,7 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 			src/gui/widgets/widget_itemslot.o src/gui/widgets/widget_progressbar.o\
 			src/gui/widgets/widget_textinput.o src/gui/widgets/widget_tooltip.o\
 			src/gui/widgets/widget_slider.o src/gui/widgets/widget_volume.o\
+			src/gui/widgets/widget_viewport.o\
 			src/game/memory_macos.o
 
 bin/moac:	$(OBJS) $(ASTONIA_NET_LIB)
@@ -135,6 +136,7 @@ src/gui/widgets/widget_textinput.o:	src/gui/widgets/widget_textinput.c src/gui/w
 src/gui/widgets/widget_tooltip.o:	src/gui/widgets/widget_tooltip.c src/gui/widgets/widget_tooltip.h src/gui/widget.h src/gui/widget_manager.h src/astonia.h src/game/game.h
 src/gui/widgets/widget_slider.o:	src/gui/widgets/widget_slider.c src/gui/widgets/widget_slider.h src/gui/widget.h src/gui/widget_manager.h src/astonia.h src/game/game.h
 src/gui/widgets/widget_volume.o:	src/gui/widgets/widget_volume.c src/gui/widgets/widget_volume.h src/gui/widget.h src/gui/widget_manager.h src/gui/widgets/widget_slider.h src/gui/widgets/widget_container.h src/gui/widgets/widget_button.h src/gui/widgets/widget_label.h src/astonia.h src/game/game.h
+src/gui/widgets/widget_viewport.o:	src/gui/widgets/widget_viewport.c src/gui/widgets/widget_viewport.h src/gui/widget.h src/gui/widget_manager.h src/gui/gui.h src/astonia.h src/game/game.h
 
 # Refactored game modules
 src/game/game_core.o:	src/game/game_core.c src/astonia.h src/game/game.h src/game/game_private.h src/client/client.h src/gui/gui.h

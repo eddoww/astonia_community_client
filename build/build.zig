@@ -65,6 +65,7 @@ pub fn build(b: *std.Build) void {
 
         // Game Widgets
         "src/gui/widget_demo.c",
+        "src/gui/widgets/widget_viewport.c",
         "src/gui/widgets/widget_volume.c",
 
         // CLIENT

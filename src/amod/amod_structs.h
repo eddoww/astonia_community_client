@@ -2,6 +2,8 @@
  * Part of Astonia Client (c) Daniel Brockhaus. Please read license.txt.
  */
 
+#include <stdint.h>
+
 #ifndef min
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
@@ -493,4 +495,122 @@ struct quest {
 struct shrine_ppd {
 	unsigned int used[MAXSHRINE / 32];
 	unsigned char continuity;
+};
+
+// --------- Widget System Types ---------
+typedef struct widget Widget;
+typedef struct widget_manager WidgetManager;
+
+// Widget type identifiers
+typedef enum {
+	WIDGET_TYPE_BASE = 0, // base widget (for custom implementations)
+	WIDGET_TYPE_CONTAINER, // container for grouping widgets
+	WIDGET_TYPE_BUTTON, // clickable button
+	WIDGET_TYPE_LABEL, // text label
+	WIDGET_TYPE_TEXTINPUT, // text input field
+	WIDGET_TYPE_ITEMSLOT, // item slot (for inventory-like displays)
+	WIDGET_TYPE_SCROLLCONTAINER, // scrollable container
+	WIDGET_TYPE_GRID, // grid layout container
+	WIDGET_TYPE_PROGRESSBAR, // progress/health bar
+	WIDGET_TYPE_TOOLTIP, // tooltip widget
+	WIDGET_TYPE_VIEWPORT, // game viewport
+	WIDGET_TYPE_CHAT, // chat widget
+	WIDGET_TYPE_INVENTORY, // inventory widget
+	WIDGET_TYPE_EQUIPMENT, // equipment widget
+	WIDGET_TYPE_SKILLS, // skills widget
+	WIDGET_TYPE_TRADING, // trading widget
+	WIDGET_TYPE_CHARLOOK, // character look widget
+	WIDGET_TYPE_MINIMAP, // minimap widget
+	WIDGET_TYPE_QUESTLOG, // quest log widget
+	WIDGET_TYPE_HELP, // help widget
+	WIDGET_TYPE_STATBARS, // stat bars widget
+	WIDGET_TYPE_HOTBAR, // hotbar widget
+	WIDGET_TYPE_TELEPORTER, // teleporter widget
+	WIDGET_TYPE_COLORPICKER, // color picker widget
+	WIDGET_TYPE_CUSTOM // custom widget (use user_data for state)
+} WidgetType;
+
+typedef enum {
+	MOUSE_BUTTON_LEFT = 1,
+	MOUSE_BUTTON_MIDDLE = 2,
+	MOUSE_BUTTON_RIGHT = 3,
+	MOUSE_BUTTON_WHEEL_UP = 4,
+	MOUSE_BUTTON_WHEEL_DOWN = 5
+} MouseButton;
+
+typedef enum { MOUSE_ACTION_DOWN = 1, MOUSE_ACTION_UP = 2, MOUSE_ACTION_MOVE = 3 } MouseAction;
+
+// Widget structure - allows mods to access widget properties and set callbacks
+struct widget {
+	// === Identity ===
+	int id;
+	WidgetType type;
+	char name[64];
+
+	// === Hierarchy ===
+	Widget *parent;
+	Widget *first_child;
+	Widget *last_child;
+	Widget *next_sibling;
+	Widget *prev_sibling;
+
+	// === Layout & Positioning ===
+	int x, y;
+	int width, height;
+	int min_width, min_height;
+	int max_width, max_height;
+
+	// === State Flags ===
+	unsigned int visible : 1;
+	unsigned int enabled : 1;
+	unsigned int focused : 1;
+	unsigned int dirty : 1;
+	unsigned int hover : 1;
+	unsigned int pressed : 1;
+	unsigned int focusable : 1; // Widget can receive keyboard focus (tab navigation)
+
+	// === Tab Navigation ===
+	int tab_index; // Tab order (lower = earlier, -1 = not in tab order)
+
+	// === Window Chrome ===
+	unsigned int has_titlebar : 1;
+	unsigned int draggable : 1;
+	unsigned int resizable : 1;
+	unsigned int minimizable : 1;
+	unsigned int closable : 1;
+	unsigned int minimized : 1;
+	unsigned int modal : 1;
+	char title[128];
+
+	// === Z-Order ===
+	int z_order;
+
+	// === Theming ===
+	int skin_id;
+
+	// === Tooltip ===
+	char tooltip_text[256]; // Tooltip text (empty = no tooltip)
+	int tooltip_delay; // Delay in ms before showing tooltip (default 500)
+
+	// === Virtual Functions (set these to handle events) ===
+	void (*render)(Widget *self);
+	int (*on_mouse_down)(Widget *self, int x, int y, int button);
+	int (*on_mouse_up)(Widget *self, int x, int y, int button);
+	int (*on_double_click)(Widget *self, int x, int y, int button);
+	int (*on_mouse_move)(Widget *self, int x, int y);
+	int (*on_mouse_wheel)(Widget *self, int x, int y, int delta);
+	int (*on_key_down)(Widget *self, int key);
+	int (*on_key_up)(Widget *self, int key);
+	int (*on_text_input)(Widget *self, int character);
+	void (*on_focus_gain)(Widget *self);
+	void (*on_focus_lost)(Widget *self);
+	void (*on_mouse_enter)(Widget *self);
+	void (*on_mouse_leave)(Widget *self);
+	void (*on_resize)(Widget *self, int new_width, int new_height);
+	void (*on_destroy)(Widget *self);
+	void (*update)(Widget *self, int dt);
+
+	// === User Data ===
+	void *user_data;
+	int user_data_size;
 };

@@ -18,13 +18,16 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "gui/widget.h"
+#include "gui/widget_manager.h"
+#include "gui/widgets/widget_volume.h"
 
 // SDL window and renderer
 SDL_Window *sdlwnd = NULL;
 SDL_Renderer *sdlren = NULL;
 
-// Cursors
-static SDL_Cursor *curs[20];
+// Cursors (includes game cursors 0-18 and widget system cursors 19-25)
+static SDL_Cursor *curs[SDL_CUR_MAX];
 
 // Zip archives for graphics
 zip_t *sdl_zip1 = NULL;
@@ -451,6 +454,12 @@ int sdl_render(void)
 
 void sdl_exit(void)
 {
+	// Cleanup widget system first (saves positions while widgets still exist)
+	widget_manager_cleanup();
+
+	// Cleanup volume widget (saves volume settings)
+	widget_volume_cleanup();
+
 	// Signal workers to quit and join them
 	if (sdl_multi && prethreads) {
 		SDL_AtomicSet(&pre_quit, 1);
@@ -544,12 +553,29 @@ void sdl_loop(void)
 		case SDL_KEYDOWN:
 			gui_sdl_keyproc(event.key.keysym.sym);
 			break;
-		case SDL_KEYUP:
-			context_keyup(event.key.keysym.sym);
+		case SDL_KEYUP: {
+			// Block keyup events if a text input widget has focus
+			Widget *focused = widget_manager_get_focus();
+			if (focused && focused->type == WIDGET_TYPE_TEXTINPUT) {
+				widget_manager_handle_key(event.key.keysym.sym, 0);
+			} else if (!widget_manager_handle_key(event.key.keysym.sym, 0)) {
+				context_keyup(event.key.keysym.sym);
+			}
 			break;
-		case SDL_TEXTINPUT:
-			cmd_proc(event.text.text[0]);
+		}
+		case SDL_TEXTINPUT: {
+			// Forward text input to widget system first, fall back to old GUI if not handled
+			Widget *focused = widget_manager_get_focus();
+			if (focused && focused->type == WIDGET_TYPE_TEXTINPUT) {
+				// Send each character to the widget manager
+				for (int i = 0; event.text.text[i]; i++) {
+					widget_manager_handle_text((int)(unsigned char)event.text.text[i]);
+				}
+			} else {
+				cmd_proc(event.text.text[0]);
+			}
 			break;
+		}
 		case SDL_MOUSEMOTION:
 			gui_sdl_mouseproc(event.motion.x, event.motion.y, SDL_MOUM_NONE, 0);
 			break;
@@ -773,6 +799,16 @@ int sdl_create_cursors(void)
 		error = 1;
 	}
 
+	// Create SDL system cursors for widget system
+	curs[SDL_CUR_ARROW] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
+	curs[SDL_CUR_HAND] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
+	curs[SDL_CUR_IBEAM] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM);
+	curs[SDL_CUR_SIZEWE] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEWE);
+	curs[SDL_CUR_SIZENS] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENS);
+	curs[SDL_CUR_SIZENWSE] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE);
+	curs[SDL_CUR_SIZENESW] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENESW);
+	curs[SDL_CUR_SIZEALL] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEALL);
+
 	if (error) {
 		fail("Failed to load one or more cursor files");
 		return 0;
@@ -783,7 +819,7 @@ int sdl_create_cursors(void)
 
 void sdl_set_cursor(int cursor)
 {
-	if (cursor < SDL_CUR_c_only || cursor > SDL_CUR_c_get) {
+	if (cursor < 0 || cursor >= SDL_CUR_MAX) {
 		return;
 	}
 	if (!curs[cursor]) {

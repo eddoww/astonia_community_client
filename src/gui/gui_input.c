@@ -13,6 +13,10 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/widget.h"
+#include "gui/widget_manager.h"
+#include "gui/widget_demo.h"
+#include "gui/widgets/widget_volume.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -24,6 +28,17 @@ void gui_sdl_keyproc(int wparam)
 
 	if (wparam != SDLK_ESCAPE && wparam != SDLK_F12 && amod_keydown(wparam)) {
 		return;
+	}
+
+	// Forward key events to widget system (gets first priority)
+	// If a text input widget has focus, block all keys from reaching the game
+	Widget *focused = widget_manager_get_focus();
+	if (focused && focused->type == WIDGET_TYPE_TEXTINPUT) {
+		widget_manager_handle_key(wparam, 1);
+		return; // Block all keys when text input has focus
+	}
+	if (widget_manager_handle_key(wparam, 1)) {
+		return; // Widget handled it
 	}
 
 	switch (wparam) {
@@ -81,11 +96,17 @@ void gui_sdl_keyproc(int wparam)
 		return;
 
 	case SDLK_F9:
-		if (display_quest) {
-			display_quest = 0;
+		// Shift+F9 toggles volume control
+		if (SDL_GetModState() & KMOD_SHIFT) {
+			widget_volume_toggle();
 		} else {
-			display_help = 0;
-			display_quest = 1;
+			// Regular F9 toggles quest log
+			if (display_quest) {
+				display_quest = 0;
+			} else {
+				display_help = 0;
+				display_quest = 1;
+			}
 		}
 		return;
 
@@ -96,13 +117,20 @@ void gui_sdl_keyproc(int wparam)
 		return;
 
 	case SDLK_F11:
-		if (display_help) {
-			display_help = 0;
+		// Ctrl+F11 or Shift+F11 toggles widget demo
+		if (SDL_GetModState() & (KMOD_CTRL | KMOD_SHIFT)) {
+			widget_demo_toggle();
 		} else {
-			display_quest = 0;
-			display_help = 1;
+			// Regular F11 toggles help
+			if (display_help) {
+				display_help = 0;
+			} else {
+				display_quest = 0;
+				display_help = 1;
+			}
 		}
 		return;
+
 	case SDLK_F12:
 		quit = 1;
 		return;
@@ -287,10 +315,31 @@ void gui_sdl_mouseproc(int x, int y, int what, int clicks)
 	int delta, tmp;
 	static int mdown = 0;
 
+	// Scale mouse coordinates before passing to widgets
+	int widget_x = x / sdl_scale - render_offset_x();
+	int widget_y = y / sdl_scale - render_offset_y();
+
+	// Forward mouse events to widget system (gets first priority)
+	if (what == SDL_MOUM_LDOWN &&
+	    widget_manager_handle_mouse(widget_x, widget_y, MOUSE_BUTTON_LEFT, MOUSE_ACTION_DOWN)) {
+		return; // Widget handled it
+	}
+	if (what == SDL_MOUM_LUP && widget_manager_handle_mouse(widget_x, widget_y, MOUSE_BUTTON_LEFT, MOUSE_ACTION_UP)) {
+		return; // Widget handled it
+	}
+	if (what == SDL_MOUM_RDOWN &&
+	    widget_manager_handle_mouse(widget_x, widget_y, MOUSE_BUTTON_RIGHT, MOUSE_ACTION_DOWN)) {
+		return; // Widget handled it
+	}
+	if (what == SDL_MOUM_RUP && widget_manager_handle_mouse(widget_x, widget_y, MOUSE_BUTTON_RIGHT, MOUSE_ACTION_UP)) {
+		return; // Widget handled it
+	}
+
 	switch (what) {
 	case SDL_MOUM_NONE:
 		mousex = x;
 		mousey = y;
+		widget_manager_handle_mouse(widget_x, widget_y, 0, MOUSE_ACTION_MOVE);
 
 		if (capbut != -1) {
 			if (mousex != XRES / 2 || mousey != YRES / 2) {

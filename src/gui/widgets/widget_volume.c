@@ -99,11 +99,14 @@ Widget *widget_volume_create(int x, int y)
 {
 	Widget *widget;
 
-	// Create container widget
+	// Create container widget (inherits cap_has_layout capability)
 	widget = widget_container_create(x, y, 180, 112);
 	if (!widget) {
 		return NULL;
 	}
+
+	// Set our specific type (keeps cap_has_layout from container)
+	widget->type = WIDGET_TYPE_VOLUME;
 
 	// Setup container layout - vertical stacking like demo widget
 	widget_container_set_layout(widget, LAYOUT_VERTICAL);

@@ -427,9 +427,11 @@ static void update_hover_state(void)
 	if (g_widget_manager->resizing_widget) {
 		// Currently resizing - show resize cursor
 		cursor = resize_handle_to_cursor(g_widget_manager->resize_handle);
+		sdl_set_cursor(cursor);
 	} else if (g_widget_manager->dragging_widget) {
 		// Currently dragging - show move cursor
 		cursor = SDL_CUR_SIZEALL;
+		sdl_set_cursor(cursor);
 	} else if (target) {
 		// Check for resize handle hover
 		if (target->resizable && !target->minimized) {

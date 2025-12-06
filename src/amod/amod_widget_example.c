@@ -3,7 +3,7 @@
  *
  * This example demonstrates how to use the widget system in a mod.
  * It creates a custom window with buttons and labels that can be
- * toggled with the F9 key.
+ * toggled with the F8 key.
  *
  * Build: make amod
  *
@@ -29,6 +29,7 @@
 static Widget *example_window = NULL;
 static Widget *click_counter_label = NULL;
 static int click_count = 0;
+static int widgets_initialized = 0;
 
 // ============================================================================
 // Event Handlers
@@ -84,7 +85,7 @@ static int on_close_button(Widget *self, int x, int y, int button)
 		if (example_window) {
 			widget_set_visible(example_window, 0);
 		}
-		addline("Window hidden. Press F9 to show again.");
+		addline("Window hidden. Press F8 to show again.");
 		return 1;
 	}
 	return 0;
@@ -99,10 +100,56 @@ static void render_counter_label(Widget *self)
 	// Draw background
 	render_rect(sx, sy, sx + self->width, sy + self->height, darkgraycolor);
 
-	// Draw counter text
+	// Draw counter text centered
 	char buf[64];
 	snprintf(buf, sizeof(buf), "Clicks: %d", click_count);
-	render_text(sx + 5, sy + 5, whitecolor, RENDER_TEXT_SMALL, buf);
+	int text_width = render_text_length(RENDER_TEXT_SMALL, buf);
+	int text_x = sx + (self->width - text_width) / 2;
+	render_text(text_x, sy + 5, whitecolor, RENDER_TEXT_SMALL, buf);
+}
+
+// Render a simple button with text
+static void render_button(Widget *self, const char *label)
+{
+	int sx, sy;
+	widget_get_screen_position(self, &sx, &sy);
+
+	// Button background - different color when hovered/pressed
+	unsigned short bg_color = graycolor;
+	if (self->pressed) {
+		bg_color = darkgraycolor;
+	} else if (self->hover) {
+		bg_color = lightgraycolor;
+	}
+
+	render_rect(sx, sy, sx + self->width, sy + self->height, bg_color);
+
+	// Button border
+	render_line(sx, sy, sx + self->width, sy, lightgraycolor);
+	render_line(sx, sy, sx, sy + self->height, lightgraycolor);
+	render_line(sx + self->width, sy, sx + self->width, sy + self->height, darkgraycolor);
+	render_line(sx, sy + self->height, sx + self->width, sy + self->height, darkgraycolor);
+
+	// Button text centered
+	int text_width = render_text_length(RENDER_TEXT_SMALL, label);
+	int text_x = sx + (self->width - text_width) / 2;
+	int text_y = sy + (self->height - 10) / 2;
+	render_text(text_x, text_y, whitecolor, RENDER_TEXT_SMALL, label);
+}
+
+static void render_click_button(Widget *self)
+{
+	render_button(self, "Click Me!");
+}
+
+static void render_reset_button(Widget *self)
+{
+	render_button(self, "Reset");
+}
+
+static void render_close_button(Widget *self)
+{
+	render_button(self, "Hide Window");
 }
 
 // ============================================================================
@@ -171,6 +218,7 @@ static void create_example_window(void)
 	if (click_button) {
 		widget_set_name(click_button, "click_button");
 		click_button->on_mouse_down = on_click_button;
+		click_button->render = render_click_button;
 		widget_add_child(example_window, click_button);
 	}
 
@@ -181,6 +229,7 @@ static void create_example_window(void)
 	if (reset_button) {
 		widget_set_name(reset_button, "reset_button");
 		reset_button->on_mouse_down = on_reset_button;
+		reset_button->render = render_reset_button;
 		widget_add_child(example_window, reset_button);
 	}
 
@@ -191,10 +240,14 @@ static void create_example_window(void)
 	if (close_button) {
 		widget_set_name(close_button, "close_button");
 		close_button->on_mouse_down = on_close_button;
+		close_button->render = render_close_button;
 		widget_add_child(example_window, close_button);
 	}
 
-	note("Example window created. Press F9 to toggle visibility.");
+	// Load saved position for just this widget (efficient - doesn't re-apply to all widgets)
+	widget_load_state(example_window);
+
+	note("Example window created. Press F8 to toggle visibility.");
 }
 
 static void destroy_example_window(void)
@@ -228,14 +281,23 @@ DLL_EXPORT void amod_exit(void)
 
 DLL_EXPORT void amod_gamestart(void)
 {
-	// Called when game starts - create our window
-	create_example_window();
-	addline("Widget Example Mod loaded. Press F9 to toggle window.");
+	// Called when game starts
+	// Note: Widget manager may not be initialized yet, so we defer widget creation to amod_frame()
+	addline("Widget Example Mod loaded. Press F8 to toggle window.");
 }
 
 DLL_EXPORT void amod_frame(void)
 {
 	// Called every frame - can be used for animations or updates
+
+	// Deferred widget initialization: wait until widget manager is ready
+	if (!widgets_initialized) {
+		Widget *root = widget_manager_get_root();
+		if (root) {
+			create_example_window();
+			widgets_initialized = 1;
+		}
+	}
 }
 
 DLL_EXPORT void amod_tick(void)
@@ -249,9 +311,8 @@ DLL_EXPORT void amod_tick(void)
 
 DLL_EXPORT int amod_keydown(int key)
 {
-	// F9 key (SDL scancode) - toggle window visibility
-	// Note: Key codes may vary, check SDL documentation
-	if (key == 0x42) { // F9
+	// F8 key (SDL keycode SDLK_F8 = 1073741889) - toggle window visibility
+	if (key == 1073741889) {
 		if (example_window) {
 			int visible = example_window->visible;
 			widget_set_visible(example_window, !visible);

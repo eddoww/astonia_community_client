@@ -1199,3 +1199,160 @@ DLL_EXPORT void widget_manager_load_state(void)
 	note("Loaded state for %d widgets from %s", count, path);
 	SDL_free(path);
 }
+
+/**
+ * Load state for a single widget by name
+ * Searches the state file for an entry matching the widget's name
+ * and applies position/size/visibility if found.
+ *
+ * @param widget Widget to load state for (must have a name set)
+ * @return 1 if state was found and applied, 0 otherwise
+ */
+DLL_EXPORT int widget_load_state(Widget *widget)
+{
+	FILE *fp;
+	char *path;
+	char *file_contents = NULL;
+	long file_size;
+
+	if (!widget || widget->name[0] == '\0') {
+		return 0;
+	}
+
+	path = get_widget_state_path();
+	if (!path) {
+		return 0;
+	}
+
+	fp = fopen(path, "rb");
+	if (!fp) {
+		SDL_free(path);
+		return 0;
+	}
+
+	// Get file size
+	fseek(fp, 0, SEEK_END);
+	file_size = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+
+	// Read entire file
+	file_contents = SDL_malloc(file_size + 1);
+	if (!file_contents) {
+		fclose(fp);
+		SDL_free(path);
+		return 0;
+	}
+
+	if (fread(file_contents, 1, file_size, fp) != (size_t)file_size) {
+		SDL_free(file_contents);
+		fclose(fp);
+		SDL_free(path);
+		return 0;
+	}
+	file_contents[file_size] = '\0';
+	fclose(fp);
+	SDL_free(path);
+
+	// Search for this widget's name in the JSON
+	const char *ptr = file_contents;
+	int found = 0;
+
+	while (*ptr && !found) {
+		if (*ptr == '{') {
+			const char *obj_start = ptr;
+			int brace_count = 1;
+			ptr++;
+
+			while (*ptr && brace_count > 0) {
+				if (*ptr == '{') {
+					brace_count++;
+				} else if (*ptr == '}') {
+					brace_count--;
+				}
+				ptr++;
+			}
+
+			if (brace_count == 0) {
+				// Parse this object to check if it matches our widget
+				size_t obj_len = ptr - obj_start;
+				char *obj_text = SDL_malloc(obj_len + 1);
+				if (obj_text) {
+					memcpy(obj_text, obj_start, obj_len);
+					obj_text[obj_len] = '\0';
+
+					// Extract name from this object
+					char name[64] = {0};
+					int x = 0, y = 0, width = 0, height = 0;
+					int visible = 1, minimized = 0;
+					const char *p = obj_text;
+
+					while (*p) {
+						while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+							p++;
+						}
+
+						if (*p == '"') {
+							p++;
+							char key[32];
+							int i = 0;
+							while (*p && *p != '"' && i < 31) {
+								key[i++] = *p++;
+							}
+							key[i] = '\0';
+							if (*p == '"') {
+								p++;
+							}
+							while (*p && *p != ':') {
+								p++;
+							}
+							if (*p == ':') {
+								p++;
+							}
+							while (*p == ' ' || *p == '\t') {
+								p++;
+							}
+
+							if (strcmp(key, "name") == 0 && *p == '"') {
+								p++;
+								i = 0;
+								while (*p && *p != '"' && i < 63) {
+									name[i++] = *p++;
+								}
+								name[i] = '\0';
+							} else if (strcmp(key, "x") == 0) {
+								x = atoi(p);
+							} else if (strcmp(key, "y") == 0) {
+								y = atoi(p);
+							} else if (strcmp(key, "width") == 0) {
+								width = atoi(p);
+							} else if (strcmp(key, "height") == 0) {
+								height = atoi(p);
+							} else if (strcmp(key, "visible") == 0) {
+								visible = (strncmp(p, "true", 4) == 0) ? 1 : 0;
+							} else if (strcmp(key, "minimized") == 0) {
+								minimized = (strncmp(p, "true", 4) == 0) ? 1 : 0;
+							}
+						}
+						p++;
+					}
+
+					// Check if this matches our widget
+					if (strcmp(name, widget->name) == 0) {
+						widget_set_position(widget, x, y);
+						widget_set_size(widget, width, height);
+						widget_set_visible(widget, visible);
+						widget_set_minimized(widget, minimized);
+						found = 1;
+					}
+
+					SDL_free(obj_text);
+				}
+			}
+		} else {
+			ptr++;
+		}
+	}
+
+	SDL_free(file_contents);
+	return found;
+}

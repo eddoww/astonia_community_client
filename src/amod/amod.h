@@ -145,6 +145,7 @@ DLL_IMPORT Widget *widget_manager_find_by_name(const char *name);
 DLL_IMPORT int widget_manager_get_widget_count(void);
 // widget manager state persistence
 DLL_IMPORT void widget_manager_load_state(void);
+DLL_IMPORT int widget_load_state(Widget *widget);
 
 // ---------- Client exported data structures -------------
 DLL_IMPORT extern int skltab_cnt;

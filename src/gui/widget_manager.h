@@ -346,4 +346,14 @@ void widget_manager_print_hierarchy(Widget *root, int indent);
  */
 DLL_EXPORT void widget_manager_load_state(void);
 
+/**
+ * Load state for a single widget by name
+ * Searches the state file for an entry matching the widget's name
+ * and applies position/size/visibility if found.
+ *
+ * @param widget Widget to load state for (must have a name set)
+ * @return 1 if state was found and applied, 0 otherwise
+ */
+DLL_EXPORT int widget_load_state(Widget *widget);
+
 #endif // WIDGET_MANAGER_H

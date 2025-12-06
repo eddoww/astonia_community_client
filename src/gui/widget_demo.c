@@ -252,7 +252,11 @@ void widget_demo_update(int dt)
 		int screen_x, screen_y;
 		widget_get_screen_position(demo_button3, &screen_x, &screen_y);
 
-		int is_over = (mousex >= screen_x && mousex <= screen_x + demo_button3->width && mousey >= screen_y &&
+		// Don't detect hover if parent container is minimized
+		int parent_minimized = (demo_container && demo_container->minimized);
+
+		int is_over = !parent_minimized &&
+		              (mousex >= screen_x && mousex <= screen_x + demo_button3->width && mousey >= screen_y &&
 		               mousey <= screen_y + demo_button3->height);
 
 		if (is_over && !button3_hovered) {

@@ -491,7 +491,9 @@ int widget_hit_test(Widget *widget, int local_x, int local_y)
 
 	// Account for title bar if present
 	min_y = widget->has_titlebar ? -TITLEBAR_HEIGHT : 0;
-	max_y = widget->height;
+
+	// When minimized, only the title bar is clickable (body clicks pass through)
+	max_y = (widget->minimized && widget->has_titlebar) ? 0 : widget->height;
 
 	return (local_x >= 0 && local_x < widget->width && local_y >= min_y && local_y < max_y);
 }

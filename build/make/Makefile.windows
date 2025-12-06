@@ -192,6 +192,7 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 			src/gui/widgets/widget_container.o src/gui/widgets/widget_button.o src/gui/widgets/widget_label.o\
 			src/gui/widgets/widget_itemslot.o src/gui/widgets/widget_progressbar.o\
 			src/gui/widgets/widget_textinput.o src/gui/widgets/widget_tooltip.o\
+			src/gui/widgets/widget_slider.o\
 			src/modder/sharedmem_windows.o src/game/crash_handler_windows.o\
 			src/game/memory_windows.o src/gui/draghack_windows.o src/client/unique_windows.o\
 			src/game/version.o
@@ -264,6 +265,7 @@ src/gui/widgets/widget_itemslot.o:	src/gui/widgets/widget_itemslot.c src/gui/wid
 src/gui/widgets/widget_progressbar.o:	src/gui/widgets/widget_progressbar.c src/gui/widgets/widget_progressbar.h src/gui/widget.h src/gui/widget_manager.h src/astonia.h src/game/game.h
 src/gui/widgets/widget_textinput.o:	src/gui/widgets/widget_textinput.c src/gui/widgets/widget_textinput.h src/gui/widget.h src/gui/widget_manager.h src/astonia.h src/game/game.h
 src/gui/widgets/widget_tooltip.o:	src/gui/widgets/widget_tooltip.c src/gui/widgets/widget_tooltip.h src/gui/widget.h src/gui/widget_manager.h src/astonia.h src/game/game.h
+src/gui/widgets/widget_slider.o:	src/gui/widgets/widget_slider.c src/gui/widgets/widget_slider.h src/gui/widget.h src/gui/widget_manager.h src/astonia.h src/game/game.h
 
 # Refactored game modules
 src/game/game_core.o:	src/game/game_core.c src/astonia.h src/game/game.h src/game/game_private.h src/client/client.h src/gui/gui.h

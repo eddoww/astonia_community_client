@@ -224,13 +224,13 @@ void widget_tooltip_show_at_widget(Widget *tooltip, Widget *target, int offset_x
 
 void widget_tooltip_update_position(Widget *tooltip, int mouse_x, int mouse_y)
 {
-	TooltipData *data;
+	const TooltipData *data;
 
 	if (!tooltip || tooltip->type != WIDGET_TYPE_TOOLTIP) {
 		return;
 	}
 
-	data = (TooltipData *)tooltip->user_data;
+	data = (const TooltipData *)tooltip->user_data;
 	if (!data) {
 		return;
 	}
@@ -366,7 +366,6 @@ static void tooltip_render(Widget *self)
 static void tooltip_update(Widget *self, int dt)
 {
 	TooltipData *data;
-	unsigned int now;
 
 	if (!self) {
 		return;
@@ -379,7 +378,7 @@ static void tooltip_update(Widget *self, int dt)
 
 	// Handle delayed show
 	if (data->pending_show && !self->visible) {
-		now = SDL_GetTicks();
+		unsigned int now = SDL_GetTicks();
 		if (now - data->show_timer >= data->show_delay) {
 			// Show tooltip
 			widget_set_visible(self, 1);
@@ -428,8 +427,13 @@ static void tooltip_calculate_size(Widget *tooltip)
 	}
 
 	data = (TooltipData *)tooltip->user_data;
-	if (!data || !data->text[0]) {
-		// Empty tooltip
+	if (!data) {
+		// No tooltip data
+		widget_set_size(tooltip, 50, 10);
+		return;
+	}
+	if (!data->text[0]) {
+		// Empty tooltip text
 		widget_set_size(tooltip, data->padding * 2 + 50, data->padding * 2 + 10);
 		return;
 	}
@@ -486,14 +490,14 @@ static void tooltip_calculate_size(Widget *tooltip)
 
 static void tooltip_position_at_mouse(Widget *tooltip, int mouse_x, int mouse_y)
 {
-	TooltipData *data;
+	const TooltipData *data;
 	int new_x, new_y;
 
 	if (!tooltip) {
 		return;
 	}
 
-	data = (TooltipData *)tooltip->user_data;
+	data = (const TooltipData *)tooltip->user_data;
 	if (!data) {
 		return;
 	}

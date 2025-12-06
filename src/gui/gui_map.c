@@ -12,6 +12,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/widgets/widget_viewport.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -37,8 +38,19 @@ void mtos(int mapx, int mapy, int *scrx, int *scry)
 
 int stom(int scrx, int scry, int *mapx, int *mapy)
 {
-	if (scrx < dotx(DOT_MTL) || scrx >= dotx(DOT_MBR) || scry < doty(DOT_MTL) || scry >= doty(DOT_MBR)) {
-		return 0;
+	int x1, y1, x2, y2;
+
+	// Get bounds from viewport widget if active, otherwise use DOT system
+	if (widget_viewport_get_bounds(&x1, &y1, &x2, &y2)) {
+		// Use viewport bounds
+		if (scrx < x1 || scrx >= x2 || scry < y1 || scry >= y2) {
+			return 0;
+		}
+	} else {
+		// Fall back to DOT system bounds
+		if (scrx < dotx(DOT_MTL) || scrx >= dotx(DOT_MBR) || scry < doty(DOT_MTL) || scry >= doty(DOT_MBR)) {
+			return 0;
+		}
 	}
 
 	scrx -= stom_off_x;

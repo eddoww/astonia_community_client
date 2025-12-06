@@ -82,6 +82,7 @@ static void on_textinput_submit(Widget *input, const char *text, void *param)
 /**
  * Initialize the widget demo
  * Creates test widgets positioned in the top-right area
+ * Note: widget_manager must already be initialized before calling this
  */
 void widget_demo_init(void)
 {
@@ -89,9 +90,8 @@ void widget_demo_init(void)
 		return;
 	}
 
-	// Initialize widget manager (800x600 is the default screen size for Astonia)
-	if (widget_manager_init(800, 600) != 0) {
-		// Can't use xlog here as it's not accessible, just return
+	// Verify widget manager is initialized
+	if (!widget_manager_get()) {
 		return;
 	}
 
@@ -108,6 +108,7 @@ void widget_demo_init(void)
 	widget_set_window_chrome(
 	    demo_container, 1, 1, 1, 1, 1); // has_titlebar, draggable, resizable, minimizable, closable
 	widget_set_title(demo_container, "Widget Demo");
+	widget_set_name(demo_container, "widget_demo"); // Name for state persistence
 
 	// Add container to root widget so it gets rendered
 	Widget *root = widget_manager_get_root();
@@ -187,6 +188,7 @@ void widget_demo_init(void)
 
 /**
  * Cleanup widget demo
+ * Note: widget_manager cleanup is handled externally, this only destroys demo widgets
  */
 void widget_demo_cleanup(void)
 {
@@ -202,8 +204,6 @@ void widget_demo_cleanup(void)
 		widget_destroy(demo_tooltip);
 		demo_tooltip = NULL;
 	}
-
-	widget_manager_cleanup();
 
 	demo_initialized = 0;
 	demo_enabled = 0;
@@ -239,15 +239,13 @@ void widget_demo_toggle(void)
 
 /**
  * Update widget demo (call every frame)
+ * Note: widget_manager_update() is called externally, this only handles demo-specific logic
  */
 void widget_demo_update(int dt)
 {
 	if (!demo_initialized || !demo_enabled) {
 		return;
 	}
-
-	// Update widget manager (handles animations, tooltips, etc.)
-	widget_manager_update(dt);
 
 	// Show tooltip when hovering over button3 (use state tracking to avoid resetting timer)
 	if (demo_button3 && demo_tooltip && demo_enabled) {
@@ -276,15 +274,12 @@ void widget_demo_update(int dt)
 
 /**
  * Render widget demo (call in display())
+ * Note: widget_manager_render() is called externally, this function is kept for compatibility
  */
 void widget_demo_render(void)
 {
-	if (!demo_initialized || !demo_enabled) {
-		return;
-	}
-
-	// Render all widgets through the widget manager
-	widget_manager_render();
+	// Rendering is handled by widget_manager_render() called from gui_display.c
+	// This function is now a no-op but kept for API compatibility
 }
 
 /**

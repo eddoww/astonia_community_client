@@ -13,6 +13,8 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/widget.h"
+#include "gui/widget_manager.h"
 #include "gui/widget_demo.h"
 #include "client/client.h"
 #include "game/game.h"
@@ -27,8 +29,14 @@ void gui_sdl_keyproc(int wparam)
 		return;
 	}
 
-	// Forward key events to widget demo (if enabled, it gets first priority)
-	if (widget_demo_handle_key(wparam, 1)) {
+	// Forward key events to widget system (gets first priority)
+	// If a text input widget has focus, block all keys from reaching the game
+	Widget *focused = widget_manager_get_focus();
+	if (focused && focused->type == WIDGET_TYPE_TEXTINPUT) {
+		widget_manager_handle_key(wparam, 1);
+		return; // Block all keys when text input has focus
+	}
+	if (widget_manager_handle_key(wparam, 1)) {
 		return; // Widget handled it
 	}
 
@@ -303,17 +311,19 @@ void gui_sdl_mouseproc(int x, int y, int what, int clicks)
 	int widget_x = x / sdl_scale - render_offset_x();
 	int widget_y = y / sdl_scale - render_offset_y();
 
-	// Forward mouse events to widget demo (if enabled, it gets first priority)
-	if (what == SDL_MOUM_LDOWN && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_LEFT, 1)) {
+	// Forward mouse events to widget system (gets first priority)
+	if (what == SDL_MOUM_LDOWN &&
+	    widget_manager_handle_mouse(widget_x, widget_y, MOUSE_BUTTON_LEFT, MOUSE_ACTION_DOWN)) {
 		return; // Widget handled it
 	}
-	if (what == SDL_MOUM_LUP && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_LEFT, 0)) {
+	if (what == SDL_MOUM_LUP && widget_manager_handle_mouse(widget_x, widget_y, MOUSE_BUTTON_LEFT, MOUSE_ACTION_UP)) {
 		return; // Widget handled it
 	}
-	if (what == SDL_MOUM_RDOWN && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_RIGHT, 1)) {
+	if (what == SDL_MOUM_RDOWN &&
+	    widget_manager_handle_mouse(widget_x, widget_y, MOUSE_BUTTON_RIGHT, MOUSE_ACTION_DOWN)) {
 		return; // Widget handled it
 	}
-	if (what == SDL_MOUM_RUP && widget_demo_handle_mouse_button(widget_x, widget_y, SDL_BUTTON_RIGHT, 0)) {
+	if (what == SDL_MOUM_RUP && widget_manager_handle_mouse(widget_x, widget_y, MOUSE_BUTTON_RIGHT, MOUSE_ACTION_UP)) {
 		return; // Widget handled it
 	}
 
@@ -321,7 +331,7 @@ void gui_sdl_mouseproc(int x, int y, int what, int clicks)
 	case SDL_MOUM_NONE:
 		mousex = x;
 		mousey = y;
-		widget_demo_handle_mouse_motion(widget_x, widget_y);
+		widget_manager_handle_mouse(widget_x, widget_y, 0, MOUSE_ACTION_MOVE);
 
 		if (capbut != -1) {
 			if (mousex != XRES / 2 || mousey != YRES / 2) {

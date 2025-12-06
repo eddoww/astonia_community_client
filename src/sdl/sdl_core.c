@@ -18,7 +18,8 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
-#include "gui/widget_demo.h"
+#include "gui/widget.h"
+#include "gui/widget_manager.h"
 
 // SDL window and renderer
 SDL_Window *sdlwnd = NULL;
@@ -452,6 +453,9 @@ int sdl_render(void)
 
 void sdl_exit(void)
 {
+	// Cleanup widget system
+	widget_manager_cleanup();
+
 	// Signal workers to quit and join them
 	if (sdl_multi && prethreads) {
 		SDL_AtomicSet(&pre_quit, 1);
@@ -545,18 +549,29 @@ void sdl_loop(void)
 		case SDL_KEYDOWN:
 			gui_sdl_keyproc(event.key.keysym.sym);
 			break;
-		case SDL_KEYUP:
-			// Block keyup events if widget has focus (so game doesn't process key releases)
-			if (!widget_demo_is_enabled() || !widget_demo_handle_key(event.key.keysym.sym, 0)) {
+		case SDL_KEYUP: {
+			// Block keyup events if a text input widget has focus
+			Widget *focused = widget_manager_get_focus();
+			if (focused && focused->type == WIDGET_TYPE_TEXTINPUT) {
+				widget_manager_handle_key(event.key.keysym.sym, 0);
+			} else if (!widget_manager_handle_key(event.key.keysym.sym, 0)) {
 				context_keyup(event.key.keysym.sym);
 			}
 			break;
-		case SDL_TEXTINPUT:
-			// Forward text input to widget demo first, fall back to old GUI if not handled
-			if (!widget_demo_is_enabled() || !widget_demo_handle_text_input(event.text.text)) {
+		}
+		case SDL_TEXTINPUT: {
+			// Forward text input to widget system first, fall back to old GUI if not handled
+			Widget *focused = widget_manager_get_focus();
+			if (focused && focused->type == WIDGET_TYPE_TEXTINPUT) {
+				// Send each character to the widget manager
+				for (int i = 0; event.text.text[i]; i++) {
+					widget_manager_handle_text((int)(unsigned char)event.text.text[i]);
+				}
+			} else {
 				cmd_proc(event.text.text[0]);
 			}
 			break;
+		}
 		case SDL_MOUSEMOTION:
 			gui_sdl_mouseproc(event.motion.x, event.motion.y, SDL_MOUM_NONE, 0);
 			break;

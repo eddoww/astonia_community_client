@@ -12,6 +12,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/widget_manager.h"
 #include "gui/widget_demo.h"
 #include "client/client.h"
 #include "game/game.h"
@@ -223,15 +224,22 @@ void display(void)
 	display_citem();
 	context_display(mousex, mousey);
 
-	// Widget demo (F11 to toggle)
-	static int widget_demo_initialized = 0;
-	if (!widget_demo_initialized) {
-		widget_demo_init();
-		widget_demo_initialized = 1;
+	// Widget system initialization and rendering
+	static int widget_system_initialized = 0;
+	if (!widget_system_initialized) {
+		// Initialize the widget manager first (800x600 is the game's internal resolution)
+		if (widget_manager_init(800, 600)) {
+			// Then initialize the demo widgets (optional, can be toggled with Ctrl/Shift+F11)
+			widget_demo_init();
+			// Load saved widget positions and state
+			widget_manager_load_state();
+		}
+		widget_system_initialized = 1;
 	}
 	int duration_ms = SDL_GetTicks64() - start;
-	widget_demo_update(duration_ms); // Use frame duration as delta time
-	widget_demo_render();
+	widget_manager_update(duration_ms); // Update all widgets
+	widget_demo_update(duration_ms); // Update demo-specific logic (tooltip handling)
+	widget_manager_render(); // Render all widgets
 
 	display_helpandquest(); // display last because it is on top
 

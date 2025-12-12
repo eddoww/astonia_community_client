@@ -67,7 +67,7 @@ static SDL_Thread **prethreads = NULL;
 
 // Image loading state machine (shared with sdl_image.c)
 int *sdli_state = NULL;
-#ifdef DEVELOPER
+
 void sdl_dump(FILE *fp)
 {
 	fprintf(fp, "SDL datadump:\n");
@@ -86,14 +86,9 @@ void sdl_dump(FILE *fp)
 	fprintf(fp, "texc_miss: %lld\n", texc_miss);
 	fprintf(fp, "texc_pre: %lld\n", texc_pre);
 
-	// sdlm_sprite, sdlm_scale, sdlm_pixel are static in sdl_image.c
-	// fprintf(fp, "sdlm_sprite: %d\n", sdlm_sprite);
-	// fprintf(fp, "sdlm_scale: %d\n", sdlm_scale);
-	// fprintf(fp, "sdlm_pixel: %p\n", sdlm_pixel);
-
 	fprintf(fp, "\n");
 }
-#endif
+
 #define GO_DEFAULTS (GO_CONTEXT | GO_ACTION | GO_BIGBAR | GO_PREDICT | GO_SHORT | GO_MAPSAVE)
 
 // #define GO_DEFAULTS (GO_CONTEXT|GO_ACTION|GO_BIGBAR|GO_PREDICT|GO_SHORT|GO_MAPSAVE|GO_NOMAP)

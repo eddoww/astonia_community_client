@@ -67,7 +67,7 @@ static SDL_Thread **prethreads = NULL;
 
 // Image loading state machine (shared with sdl_image.c)
 int *sdli_state = NULL;
-
+#ifdef DEVELOPER
 void sdl_dump(FILE *fp)
 {
 	fprintf(fp, "SDL datadump:\n");
@@ -93,7 +93,7 @@ void sdl_dump(FILE *fp)
 
 	fprintf(fp, "\n");
 }
-
+#endif
 #define GO_DEFAULTS (GO_CONTEXT | GO_ACTION | GO_BIGBAR | GO_PREDICT | GO_SHORT | GO_MAPSAVE)
 
 // #define GO_DEFAULTS (GO_CONTEXT|GO_ACTION|GO_BIGBAR|GO_PREDICT|GO_SHORT|GO_MAPSAVE|GO_NOMAP)

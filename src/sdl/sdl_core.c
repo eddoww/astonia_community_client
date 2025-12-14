@@ -68,7 +68,8 @@ static SDL_atomic_t pre_quit;
 static SDL_Thread **prethreads = NULL;
 
 // Image loading state machine (shared with sdl_image.c)
-int *sdli_state = NULL;
+static int sdli_state_storage[MAXSPRITE];
+int *sdli_state = sdli_state_storage;
 
 void sdl_dump(FILE *fp)
 {
@@ -102,7 +103,6 @@ void sdl_dump(FILE *fp)
 
 int sdl_init(int width, int height, char *title)
 {
-	size_t len;
 	int i;
 	SDL_DisplayMode DM;
 
@@ -142,12 +142,6 @@ int sdl_init(int width, int height, char *title)
 		return 0;
 	}
 
-	len = sizeof(struct sdl_image) * MAXSPRITE;
-	sdli = xmalloc(len, MEM_SDL_BASE);
-	if (!sdli) {
-		return fail("Out of memory in sdl_init");
-	}
-
 	sdlt_cache = xmalloc((size_t)MAX_TEXHASH * sizeof(int), MEM_SDL_BASE);
 	if (!sdlt_cache) {
 		return fail("Out of memory in sdl_init");
@@ -160,15 +154,6 @@ int sdl_init(int width, int height, char *title)
 	sdlt = xmalloc((size_t)MAX_TEXCACHE * sizeof(struct sdl_texture), MEM_SDL_BASE);
 	if (!sdlt) {
 		return fail("Out of memory in sdl_init");
-	}
-
-	// Initialize sdli_state array for image loading state machine
-	sdli_state = xmalloc(MAXSPRITE * sizeof(int), MEM_SDL_BASE);
-	if (!sdli_state) {
-		return fail("Out of memory in sdl_init");
-	}
-	for (i = 0; i < MAXSPRITE; i++) {
-		sdli_state[i] = 0; // IMG_UNLOADED
 	}
 
 	for (i = 0; i < MAX_TEXCACHE; i++) {
@@ -536,11 +521,6 @@ void sdl_exit(void)
 	if (premutex) {
 		SDL_DestroyMutex(premutex);
 		premutex = NULL;
-	}
-
-	if (sdli_state) {
-		xfree(sdli_state);
-		sdli_state = NULL;
 	}
 
 	if (game_options & GO_SOUND) {

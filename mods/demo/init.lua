@@ -15,6 +15,12 @@
     API Reference:
     ===============
 
+    Callback Registration:
+      register(event_name, callback_function)
+      Events: on_init, on_exit, on_gamestart, on_tick, on_frame,
+              on_mouse_move, on_mouse_click, on_keydown, on_keyup,
+              on_client_cmd, on_areachange, on_before_reload, on_after_reload
+
     Logging:
       client.note(msg)      - Log to console
       client.warn(msg)      - Log warning
@@ -607,50 +613,50 @@ local function handle_demo_commands(cmd)
 end
 
 -- ============================================================================
--- LIFECYCLE CALLBACKS
+-- LIFECYCLE CALLBACKS (using register)
 -- ============================================================================
 
-function on_init()
+register("on_init", function()
     client.note("Demo Mod v" .. Demo.version .. " initializing...")
     client.note(string.format("Map size: %dx%d, DIST=%d", C.MAPDX, C.MAPDY, C.DIST))
     client.note(string.format("Max chars: %d, Inventory: %d slots", C.MAXCHARS, C.INVENTORYSIZE))
     client.note(string.format("Game runs at %d ticks/second", C.TICKS))
     Demo.initialized = true
     client.note("Demo Mod initialized! Type #demo for help.")
-end
+end)
 
-function on_exit()
+register("on_exit", function()
     client.note("Demo Mod shutting down...")
     client.note(string.format("Session stats: %d ticks, %d frames, %d clicks",
         Demo.tick_count, Demo.frame_count, Demo.mouse_clicks))
-end
+end)
 
-function on_gamestart()
+register("on_gamestart", function()
     Demo.game_started = true
     local username = client.get_username()
     client.note("Game started! Welcome, " .. username)
     client.addline("Demo Mod active. Type #demo for commands.")
-end
+end)
 
-function on_areachange()
+register("on_areachange", function()
     local ox, oy = client.get_origin()
     client.note(string.format("Area changed! New origin: %d, %d", ox, oy))
-end
+end)
 
-function on_before_reload()
+register("on_before_reload", function()
     client.note("Demo Mod: Preparing for hot-reload...")
-end
+end)
 
-function on_after_reload()
+register("on_after_reload", function()
     client.note("Demo Mod: Hot-reload complete!")
     Demo.initialized = true
-end
+end)
 
 -- ============================================================================
 -- UPDATE CALLBACKS
 -- ============================================================================
 
-function on_tick()
+register("on_tick", function()
     Demo.tick_count = Demo.tick_count + 1
 
     -- Calculate TPS every second
@@ -664,9 +670,9 @@ function on_tick()
         end
         Demo.last_tick_time = current_time
     end
-end
+end)
 
-function on_frame()
+register("on_frame", function()
     Demo.frame_count = Demo.frame_count + 1
 
     -- Render enabled overlays
@@ -675,27 +681,27 @@ function on_frame()
     if Demo.show_mouse_tracker then render_mouse_tracker() end
     if Demo.show_map_info then render_map_info() end
     if Demo.show_nearby_players then render_nearby_players() end
-end
+end)
 
 -- ============================================================================
 -- INPUT CALLBACKS
 -- ============================================================================
 
-function on_mouse_move(x, y)
+register("on_mouse_move", function(x, y)
     Demo.last_mouse_x = x
     Demo.last_mouse_y = y
     return 0  -- Don't consume
-end
+end)
 
-function on_mouse_click(x, y, button)
+register("on_mouse_click", function(x, y, button)
     Demo.mouse_clicks = Demo.mouse_clicks + 1
     if Demo.show_mouse_tracker then
         client.note(string.format("Click at (%d, %d) button=%d", x, y, button))
     end
     return 0  -- Don't consume (1=consume, -1=consume but allow others)
-end
+end)
 
-function on_keydown(key)
+register("on_keydown", function(key)
     Demo.keys_pressed[key] = true
     Demo.last_key = key
 
@@ -714,16 +720,16 @@ function on_keydown(key)
     end
 
     return 0  -- Don't consume
-end
+end)
 
-function on_keyup(key)
+register("on_keyup", function(key)
     Demo.keys_pressed[key] = false
     return 0
-end
+end)
 
-function on_client_cmd(cmd)
+register("on_client_cmd", function(cmd)
     return handle_demo_commands(cmd)
-end
+end)
 
 -- ============================================================================
 -- EXPORT

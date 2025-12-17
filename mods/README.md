@@ -18,30 +18,56 @@ mods/
 
 1. Create a folder for your mod: `mods/my_mod/`
 2. Create `init.lua` in your mod folder
-3. Implement any callbacks you need
+3. Register callbacks using `register("event_name", function() ... end)`
 4. Start the game - your mod will be loaded automatically
+
+## Callback Registration
+
+Use the `register()` function to add callbacks. Multiple mods can register callbacks
+for the same event - all registered callbacks will be called.
+
+```lua
+-- Register an initialization callback
+register("on_init", function()
+    client.note("My mod initialized!")
+end)
+
+-- Register a tick callback
+register("on_tick", function()
+    -- Called every game tick
+end)
+
+-- Register a command handler
+register("on_client_cmd", function(cmd)
+    if cmd == "#mycommand" then
+        client.addline("Command handled!")
+        return 1  -- Event consumed
+    end
+    return 0  -- Event not handled
+end)
+```
 
 ## Hot Reload
 
 Type `#lua_reload` in the chat to reload all mods without restarting the client.
 
-## Available Callbacks
+## Available Events
 
-| Callback | Description |
-|----------|-------------|
-| `on_init()` | Called when scripts are loaded |
-| `on_exit()` | Called when client shuts down |
-| `on_gamestart()` | Called when connected to server |
-| `on_tick()` | Called every game tick (24/sec) |
-| `on_frame()` | Called every display frame |
-| `on_mouse_move(x, y)` | Called on mouse movement |
-| `on_mouse_click(x, y, button)` | Return 1 to consume event |
-| `on_keydown(key)` | Return 1 to consume event |
-| `on_keyup(key)` | Return 1 to consume event |
-| `on_client_cmd(cmd)` | Handle # commands, return 1 if handled |
-| `on_areachange()` | Called when area changes |
-| `on_before_reload()` | Called before hot-reload |
-| `on_after_reload()` | Called after hot-reload |
+| Event | Description |
+|-------|-------------|
+| `on_init` | Called when scripts are loaded |
+| `on_exit` | Called when client shuts down |
+| `on_gamestart` | Called when connected to server |
+| `on_tick` | Called every game tick (24/sec) |
+| `on_frame` | Called every display frame |
+| `on_mouse_move` | Called on mouse movement (x, y) |
+| `on_mouse_click` | Return 1 to consume event (x, y, button) |
+| `on_keydown` | Return 1 to consume event (key) |
+| `on_keyup` | Return 1 to consume event (key) |
+| `on_client_cmd` | Handle # commands, return 1 if handled (cmd) |
+| `on_areachange` | Called when area changes |
+| `on_before_reload` | Called before hot-reload |
+| `on_after_reload` | Called after hot-reload |
 
 ## Client API
 

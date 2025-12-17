@@ -36,6 +36,9 @@
 #include "client/client.h"
 #include "lib/cjson/cJSON.h"
 #include "modder/modder.h"
+#ifdef USE_LUAJIT
+#include "scripting/lua_interface.h"
+#endif
 
 // Forward declarations
 void xlog(FILE *logfp, char *format, ...) __attribute__((format(printf, 2, 3)));
@@ -858,6 +861,9 @@ int main(int argc, char *argv[])
 	amod_init();
 	sprite_config_init();
 	amod_sprite_config();
+#ifdef USE_LUAJIT
+	lua_scripting_init();
+#endif
 #ifdef ENABLE_SHAREDMEM
 	sharedmem_init();
 #endif
@@ -963,6 +969,9 @@ int main(int argc, char *argv[])
 
 #ifdef ENABLE_SHAREDMEM
 	sharedmem_exit();
+#endif
+#ifdef USE_LUAJIT
+	lua_scripting_exit();
 #endif
 	amod_exit();
 	main_exit();

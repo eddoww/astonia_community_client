@@ -262,7 +262,19 @@ local function render_mouse_tracker()
     -- Get mouse position (demonstrates get_mouse returning 2 values)
     local mx, my = client.get_mouse()
 
-    -- Crosshair using render_line
+    -- Only draw if mouse is in a safe area (avoid edge issues)
+    if mx < 20 or my < 20 then
+        -- Just show info panel in a fixed position when mouse is near edges
+        local panel_x = 100
+        local panel_y = 100
+        draw_panel(panel_x, panel_y, 120, 50, nil)
+        client.render_text(panel_x + 4, panel_y + 4, colors.text, 0, string.format("Mouse: %d, %d", mx, my))
+        client.render_text(panel_x + 4, panel_y + 16, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
+        client.render_text(panel_x + 4, panel_y + 28, colors.text, 0, string.format("Last key: %d", Demo.last_key))
+        return
+    end
+
+    -- Crosshair using render_line (safe since we checked bounds above)
     local size = 10
     client.render_line(mx - size, my, mx + size, my, colors.green)
     client.render_line(mx, my - size, mx, my + size, colors.green)
@@ -271,7 +283,10 @@ local function render_mouse_tracker()
     for i = -2, 2 do
         for j = -2, 2 do
             if math.abs(i) + math.abs(j) == 2 then
-                client.render_pixel(mx + i * 5, my + j * 5, custom_colors.cyan)
+                local px, py = mx + i * 5, my + j * 5
+                if px > 0 and py > 0 then
+                    client.render_pixel(px, py, custom_colors.cyan)
+                end
             end
         end
     end

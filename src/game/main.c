@@ -26,6 +26,9 @@
 #include "gui/gui.h"
 #include "client/client.h"
 #include "modder/modder.h"
+#ifdef USE_LUAJIT
+#include "scripting/lua_interface.h"
+#endif
 
 // Forward declarations
 void xlog(FILE *logfp, char *format, ...) __attribute__((format(printf, 2, 3)));
@@ -559,6 +562,9 @@ int main(int argc, char *argv[])
 #endif
 
 	amod_init();
+#ifdef USE_LUAJIT
+	lua_scripting_init();
+#endif
 #ifdef ENABLE_SHAREDMEM
 	sharedmem_init();
 #endif
@@ -613,6 +619,9 @@ int main(int argc, char *argv[])
 
 #ifdef ENABLE_SHAREDMEM
 	sharedmem_exit();
+#endif
+#ifdef USE_LUAJIT
+	lua_scripting_exit();
 #endif
 	amod_exit();
 	main_exit();

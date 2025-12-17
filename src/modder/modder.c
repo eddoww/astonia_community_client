@@ -19,6 +19,9 @@
 #include "client/client.h"
 #include "gui/gui.h"
 #include "sdl/sdl.h"
+#ifdef USE_LUAJIT
+#include "scripting/lua_interface.h"
+#endif
 
 struct mod {
 	void (*_amod_init)(void);
@@ -265,6 +268,9 @@ void amod_gamestart(void)
 			mod[i]._amod_gamestart();
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_gamestart();
+#endif
 }
 
 void amod_frame(void)
@@ -274,6 +280,9 @@ void amod_frame(void)
 			mod[i]._amod_frame();
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_frame();
+#endif
 }
 
 void amod_tick(void)
@@ -283,6 +292,9 @@ void amod_tick(void)
 			mod[i]._amod_tick();
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_tick();
+#endif
 }
 
 void amod_mouse_move(int x, int y)
@@ -292,6 +304,9 @@ void amod_mouse_move(int x, int y)
 			mod[i]._amod_mouse_move(x, y);
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_mouse_move(x, y);
+#endif
 }
 
 int amod_mouse_click(int x, int y, int what)
@@ -306,6 +321,14 @@ int amod_mouse_click(int x, int y, int what)
 			}
 		}
 	}
+#ifdef USE_LUAJIT
+	tmp = lua_scripting_mouse_click(x, y, what);
+	if (tmp > 0) {
+		return 1;
+	} else if (tmp < 0) {
+		ret = 1;
+	}
+#endif
 	return ret;
 }
 
@@ -325,6 +348,9 @@ void amod_areachange(void)
 			mod[i]._amod_areachange();
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_areachange();
+#endif
 }
 
 int amod_keydown(int key)
@@ -340,6 +366,15 @@ int amod_keydown(int key)
 			}
 		}
 	}
+#ifdef USE_LUAJIT
+	tmp = lua_scripting_keydown(key);
+	if (tmp > 0) {
+		sdl_flush_textinput();
+		return 1;
+	} else if (tmp < 0) {
+		ret = 1;
+	}
+#endif
 	return ret;
 }
 
@@ -355,6 +390,14 @@ int amod_keyup(int key)
 			}
 		}
 	}
+#ifdef USE_LUAJIT
+	tmp = lua_scripting_keyup(key);
+	if (tmp > 0) {
+		return 1;
+	} else if (tmp < 0) {
+		ret = 1;
+	}
+#endif
 	return ret;
 }
 
@@ -370,6 +413,15 @@ void amod_update_hover_texts(void)
 int amod_client_cmd(const char *buf)
 {
 	int ret = 0, tmp;
+#ifdef USE_LUAJIT
+	// Check Lua commands first (allows #lua_reload etc. to work)
+	tmp = lua_scripting_client_cmd(buf);
+	if (tmp > 0) {
+		return 1;
+	} else if (tmp < 0) {
+		ret = 1;
+	}
+#endif
 	for (int i = 0; i < MAXMOD; i++) {
 		if (mod[i]._amod_client_cmd && (tmp = mod[i]._amod_client_cmd(buf))) {
 			if (tmp > 0) {

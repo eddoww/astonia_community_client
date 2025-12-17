@@ -45,12 +45,30 @@ WARNING_FLAGS ?= $(STRICT_WARNING_FLAGS) -Werror
 # Default to using mimalloc unless USE_MIMALLOC=0 is set
 USE_MIMALLOC ?= 1
 
-CFLAGS=$(OPT) $(DEBUG) $(WARNING_FLAGS) $(DEVELOPER_FLAGS) -fno-omit-frame-pointer -fvisibility=hidden $(SDL_CFLAGS) $(EXTRA_ARCH_FLAGS) -Iinclude -Isrc -DUSE_MIMALLOC=$(USE_MIMALLOC)
-CFLAGS_PIC=$(OPT) $(DEBUG) $(WARNING_FLAGS) $(DEVELOPER_FLAGS) -fPIC -fno-omit-frame-pointer -fvisibility=hidden $(SDL_CFLAGS) $(EXTRA_ARCH_FLAGS) -Iinclude -Isrc -DUSE_MIMALLOC=$(USE_MIMALLOC)
+# LuaJIT support (enabled by default, disable with USE_LUAJIT=0)
+USE_LUAJIT ?= 1
+ifeq ($(USE_LUAJIT),1)
+LUAJIT_CFLAGS=$(shell pkg-config --cflags luajit 2>/dev/null || echo "-I/usr/include/luajit-2.1")
+LUAJIT_LIBS=$(shell pkg-config --libs luajit 2>/dev/null || echo "-lluajit-5.1")
+endif
+
+CFLAGS_BASE=$(OPT) $(DEBUG) $(WARNING_FLAGS) $(DEVELOPER_FLAGS) -fno-omit-frame-pointer -fvisibility=hidden $(SDL_CFLAGS) $(EXTRA_ARCH_FLAGS) -Iinclude -Isrc -DUSE_MIMALLOC=$(USE_MIMALLOC)
+CFLAGS_PIC_BASE=$(OPT) $(DEBUG) $(WARNING_FLAGS) $(DEVELOPER_FLAGS) -fPIC -fno-omit-frame-pointer -fvisibility=hidden $(SDL_CFLAGS) $(EXTRA_ARCH_FLAGS) -Iinclude -Isrc -DUSE_MIMALLOC=$(USE_MIMALLOC)
+
+ifeq ($(USE_LUAJIT),1)
+CFLAGS=$(CFLAGS_BASE) $(LUAJIT_CFLAGS) -DUSE_LUAJIT=1
+CFLAGS_PIC=$(CFLAGS_PIC_BASE) $(LUAJIT_CFLAGS) -DUSE_LUAJIT=1
+else
+CFLAGS=$(CFLAGS_BASE)
+CFLAGS_PIC=$(CFLAGS_PIC_BASE)
+endif
 LDFLAGS=$(OPT) $(DEBUG) -rdynamic -Wl,-rpath,\$$ORIGIN
 
 SDL_LIBS=$(shell $(SDL_CONFIG) --libs)
 LIBS = -lz -lpng -lzip $(SDL_LIBS) -lSDL2_mixer -lm
+ifeq ($(USE_LUAJIT),1)
+LIBS += $(LUAJIT_LIBS)
+endif
 ifeq ($(USE_MIMALLOC),1)
 LIBS += -lmimalloc
 endif
@@ -70,6 +88,11 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 			src/gui/dots.o src/gui/display.o src/gui/teleport.o src/gui/color.o src/gui/cmd.o\
 			src/gui/questlog.o src/gui/context.o src/gui/hover.o src/gui/minimap.o\
 			src/game/memory_linux.o src/game/version.o
+
+# Add Lua scripting objects if enabled
+ifeq ($(USE_LUAJIT),1)
+OBJS += src/scripting/lua_core.o src/scripting/lua_api.o
+endif
 
 bin/moac:	$(OBJS) $(ASTONIA_NET_LIB)
 		mkdir -p bin
@@ -148,6 +171,15 @@ src/game/memory.o: src/game/memory.c src/game/memory.h src/astonia.h src/sdl/sdl
 
 src/game/memory_linux.o: src/game/memory_linux.c
 		$(CC) $(CFLAGS_PIC) -c -o $@ $<
+
+# Lua scripting modules (only compiled when USE_LUAJIT=1)
+ifeq ($(USE_LUAJIT),1)
+src/scripting/lua_core.o: src/scripting/lua_core.c src/astonia.h src/scripting/lua_interface.h
+		$(CC) $(CFLAGS) -c -o $@ $<
+
+src/scripting/lua_api.o: src/scripting/lua_api.c src/astonia.h src/client/client.h src/game/game.h src/gui/gui.h
+		$(CC) $(CFLAGS) -c -o $@ $<
+endif
 
 clean:
 	@echo "Cleaning build artifacts..."

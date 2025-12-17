@@ -32,12 +32,12 @@ local ExampleMod = {
 
 -- Initialize mod
 function on_init()
-    client.log("Example Mod v" .. ExampleMod.version .. " initialized!")
+    client.note("Example Mod v" .. ExampleMod.version .. " initialized!")
 end
 
 -- Called when game starts
 function on_gamestart()
-    client.log("Example Mod: Game started!")
+    client.note("Example Mod: Game started!")
 end
 
 -- Called every tick (24 times per second)
@@ -47,19 +47,19 @@ function on_tick()
     -- Example: Log every 240 ticks (10 seconds)
     if ExampleMod.tick_count % 240 == 0 then
         -- Uncomment to see periodic messages:
-        -- client.log("Example Mod: " .. ExampleMod.tick_count .. " ticks elapsed")
+        -- client.note("Example Mod: " .. ExampleMod.tick_count .. " ticks elapsed")
     end
 end
 
 -- Handle custom commands (starting with #)
 function on_client_cmd(cmd)
     if cmd == "#example" then
-        client.chat("Example Mod is running! Tick count: " .. ExampleMod.tick_count)
+        client.addline("Example Mod is running! Tick count: " .. ExampleMod.tick_count)
         return 1  -- Command handled
     elseif cmd == "#example_help" then
-        client.chat("Example Mod Commands:")
-        client.chat("  #example - Show mod status")
-        client.chat("  #example_help - Show this help")
+        client.addline("Example Mod Commands:")
+        client.addline("  #example - Show mod status")
+        client.addline("  #example_help - Show this help")
         return 1
     end
     return 0  -- Command not handled
@@ -67,12 +67,12 @@ end
 
 -- Log when area changes
 function on_areachange()
-    client.log("Example Mod: Area changed!")
+    client.note("Example Mod: Area changed!")
 end
 
 -- Clean up on exit
 function on_exit()
-    client.log("Example Mod shutting down...")
+    client.note("Example Mod shutting down...")
 end
 
 -- Store mod reference globally for other scripts to access

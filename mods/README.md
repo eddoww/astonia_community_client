@@ -48,26 +48,56 @@ Type `#lua_reload` in the chat to reload all mods without restarting the client.
 Access the client API through the `client` global table:
 
 ### Logging
-- `client.log(message)` - Log to console
-- `client.chat(message)` - Send chat message
+- `client.note(message)` - Log to console
+- `client.warn(message)` - Log warning to console
+- `client.addline(message)` - Add message to chat window
 
 ### Game Data
-- `client.get_player_hp()` - Get player health
-- `client.get_player_mana()` - Get player mana
-- `client.get_player_pos()` - Returns x, y position
-- `client.get_player_name()` - Get player name
+- `client.get_hp()` - Get player health
+- `client.get_mana()` - Get player mana
+- `client.get_rage()` - Get rage value
+- `client.get_endurance()` - Get endurance value
+- `client.get_lifeshield()` - Get lifeshield value
+- `client.get_experience()` - Get experience points
+- `client.get_gold()` - Get gold amount
 - `client.get_tick()` - Get current tick number
-- `client.get_map_at(x, y)` - Get map tile info at position
+- `client.get_username()` - Get player name
+- `client.get_origin()` - Returns x, y map origin
+- `client.get_mouse()` - Returns x, y mouse position
+- `client.get_value(type, idx)` - Get character stat (type: 0=base, 1=current)
+- `client.get_item(slot)` - Get inventory item sprite
+- `client.get_item_flags(slot)` - Get inventory item flags
+- `client.get_map_tile(x, y)` - Get map tile info (returns table)
+- `client.get_player(idx)` - Get player info (returns table)
 
 ### Rendering
-- `client.draw_text(x, y, text, color)` - Draw text on screen
-- `client.draw_rect(x, y, w, h, color)` - Draw rectangle
-- `client.draw_sprite(x, y, sprite, light, align)` - Draw sprite
+- `client.render_text(x, y, color, flags, text)` - Draw text, returns width
+- `client.render_rect(sx, sy, ex, ey, color)` - Draw filled rectangle
+- `client.render_line(fx, fy, tx, ty, color)` - Draw line
+- `client.render_pixel(x, y, color)` - Draw single pixel
+- `client.render_sprite(sprite, x, y, light, align)` - Draw sprite
+- `client.render_text_length(flags, text)` - Get text width
+- `client.rgb(r, g, b)` - Create color (0-31 per channel)
+
+### GUI Helpers
+- `client.dotx(idx)`, `client.doty(idx)` - Get screen anchor positions
+- `client.butx(idx)`, `client.buty(idx)` - Get button positions
+
+### Utilities
+- `client.exp2level(exp)` - Convert experience to level
+- `client.level2exp(level)` - Convert level to experience needed
+- `client.cmd_text(text)` - Send text as if player typed it
 
 ### Colors
 The `colors` table provides predefined colors:
-- `colors.white`, `colors.black`, `colors.red`, `colors.green`, `colors.blue`
-- `colors.yellow`, `colors.cyan`, `colors.magenta`, `colors.gray`
+- `colors.white`, `colors.red`, `colors.green`, `colors.blue`
+- `colors.text`, `colors.health`, `colors.mana`
+
+### Constants
+The `C` table provides game constants:
+- `C.V_HP`, `C.V_MANA`, `C.V_STR`, `C.V_AGI`, `C.V_INT`, `C.V_WIS`
+- `C.DOT_TL`, `C.DOT_BR`, `C.DOT_INV`, `C.DOT_SKL`, etc.
+- `C.MAPDX`, `C.MAPDY`, `C.DIST`, `C.MAXCHARS`, `C.INVENTORYSIZE`, `C.TICKS`
 
 ## Sandbox
 

@@ -430,6 +430,20 @@ void lua_scripting_exit(void)
 	note("Lua scripting shutdown complete");
 }
 
+// Clear all known callback globals before reload
+static void clear_callback_globals(void)
+{
+	const char *callbacks[] = {
+	    "on_init",       "on_exit",        "on_gamestart",   "on_tick",         "on_frame",
+	    "on_mouse_move", "on_mouse_click", "on_keydown",     "on_keyup",        "on_client_cmd",
+	    "on_areachange", "on_before_reload", "on_after_reload", NULL};
+
+	for (int i = 0; callbacks[i] != NULL; i++) {
+		lua_pushnil(L);
+		lua_setglobal(L, callbacks[i]);
+	}
+}
+
 bool lua_scripting_reload(void)
 {
 	if (!L) {
@@ -441,16 +455,19 @@ bool lua_scripting_reload(void)
 	// Call pre-reload handler
 	call_lua_handler("on_before_reload");
 
-	// We need to preserve the Lua state but reload scripts
-	// First, clear any global mod state
+	// Clear all mod state and callbacks
 	lua_pushnil(L);
 	lua_setglobal(L, "MOD");
+	clear_callback_globals();
 
 	// Re-register API (in case it was modified)
 	lua_api_register(L);
 
 	// Reload all mods
 	load_all_mods();
+
+	// Call initialization handler (scripts were freshly loaded)
+	call_lua_handler("on_init");
 
 	// Call post-reload handler
 	call_lua_handler("on_after_reload");
@@ -496,8 +513,14 @@ int lua_scripting_keyup(int key)
 
 int lua_scripting_client_cmd(const char *buf)
 {
-	// Special command to reload scripts
-	if (strcmp(buf, "#lua_reload") == 0) {
+	if (!L) {
+		// Lua not initialized
+		return 0;
+	}
+
+	// Special command to reload scripts (allow trailing whitespace)
+	if (strncmp(buf, "#lua_reload", 11) == 0 &&
+	    (buf[11] == '\0' || buf[11] == ' ' || buf[11] == '\t')) {
 		lua_scripting_reload();
 		return 1;
 	}

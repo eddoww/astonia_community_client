@@ -290,95 +290,211 @@ static int load_all_mods(void)
 	return total_scripts;
 }
 
-// Call a Lua event handler function if it exists
+// Call all registered callbacks for an event (no arguments, no return)
 static int call_lua_handler(const char *name)
 {
 	if (!L) {
 		return 0;
 	}
 
-	lua_getglobal(L, name);
-	if (!lua_isfunction(L, -1)) {
+	// Get _callbacks table
+	lua_getglobal(L, "_callbacks");
+	if (!lua_istable(L, -1)) {
 		lua_pop(L, 1);
 		return 0;
 	}
 
-	if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
-		const char *error = lua_tostring(L, -1);
-		warn("Lua error in %s: %s", name, error ? error : "unknown");
-		lua_pop(L, 1);
+	// Get the callback array for this event
+	lua_getfield(L, -1, name);
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 2); // pop nil and _callbacks
 		return 0;
 	}
 
-	return 1;
+	// Iterate through all registered callbacks
+	int len = (int)lua_objlen(L, -1);
+	int called = 0;
+	for (int i = 1; i <= len; i++) {
+		lua_rawgeti(L, -1, i);
+		if (lua_isfunction(L, -1)) {
+			if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+				const char *error = lua_tostring(L, -1);
+				warn("Lua error in %s callback %d: %s", name, i, error ? error : "unknown");
+				lua_pop(L, 1);
+			} else {
+				called++;
+			}
+		} else {
+			lua_pop(L, 1);
+		}
+	}
+
+	lua_pop(L, 2); // pop callback array and _callbacks
+	return called;
 }
 
-// Call a Lua event handler with integer arguments, returning an integer result
+// Call all registered callbacks with integer arguments, returning combined result
+// If any callback returns non-zero, that value is returned (first non-zero wins)
 static int call_lua_handler_int(const char *name, int nargs, ...)
 {
 	if (!L) {
 		return 0;
 	}
 
-	lua_getglobal(L, name);
-	if (!lua_isfunction(L, -1)) {
-		lua_pop(L, 1);
-		return 0;
-	}
-
-	// Push arguments
+	// Collect arguments first (va_list can only be traversed once)
+	int arg_values[8]; // Max 8 args should be enough
 	va_list args;
 	va_start(args, nargs);
-	for (int i = 0; i < nargs; i++) {
-		lua_pushinteger(L, va_arg(args, int));
+	for (int i = 0; i < nargs && i < 8; i++) {
+		arg_values[i] = va_arg(args, int);
 	}
 	va_end(args);
 
-	if (lua_pcall(L, nargs, 1, 0) != LUA_OK) {
-		const char *error = lua_tostring(L, -1);
-		warn("Lua error in %s: %s", name, error ? error : "unknown");
+	// Get _callbacks table
+	lua_getglobal(L, "_callbacks");
+	if (!lua_istable(L, -1)) {
 		lua_pop(L, 1);
 		return 0;
 	}
 
-	int result = 0;
-	if (lua_isnumber(L, -1)) {
-		result = (int)lua_tointeger(L, -1);
+	// Get the callback array for this event
+	lua_getfield(L, -1, name);
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 2);
+		return 0;
 	}
-	lua_pop(L, 1);
 
+	// Iterate through all registered callbacks
+	int len = (int)lua_objlen(L, -1);
+	int result = 0;
+	for (int i = 1; i <= len; i++) {
+		lua_rawgeti(L, -1, i);
+		if (lua_isfunction(L, -1)) {
+			// Push arguments
+			for (int j = 0; j < nargs && j < 8; j++) {
+				lua_pushinteger(L, arg_values[j]);
+			}
+			if (lua_pcall(L, nargs, 1, 0) != LUA_OK) {
+				const char *error = lua_tostring(L, -1);
+				warn("Lua error in %s callback %d: %s", name, i, error ? error : "unknown");
+				lua_pop(L, 1);
+			} else {
+				if (lua_isnumber(L, -1)) {
+					int r = (int)lua_tointeger(L, -1);
+					if (r != 0 && result == 0) {
+						result = r; // First non-zero result wins
+					}
+				}
+				lua_pop(L, 1);
+			}
+		} else {
+			lua_pop(L, 1);
+		}
+	}
+
+	lua_pop(L, 2); // pop callback array and _callbacks
 	return result;
 }
 
-// Call a Lua event handler with string argument, returning an integer result
+// Call all registered callbacks with string argument, returning combined result
 static int call_lua_handler_str(const char *name, const char *str_arg)
 {
 	if (!L) {
 		return 0;
 	}
 
-	lua_getglobal(L, name);
-	if (!lua_isfunction(L, -1)) {
+	// Get _callbacks table
+	lua_getglobal(L, "_callbacks");
+	if (!lua_istable(L, -1)) {
 		lua_pop(L, 1);
 		return 0;
 	}
 
-	lua_pushstring(L, str_arg);
-
-	if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
-		const char *error = lua_tostring(L, -1);
-		warn("Lua error in %s: %s", name, error ? error : "unknown");
-		lua_pop(L, 1);
+	// Get the callback array for this event
+	lua_getfield(L, -1, name);
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 2);
 		return 0;
 	}
 
+	// Iterate through all registered callbacks
+	int len = (int)lua_objlen(L, -1);
 	int result = 0;
-	if (lua_isnumber(L, -1)) {
-		result = (int)lua_tointeger(L, -1);
+	for (int i = 1; i <= len; i++) {
+		lua_rawgeti(L, -1, i);
+		if (lua_isfunction(L, -1)) {
+			lua_pushstring(L, str_arg);
+			if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+				const char *error = lua_tostring(L, -1);
+				warn("Lua error in %s callback %d: %s", name, i, error ? error : "unknown");
+				lua_pop(L, 1);
+			} else {
+				if (lua_isnumber(L, -1)) {
+					int r = (int)lua_tointeger(L, -1);
+					if (r != 0 && result == 0) {
+						result = r;
+					}
+				}
+				lua_pop(L, 1);
+			}
+		} else {
+			lua_pop(L, 1);
+		}
 	}
-	lua_pop(L, 1);
 
+	lua_pop(L, 2); // pop callback array and _callbacks
 	return result;
+}
+
+// List of callback event names
+static const char *callback_names[] = {"on_init",         "on_exit",       "on_gamestart",     "on_tick",
+                                       "on_frame",        "on_mouse_move", "on_mouse_click",   "on_keydown",
+                                       "on_keyup",        "on_client_cmd", "on_areachange",    "on_before_reload",
+                                       "on_after_reload", NULL};
+
+// Set up the callback registration system in Lua
+static void setup_callback_system(void)
+{
+	// Create _callbacks table with empty arrays for each event type
+	lua_newtable(L);
+	for (int i = 0; callback_names[i] != NULL; i++) {
+		lua_newtable(L);
+		lua_setfield(L, -2, callback_names[i]);
+	}
+	lua_setglobal(L, "_callbacks");
+
+	// Create the register() function in Lua
+	const char *register_func =
+	    "function register(event_name, callback)\n"
+	    "    if type(callback) ~= 'function' then\n"
+	    "        client.warn('register: callback must be a function')\n"
+	    "        return false\n"
+	    "    end\n"
+	    "    if not _callbacks[event_name] then\n"
+	    "        client.warn('register: unknown event: ' .. tostring(event_name))\n"
+	    "        return false\n"
+	    "    end\n"
+	    "    table.insert(_callbacks[event_name], callback)\n"
+	    "    return true\n"
+	    "end\n";
+
+	if (luaL_dostring(L, register_func) != LUA_OK) {
+		const char *error = lua_tostring(L, -1);
+		warn("Failed to create register function: %s", error ? error : "unknown");
+		lua_pop(L, 1);
+	}
+}
+
+// Clear all registered callbacks (for reload)
+static void clear_callbacks(void)
+{
+	// Reset _callbacks table with empty arrays
+	lua_newtable(L);
+	for (int i = 0; callback_names[i] != NULL; i++) {
+		lua_newtable(L);
+		lua_setfield(L, -2, callback_names[i]);
+	}
+	lua_setglobal(L, "_callbacks");
 }
 
 bool lua_scripting_init(void)
@@ -400,6 +516,9 @@ bool lua_scripting_init(void)
 
 	// Register client API functions
 	lua_api_register(L);
+
+	// Set up callback registration system
+	setup_callback_system();
 
 	// Load all mods
 	load_all_mods();
@@ -430,20 +549,6 @@ void lua_scripting_exit(void)
 	note("Lua scripting shutdown complete");
 }
 
-// Clear all known callback globals before reload
-static void clear_callback_globals(void)
-{
-	const char *callbacks[] = {
-	    "on_init",       "on_exit",        "on_gamestart",   "on_tick",         "on_frame",
-	    "on_mouse_move", "on_mouse_click", "on_keydown",     "on_keyup",        "on_client_cmd",
-	    "on_areachange", "on_before_reload", "on_after_reload", NULL};
-
-	for (int i = 0; callbacks[i] != NULL; i++) {
-		lua_pushnil(L);
-		lua_setglobal(L, callbacks[i]);
-	}
-}
-
 bool lua_scripting_reload(void)
 {
 	if (!L) {
@@ -458,7 +563,7 @@ bool lua_scripting_reload(void)
 	// Clear all mod state and callbacks
 	lua_pushnil(L);
 	lua_setglobal(L, "MOD");
-	clear_callback_globals();
+	clear_callbacks();
 
 	// Re-register API (in case it was modified)
 	lua_api_register(L);

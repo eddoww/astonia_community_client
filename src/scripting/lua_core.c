@@ -25,19 +25,24 @@ void lua_api_register(lua_State *L);
 // Global Lua state
 static lua_State *L = NULL;
 
-// Scripts directory relative to bin/
-static const char *SCRIPTS_DIR = "scripts";
+// Mods directory (at game root level, not in bin/)
+static const char *MODS_DIR = "mods";
 
 // Version string for loaded mods
 static char lua_version_str[256] = "LuaJIT Scripting";
 
 // Track loaded scripts for hot-reload
-#define MAX_SCRIPTS 64
+#define MAX_SCRIPTS 128
 static struct {
-	char path[256];
+	char path[512];
 	time_t mtime;
 } loaded_scripts[MAX_SCRIPTS];
 static int loaded_script_count = 0;
+
+// Track loaded mod names
+#define MAX_MODS 32
+static char loaded_mod_names[MAX_MODS][64];
+static int loaded_mod_count = 0;
 
 // Sandbox configuration - functions to remove from global environment
 static const char *unsafe_functions[] = {
@@ -161,35 +166,21 @@ static int load_script(const char *path)
 	return 1;
 }
 
-// Load all scripts from the scripts directory
-static int load_all_scripts(void)
+// Load all Lua files from a single mod directory
+static int load_mod_scripts(const char *mod_path, const char *mod_name)
 {
-	char scripts_path[512];
 	DIR *dir;
 	struct dirent *entry;
 	int count = 0;
 
-	// Reset loaded scripts tracking
-	loaded_script_count = 0;
-
-	// Build path to scripts directory
-	snprintf(scripts_path, sizeof(scripts_path), "%s", SCRIPTS_DIR);
-
-	dir = opendir(scripts_path);
+	dir = opendir(mod_path);
 	if (!dir) {
-		// Try with bin/ prefix
-		snprintf(scripts_path, sizeof(scripts_path), "bin/%s", SCRIPTS_DIR);
-		dir = opendir(scripts_path);
-	}
-
-	if (!dir) {
-		note("Scripts directory not found, no Lua mods will be loaded");
 		return 0;
 	}
 
 	// First, look for and load init.lua if it exists
 	char init_path[512];
-	snprintf(init_path, sizeof(init_path), "%s/init.lua", scripts_path);
+	snprintf(init_path, sizeof(init_path), "%s/init.lua", mod_path);
 	FILE *init_file = fopen(init_path, "r");
 	if (init_file) {
 		fclose(init_file);
@@ -207,7 +198,7 @@ static int load_all_scripts(void)
 			}
 
 			char full_path[512];
-			snprintf(full_path, sizeof(full_path), "%s/%s", scripts_path, entry->d_name);
+			snprintf(full_path, sizeof(full_path), "%s/%s", mod_path, entry->d_name);
 
 			if (load_script(full_path)) {
 				count++;
@@ -217,8 +208,86 @@ static int load_all_scripts(void)
 
 	closedir(dir);
 
-	note("Loaded %d Lua scripts", count);
+	// Track the mod name
+	if (count > 0 && loaded_mod_count < MAX_MODS) {
+		strncpy(loaded_mod_names[loaded_mod_count], mod_name, sizeof(loaded_mod_names[0]) - 1);
+		loaded_mod_names[loaded_mod_count][sizeof(loaded_mod_names[0]) - 1] = '\0';
+		loaded_mod_count++;
+	}
+
 	return count;
+}
+
+// Load all mods from the mods directory (mods/MODNAME/*.lua)
+static int load_all_mods(void)
+{
+	char mods_path[512];
+	DIR *dir;
+	struct dirent *entry;
+	int total_scripts = 0;
+	int mod_count = 0;
+
+	// Reset tracking
+	loaded_script_count = 0;
+	loaded_mod_count = 0;
+
+	// Try to find mods directory - first at game root level
+	snprintf(mods_path, sizeof(mods_path), "%s", MODS_DIR);
+	dir = opendir(mods_path);
+
+	if (!dir) {
+		// Try relative to bin/ (when running from bin/)
+		snprintf(mods_path, sizeof(mods_path), "../%s", MODS_DIR);
+		dir = opendir(mods_path);
+	}
+
+	if (!dir) {
+		note("Mods directory '%s' not found, no Lua mods will be loaded", MODS_DIR);
+		return 0;
+	}
+
+	// Iterate through subdirectories (each is a mod)
+	while ((entry = readdir(dir)) != NULL) {
+		// Skip . and ..
+		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+			continue;
+		}
+
+		// Check if it's a directory
+		if (entry->d_type == DT_DIR) {
+			char mod_path[512];
+			snprintf(mod_path, sizeof(mod_path), "%s/%s", mods_path, entry->d_name);
+
+			int scripts_loaded = load_mod_scripts(mod_path, entry->d_name);
+			if (scripts_loaded > 0) {
+				note("Loaded mod '%s' (%d scripts)", entry->d_name, scripts_loaded);
+				total_scripts += scripts_loaded;
+				mod_count++;
+			}
+		}
+	}
+
+	closedir(dir);
+
+	// Update version string with loaded mod names
+	if (loaded_mod_count > 0) {
+		char mod_list[200] = "";
+		for (int i = 0; i < loaded_mod_count && i < 5; i++) {
+			if (i > 0) {
+				strncat(mod_list, ", ", sizeof(mod_list) - strlen(mod_list) - 1);
+			}
+			strncat(mod_list, loaded_mod_names[i], sizeof(mod_list) - strlen(mod_list) - 1);
+		}
+		if (loaded_mod_count > 5) {
+			strncat(mod_list, "...", sizeof(mod_list) - strlen(mod_list) - 1);
+		}
+		snprintf(lua_version_str, sizeof(lua_version_str), "LuaJIT Mods: %s", mod_list);
+	} else {
+		snprintf(lua_version_str, sizeof(lua_version_str), "LuaJIT (no mods loaded)");
+	}
+
+	note("Loaded %d mods with %d total scripts", mod_count, total_scripts);
+	return total_scripts;
 }
 
 // Call a Lua event handler function if it exists
@@ -332,8 +401,8 @@ bool lua_scripting_init(void)
 	// Register client API functions
 	lua_api_register(L);
 
-	// Load all scripts
-	load_all_scripts();
+	// Load all mods
+	load_all_mods();
 
 	// Call initialization handler
 	call_lua_handler("on_init");
@@ -380,9 +449,8 @@ bool lua_scripting_reload(void)
 	// Re-register API (in case it was modified)
 	lua_api_register(L);
 
-	// Reload scripts
-	loaded_script_count = 0;
-	load_all_scripts();
+	// Reload all mods
+	load_all_mods();
 
 	// Call post-reload handler
 	call_lua_handler("on_after_reload");

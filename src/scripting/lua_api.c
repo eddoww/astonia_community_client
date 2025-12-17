@@ -80,6 +80,11 @@ static int l_render_line(lua_State *L)
 	int ty = (int)luaL_checkinteger(L, 4);
 	unsigned short color = (unsigned short)luaL_checkinteger(L, 5);
 
+	// Skip rendering if any coordinate is negative (prevents crashes)
+	if (fx < 0 || fy < 0 || tx < 0 || ty < 0) {
+		return 0;
+	}
+
 	render_line(fx, fy, tx, ty, color);
 	return 0;
 }
@@ -89,6 +94,11 @@ static int l_render_pixel(lua_State *L)
 	int x = (int)luaL_checkinteger(L, 1);
 	int y = (int)luaL_checkinteger(L, 2);
 	unsigned short color = (unsigned short)luaL_checkinteger(L, 3);
+
+	// Skip rendering if coordinates are negative (prevents crashes)
+	if (x < 0 || y < 0) {
+		return 0;
+	}
 
 	render_pixel(x, y, color);
 	return 0;

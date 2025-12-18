@@ -18,6 +18,20 @@
 
 // External declarations from gui module (not exported in headers)
 extern int mousex, mousey;
+extern int plrmn;
+extern map_index_t itmsel, chrsel, mapsel;
+
+// External declarations for skills
+extern struct skill *game_skill;
+extern char **game_skilldesc;
+
+// External declarations for quests
+extern struct quest quest[];
+extern struct questlog *game_questlog;
+extern int *game_questcount;
+
+// External declarations for mil_rank function
+int mil_rank(int exp);
 
 // Forward declaration for API registration function (called from lua_core.c)
 void lua_api_register(lua_State *L);
@@ -111,6 +125,11 @@ static int l_render_sprite(lua_State *L)
 	int y = (int)luaL_checkinteger(L, 3);
 	char light = (char)luaL_optinteger(L, 4, 0);
 	char align = (char)luaL_optinteger(L, 5, 0);
+
+	// Skip invalid sprite 0 (causes texture cache issues)
+	if (sprite == 0) {
+		return 0;
+	}
 
 	render_sprite(sprite, x, y, light, align);
 	return 0;
@@ -259,6 +278,334 @@ static int l_mtos(lua_State *L)
 	lua_pushinteger(L, scrx);
 	lua_pushinteger(L, scry);
 	return 2;
+}
+
+// Get world coordinates (origin + local map position)
+// This is what you see when right-clicking in-game
+static int l_get_world_pos(lua_State *L)
+{
+	int mapx = (int)luaL_checkinteger(L, 1);
+	int mapy = (int)luaL_checkinteger(L, 2);
+
+	int worldx = originx - (int)(MAPDX / 2) + mapx;
+	int worldy = originy - (int)(MAPDY / 2) + mapy;
+
+	lua_pushinteger(L, worldx);
+	lua_pushinteger(L, worldy);
+	return 2;
+}
+
+// Get player map number (local position in map array)
+static int l_get_plrmn(lua_State *L)
+{
+	lua_pushinteger(L, plrmn);
+	return 1;
+}
+
+// Get player world position
+static int l_get_player_world_pos(lua_State *L)
+{
+	int mapx = (int)((unsigned int)plrmn % MAPDX);
+	int mapy = (int)((unsigned int)plrmn / MAPDX);
+
+	int worldx = originx - (int)(MAPDX / 2) + mapx;
+	int worldy = originy - (int)(MAPDY / 2) + mapy;
+
+	lua_pushinteger(L, worldx);
+	lua_pushinteger(L, worldy);
+	return 2;
+}
+
+// --- Selection info ---
+
+// Get currently selected item map index
+static int l_get_itmsel(lua_State *L)
+{
+	if (itmsel == MAXMN) {
+		lua_pushnil(L);
+		return 1;
+	}
+	lua_pushinteger(L, (int)itmsel);
+	return 1;
+}
+
+// Get currently selected character map index
+static int l_get_chrsel(lua_State *L)
+{
+	if (chrsel == MAXMN) {
+		lua_pushnil(L);
+		return 1;
+	}
+	lua_pushinteger(L, (int)chrsel);
+	return 1;
+}
+
+// Get currently selected map tile
+static int l_get_mapsel(lua_State *L)
+{
+	if (mapsel == MAXMN) {
+		lua_pushnil(L);
+		return 1;
+	}
+	lua_pushinteger(L, (int)mapsel);
+	return 1;
+}
+
+// Get current action and target position
+static int l_get_action(lua_State *L)
+{
+	lua_newtable(L);
+
+	lua_pushinteger(L, act);
+	lua_setfield(L, -2, "act");
+
+	lua_pushinteger(L, actx);
+	lua_setfield(L, -2, "x");
+
+	lua_pushinteger(L, acty);
+	lua_setfield(L, -2, "y");
+
+	return 1;
+}
+
+// --- Look/Inspect info ---
+
+// Get current look target name
+static int l_get_look_name(lua_State *L)
+{
+	lua_pushstring(L, look_name);
+	return 1;
+}
+
+// Get current look target description
+static int l_get_look_desc(lua_State *L)
+{
+	lua_pushstring(L, look_desc);
+	return 1;
+}
+
+// Get look inventory sprite (for equipment display)
+static int l_get_lookinv(lua_State *L)
+{
+	int idx = (int)luaL_checkinteger(L, 1);
+
+	if (idx < 0 || idx >= 12) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_pushinteger(L, lookinv[idx]);
+	return 1;
+}
+
+// --- Container info ---
+
+// Get container type (0=none, 1=container, 2=shop)
+static int l_get_con_type(lua_State *L)
+{
+	lua_pushinteger(L, con_type);
+	return 1;
+}
+
+// Get container name
+static int l_get_con_name(lua_State *L)
+{
+	lua_pushstring(L, con_name);
+	return 1;
+}
+
+// Get container item count
+static int l_get_con_cnt(lua_State *L)
+{
+	lua_pushinteger(L, con_cnt);
+	return 1;
+}
+
+// Get container item sprite
+static int l_get_container(lua_State *L)
+{
+	int idx = (int)luaL_checkinteger(L, 1);
+
+	if (idx < 0 || idx >= CONTAINERSIZE) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_pushinteger(L, container[idx]);
+	return 1;
+}
+
+// --- Player state ---
+
+// Get player speed state (0=ill, 1=stealth, 2=normal, 3=fast)
+static int l_get_pspeed(lua_State *L)
+{
+	lua_pushinteger(L, pspeed);
+	return 1;
+}
+
+// Get military experience
+static int l_get_mil_exp(lua_State *L)
+{
+	lua_pushinteger(L, mil_exp);
+	return 1;
+}
+
+// Get military rank from experience
+static int l_get_mil_rank(lua_State *L)
+{
+	int exp = (int)luaL_optinteger(L, 1, (lua_Integer)mil_exp);
+	lua_pushinteger(L, mil_rank(exp));
+	return 1;
+}
+
+// --- Skill info ---
+
+// Get skill name
+static int l_get_skill_name(lua_State *L)
+{
+	int idx = (int)luaL_checkinteger(L, 1);
+
+	if (idx < 0 || idx >= V_MAX || game_skill == NULL) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_pushstring(L, game_skill[idx].name);
+	return 1;
+}
+
+// Get skill description
+static int l_get_skill_desc(lua_State *L)
+{
+	int idx = (int)luaL_checkinteger(L, 1);
+
+	if (idx < 0 || idx >= V_MAX || game_skilldesc == NULL) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_pushstring(L, game_skilldesc[idx]);
+	return 1;
+}
+
+// Get skill info (bases, cost, start)
+static int l_get_skill_info(lua_State *L)
+{
+	int idx = (int)luaL_checkinteger(L, 1);
+
+	if (idx < 0 || idx >= V_MAX || game_skill == NULL) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_newtable(L);
+
+	lua_pushstring(L, game_skill[idx].name);
+	lua_setfield(L, -2, "name");
+
+	lua_pushinteger(L, game_skill[idx].base1);
+	lua_setfield(L, -2, "base1");
+
+	lua_pushinteger(L, game_skill[idx].base2);
+	lua_setfield(L, -2, "base2");
+
+	lua_pushinteger(L, game_skill[idx].base3);
+	lua_setfield(L, -2, "base3");
+
+	lua_pushinteger(L, game_skill[idx].cost);
+	lua_setfield(L, -2, "cost");
+
+	lua_pushinteger(L, game_skill[idx].start);
+	lua_setfield(L, -2, "start");
+
+	return 1;
+}
+
+// Get raise cost for a skill
+static int l_get_raise_cost(lua_State *L)
+{
+	int v = (int)luaL_checkinteger(L, 1);
+	int n = (int)luaL_checkinteger(L, 2);
+
+	lua_pushinteger(L, raise_cost(v, n));
+	return 1;
+}
+
+// --- Quest info ---
+
+// Get quest count
+static int l_get_quest_count(lua_State *L)
+{
+	if (game_questcount == NULL) {
+		lua_pushinteger(L, 0);
+		return 1;
+	}
+	lua_pushinteger(L, *game_questcount);
+	return 1;
+}
+
+// Get quest status (done/open flags)
+static int l_get_quest_status(lua_State *L)
+{
+	int idx = (int)luaL_checkinteger(L, 1);
+
+	if (idx < 0 || idx >= MAXQUEST) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_newtable(L);
+
+	lua_pushinteger(L, quest[idx].done);
+	lua_setfield(L, -2, "done");
+
+	lua_pushinteger(L, quest[idx].flags);
+	lua_setfield(L, -2, "flags");
+
+	return 1;
+}
+
+// Get quest log info
+static int l_get_quest_info(lua_State *L)
+{
+	int idx = (int)luaL_checkinteger(L, 1);
+
+	if (game_questlog == NULL || game_questcount == NULL || idx < 0 || idx >= *game_questcount) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_newtable(L);
+
+	if (game_questlog[idx].name) {
+		lua_pushstring(L, game_questlog[idx].name);
+		lua_setfield(L, -2, "name");
+	}
+
+	lua_pushinteger(L, game_questlog[idx].minlevel);
+	lua_setfield(L, -2, "minlevel");
+
+	lua_pushinteger(L, game_questlog[idx].maxlevel);
+	lua_setfield(L, -2, "maxlevel");
+
+	if (game_questlog[idx].giver) {
+		lua_pushstring(L, game_questlog[idx].giver);
+		lua_setfield(L, -2, "giver");
+	}
+
+	if (game_questlog[idx].area) {
+		lua_pushstring(L, game_questlog[idx].area);
+		lua_setfield(L, -2, "area");
+	}
+
+	lua_pushinteger(L, game_questlog[idx].exp);
+	lua_setfield(L, -2, "exp");
+
+	lua_pushinteger(L, game_questlog[idx].flags);
+	lua_setfield(L, -2, "flags");
+
+	return 1;
 }
 
 // Get character stat value
@@ -475,11 +822,47 @@ static const luaL_Reg client_funcs[] = {
     {"get_mouse", l_get_mouse},
     {"stom", l_stom},
     {"mtos", l_mtos},
+    {"get_world_pos", l_get_world_pos},
+    {"get_plrmn", l_get_plrmn},
+    {"get_player_world_pos", l_get_player_world_pos},
     {"get_value", l_get_value},
     {"get_item", l_get_item},
     {"get_item_flags", l_get_item_flags},
     {"get_map_tile", l_get_map_tile},
     {"get_player", l_get_player},
+
+    // Selection info
+    {"get_itmsel", l_get_itmsel},
+    {"get_chrsel", l_get_chrsel},
+    {"get_mapsel", l_get_mapsel},
+    {"get_action", l_get_action},
+
+    // Look/Inspect info
+    {"get_look_name", l_get_look_name},
+    {"get_look_desc", l_get_look_desc},
+    {"get_lookinv", l_get_lookinv},
+
+    // Container info
+    {"get_con_type", l_get_con_type},
+    {"get_con_name", l_get_con_name},
+    {"get_con_cnt", l_get_con_cnt},
+    {"get_container", l_get_container},
+
+    // Player state
+    {"get_pspeed", l_get_pspeed},
+    {"get_mil_exp", l_get_mil_exp},
+    {"get_mil_rank", l_get_mil_rank},
+
+    // Skill info
+    {"get_skill_name", l_get_skill_name},
+    {"get_skill_desc", l_get_skill_desc},
+    {"get_skill_info", l_get_skill_info},
+    {"get_raise_cost", l_get_raise_cost},
+
+    // Quest info
+    {"get_quest_count", l_get_quest_count},
+    {"get_quest_status", l_get_quest_status},
+    {"get_quest_info", l_get_quest_info},
 
     // GUI helpers
     {"dotx", l_dotx},
@@ -554,8 +937,32 @@ void lua_api_register(lua_State *L)
 	lua_setfield(L, -2, "MAXCHARS");
 	lua_pushinteger(L, INVENTORYSIZE);
 	lua_setfield(L, -2, "INVENTORYSIZE");
+	lua_pushinteger(L, CONTAINERSIZE);
+	lua_setfield(L, -2, "CONTAINERSIZE");
 	lua_pushinteger(L, TICKS);
 	lua_setfield(L, -2, "TICKS");
+	lua_pushinteger(L, V_MAX);
+	lua_setfield(L, -2, "V_MAX");
+	lua_pushinteger(L, MAXQUEST);
+	lua_setfield(L, -2, "MAXQUEST");
+	lua_pushinteger(L, MAXMN);
+	lua_setfield(L, -2, "MAXMN");
+
+	// Quest flags
+	lua_pushinteger(L, QF_OPEN);
+	lua_setfield(L, -2, "QF_OPEN");
+	lua_pushinteger(L, QF_DONE);
+	lua_setfield(L, -2, "QF_DONE");
+
+	// Speed states (for pspeed)
+	lua_pushinteger(L, 0);
+	lua_setfield(L, -2, "SPEED_ILL");
+	lua_pushinteger(L, 1);
+	lua_setfield(L, -2, "SPEED_STEALTH");
+	lua_pushinteger(L, 2);
+	lua_setfield(L, -2, "SPEED_NORMAL");
+	lua_pushinteger(L, 3);
+	lua_setfield(L, -2, "SPEED_FAST");
 
 	lua_setglobal(L, "C");
 

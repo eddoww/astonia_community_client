@@ -1,15 +1,33 @@
 --[[
     Comprehensive Demo Mod for Astonia Client
 
-    This mod demonstrates ALL available API features.
+    This mod demonstrates ALL available Lua API features.
     Use #demo in chat to see available commands.
 
-    Features demonstrated:
+    Overlays (toggle with commands or F9/F10):
+    ==========================================
+    #demo_overlay (F9) - Player basics: username, world position, tick, FPS, HP/MP bars
+    #demo_stats (F10)  - Character sheet: stats with buff colors, resources, exp bar, gold
+    #demo_mouse        - Coordinate conversion: screen->local->world, cursor crosshair
+    #demo_map          - World scanner: tile under cursor, items on ground nearby
+    #demo_players      - Character scanner: scan map tiles for NPCs/players, target brackets
+    #demo_select       - Target info: selection details, look/inspect, equipment check
+    #demo_skills       - Skills & items: raise costs, containers, quest progress, inventory
+
+    API Features Demonstrated:
+    ==========================
     - All callbacks (init, tick, frame, input, etc.)
-    - Rendering (text, rectangles, lines, pixels)
-    - Game data access (HP, mana, stats, inventory, map)
+    - Rendering (text, rectangles, lines, pixels, colors)
+    - Game data access (HP, mana, stats, inventory, map tiles)
+    - Coordinate conversion (screen <-> map <-> world)
+    - Character/NPC scanning via map tiles
+    - Selection and targeting system
+    - Look/inspect system with equipment
+    - Container and shop access
+    - Quest status tracking
+    - Skill info and raise costs
     - GUI positioning helpers
-    - Custom commands
+    - Custom chat commands
     - Hot-reload support
 
     API Reference:
@@ -52,7 +70,7 @@
       client.get_world_pos(mapx, mapy) -> worldx, worldy (like right-click coords)
       client.get_plrmn() -> mn (player map index)
       client.get_player_world_pos() -> worldx, worldy
-      client.get_value(type, idx) -> value (type: 0=base, 1=current)
+      client.get_value(type, idx) -> value (type: 0=modified, 1=base)
       client.get_item(slot) -> sprite
       client.get_item_flags(slot) -> flags
       client.get_map_tile(x, y) -> {gsprite, fsprite, isprite, csprite, cn, flags, health}
@@ -76,9 +94,13 @@
       client.get_container(slot) -> sprite
 
     Player State:
-      client.get_pspeed() -> 0=ill, 1=stealth, 2=normal, 3=fast
+      client.get_pspeed() -> 0=normal, 1=fast, 2=stealth
       client.get_mil_exp() -> military exp
       client.get_mil_rank([exp]) -> rank number
+
+    Clipboard:
+      client.set_clipboard(text) -> success (boolean)
+      client.get_clipboard() -> text or nil
 
     Skills:
       client.get_skill_name(idx) -> string
@@ -101,12 +123,20 @@
       client.cmd_text(text) - Send text as player input
 
     Constants (C table):
-      C.V_HP, C.V_MANA, C.V_ENDURANCE, C.V_STR, C.V_AGI, C.V_INT, C.V_WIS
-      C.DOT_TL, C.DOT_BR, C.DOT_INV, C.DOT_SKL, C.DOT_TXT, C.DOT_MCT, C.DOT_TOP, C.DOT_BOT
-      C.MAPDX, C.MAPDY, C.DIST, C.MAXCHARS, C.INVENTORYSIZE, C.CONTAINERSIZE, C.TICKS
-      C.V_MAX, C.MAXQUEST, C.MAXMN
-      C.QF_OPEN, C.QF_DONE (quest flags)
-      C.SPEED_ILL, C.SPEED_STEALTH, C.SPEED_NORMAL, C.SPEED_FAST
+      Primary: C.V_HP, C.V_MANA, C.V_ENDURANCE, C.V_STR, C.V_AGI, C.V_INT, C.V_WIS
+      Combat: C.V_ARMOR, C.V_WEAPON, C.V_LIGHT, C.V_SPEED
+      Weapons: C.V_PULSE, C.V_DAGGER, C.V_HAND, C.V_STAFF, C.V_SWORD, C.V_TWOHAND
+      Skills: C.V_ARMORSKILL, C.V_ATTACK, C.V_PARRY, C.V_WARCRY, C.V_TACTICS,
+              C.V_SURROUND, C.V_BODYCONTROL, C.V_SPEEDSKILL
+      Utility: C.V_BARTER, C.V_PERCEPT, C.V_STEALTH
+      Magic: C.V_BLESS, C.V_HEAL, C.V_FREEZE, C.V_MAGICSHIELD, C.V_FLASH,
+             C.V_FIREBALL, C.V_REGENERATE, C.V_MEDITATE, C.V_IMMUNITY
+      Other: C.V_DEMON, C.V_DURATION, C.V_RAGE, C.V_COLD, C.V_PROFESSION
+      UI: C.DOT_TL, C.DOT_BR, C.DOT_INV, C.DOT_SKL, C.DOT_TXT, C.DOT_MCT, C.DOT_TOP, C.DOT_BOT
+      Map: C.MAPDX, C.MAPDY, C.DIST, C.MAXCHARS, C.INVENTORYSIZE, C.CONTAINERSIZE, C.TICKS
+      Limits: C.V_MAX, C.MAXQUEST, C.MAXMN
+      Quest flags: C.QF_OPEN, C.QF_DONE
+      Speed: C.SPEED_NORMAL (0), C.SPEED_FAST (1), C.SPEED_STEALTH (2)
 
     Colors (colors table):
       colors.white, colors.red, colors.green, colors.blue
@@ -148,6 +178,9 @@ local Demo = {
     -- Performance tracking
     last_tick_time = 0,
     ticks_per_second = 0,
+
+    -- Stats panel page (0-3)
+    stats_page = 0,
 }
 
 -- ============================================================================
@@ -210,328 +243,708 @@ end
 -- RENDER FUNCTIONS
 -- ============================================================================
 
+-- Main overlay: Player basics with FPS counter and resources
 local function render_main_overlay()
-    -- Position using GUI helpers (dotx/doty)
     local x = client.dotx(C.DOT_TL) + 10
     local y = client.doty(C.DOT_TL) + 10
 
-    draw_panel(x, y, 220, 100, "Demo Overlay (F9)")
+    draw_panel(x, y, 220, 190, "Demo Mod (F9)")
 
     local text_y = y + 18
 
-    -- Username (demonstrates get_username)
+    -- Username and level
     local username = client.get_username()
-    client.render_text(x + 4, text_y, colors.text, 0, "Player: " .. username)
+    local exp = client.get_experience()
+    local level = client.exp2level(exp)
+    client.render_text(x + 4, text_y, colors.white, 0, string.format("%s (Lv.%d)", username, level))
     text_y = text_y + 12
 
-    -- Current tick (demonstrates get_tick)
+    -- World position (demonstrates get_player_world_pos)
+    local pwx, pwy = client.get_player_world_pos()
+    client.render_text(x + 4, text_y, custom_colors.cyan, 0, string.format("Position: %d, %d", pwx, pwy))
+    text_y = text_y + 12
+
+    -- Game tick + approximate FPS
     local tick = client.get_tick()
-    client.render_text(x + 4, text_y, colors.text, 0, string.format("Tick: %d", tick))
-    text_y = text_y + 12
-
-    -- Origin position (demonstrates get_origin returning 2 values)
-    local ox, oy = client.get_origin()
-    client.render_text(x + 4, text_y, colors.text, 0, string.format("Origin: %d, %d", ox, oy))
-    text_y = text_y + 12
-
-    -- HP Bar (demonstrates get_hp + get_value)
-    local hp = client.get_hp()
-    local max_hp = client.get_value(0, C.V_HP)  -- 0 = base value
-    client.render_text(x + 4, text_y, colors.health, 0, string.format("HP: %d/%d", hp, max_hp))
-    draw_bar(x + 80, text_y, 130, 10, hp, max_hp, colors.health)
+    local fps = math.floor(Demo.frame_count / math.max(1, Demo.tick_count / C.TICKS))
+    client.render_text(x + 4, text_y, colors.text, 0, string.format("Tick: %d  ~%d FPS", tick, fps))
     text_y = text_y + 14
 
-    -- Mana Bar (demonstrates get_mana)
+    -- HP Bar
+    local hp = client.get_hp()
+    local max_hp = client.get_value(0, C.V_HP)
+    client.render_text(x + 4, text_y, colors.health, 0, string.format("HP: %d/%d", hp, max_hp))
+    draw_bar(x + 75, text_y, 135, 10, hp, max_hp, colors.health)
+    text_y = text_y + 14
+
+    -- Mana Bar
     local mana = client.get_mana()
     local max_mana = client.get_value(0, C.V_MANA)
-    client.render_text(x + 4, text_y, colors.mana, 0, string.format("Mana: %d/%d", mana, max_mana))
-    draw_bar(x + 80, text_y, 130, 10, mana, max_mana, colors.mana)
-end
+    client.render_text(x + 4, text_y, colors.mana, 0, string.format("MP: %d/%d", mana, max_mana))
+    draw_bar(x + 75, text_y, 135, 10, mana, max_mana, colors.mana)
+    text_y = text_y + 14
 
-local function render_stats_panel()
-    local x = client.dotx(C.DOT_BR) - 230
-    local y = client.doty(C.DOT_TL) + 10
+    -- Experience progress bar
+    local curr_level_exp = client.level2exp(level)
+    local next_level_exp = client.level2exp(level + 1)
+    local exp_progress = exp - curr_level_exp
+    local exp_needed = next_level_exp - curr_level_exp
+    client.render_text(x + 4, text_y, custom_colors.purple, 0, "EXP:")
+    draw_bar(x + 35, text_y, 175, 10, exp_progress, exp_needed, custom_colors.purple)
+    text_y = text_y + 14
 
-    draw_panel(x, y, 220, 180, "Character Stats (F10)")
-
-    local text_y = y + 18
-
-    -- Primary stats with buff/debuff coloring (demonstrates get_value with constants)
-    local stats = {
-        {name = "Strength", idx = C.V_STR},
-        {name = "Agility", idx = C.V_AGI},
-        {name = "Intelligence", idx = C.V_INT},
-        {name = "Wisdom", idx = C.V_WIS},
-    }
-
-    for _, stat in ipairs(stats) do
-        local base = client.get_value(0, stat.idx)    -- Base value
-        local current = client.get_value(1, stat.idx) -- Current value
-        local color = colors.text
-        if current > base then
-            color = colors.green  -- Buffed
-        elseif current < base then
-            color = colors.red    -- Debuffed
-        end
-        client.render_text(x + 4, text_y, colors.text, 0, stat.name .. ":")
-        client.render_text(x + 100, text_y, color, 0, string.format("%d (%d)", current, base))
-        text_y = text_y + 12
-    end
-
-    text_y = text_y + 4
-    client.render_text(x + 4, text_y, custom_colors.yellow, 0, "--- Resources ---")
-    text_y = text_y + 12
-
-    -- Secondary resources (demonstrates get_rage, get_endurance, get_lifeshield)
+    -- Resources row: Rage, Endurance, Lifeshield
     local rage = client.get_rage()
     local endurance = client.get_endurance()
     local lifeshield = client.get_lifeshield()
-
-    client.render_text(x + 4, text_y, colors.red, 0, string.format("Rage: %d", rage))
-    text_y = text_y + 12
-    client.render_text(x + 4, text_y, custom_colors.orange, 0, string.format("Endurance: %d", endurance))
-    text_y = text_y + 12
-    client.render_text(x + 4, text_y, custom_colors.cyan, 0, string.format("Lifeshield: %d", lifeshield))
+    client.render_text(x + 4, text_y, colors.red, 0, string.format("Rage:%d", rage))
+    client.render_text(x + 70, text_y, custom_colors.orange, 0, string.format("End:%d", endurance))
+    client.render_text(x + 135, text_y, custom_colors.cyan, 0, string.format("Shield:%d", lifeshield))
     text_y = text_y + 14
 
-    -- Experience and level (demonstrates get_experience, exp2level, level2exp)
-    local exp = client.get_experience()
+    -- Gold, mil rank, speed
     local gold = client.get_gold()
-    local level = client.exp2level(exp)
-    local next_level_exp = client.level2exp(level + 1)
+    local mil_rank = client.get_mil_rank()
+    local pspeed = client.get_pspeed()
+    local speed_names = {[0] = "Normal", [1] = "Fast", [2] = "Stealth"}
+    local speed_colors = {[0] = colors.text, [1] = colors.green, [2] = custom_colors.purple}
 
-    client.render_text(x + 4, text_y, custom_colors.purple, 0, string.format("Level: %d", level))
-    text_y = text_y + 12
-    client.render_text(x + 4, text_y, colors.text, 0, string.format("Exp: %d / %d", exp, next_level_exp))
-    text_y = text_y + 12
     client.render_text(x + 4, text_y, custom_colors.yellow, 0, string.format("Gold: %d", gold))
+    client.render_text(x + 90, text_y, custom_colors.cyan, 0, string.format("Mil:%d", mil_rank))
+    client.render_text(x + 140, text_y, speed_colors[pspeed] or colors.text, 0, speed_names[pspeed] or "?")
 end
 
+-- Stats panel: Detailed stat breakdown with pages
+-- All stat definitions organized by category
+local stat_pages = {
+    {
+        name = "Attributes",
+        stats = {
+            {name = "Hit Points", idx = C.V_HP},
+            {name = "Endurance", idx = C.V_ENDURANCE},
+            {name = "Mana", idx = C.V_MANA},
+            {name = "Wisdom", idx = C.V_WIS},
+            {name = "Intelligence", idx = C.V_INT},
+            {name = "Agility", idx = C.V_AGI},
+            {name = "Strength", idx = C.V_STR},
+            {name = "Armor Value", idx = C.V_ARMOR},
+            {name = "Weapon Value", idx = C.V_WEAPON},
+            {name = "Speed", idx = C.V_SPEED},
+        }
+    },
+    {
+        name = "Combat Skills",
+        stats = {
+            {name = "Attack", idx = C.V_ATTACK},
+            {name = "Parry", idx = C.V_PARRY},
+            {name = "Tactics", idx = C.V_TACTICS},
+            {name = "Warcry", idx = C.V_WARCRY},
+            {name = "Surround Hit", idx = C.V_SURROUND},
+            {name = "Body Control", idx = C.V_BODYCONTROL},
+            {name = "Speed Skill", idx = C.V_SPEEDSKILL},
+            {name = "Armor Skill", idx = C.V_ARMORSKILL},
+        }
+    },
+    {
+        name = "Weapon Skills",
+        stats = {
+            {name = "Dagger", idx = C.V_DAGGER},
+            {name = "Hand to Hand", idx = C.V_HAND},
+            {name = "Staff", idx = C.V_STAFF},
+            {name = "Sword", idx = C.V_SWORD},
+            {name = "Two-Handed", idx = C.V_TWOHAND},
+        }
+    },
+    {
+        name = "Magic",
+        stats = {
+            {name = "Bless", idx = C.V_BLESS},
+            {name = "Heal", idx = C.V_HEAL},
+            {name = "Freeze", idx = C.V_FREEZE},
+            {name = "Magic Shield", idx = C.V_MAGICSHIELD},
+            {name = "Flash", idx = C.V_FLASH},
+            {name = "Fireball", idx = C.V_FIREBALL},
+            {name = "Pulse", idx = C.V_PULSE},
+            {name = "Immunity", idx = C.V_IMMUNITY},
+            {name = "Duration", idx = C.V_DURATION},
+        }
+    },
+    {
+        name = "Utility",
+        stats = {
+            {name = "Barter", idx = C.V_BARTER},
+            {name = "Perception", idx = C.V_PERCEPT},
+            {name = "Stealth", idx = C.V_STEALTH},
+            {name = "Regenerate", idx = C.V_REGENERATE},
+            {name = "Meditate", idx = C.V_MEDITATE},
+        }
+    },
+}
+
+-- Check if a page has any visible skills (base > 0, or Attributes page which always shows)
+local function page_has_skills(page_idx)
+    if page_idx == 1 then return true end  -- Attributes always visible
+    local page = stat_pages[page_idx]
+    if not page then return false end
+    for _, stat in ipairs(page.stats) do
+        if stat.idx then
+            local base = client.get_value(1, stat.idx)
+            if base > 0 then return true end
+        end
+    end
+    return false
+end
+
+-- Get list of visible page indices
+local function get_visible_pages()
+    local visible = {}
+    for i = 1, #stat_pages do
+        if page_has_skills(i) then
+            table.insert(visible, i)
+        end
+    end
+    return visible
+end
+
+-- Generate full stats text for clipboard export
+local function generate_stats_text()
+    local lines = {}
+    local username = client.get_username()
+    local exp = client.get_experience()
+    local level = client.exp2level(exp)
+
+    table.insert(lines, string.format("=== %s (Level %d) ===", username, level))
+    table.insert(lines, string.format("Experience: %d", exp))
+    table.insert(lines, string.format("Gold: %d | Military Rank: %d", client.get_gold(), client.get_mil_rank()))
+    table.insert(lines, "")
+
+    for page_idx, page in ipairs(stat_pages) do
+        local page_lines = {}
+        for _, stat in ipairs(page.stats) do
+            if stat.idx then
+                local base = client.get_value(1, stat.idx)  -- 1 = base/trained
+                -- Skip skills with 0 base (except for Attributes page)
+                if base > 0 or page_idx == 1 then
+                    local mod = client.get_value(0, stat.idx)   -- 0 = modified (with gear/buffs)
+                    local diff = mod - base
+                    local diff_str = diff > 0 and string.format(" (+%d from gear/buffs)", diff) or (diff < 0 and string.format(" (%d)", diff) or "")
+                    table.insert(page_lines, string.format("  %s: %d (base: %d)%s", stat.name, mod, base, diff_str))
+                end
+            end
+        end
+        -- Only add page header if there are skills to show
+        if #page_lines > 0 then
+            table.insert(lines, "--- " .. page.name .. " ---")
+            for _, line in ipairs(page_lines) do
+                table.insert(lines, line)
+            end
+            table.insert(lines, "")
+        end
+    end
+
+    return table.concat(lines, "\n")
+end
+
+local function render_stats_panel()
+    local x = client.dotx(C.DOT_BR) - 240
+    local y = client.doty(C.DOT_TL) + 10
+
+    -- Get visible pages and find current position
+    local visible = get_visible_pages()
+    if #visible == 0 then return end  -- No pages to show (shouldn't happen)
+
+    -- Ensure stats_page points to a visible page
+    local current_visible_idx = nil
+    for i, page_idx in ipairs(visible) do
+        if page_idx == Demo.stats_page + 1 then
+            current_visible_idx = i
+            break
+        end
+    end
+    -- If current page not visible, reset to first visible
+    if not current_visible_idx then
+        Demo.stats_page = visible[1] - 1
+        current_visible_idx = 1
+    end
+
+    local page = stat_pages[Demo.stats_page + 1]
+
+    draw_panel(x, y, 230, 185, string.format("Stats: %s (F10)", page.name))
+
+    local text_y = y + 18
+
+    -- Navigation hint (show position among visible pages only)
+    client.render_text(x + 4, text_y, custom_colors.cyan, 0, string.format("Page %d/%d", current_visible_idx, #visible))
+    client.render_text(x + 75, text_y, colors.text, 0, ", . / c=Copy")
+    text_y = text_y + 14
+
+    -- Column headers: Base = trained, Mod = with gear/buffs
+    client.render_text(x + 4, text_y, colors.text, 0, "Stat")
+    client.render_text(x + 115, text_y, colors.text, 0, "Base")
+    client.render_text(x + 155, text_y, colors.text, 0, "Mod")
+    client.render_text(x + 195, text_y, colors.text, 0, "Gear")
+    text_y = text_y + 12
+
+    -- Separator line
+    client.render_line(x + 4, text_y, x + 226, text_y, custom_colors.panel_border)
+    text_y = text_y + 4
+
+    -- Stat rows (max 10 visible)
+    local max_display = 10
+    local count = 0
+
+    for _, stat in ipairs(page.stats) do
+        if count >= max_display then break end
+        if stat.idx then
+            local base = client.get_value(1, stat.idx)  -- 1 = base/trained value
+
+            -- Skip skills with 0 base (character doesn't have access)
+            -- Exception: always show attributes page since they're core stats
+            if base == 0 and Demo.stats_page > 0 then
+                -- Skip this skill
+            else
+                local mod = client.get_value(0, stat.idx)   -- 0 = modified (with gear/buffs)
+                local diff = mod - base                      -- positive = gear bonus
+
+                -- Stat name (truncate if needed)
+                local name = stat.name
+                if string.len(name) > 14 then
+                    name = string.sub(name, 1, 12) .. ".."
+                end
+                client.render_text(x + 4, text_y, colors.text, 0, name)
+
+                -- Base value (what you trained)
+                client.render_text(x + 115, text_y, colors.text, 0, tostring(base))
+
+                -- Modified value (colored if different from base)
+                local mod_color = diff > 0 and colors.green or (diff < 0 and colors.red or colors.text)
+                client.render_text(x + 155, text_y, mod_color, 0, tostring(mod))
+
+                -- Gear bonus (difference from base)
+                if diff ~= 0 then
+                    local diff_color = diff > 0 and colors.green or colors.red
+                    local diff_str = diff > 0 and string.format("+%d", diff) or tostring(diff)
+                    client.render_text(x + 195, text_y, diff_color, 0, diff_str)
+                end
+
+                text_y = text_y + 12
+                count = count + 1
+            end
+        end
+    end
+end
+
+-- Mouse tracker: Coordinate conversion demo with cursor info
 local function render_mouse_tracker()
-    -- Get mouse position (demonstrates get_mouse returning 2 values)
     local mx, my = client.get_mouse()
-
-    -- Convert screen to map coordinates (demonstrates stom)
     local mapx, mapy = client.stom(mx, my)
-    local map_str = mapx and string.format("Map: %d, %d", mapx, mapy) or "Map: (outside)"
 
-    -- Convert to world coordinates (demonstrates get_world_pos)
-    local world_str = "(outside)"
+    -- Crosshair at cursor
+    if mx > 20 and my > 20 then
+        client.render_line(mx - 8, my, mx + 8, my, colors.green)
+        client.render_line(mx, my - 8, mx, my + 8, colors.green)
+
+        -- Diamond pattern using pixels
+        for i = -3, 3 do
+            local dist = 3 - math.abs(i)
+            client.render_pixel(mx + i * 4, my - dist * 4, custom_colors.cyan)
+            client.render_pixel(mx + i * 4, my + dist * 4, custom_colors.cyan)
+        end
+    end
+
+    -- Info panel (fixed position for stability)
+    local px, py = client.dotx(C.DOT_TL) + 10, client.doty(C.DOT_TL) + 130
+    draw_panel(px, py, 160, 86, "Cursor Info")
+
+    local text_y = py + 18
+    client.render_text(px + 4, text_y, colors.text, 0, string.format("Screen: %d, %d", mx, my))
+    text_y = text_y + 12
+
+    if mapx then
+        client.render_text(px + 4, text_y, custom_colors.cyan, 0, string.format("Local: %d, %d", mapx, mapy))
+        text_y = text_y + 12
+        local worldx, worldy = client.get_world_pos(mapx, mapy)
+        client.render_text(px + 4, text_y, custom_colors.yellow, 0, string.format("World: %d, %d", worldx, worldy))
+    else
+        client.render_text(px + 4, text_y, colors.red, 0, "(outside game area)")
+    end
+    text_y = text_y + 14
+    client.render_text(px + 4, text_y, colors.text, 0, string.format("Clicks: %d  Key: %d", Demo.mouse_clicks, Demo.last_key))
+end
+
+-- World info: Tile under cursor + items on ground nearby
+local function render_map_info()
+    local x = 10
+    local y = client.doty(C.DOT_BOT) - 140
+
+    draw_panel(x, y, 180, 130, "World Scanner")
+
+    local text_y = y + 18
+
+    -- Get tile under mouse cursor
+    local mx, my = client.get_mouse()
+    local mapx, mapy = client.stom(mx, my)
+
     if mapx then
         local worldx, worldy = client.get_world_pos(mapx, mapy)
-        world_str = string.format("World: %d, %d", worldx, worldy)
+        client.render_text(x + 4, text_y, custom_colors.yellow, 0, string.format("Cursor: %d, %d", worldx, worldy))
+        text_y = text_y + 12
+
+        local tile = client.get_map_tile(mapx, mapy)
+        if tile then
+            client.render_text(x + 4, text_y, colors.text, 0, string.format("Ground: %d  Fore: %d", tile.gsprite, tile.fsprite))
+            text_y = text_y + 12
+            if tile.isprite > 0 then
+                client.render_text(x + 4, text_y, colors.green, 0, string.format("Item on tile: %d", tile.isprite))
+            elseif tile.csprite > 0 then
+                client.render_text(x + 4, text_y, custom_colors.orange, 0, string.format("Character: cn=%d", tile.cn))
+            else
+                client.render_text(x + 4, text_y, colors.text, 0, "(empty tile)")
+            end
+        end
+    else
+        client.render_text(x + 4, text_y, colors.text, 0, "Move cursor over game")
     end
 
-    -- Only draw if mouse is in a safe area (avoid edge issues)
-    if mx < 20 or my < 20 then
-        -- Just show info panel in a fixed position when mouse is near edges
-        local panel_x = 100
-        local panel_y = 100
-        draw_panel(panel_x, panel_y, 140, 74, nil)
-        client.render_text(panel_x + 4, panel_y + 4, colors.text, 0, string.format("Screen: %d, %d", mx, my))
-        client.render_text(panel_x + 4, panel_y + 16, custom_colors.cyan, 0, map_str)
-        client.render_text(panel_x + 4, panel_y + 28, custom_colors.yellow, 0, world_str)
-        client.render_text(panel_x + 4, panel_y + 40, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
-        client.render_text(panel_x + 4, panel_y + 52, colors.text, 0, string.format("Last key: %d", Demo.last_key))
-        return
-    end
+    text_y = text_y + 14
 
-    -- Crosshair using render_line (safe since we checked bounds above)
-    local size = 10
-    client.render_line(mx - size, my, mx + size, my, colors.green)
-    client.render_line(mx, my - size, mx, my + size, colors.green)
+    -- Scan for items on ground nearby
+    client.render_text(x + 4, text_y, custom_colors.cyan, 0, "Items on ground:")
+    text_y = text_y + 12
 
-    -- Pixel pattern around cursor (demonstrates render_pixel)
-    for i = -2, 2 do
-        for j = -2, 2 do
-            if math.abs(i) + math.abs(j) == 2 then
-                local px, py = mx + i * 5, my + j * 5
-                if px > 0 and py > 0 then
-                    client.render_pixel(px, py, custom_colors.cyan)
+    local items_found = 0
+    local player_mn = client.get_plrmn()
+    local pmx = player_mn % C.MAPDX
+    local pmy = math.floor(player_mn / C.MAPDX)
+
+    for dy = -5, 5 do
+        for dx = -5, 5 do
+            local tx, ty = pmx + dx, pmy + dy
+            if tx >= 0 and tx < C.MAPDX and ty >= 0 and ty < C.MAPDY then
+                local t = client.get_map_tile(tx, ty)
+                if t and t.isprite > 0 then
+                    items_found = items_found + 1
                 end
             end
         end
     end
 
-    -- Info panel following cursor
-    local panel_x = mx + 15
-    local panel_y = my + 15
-
-    draw_panel(panel_x, panel_y, 140, 74, nil)
-
-    client.render_text(panel_x + 4, panel_y + 4, colors.text, 0, string.format("Screen: %d, %d", mx, my))
-    client.render_text(panel_x + 4, panel_y + 16, custom_colors.cyan, 0, map_str)
-    client.render_text(panel_x + 4, panel_y + 28, custom_colors.yellow, 0, world_str)
-    client.render_text(panel_x + 4, panel_y + 40, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
-    client.render_text(panel_x + 4, panel_y + 52, colors.text, 0, string.format("Last key: %d", Demo.last_key))
-end
-
-local function render_map_info()
-    -- Demonstrates get_map_tile returning a table
-    local map_x = C.MAPDX / 2
-    local map_y = C.MAPDY / 2
-
-    local tile = client.get_map_tile(map_x, map_y)
-
-    local x = 10
-    local y = client.doty(C.DOT_BOT) - 100
-
-    draw_panel(x, y, 180, 90, "Map Tile Info")
-
-    local text_y = y + 18
-
-    if tile then
-        client.render_text(x + 4, text_y, colors.text, 0, string.format("Pos: %d, %d", map_x, map_y))
-        text_y = text_y + 12
-        client.render_text(x + 4, text_y, colors.text, 0, string.format("Ground: %d", tile.gsprite))
-        text_y = text_y + 12
-        client.render_text(x + 4, text_y, colors.text, 0, string.format("Floor: %d", tile.fsprite))
-        text_y = text_y + 12
-        client.render_text(x + 4, text_y, colors.text, 0, string.format("Item: %d", tile.isprite))
-        text_y = text_y + 12
-        client.render_text(x + 4, text_y, colors.text, 0, string.format("Char: %d, HP: %d", tile.cn, tile.health))
+    if items_found > 0 then
+        client.render_text(x + 4, text_y, colors.green, 0, string.format("%d items within 5 tiles", items_found))
     else
-        client.render_text(x + 4, text_y, colors.red, 0, "No tile data")
+        client.render_text(x + 4, text_y, colors.text, 0, "None nearby")
     end
 end
 
-local function render_nearby_players()
-    local x = client.dotx(C.DOT_BR) - 180
-    local y = client.doty(C.DOT_BOT) - 150
+-- Shared character data for multiple render functions
+local nearby_chars_cache = {}
 
-    draw_panel(x, y, 170, 140, "Nearby Players")
+-- Scan and cache nearby characters (called once per frame)
+local function scan_nearby_characters()
+    nearby_chars_cache = {}
+
+    local player_mn = client.get_plrmn()
+    local player_mx = player_mn % C.MAPDX
+    local player_my = math.floor(player_mn / C.MAPDX)
+
+    -- Get selected character for highlighting
+    local chrsel = client.get_chrsel()
+    local selected_cn = nil
+    if chrsel then
+        local sel_tile = client.get_map_tile(chrsel % C.MAPDX, math.floor(chrsel / C.MAPDX))
+        if sel_tile then selected_cn = sel_tile.cn end
+    end
+
+    for my = 0, C.MAPDY - 1 do
+        for mx = 0, C.MAPDX - 1 do
+            local tile = client.get_map_tile(mx, my)
+            if tile and tile.csprite > 0 then
+                local dist = math.abs(mx - player_mx) + math.abs(my - player_my)
+
+                if dist > 0 then
+                    local p = client.get_player(tile.cn)
+                    local scrx, scry = client.mtos(mx, my)
+
+                    table.insert(nearby_chars_cache, {
+                        mx = mx,
+                        my = my,
+                        cn = tile.cn,
+                        sprite = tile.csprite,
+                        health = tile.health,
+                        dist = dist,
+                        name = p and p.name or nil,
+                        level = p and p.level or nil,
+                        pk_status = p and p.pk_status or 0,
+                        scrx = scrx,
+                        scry = scry,
+                        is_selected = (tile.cn == selected_cn),
+                        is_player = (p and p.name and p.name ~= "")
+                    })
+                end
+            end
+        end
+    end
+
+    table.sort(nearby_chars_cache, function(a, b) return a.dist < b.dist end)
+end
+
+-- Get color for a character based on status
+local function get_char_color(char)
+    if char.pk_status == 1 then
+        return colors.red
+    elseif char.pk_status == 2 then
+        return custom_colors.orange
+    elseif char.health < 30 then
+        return colors.red
+    elseif char.health < 70 then
+        return custom_colors.yellow
+    else
+        return colors.green
+    end
+end
+
+-- Draw world markers (target brackets, decimal level next to roman numerals)
+local function render_world_markers()
+    for _, char in ipairs(nearby_chars_cache) do
+        if char.scrx and char.scry then
+            local color = get_char_color(char)
+
+            -- Selected target: animated bracket highlight
+            if char.is_selected then
+                local s = 8
+                local ox, oy = char.scrx, char.scry - 30
+
+                -- Animated pulse
+                local pulse = math.sin(os.clock() * 6) * 2
+                s = s + pulse
+
+                -- Corner brackets
+                client.render_line(ox - s, oy - s, ox - s + 4, oy - s, colors.white)
+                client.render_line(ox - s, oy - s, ox - s, oy - s + 4, colors.white)
+
+                client.render_line(ox + s, oy - s, ox + s - 4, oy - s, colors.white)
+                client.render_line(ox + s, oy - s, ox + s, oy - s + 4, colors.white)
+
+                client.render_line(ox - s, oy + s, ox - s + 4, oy + s, colors.white)
+                client.render_line(ox - s, oy + s, ox - s, oy + s - 4, colors.white)
+
+                client.render_line(ox + s, oy + s, ox + s - 4, oy + s, colors.white)
+                client.render_line(ox + s, oy + s, ox + s, oy + s - 4, colors.white)
+            end
+
+            -- Add decimal level next to the roman numerals (offset to the right)
+            if char.is_player and char.level and char.level > 0 then
+                client.render_text(char.scrx + 18, char.scry - 44, custom_colors.cyan,
+                    0, string.format("(%d)", char.level))
+            end
+        end
+    end
+end
+
+-- Main nearby players panel
+local function render_nearby_players()
+    -- First scan for characters (updates cache)
+    scan_nearby_characters()
+
+    -- Draw world markers (target brackets, decimal levels)
+    render_world_markers()
+
+    -- Panel position
+    local x = client.dotx(C.DOT_BR) - 200
+    local y = client.doty(C.DOT_BOT) - 180
+
+    draw_panel(x, y, 190, 170, "Nearby Characters")
 
     local text_y = y + 18
     local count = 0
-    local max_display = 8
+    local max_display = 9
 
-    -- Iterate through player slots (demonstrates get_player returning a table)
-    for i = 0, C.MAXCHARS - 1 do
-        local p = client.get_player(i)
-        if p and count < max_display then
-            local color = colors.text
-            if p.pk_status == 1 then
-                color = colors.red
-            elseif p.pk_status == 2 then
-                color = custom_colors.orange
-            end
+    for _, char in ipairs(nearby_chars_cache) do
+        if count >= max_display then break end
 
-            local name_display = p.name
-            if string.len(name_display) > 12 then
-                name_display = string.sub(name_display, 1, 12) .. ".."
-            end
+        local color = get_char_color(char)
 
-            client.render_text(x + 4, text_y, color, 0,
-                string.format("L%d %s", p.level, name_display))
-            text_y = text_y + 12
-            count = count + 1
+        -- Highlight selected character in the list
+        if char.is_selected then
+            client.render_rect(x + 2, text_y - 1, x + 188, text_y + 11, custom_colors.dark_gray)
         end
+
+        -- Format display
+        local display
+        if char.name and char.name ~= "" then
+            local name = char.name
+            if string.len(name) > 11 then
+                name = string.sub(name, 1, 11) .. ".."
+            end
+            if char.level and char.level > 0 then
+                display = string.format("L%d %s", char.level, name)
+            else
+                display = name
+            end
+        else
+            display = string.format("NPC #%d", char.cn)
+        end
+
+        client.render_text(x + 4, text_y, color, 0, display)
+        client.render_text(x + 130, text_y, colors.text, 0,
+            string.format("d:%d %d%%", char.dist, char.health))
+        text_y = text_y + 14
+        count = count + 1
     end
 
-    if count == 0 then
-        client.render_text(x + 4, text_y, colors.text, 0, "No players nearby")
+    if #nearby_chars_cache == 0 then
+        client.render_text(x + 4, text_y, colors.text, 0, "No characters nearby")
+    else
+        text_y = text_y + 2
+        -- Summary with player/NPC breakdown
+        local players = 0
+        local npcs = 0
+        for _, c in ipairs(nearby_chars_cache) do
+            if c.is_player then players = players + 1 else npcs = npcs + 1 end
+        end
+        client.render_text(x + 4, text_y, custom_colors.cyan, 0,
+            string.format("Total: %d (%d players, %d NPCs)", #nearby_chars_cache, players, npcs))
     end
 end
 
--- NEW: Demonstrates selection and targeting API
+-- Target info: Selection, look info, and equipment preview
 local function render_selection_info()
     local x = 10
-    local y = client.doty(C.DOT_TL) + 120
+    local y = client.doty(C.DOT_TL) + 130
 
-    draw_panel(x, y, 200, 170, "Selection & Targeting")
+    draw_panel(x, y, 200, 155, "Target Info")
 
     local text_y = y + 18
 
-    -- Player world position (demonstrates get_player_world_pos)
-    local pwx, pwy = client.get_player_world_pos()
-    client.render_text(x + 4, text_y, custom_colors.yellow, 0, string.format("Player pos: %d, %d", pwx, pwy))
-    text_y = text_y + 12
-
-    -- Player speed (demonstrates get_pspeed)
-    local pspeed = client.get_pspeed()
-    local speed_names = {[0] = "Ill", [1] = "Stealth", [2] = "Normal", [3] = "Fast"}
-    local speed_name = speed_names[pspeed] or "Unknown"
-    client.render_text(x + 4, text_y, colors.text, 0, string.format("Speed: %s (%d)", speed_name, pspeed))
-    text_y = text_y + 12
-
-    -- Military rank (demonstrates get_mil_exp and get_mil_rank)
-    local mil_exp = client.get_mil_exp()
-    local mil_rank = client.get_mil_rank()
-    client.render_text(x + 4, text_y, custom_colors.purple, 0, string.format("Mil: Rank %d (Exp: %d)", mil_rank, mil_exp))
+    -- Current action
+    local action = client.get_action()
+    local action_names = {[0] = "Idle", [1] = "Move", [2] = "Attack", [3] = "Take", [4] = "Use", [5] = "Give"}
+    local action_name = action_names[action.act] or string.format("Act#%d", action.act)
+    client.render_text(x + 4, text_y, custom_colors.orange, 0, string.format("Action: %s", action_name))
+    if action.act > 0 then
+        client.render_text(x + 100, text_y, colors.text, 0, string.format("@ %d,%d", action.x, action.y))
+    end
     text_y = text_y + 14
 
-    -- Selection info (demonstrates get_chrsel, get_itmsel, get_mapsel)
-    client.render_text(x + 4, text_y, custom_colors.cyan, 0, "--- Selection ---")
-    text_y = text_y + 12
-
+    -- Selection info with details
     local chrsel = client.get_chrsel()
     local itmsel = client.get_itmsel()
-    local mapsel = client.get_mapsel()
 
-    client.render_text(x + 4, text_y, colors.text, 0, "Char: " .. (chrsel and tostring(chrsel) or "none"))
-    text_y = text_y + 12
-    client.render_text(x + 4, text_y, colors.text, 0, "Item: " .. (itmsel and tostring(itmsel) or "none"))
-    text_y = text_y + 12
-    client.render_text(x + 4, text_y, colors.text, 0, "Map: " .. (mapsel and tostring(mapsel) or "none"))
+    if chrsel then
+        local sel_mx = chrsel % C.MAPDX
+        local sel_my = math.floor(chrsel / C.MAPDX)
+        local sel_tile = client.get_map_tile(sel_mx, sel_my)
+        if sel_tile and sel_tile.cn > 0 then
+            local p = client.get_player(sel_tile.cn)
+            if p and p.name ~= "" then
+                client.render_text(x + 4, text_y, colors.green, 0, string.format("Target: %s (L%d)", p.name, p.level))
+            else
+                client.render_text(x + 4, text_y, custom_colors.orange, 0, string.format("Target: NPC #%d", sel_tile.cn))
+            end
+            text_y = text_y + 12
+            client.render_text(x + 4, text_y, colors.text, 0, string.format("Health: %d%%", sel_tile.health))
+        end
+    elseif itmsel then
+        client.render_text(x + 4, text_y, custom_colors.yellow, 0, "Item selected on ground")
+    else
+        client.render_text(x + 4, text_y, colors.text, 0, "No target selected")
+    end
     text_y = text_y + 14
 
-    -- Action info (demonstrates get_action)
-    local action = client.get_action()
-    client.render_text(x + 4, text_y, custom_colors.orange, 0, string.format("Action: %d at (%d, %d)", action.act, action.x, action.y))
-    text_y = text_y + 14
-
-    -- Look info (demonstrates get_look_name, get_look_desc)
+    -- Look info (what you're inspecting)
     local look_name = client.get_look_name()
+    local look_desc = client.get_look_desc()
+
     if look_name and look_name ~= "" then
-        client.render_text(x + 4, text_y, colors.white, 0, "Looking: " .. string.sub(look_name, 1, 20))
+        client.render_text(x + 4, text_y, colors.white, 0, "Inspecting:")
+        text_y = text_y + 12
+        client.render_text(x + 4, text_y, custom_colors.cyan, 0, string.sub(look_name, 1, 24))
+        text_y = text_y + 12
+
+        -- Show equipment slots if looking at a character (demonstrates get_lookinv)
+        local has_equip = false
+        local equip_str = "Gear: "
+        for slot = 0, 5 do
+            local sprite = client.get_lookinv(slot)
+            if sprite and sprite > 0 then
+                has_equip = true
+            end
+        end
+        if has_equip then
+            client.render_text(x + 4, text_y, colors.text, 0, "(Has equipped items)")
+        elseif look_desc and look_desc ~= "" then
+            -- Show truncated description
+            client.render_text(x + 4, text_y, colors.text, 0, string.sub(look_desc, 1, 26))
+        end
+    else
+        text_y = text_y + 12
+        client.render_text(x + 4, text_y, colors.text, 0, "(Right-click to inspect)")
     end
 end
 
--- NEW: Demonstrates skill API
+-- Skills & Inventory: Skill costs, containers, quests, inventory preview
 local function render_skills_info()
     local x = client.dotx(C.DOT_BR) - 200
-    local y = client.doty(C.DOT_TL) + 200
+    local y = client.doty(C.DOT_TL) + 210
 
-    draw_panel(x, y, 190, 140, "Skills Info")
+    draw_panel(x, y, 190, 165, "Skills & Items")
 
     local text_y = y + 18
 
-    -- Show a few skill names (demonstrates get_skill_name, get_skill_info)
-    local skills_to_show = {C.V_STR, C.V_AGI, C.V_INT, C.V_WIS}
+    -- Show skill raise costs (demonstrates get_skill_info, get_raise_cost)
+    client.render_text(x + 4, text_y, custom_colors.cyan, 0, "Next skill raise cost:")
+    text_y = text_y + 12
 
-    for _, skill_idx in ipairs(skills_to_show) do
-        local info = client.get_skill_info(skill_idx)
-        if info then
-            local base = client.get_value(0, skill_idx)
-            local curr = client.get_value(1, skill_idx)
-            local cost = client.get_raise_cost(skill_idx, curr + 1)
-            local color = curr > base and colors.green or (curr < base and colors.red or colors.text)
-            client.render_text(x + 4, text_y, color, 0, string.format("%s: %d", info.name, curr))
-            client.render_text(x + 100, text_y, custom_colors.yellow, 0, string.format("Cost: %d", cost))
-            text_y = text_y + 12
-        end
+    local skills_to_show = {{name = "STR", idx = C.V_STR}, {name = "WIS", idx = C.V_WIS}}
+    for _, skill in ipairs(skills_to_show) do
+        local curr = client.get_value(1, skill.idx)
+        local cost = client.get_raise_cost(skill.idx, curr + 1)
+        client.render_text(x + 4, text_y, colors.text, 0, string.format("%s %d->%d:", skill.name, curr, curr + 1))
+        client.render_text(x + 80, text_y, custom_colors.yellow, 0, string.format("%d exp", cost))
+        text_y = text_y + 12
     end
-
     text_y = text_y + 4
 
-    -- Container info (demonstrates get_con_type, get_con_name, get_con_cnt)
+    -- Container info
     local con_type = client.get_con_type()
     local con_cnt = client.get_con_cnt()
     if con_cnt > 0 then
         local con_name = client.get_con_name()
         local type_names = {[0] = "None", [1] = "Container", [2] = "Shop"}
-        client.render_text(x + 4, text_y, custom_colors.cyan, 0, string.format("%s: %s", type_names[con_type] or "?", con_name))
-        text_y = text_y + 12
-        client.render_text(x + 4, text_y, colors.text, 0, string.format("Items: %d", con_cnt))
+        client.render_text(x + 4, text_y, colors.green, 0, string.format("%s: %s (%d)", type_names[con_type] or "?", string.sub(con_name, 1, 10), con_cnt))
     else
         client.render_text(x + 4, text_y, colors.text, 0, "No container open")
     end
-
     text_y = text_y + 14
 
-    -- Quest count (demonstrates get_quest_count)
+    -- Quest progress (demonstrates get_quest_count, get_quest_status)
     local quest_count = client.get_quest_count()
-    client.render_text(x + 4, text_y, custom_colors.purple, 0, string.format("Quests available: %d", quest_count))
+    local completed = 0
+    for i = 0, quest_count - 1 do
+        local status = client.get_quest_status(i)
+        if status and status.done then
+            completed = completed + 1
+        end
+    end
+    client.render_text(x + 4, text_y, custom_colors.purple, 0, string.format("Quests: %d/%d done", completed, quest_count))
+    text_y = text_y + 14
+
+    -- Inventory preview (demonstrates get_item, get_item_flags)
+    client.render_text(x + 4, text_y, custom_colors.cyan, 0, "Inventory (first 8):")
+    text_y = text_y + 12
+
+    local inv_str = ""
+    local filled = 0
+    for slot = 0, 7 do
+        local sprite = client.get_item(slot)
+        if sprite and sprite > 0 then
+            filled = filled + 1
+            inv_str = inv_str .. "#"
+        else
+            inv_str = inv_str .. "."
+        end
+    end
+    client.render_text(x + 4, text_y, colors.text, 0, string.format("[%s] %d items", inv_str, filled))
 end
 
 -- ============================================================================
@@ -540,19 +953,20 @@ end
 
 local function show_help()
     client.addline("=== Demo Mod Commands ===")
-    client.addline("#demo_overlay  - Toggle main overlay (F9)")
-    client.addline("#demo_stats    - Toggle stats panel (F10)")
-    client.addline("#demo_mouse    - Toggle mouse tracker (w/ world coords)")
-    client.addline("#demo_map      - Toggle map tile info")
-    client.addline("#demo_players  - Toggle nearby players")
-    client.addline("#demo_select   - Toggle selection/targeting info")
-    client.addline("#demo_skills   - Toggle skills/container info")
+    client.addline("#demo_overlay  - Player info, HP/MP/EXP bars, resources (F9)")
+    client.addline("#demo_stats    - All stats: base/mod/gear bonus (F10)")
+    client.addline("                 , . to change page, c to copy")
+    client.addline("#demo_mouse    - Cursor coordinates + crosshair")
+    client.addline("#demo_map      - World scanner (tile info, items)")
+    client.addline("#demo_players  - Nearby characters radar")
+    client.addline("#demo_select   - Target info, inspect details")
+    client.addline("#demo_skills   - Skills, quests, inventory")
     client.addline("#demo_all      - Enable all overlays")
     client.addline("#demo_off      - Disable all overlays")
     client.addline("#demo_info     - Show mod state info")
-    client.addline("#demo_say <msg>- Send chat message")
-    client.addline("#demo_test     - Run API test suite")
-    client.addline("#lua_reload    - Hot-reload all mods")
+    client.addline("#demo_copy     - Copy all stats to clipboard")
+    client.addline("#demo_say <msg>- Send chat message (cmd_text)")
+    client.addline("#demo_test     - Run comprehensive API tests")
 end
 
 local function show_mod_info()
@@ -745,6 +1159,27 @@ local function run_api_tests()
     test("C.QF_DONE exists", C.QF_DONE ~= nil)
     test("C.SPEED_NORMAL exists", C.SPEED_NORMAL ~= nil)
 
+    -- Test new stat constants
+    test("C.V_ARMOR exists", C.V_ARMOR ~= nil)
+    test("C.V_ATTACK exists", C.V_ATTACK ~= nil)
+    test("C.V_BLESS exists", C.V_BLESS ~= nil)
+    test("C.V_TACTICS exists", C.V_TACTICS ~= nil)
+
+    -- Test clipboard functions (only if available - requires client rebuild)
+    if client.set_clipboard then
+        test("set_clipboard exists", true)
+        test("get_clipboard exists", client.get_clipboard ~= nil)
+        local test_str = "Demo Mod Clipboard Test"
+        local set_ok = client.set_clipboard(test_str)
+        test("set_clipboard returns boolean", type(set_ok) == "boolean")
+        if set_ok then
+            local got_str = client.get_clipboard()
+            test("get_clipboard returns set text", got_str == test_str)
+        end
+    else
+        client.note("Clipboard functions not available - rebuild client to enable")
+    end
+
     -- Test sandbox is working
     test("os.time exists (allowed)", os.time ~= nil)
     test("os.date exists (allowed)", os.date ~= nil)
@@ -839,6 +1274,21 @@ local function handle_demo_commands(cmd)
 
     if cmd == "#demo_info" then
         show_mod_info()
+        return 1
+    end
+
+    if cmd == "#demo_copy" then
+        local stats_text = generate_stats_text()
+        if client.set_clipboard then
+            if client.set_clipboard(stats_text) then
+                client.addline("All stats copied to clipboard!")
+            else
+                client.addline("Failed to copy to clipboard")
+            end
+        else
+            client.addline("Clipboard not available - rebuild client")
+            client.note(stats_text)  -- Print to console instead
+        end
         return 1
     end
 
@@ -969,6 +1419,50 @@ register("on_keydown", function(key)
         Demo.show_stats = not Demo.show_stats
         client.addline("Stats panel: " .. (Demo.show_stats and "ON" or "OFF"))
         return 1  -- Consume
+    end
+
+    -- Stats panel navigation (only when stats panel is visible)
+    if Demo.show_stats then
+        local visible = get_visible_pages()
+        if #visible > 0 then
+            -- Find current position in visible pages
+            local current_idx = 1
+            for i, page_idx in ipairs(visible) do
+                if page_idx == Demo.stats_page + 1 then
+                    current_idx = i
+                    break
+                end
+            end
+
+            -- ',' key (44) - previous page
+            if key == 44 then
+                current_idx = current_idx - 1
+                if current_idx < 1 then current_idx = #visible end
+                Demo.stats_page = visible[current_idx] - 1
+                return 1
+            end
+            -- '.' key (46) - next page
+            if key == 46 then
+                current_idx = current_idx + 1
+                if current_idx > #visible then current_idx = 1 end
+                Demo.stats_page = visible[current_idx] - 1
+                return 1
+            end
+        end
+        -- 'C' key (99) - copy stats to clipboard (lowercase c)
+        if key == 99 then
+            local stats_text = generate_stats_text()
+            if client.set_clipboard then
+                if client.set_clipboard(stats_text) then
+                    client.addline("Stats copied to clipboard!")
+                else
+                    client.addline("Failed to copy to clipboard")
+                end
+            else
+                client.addline("Clipboard not available - rebuild client")
+            end
+            return 1
+        end
     end
 
     return 0  -- Don't consume

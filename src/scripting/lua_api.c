@@ -11,6 +11,8 @@
 #include <lauxlib.h>
 #include <string.h>
 
+#include <SDL2/SDL.h>
+
 #include "astonia.h"
 #include "client/client.h"
 #include "game/game.h"
@@ -437,7 +439,7 @@ static int l_get_container(lua_State *L)
 
 // --- Player state ---
 
-// Get player speed state (0=ill, 1=stealth, 2=normal, 3=fast)
+// Get player speed state (0=normal, 1=fast, 2=stealth)
 static int l_get_pspeed(lua_State *L)
 {
 	lua_pushinteger(L, pspeed);
@@ -611,7 +613,7 @@ static int l_get_quest_info(lua_State *L)
 // Get character stat value
 static int l_get_value(lua_State *L)
 {
-	int type = (int)luaL_checkinteger(L, 1); // 0 = base, 1 = current
+	int type = (int)luaL_checkinteger(L, 1); // 0 = modified (with gear/buffs), 1 = base (trained)
 	int idx = (int)luaL_checkinteger(L, 2);
 
 	if (type < 0 || type > 1 || idx < 0 || idx >= V_MAX) {
@@ -704,8 +706,8 @@ static int l_get_player(lua_State *L)
 
 	struct player *p = &player[idx];
 
-	// Return nil if player slot is empty
-	if (p->csprite == 0) {
+	// Return nil if player slot is empty (check name like the game does)
+	if (p->name[0] == '\0') {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -787,6 +789,34 @@ static int l_cmd_text(lua_State *L)
 	buf[sizeof(buf) - 1] = '\0';
 	cmd_text(buf);
 	return 0;
+}
+
+// --- Clipboard functions ---
+
+// Set clipboard text
+static int l_set_clipboard(lua_State *L)
+{
+	const char *text = luaL_checkstring(L, 1);
+	int result = SDL_SetClipboardText(text);
+	lua_pushboolean(L, result == 0);
+	return 1;
+}
+
+// Get clipboard text
+static int l_get_clipboard(lua_State *L)
+{
+	if (!SDL_HasClipboardText()) {
+		lua_pushnil(L);
+		return 1;
+	}
+	char *text = SDL_GetClipboardText();
+	if (text) {
+		lua_pushstring(L, text);
+		SDL_free(text);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
 }
 
 // --- Registration ---
@@ -877,6 +907,10 @@ static const luaL_Reg client_funcs[] = {
     // Commands
     {"cmd_text", l_cmd_text},
 
+    // Clipboard
+    {"set_clipboard", l_set_clipboard},
+    {"get_clipboard", l_get_clipboard},
+
     {NULL, NULL}
 };
 
@@ -890,7 +924,7 @@ void lua_api_register(lua_State *L)
 	// Create constants table
 	lua_newtable(L);
 
-	// Stat value indices
+	// Primary stat indices
 	lua_pushinteger(L, V_HP);
 	lua_setfield(L, -2, "V_HP");
 	lua_pushinteger(L, V_ENDURANCE);
@@ -905,6 +939,88 @@ void lua_api_register(lua_State *L)
 	lua_setfield(L, -2, "V_AGI");
 	lua_pushinteger(L, V_STR);
 	lua_setfield(L, -2, "V_STR");
+
+	// Combat stat indices
+	lua_pushinteger(L, V_ARMOR);
+	lua_setfield(L, -2, "V_ARMOR");
+	lua_pushinteger(L, V_WEAPON);
+	lua_setfield(L, -2, "V_WEAPON");
+	lua_pushinteger(L, V_LIGHT);
+	lua_setfield(L, -2, "V_LIGHT");
+	lua_pushinteger(L, V_SPEED);
+	lua_setfield(L, -2, "V_SPEED");
+
+	// Weapon skills
+	lua_pushinteger(L, V_PULSE);
+	lua_setfield(L, -2, "V_PULSE");
+	lua_pushinteger(L, V_DAGGER);
+	lua_setfield(L, -2, "V_DAGGER");
+	lua_pushinteger(L, V_HAND);
+	lua_setfield(L, -2, "V_HAND");
+	lua_pushinteger(L, V_STAFF);
+	lua_setfield(L, -2, "V_STAFF");
+	lua_pushinteger(L, V_SWORD);
+	lua_setfield(L, -2, "V_SWORD");
+	lua_pushinteger(L, V_TWOHAND);
+	lua_setfield(L, -2, "V_TWOHAND");
+
+	// Combat skills
+	lua_pushinteger(L, V_ARMORSKILL);
+	lua_setfield(L, -2, "V_ARMORSKILL");
+	lua_pushinteger(L, V_ATTACK);
+	lua_setfield(L, -2, "V_ATTACK");
+	lua_pushinteger(L, V_PARRY);
+	lua_setfield(L, -2, "V_PARRY");
+	lua_pushinteger(L, V_WARCRY);
+	lua_setfield(L, -2, "V_WARCRY");
+	lua_pushinteger(L, V_TACTICS);
+	lua_setfield(L, -2, "V_TACTICS");
+	lua_pushinteger(L, V_SURROUND);
+	lua_setfield(L, -2, "V_SURROUND");
+	lua_pushinteger(L, V_BODYCONTROL);
+	lua_setfield(L, -2, "V_BODYCONTROL");
+	lua_pushinteger(L, V_SPEEDSKILL);
+	lua_setfield(L, -2, "V_SPEEDSKILL");
+
+	// Utility skills
+	lua_pushinteger(L, V_BARTER);
+	lua_setfield(L, -2, "V_BARTER");
+	lua_pushinteger(L, V_PERCEPT);
+	lua_setfield(L, -2, "V_PERCEPT");
+	lua_pushinteger(L, V_STEALTH);
+	lua_setfield(L, -2, "V_STEALTH");
+
+	// Magic skills
+	lua_pushinteger(L, V_BLESS);
+	lua_setfield(L, -2, "V_BLESS");
+	lua_pushinteger(L, V_HEAL);
+	lua_setfield(L, -2, "V_HEAL");
+	lua_pushinteger(L, V_FREEZE);
+	lua_setfield(L, -2, "V_FREEZE");
+	lua_pushinteger(L, V_MAGICSHIELD);
+	lua_setfield(L, -2, "V_MAGICSHIELD");
+	lua_pushinteger(L, V_FLASH);
+	lua_setfield(L, -2, "V_FLASH");
+	lua_pushinteger(L, V_FIREBALL);
+	lua_setfield(L, -2, "V_FIREBALL");
+	lua_pushinteger(L, V_REGENERATE);
+	lua_setfield(L, -2, "V_REGENERATE");
+	lua_pushinteger(L, V_MEDITATE);
+	lua_setfield(L, -2, "V_MEDITATE");
+	lua_pushinteger(L, V_IMMUNITY);
+	lua_setfield(L, -2, "V_IMMUNITY");
+
+	// Other skills
+	lua_pushinteger(L, V_DEMON);
+	lua_setfield(L, -2, "V_DEMON");
+	lua_pushinteger(L, V_DURATION);
+	lua_setfield(L, -2, "V_DURATION");
+	lua_pushinteger(L, V_RAGE);
+	lua_setfield(L, -2, "V_RAGE");
+	lua_pushinteger(L, V_COLD);
+	lua_setfield(L, -2, "V_COLD");
+	lua_pushinteger(L, V_PROFESSION);
+	lua_setfield(L, -2, "V_PROFESSION");
 
 	// DOT indices for UI positioning
 	lua_pushinteger(L, DOT_TL);
@@ -954,15 +1070,13 @@ void lua_api_register(lua_State *L)
 	lua_pushinteger(L, QF_DONE);
 	lua_setfield(L, -2, "QF_DONE");
 
-	// Speed states (for pspeed)
+	// Speed states (for pspeed) - 0=normal, 1=fast, 2=stealth
 	lua_pushinteger(L, 0);
-	lua_setfield(L, -2, "SPEED_ILL");
-	lua_pushinteger(L, 1);
-	lua_setfield(L, -2, "SPEED_STEALTH");
-	lua_pushinteger(L, 2);
 	lua_setfield(L, -2, "SPEED_NORMAL");
-	lua_pushinteger(L, 3);
+	lua_pushinteger(L, 1);
 	lua_setfield(L, -2, "SPEED_FAST");
+	lua_pushinteger(L, 2);
+	lua_setfield(L, -2, "SPEED_STEALTH");
 
 	lua_setglobal(L, "C");
 

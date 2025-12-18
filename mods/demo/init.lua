@@ -268,15 +268,20 @@ local function render_mouse_tracker()
     -- Get mouse position (demonstrates get_mouse returning 2 values)
     local mx, my = client.get_mouse()
 
+    -- Convert screen to map coordinates (demonstrates stom)
+    local mapx, mapy = client.stom(mx, my)
+    local map_str = mapx and string.format("Map: %d, %d", mapx, mapy) or "Map: (outside)"
+
     -- Only draw if mouse is in a safe area (avoid edge issues)
     if mx < 20 or my < 20 then
         -- Just show info panel in a fixed position when mouse is near edges
         local panel_x = 100
         local panel_y = 100
-        draw_panel(panel_x, panel_y, 120, 50, nil)
-        client.render_text(panel_x + 4, panel_y + 4, colors.text, 0, string.format("Mouse: %d, %d", mx, my))
-        client.render_text(panel_x + 4, panel_y + 16, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
-        client.render_text(panel_x + 4, panel_y + 28, colors.text, 0, string.format("Last key: %d", Demo.last_key))
+        draw_panel(panel_x, panel_y, 130, 62, nil)
+        client.render_text(panel_x + 4, panel_y + 4, colors.text, 0, string.format("Screen: %d, %d", mx, my))
+        client.render_text(panel_x + 4, panel_y + 16, custom_colors.cyan, 0, map_str)
+        client.render_text(panel_x + 4, panel_y + 28, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
+        client.render_text(panel_x + 4, panel_y + 40, colors.text, 0, string.format("Last key: %d", Demo.last_key))
         return
     end
 
@@ -301,11 +306,12 @@ local function render_mouse_tracker()
     local panel_x = mx + 15
     local panel_y = my + 15
 
-    draw_panel(panel_x, panel_y, 120, 50, nil)
+    draw_panel(panel_x, panel_y, 130, 62, nil)
 
-    client.render_text(panel_x + 4, panel_y + 4, colors.text, 0, string.format("Mouse: %d, %d", mx, my))
-    client.render_text(panel_x + 4, panel_y + 16, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
-    client.render_text(panel_x + 4, panel_y + 28, colors.text, 0, string.format("Last key: %d", Demo.last_key))
+    client.render_text(panel_x + 4, panel_y + 4, colors.text, 0, string.format("Screen: %d, %d", mx, my))
+    client.render_text(panel_x + 4, panel_y + 16, custom_colors.cyan, 0, map_str)
+    client.render_text(panel_x + 4, panel_y + 28, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
+    client.render_text(panel_x + 4, panel_y + 40, colors.text, 0, string.format("Last key: %d", Demo.last_key))
 end
 
 local function render_map_info()

@@ -90,6 +90,8 @@ Access the client API through the `client` global table:
 - `client.get_username()` - Get player name
 - `client.get_origin()` - Returns x, y map origin
 - `client.get_mouse()` - Returns x, y mouse position
+- `client.stom(scrx, scry)` - Screen to map coords, returns mapx, mapy (or nil if outside)
+- `client.mtos(mapx, mapy)` - Map to screen coords, returns scrx, scry
 - `client.get_value(type, idx)` - Get character stat (type: 0=base, 1=current)
 - `client.get_item(slot)` - Get inventory item sprite
 - `client.get_item_flags(slot)` - Get inventory item flags

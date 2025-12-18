@@ -229,6 +229,38 @@ static int l_get_mouse(lua_State *L)
 	return 2;
 }
 
+// Screen to map coordinate conversion
+static int l_stom(lua_State *L)
+{
+	int scrx = (int)luaL_checkinteger(L, 1);
+	int scry = (int)luaL_checkinteger(L, 2);
+	int mapx, mapy;
+
+	if (stom(scrx, scry, &mapx, &mapy)) {
+		lua_pushinteger(L, mapx);
+		lua_pushinteger(L, mapy);
+		return 2;
+	}
+
+	// Outside map area - return nil
+	lua_pushnil(L);
+	lua_pushnil(L);
+	return 2;
+}
+
+// Map to screen coordinate conversion
+static int l_mtos(lua_State *L)
+{
+	unsigned int mapx = (unsigned int)luaL_checkinteger(L, 1);
+	unsigned int mapy = (unsigned int)luaL_checkinteger(L, 2);
+	int scrx, scry;
+
+	mtos(mapx, mapy, &scrx, &scry);
+	lua_pushinteger(L, scrx);
+	lua_pushinteger(L, scry);
+	return 2;
+}
+
 // Get character stat value
 static int l_get_value(lua_State *L)
 {
@@ -441,6 +473,8 @@ static const luaL_Reg client_funcs[] = {
     {"get_username", l_get_username},
     {"get_origin", l_get_origin},
     {"get_mouse", l_get_mouse},
+    {"stom", l_stom},
+    {"mtos", l_mtos},
     {"get_value", l_get_value},
     {"get_item", l_get_item},
     {"get_item_flags", l_get_item_flags},

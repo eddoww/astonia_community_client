@@ -104,7 +104,8 @@ RUN mkdir -p AppDir/usr/lib && \
     cp bin/libastonia_net.so AppDir/usr/lib/ && \
     cp bin/amod.so AppDir/usr/share/astonia/bin/ && \
     cp /usr/lib/libmimalloc.so.* AppDir/usr/lib/ 2>/dev/null || cp /usr/lib/libmimalloc.so AppDir/usr/lib/ 2>/dev/null || true && \
-    cp -r res AppDir/usr/share/astonia/
+    cp -r res AppDir/usr/share/astonia/ && \
+    cp -r mods AppDir/usr/share/astonia/
 
 # Create wrapper script (symlink in /usr/bin for desktop integration)
 RUN printf '#!/bin/bash\n\

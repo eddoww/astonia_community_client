@@ -45,13 +45,51 @@
       client.get_gold() -> gold
       client.get_tick() -> tick
       client.get_username() -> name
-      client.get_origin() -> x, y
-      client.get_mouse() -> x, y
+      client.get_origin() -> x, y (map origin)
+      client.get_mouse() -> x, y (screen coords)
+      client.stom(scrx, scry) -> mapx, mapy (screen to map)
+      client.mtos(mapx, mapy) -> scrx, scry (map to screen)
+      client.get_world_pos(mapx, mapy) -> worldx, worldy (like right-click coords)
+      client.get_plrmn() -> mn (player map index)
+      client.get_player_world_pos() -> worldx, worldy
       client.get_value(type, idx) -> value (type: 0=base, 1=current)
       client.get_item(slot) -> sprite
       client.get_item_flags(slot) -> flags
       client.get_map_tile(x, y) -> {gsprite, fsprite, isprite, csprite, cn, flags, health}
       client.get_player(idx) -> {name, sprite, level, clan, pk_status}
+
+    Selection & Targeting:
+      client.get_chrsel() -> mn or nil (selected character)
+      client.get_itmsel() -> mn or nil (selected item)
+      client.get_mapsel() -> mn or nil (selected map tile)
+      client.get_action() -> {act, x, y} (current action)
+
+    Look/Inspect:
+      client.get_look_name() -> string (inspected target name)
+      client.get_look_desc() -> string (inspected target description)
+      client.get_lookinv(slot) -> sprite (look equipment)
+
+    Container:
+      client.get_con_type() -> 0=none, 1=container, 2=shop
+      client.get_con_name() -> string
+      client.get_con_cnt() -> item count
+      client.get_container(slot) -> sprite
+
+    Player State:
+      client.get_pspeed() -> 0=ill, 1=stealth, 2=normal, 3=fast
+      client.get_mil_exp() -> military exp
+      client.get_mil_rank([exp]) -> rank number
+
+    Skills:
+      client.get_skill_name(idx) -> string
+      client.get_skill_desc(idx) -> string
+      client.get_skill_info(idx) -> {name, base1, base2, base3, cost, start}
+      client.get_raise_cost(skill, level) -> exp cost
+
+    Quests:
+      client.get_quest_count() -> number of quest definitions
+      client.get_quest_status(idx) -> {done, flags}
+      client.get_quest_info(idx) -> {name, minlevel, maxlevel, giver, area, exp, flags}
 
     GUI Helpers:
       client.dotx(idx), client.doty(idx) - Screen anchor points
@@ -65,7 +103,10 @@
     Constants (C table):
       C.V_HP, C.V_MANA, C.V_ENDURANCE, C.V_STR, C.V_AGI, C.V_INT, C.V_WIS
       C.DOT_TL, C.DOT_BR, C.DOT_INV, C.DOT_SKL, C.DOT_TXT, C.DOT_MCT, C.DOT_TOP, C.DOT_BOT
-      C.MAPDX, C.MAPDY, C.DIST, C.MAXCHARS, C.INVENTORYSIZE, C.TICKS
+      C.MAPDX, C.MAPDY, C.DIST, C.MAXCHARS, C.INVENTORYSIZE, C.CONTAINERSIZE, C.TICKS
+      C.V_MAX, C.MAXQUEST, C.MAXMN
+      C.QF_OPEN, C.QF_DONE (quest flags)
+      C.SPEED_ILL, C.SPEED_STEALTH, C.SPEED_NORMAL, C.SPEED_FAST
 
     Colors (colors table):
       colors.white, colors.red, colors.green, colors.blue
@@ -92,6 +133,8 @@ local Demo = {
     show_mouse_tracker = false,
     show_map_info = false,
     show_nearby_players = false,
+    show_selection = false,
+    show_skills = false,
 
     -- Mouse tracking
     last_mouse_x = 0,
@@ -272,16 +315,24 @@ local function render_mouse_tracker()
     local mapx, mapy = client.stom(mx, my)
     local map_str = mapx and string.format("Map: %d, %d", mapx, mapy) or "Map: (outside)"
 
+    -- Convert to world coordinates (demonstrates get_world_pos)
+    local world_str = "(outside)"
+    if mapx then
+        local worldx, worldy = client.get_world_pos(mapx, mapy)
+        world_str = string.format("World: %d, %d", worldx, worldy)
+    end
+
     -- Only draw if mouse is in a safe area (avoid edge issues)
     if mx < 20 or my < 20 then
         -- Just show info panel in a fixed position when mouse is near edges
         local panel_x = 100
         local panel_y = 100
-        draw_panel(panel_x, panel_y, 130, 62, nil)
+        draw_panel(panel_x, panel_y, 140, 74, nil)
         client.render_text(panel_x + 4, panel_y + 4, colors.text, 0, string.format("Screen: %d, %d", mx, my))
         client.render_text(panel_x + 4, panel_y + 16, custom_colors.cyan, 0, map_str)
-        client.render_text(panel_x + 4, panel_y + 28, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
-        client.render_text(panel_x + 4, panel_y + 40, colors.text, 0, string.format("Last key: %d", Demo.last_key))
+        client.render_text(panel_x + 4, panel_y + 28, custom_colors.yellow, 0, world_str)
+        client.render_text(panel_x + 4, panel_y + 40, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
+        client.render_text(panel_x + 4, panel_y + 52, colors.text, 0, string.format("Last key: %d", Demo.last_key))
         return
     end
 
@@ -306,12 +357,13 @@ local function render_mouse_tracker()
     local panel_x = mx + 15
     local panel_y = my + 15
 
-    draw_panel(panel_x, panel_y, 130, 62, nil)
+    draw_panel(panel_x, panel_y, 140, 74, nil)
 
     client.render_text(panel_x + 4, panel_y + 4, colors.text, 0, string.format("Screen: %d, %d", mx, my))
     client.render_text(panel_x + 4, panel_y + 16, custom_colors.cyan, 0, map_str)
-    client.render_text(panel_x + 4, panel_y + 28, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
-    client.render_text(panel_x + 4, panel_y + 40, colors.text, 0, string.format("Last key: %d", Demo.last_key))
+    client.render_text(panel_x + 4, panel_y + 28, custom_colors.yellow, 0, world_str)
+    client.render_text(panel_x + 4, panel_y + 40, colors.text, 0, string.format("Clicks: %d", Demo.mouse_clicks))
+    client.render_text(panel_x + 4, panel_y + 52, colors.text, 0, string.format("Last key: %d", Demo.last_key))
 end
 
 local function render_map_info()
@@ -381,6 +433,107 @@ local function render_nearby_players()
     end
 end
 
+-- NEW: Demonstrates selection and targeting API
+local function render_selection_info()
+    local x = 10
+    local y = client.doty(C.DOT_TL) + 120
+
+    draw_panel(x, y, 200, 170, "Selection & Targeting")
+
+    local text_y = y + 18
+
+    -- Player world position (demonstrates get_player_world_pos)
+    local pwx, pwy = client.get_player_world_pos()
+    client.render_text(x + 4, text_y, custom_colors.yellow, 0, string.format("Player pos: %d, %d", pwx, pwy))
+    text_y = text_y + 12
+
+    -- Player speed (demonstrates get_pspeed)
+    local pspeed = client.get_pspeed()
+    local speed_names = {[0] = "Ill", [1] = "Stealth", [2] = "Normal", [3] = "Fast"}
+    local speed_name = speed_names[pspeed] or "Unknown"
+    client.render_text(x + 4, text_y, colors.text, 0, string.format("Speed: %s (%d)", speed_name, pspeed))
+    text_y = text_y + 12
+
+    -- Military rank (demonstrates get_mil_exp and get_mil_rank)
+    local mil_exp = client.get_mil_exp()
+    local mil_rank = client.get_mil_rank()
+    client.render_text(x + 4, text_y, custom_colors.purple, 0, string.format("Mil: Rank %d (Exp: %d)", mil_rank, mil_exp))
+    text_y = text_y + 14
+
+    -- Selection info (demonstrates get_chrsel, get_itmsel, get_mapsel)
+    client.render_text(x + 4, text_y, custom_colors.cyan, 0, "--- Selection ---")
+    text_y = text_y + 12
+
+    local chrsel = client.get_chrsel()
+    local itmsel = client.get_itmsel()
+    local mapsel = client.get_mapsel()
+
+    client.render_text(x + 4, text_y, colors.text, 0, "Char: " .. (chrsel and tostring(chrsel) or "none"))
+    text_y = text_y + 12
+    client.render_text(x + 4, text_y, colors.text, 0, "Item: " .. (itmsel and tostring(itmsel) or "none"))
+    text_y = text_y + 12
+    client.render_text(x + 4, text_y, colors.text, 0, "Map: " .. (mapsel and tostring(mapsel) or "none"))
+    text_y = text_y + 14
+
+    -- Action info (demonstrates get_action)
+    local action = client.get_action()
+    client.render_text(x + 4, text_y, custom_colors.orange, 0, string.format("Action: %d at (%d, %d)", action.act, action.x, action.y))
+    text_y = text_y + 14
+
+    -- Look info (demonstrates get_look_name, get_look_desc)
+    local look_name = client.get_look_name()
+    if look_name and look_name ~= "" then
+        client.render_text(x + 4, text_y, colors.white, 0, "Looking: " .. string.sub(look_name, 1, 20))
+    end
+end
+
+-- NEW: Demonstrates skill API
+local function render_skills_info()
+    local x = client.dotx(C.DOT_BR) - 200
+    local y = client.doty(C.DOT_TL) + 200
+
+    draw_panel(x, y, 190, 140, "Skills Info")
+
+    local text_y = y + 18
+
+    -- Show a few skill names (demonstrates get_skill_name, get_skill_info)
+    local skills_to_show = {C.V_STR, C.V_AGI, C.V_INT, C.V_WIS}
+
+    for _, skill_idx in ipairs(skills_to_show) do
+        local info = client.get_skill_info(skill_idx)
+        if info then
+            local base = client.get_value(0, skill_idx)
+            local curr = client.get_value(1, skill_idx)
+            local cost = client.get_raise_cost(skill_idx, curr + 1)
+            local color = curr > base and colors.green or (curr < base and colors.red or colors.text)
+            client.render_text(x + 4, text_y, color, 0, string.format("%s: %d", info.name, curr))
+            client.render_text(x + 100, text_y, custom_colors.yellow, 0, string.format("Cost: %d", cost))
+            text_y = text_y + 12
+        end
+    end
+
+    text_y = text_y + 4
+
+    -- Container info (demonstrates get_con_type, get_con_name, get_con_cnt)
+    local con_type = client.get_con_type()
+    local con_cnt = client.get_con_cnt()
+    if con_cnt > 0 then
+        local con_name = client.get_con_name()
+        local type_names = {[0] = "None", [1] = "Container", [2] = "Shop"}
+        client.render_text(x + 4, text_y, custom_colors.cyan, 0, string.format("%s: %s", type_names[con_type] or "?", con_name))
+        text_y = text_y + 12
+        client.render_text(x + 4, text_y, colors.text, 0, string.format("Items: %d", con_cnt))
+    else
+        client.render_text(x + 4, text_y, colors.text, 0, "No container open")
+    end
+
+    text_y = text_y + 14
+
+    -- Quest count (demonstrates get_quest_count)
+    local quest_count = client.get_quest_count()
+    client.render_text(x + 4, text_y, custom_colors.purple, 0, string.format("Quests available: %d", quest_count))
+end
+
 -- ============================================================================
 -- COMMAND HANDLERS
 -- ============================================================================
@@ -389,9 +542,11 @@ local function show_help()
     client.addline("=== Demo Mod Commands ===")
     client.addline("#demo_overlay  - Toggle main overlay (F9)")
     client.addline("#demo_stats    - Toggle stats panel (F10)")
-    client.addline("#demo_mouse    - Toggle mouse tracker")
+    client.addline("#demo_mouse    - Toggle mouse tracker (w/ world coords)")
     client.addline("#demo_map      - Toggle map tile info")
     client.addline("#demo_players  - Toggle nearby players")
+    client.addline("#demo_select   - Toggle selection/targeting info")
+    client.addline("#demo_skills   - Toggle skills/container info")
     client.addline("#demo_all      - Enable all overlays")
     client.addline("#demo_off      - Disable all overlays")
     client.addline("#demo_info     - Show mod state info")
@@ -416,6 +571,8 @@ local function show_mod_info()
     if Demo.show_mouse_tracker then table.insert(overlays, "mouse") end
     if Demo.show_map_info then table.insert(overlays, "map") end
     if Demo.show_nearby_players then table.insert(overlays, "players") end
+    if Demo.show_selection then table.insert(overlays, "select") end
+    if Demo.show_skills then table.insert(overlays, "skills") end
 
     if #overlays > 0 then
         client.addline("Active overlays: " .. table.concat(overlays, ", "))
@@ -517,6 +674,77 @@ local function run_api_tests()
     test("colors.health exists", colors.health ~= nil)
     test("colors.mana exists", colors.mana ~= nil)
 
+    -- NEW: Test world coordinate functions
+    local pwx, pwy = client.get_player_world_pos()
+    test("get_player_world_pos() returns two numbers", type(pwx) == "number" and type(pwy) == "number")
+
+    local plrmn = client.get_plrmn()
+    test("get_plrmn() returns number", type(plrmn) == "number")
+
+    local wx, wy = client.get_world_pos(10, 10)
+    test("get_world_pos() returns two numbers", type(wx) == "number" and type(wy) == "number")
+
+    -- NEW: Test selection functions
+    local chrsel = client.get_chrsel()
+    test("get_chrsel() returns number or nil", type(chrsel) == "number" or chrsel == nil)
+
+    local itmsel = client.get_itmsel()
+    test("get_itmsel() returns number or nil", type(itmsel) == "number" or itmsel == nil)
+
+    local action = client.get_action()
+    test("get_action() returns table", type(action) == "table")
+    if action then
+        test("action.act exists", action.act ~= nil)
+        test("action.x exists", action.x ~= nil)
+        test("action.y exists", action.y ~= nil)
+    end
+
+    -- NEW: Test look functions
+    local look_name = client.get_look_name()
+    test("get_look_name() returns string", type(look_name) == "string")
+
+    local look_desc = client.get_look_desc()
+    test("get_look_desc() returns string", type(look_desc) == "string")
+
+    -- NEW: Test container functions
+    test("get_con_type() returns number", type(client.get_con_type()) == "number")
+    test("get_con_cnt() returns number", type(client.get_con_cnt()) == "number")
+    test("get_con_name() returns string", type(client.get_con_name()) == "string")
+
+    -- NEW: Test player state functions
+    test("get_pspeed() returns number", type(client.get_pspeed()) == "number")
+    test("get_mil_exp() returns number", type(client.get_mil_exp()) == "number")
+    test("get_mil_rank() returns number", type(client.get_mil_rank()) == "number")
+
+    -- NEW: Test skill functions
+    local skill_info = client.get_skill_info(C.V_STR)
+    test("get_skill_info() returns table or nil", type(skill_info) == "table" or skill_info == nil)
+    if skill_info then
+        test("skill_info.name exists", skill_info.name ~= nil)
+        test("skill_info.cost exists", skill_info.cost ~= nil)
+    end
+
+    local skill_name = client.get_skill_name(C.V_STR)
+    test("get_skill_name() returns string or nil", type(skill_name) == "string" or skill_name == nil)
+
+    local raise_cost = client.get_raise_cost(C.V_STR, 10)
+    test("get_raise_cost() returns number", type(raise_cost) == "number")
+
+    -- NEW: Test quest functions
+    test("get_quest_count() returns number", type(client.get_quest_count()) == "number")
+
+    local quest_status = client.get_quest_status(0)
+    test("get_quest_status() returns table or nil", type(quest_status) == "table" or quest_status == nil)
+
+    -- NEW: Test new constants
+    test("C.CONTAINERSIZE exists", C.CONTAINERSIZE ~= nil)
+    test("C.V_MAX exists", C.V_MAX ~= nil)
+    test("C.MAXQUEST exists", C.MAXQUEST ~= nil)
+    test("C.MAXMN exists", C.MAXMN ~= nil)
+    test("C.QF_OPEN exists", C.QF_OPEN ~= nil)
+    test("C.QF_DONE exists", C.QF_DONE ~= nil)
+    test("C.SPEED_NORMAL exists", C.SPEED_NORMAL ~= nil)
+
     -- Test sandbox is working
     test("os.time exists (allowed)", os.time ~= nil)
     test("os.date exists (allowed)", os.date ~= nil)
@@ -573,12 +801,26 @@ local function handle_demo_commands(cmd)
         return 1
     end
 
+    if cmd == "#demo_select" then
+        Demo.show_selection = not Demo.show_selection
+        client.addline("Selection info: " .. (Demo.show_selection and "ON" or "OFF"))
+        return 1
+    end
+
+    if cmd == "#demo_skills" then
+        Demo.show_skills = not Demo.show_skills
+        client.addline("Skills info: " .. (Demo.show_skills and "ON" or "OFF"))
+        return 1
+    end
+
     if cmd == "#demo_all" then
         Demo.show_overlay = true
         Demo.show_stats = true
         Demo.show_mouse_tracker = true
         Demo.show_map_info = true
         Demo.show_nearby_players = true
+        Demo.show_selection = true
+        Demo.show_skills = true
         client.addline("All overlays enabled!")
         return 1
     end
@@ -589,6 +831,8 @@ local function handle_demo_commands(cmd)
         Demo.show_mouse_tracker = false
         Demo.show_map_info = false
         Demo.show_nearby_players = false
+        Demo.show_selection = false
+        Demo.show_skills = false
         client.addline("All overlays disabled.")
         return 1
     end
@@ -687,6 +931,8 @@ register("on_frame", function()
     if Demo.show_mouse_tracker then render_mouse_tracker() end
     if Demo.show_map_info then render_map_info() end
     if Demo.show_nearby_players then render_nearby_players() end
+    if Demo.show_selection then render_selection_info() end
+    if Demo.show_skills then render_skills_info() end
 end)
 
 -- ============================================================================

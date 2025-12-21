@@ -439,7 +439,7 @@ static int l_get_container(lua_State *L)
 
 // --- Player state ---
 
-// Get player speed state (0=normal, 1=fast, 2=stealth)
+// Get player speed state: 0=normal, 1=fast, 2=stealth
 static int l_get_pspeed(lua_State *L)
 {
 	lua_pushinteger(L, pspeed);
@@ -823,96 +823,59 @@ static int l_get_clipboard(lua_State *L)
 
 static const luaL_Reg client_funcs[] = {
     // Logging
-    {"note", l_note},
-    {"warn", l_warn},
-    {"addline", l_addline},
+    {"note", l_note}, {"warn", l_warn}, {"addline", l_addline},
 
     // Rendering
-    {"render_text", l_render_text},
-    {"render_rect", l_render_rect},
-    {"render_line", l_render_line},
-    {"render_pixel", l_render_pixel},
-    {"render_sprite", l_render_sprite},
-    {"render_text_length", l_render_text_length},
+    {"render_text", l_render_text}, {"render_rect", l_render_rect}, {"render_line", l_render_line},
+    {"render_pixel", l_render_pixel}, {"render_sprite", l_render_sprite}, {"render_text_length", l_render_text_length},
 
     // Colors
     {"rgb", l_rgb},
 
     // Game data
-    {"get_hp", l_get_hp},
-    {"get_mana", l_get_mana},
-    {"get_rage", l_get_rage},
-    {"get_endurance", l_get_endurance},
-    {"get_lifeshield", l_get_lifeshield},
-    {"get_experience", l_get_experience},
-    {"get_gold", l_get_gold},
-    {"get_tick", l_get_tick},
-    {"get_username", l_get_username},
-    {"get_origin", l_get_origin},
-    {"get_mouse", l_get_mouse},
-    {"stom", l_stom},
-    {"mtos", l_mtos},
-    {"get_world_pos", l_get_world_pos},
-    {"get_plrmn", l_get_plrmn},
-    {"get_player_world_pos", l_get_player_world_pos},
-    {"get_value", l_get_value},
-    {"get_item", l_get_item},
-    {"get_item_flags", l_get_item_flags},
-    {"get_map_tile", l_get_map_tile},
+    {"get_hp", l_get_hp}, {"get_mana", l_get_mana}, {"get_rage", l_get_rage}, {"get_endurance", l_get_endurance},
+    {"get_lifeshield", l_get_lifeshield}, {"get_experience", l_get_experience}, {"get_gold", l_get_gold},
+    {"get_tick", l_get_tick}, {"get_username", l_get_username}, {"get_origin", l_get_origin},
+    {"get_mouse", l_get_mouse}, {"stom", l_stom}, {"mtos", l_mtos}, {"get_world_pos", l_get_world_pos},
+    {"get_plrmn", l_get_plrmn}, {"get_player_world_pos", l_get_player_world_pos}, {"get_value", l_get_value},
+    {"get_item", l_get_item}, {"get_item_flags", l_get_item_flags}, {"get_map_tile", l_get_map_tile},
     {"get_player", l_get_player},
 
     // Selection info
-    {"get_itmsel", l_get_itmsel},
-    {"get_chrsel", l_get_chrsel},
-    {"get_mapsel", l_get_mapsel},
+    {"get_itmsel", l_get_itmsel}, {"get_chrsel", l_get_chrsel}, {"get_mapsel", l_get_mapsel},
     {"get_action", l_get_action},
 
     // Look/Inspect info
-    {"get_look_name", l_get_look_name},
-    {"get_look_desc", l_get_look_desc},
-    {"get_lookinv", l_get_lookinv},
+    {"get_look_name", l_get_look_name}, {"get_look_desc", l_get_look_desc}, {"get_lookinv", l_get_lookinv},
 
     // Container info
-    {"get_con_type", l_get_con_type},
-    {"get_con_name", l_get_con_name},
-    {"get_con_cnt", l_get_con_cnt},
+    {"get_con_type", l_get_con_type}, {"get_con_name", l_get_con_name}, {"get_con_cnt", l_get_con_cnt},
     {"get_container", l_get_container},
 
     // Player state
-    {"get_pspeed", l_get_pspeed},
-    {"get_mil_exp", l_get_mil_exp},
-    {"get_mil_rank", l_get_mil_rank},
+    {"get_pspeed", l_get_pspeed}, {"get_mil_exp", l_get_mil_exp}, {"get_mil_rank", l_get_mil_rank},
 
     // Skill info
-    {"get_skill_name", l_get_skill_name},
-    {"get_skill_desc", l_get_skill_desc},
-    {"get_skill_info", l_get_skill_info},
+    {"get_skill_name", l_get_skill_name}, {"get_skill_desc", l_get_skill_desc}, {"get_skill_info", l_get_skill_info},
     {"get_raise_cost", l_get_raise_cost},
 
     // Quest info
-    {"get_quest_count", l_get_quest_count},
-    {"get_quest_status", l_get_quest_status},
+    {"get_quest_count", l_get_quest_count}, {"get_quest_status", l_get_quest_status},
     {"get_quest_info", l_get_quest_info},
 
     // GUI helpers
-    {"dotx", l_dotx},
-    {"doty", l_doty},
-    {"butx", l_butx},
-    {"buty", l_buty},
+    {"dotx", l_dotx}, {"doty", l_doty}, {"butx", l_butx}, {"buty", l_buty},
 
     // Utilities
-    {"exp2level", l_exp2level},
-    {"level2exp", l_level2exp},
+    {"exp2level", l_exp2level}, {"level2exp", l_level2exp},
 
     // Commands
     {"cmd_text", l_cmd_text},
 
     // Clipboard
-    {"set_clipboard", l_set_clipboard},
-    {"get_clipboard", l_get_clipboard},
+    {"set_clipboard", l_set_clipboard}, {"get_clipboard", l_get_clipboard},
 
-    {NULL, NULL}
-};
+    {NULL, NULL}};
 
 void lua_api_register(lua_State *L)
 {

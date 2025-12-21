@@ -16,6 +16,8 @@
 #include <lualib.h>
 #include <lauxlib.h>
 
+#include <SDL2/SDL.h>
+
 #include "astonia.h"
 #include "scripting/lua_interface.h"
 
@@ -25,18 +27,20 @@ void lua_api_register(lua_State *L);
 // Global Lua state
 static lua_State *L = NULL;
 
-// Mods directory (at game root level, not in bin/)
-static const char *MODS_DIR = "mods";
+// Mods subdirectory name (within SDL user data path)
+static const char *MODS_SUBDIR = "mods";
 
 // Version string for loaded mods
 static char lua_version_str[256] = "LuaJIT Scripting";
 
 // Track loaded scripts for hot-reload
 #define MAX_SCRIPTS 128
+
 static struct {
 	char path[512];
 	time_t mtime;
 } loaded_scripts[MAX_SCRIPTS];
+
 static int loaded_script_count = 0;
 
 // Track loaded mod names
@@ -44,23 +48,121 @@ static int loaded_script_count = 0;
 static char loaded_mod_names[MAX_MODS][64];
 static int loaded_mod_count = 0;
 
+// Current mod path for safe require (set during mod loading)
+static char current_mod_path[512] = "";
+
+// Instruction limit for script execution (prevents infinite loops)
+// ~10 million instructions is roughly 1-2 seconds of execution
+#define LUA_MAX_INSTRUCTIONS 10000000
+
+static void instruction_limit_hook(lua_State *L, lua_Debug *ar)
+{
+	(void)ar;
+	luaL_error(L, "script exceeded instruction limit (possible infinite loop)");
+}
+
+static void enable_instruction_limit(lua_State *L)
+{
+	lua_sethook(L, instruction_limit_hook, LUA_MASKCOUNT, LUA_MAX_INSTRUCTIONS);
+}
+
+static void disable_instruction_limit(lua_State *L)
+{
+	lua_sethook(L, NULL, 0, 0);
+}
+
+// Safe require function - loads modules only from the current mod directory
+static int l_safe_require(lua_State *L)
+{
+	const char *modname = luaL_checkstring(L, 1);
+
+	// Security: check for path traversal attempts
+	if (strstr(modname, "..") != NULL) {
+		return luaL_error(L, "require: path traversal not allowed (..)");
+	}
+
+	// Block absolute paths
+	if (modname[0] == '/' || modname[0] == '\\') {
+		return luaL_error(L, "require: absolute paths not allowed");
+	}
+
+	// Block backslashes (Windows path separators)
+	if (strchr(modname, '\\') != NULL) {
+		return luaL_error(L, "require: backslashes not allowed in module names");
+	}
+
+	// Block empty module names
+	if (modname[0] == '\0') {
+		return luaL_error(L, "require: empty module name");
+	}
+
+	// Check if we have a current mod path set
+	if (current_mod_path[0] == '\0') {
+		return luaL_error(L, "require: no mod context (require can only be used within a mod)");
+	}
+
+	// Build the full path
+	char full_path[512];
+	int written = snprintf(full_path, sizeof(full_path), "%s/%s.lua", current_mod_path, modname);
+	if (written >= (int)sizeof(full_path)) {
+		return luaL_error(L, "require: path too long");
+	}
+
+	// Get or create the _LOADED table
+	lua_getglobal(L, "_LOADED");
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 1);
+		lua_newtable(L);
+		lua_pushvalue(L, -1);
+		lua_setglobal(L, "_LOADED");
+	}
+
+	// Check if module is already loaded
+	lua_getfield(L, -1, full_path);
+	if (!lua_isnil(L, -1)) {
+		// Already loaded, return cached value
+		lua_remove(L, -2); // remove _LOADED table
+		return 1;
+	}
+	lua_pop(L, 1); // pop nil
+
+	// Load the file
+	if (luaL_loadfile(L, full_path) != LUA_OK) {
+		const char *error = lua_tostring(L, -1);
+		lua_pop(L, 2); // pop error and _LOADED
+		return luaL_error(L, "require '%s': %s", modname, error ? error : "failed to load");
+	}
+
+	// Execute with instruction limit
+	enable_instruction_limit(L);
+	int status = lua_pcall(L, 0, 1, 0);
+	disable_instruction_limit(L);
+
+	if (status != LUA_OK) {
+		const char *error = lua_tostring(L, -1);
+		lua_pop(L, 2); // pop error and _LOADED
+		return luaL_error(L, "require '%s': %s", modname, error ? error : "execution failed");
+	}
+
+	// If nil was returned, use true as the cached value (standard Lua behavior)
+	if (lua_isnil(L, -1)) {
+		lua_pop(L, 1);
+		lua_pushboolean(L, 1);
+	}
+
+	// Cache the result: _LOADED[full_path] = result
+	lua_pushvalue(L, -1); // duplicate result for caching
+	lua_setfield(L, -3, full_path); // _LOADED[full_path] = result
+	lua_remove(L, -2); // remove _LOADED table
+
+	return 1; // return the result
+}
+
 // Sandbox configuration - functions to remove from global environment
-static const char *unsafe_functions[] = {
-    "dofile",
-    "loadfile",
-    "load",
-    "loadstring",
-    NULL
-};
+static const char *unsafe_functions[] = {"dofile", "loadfile", "load", "loadstring", NULL};
 
 // Unsafe packages to remove
-static const char *unsafe_packages[] = {
-    "io",
-    "os",
-    "debug",
-    "package",
-    NULL
-};
+static const char *unsafe_packages[] = {"io", "os", "debug", "package", NULL};
 
 // Safe os functions to keep (time-related only)
 static void setup_safe_os(lua_State *L)
@@ -120,6 +222,40 @@ static void apply_sandbox(lua_State *L)
 	lua_pushnil(L);
 	lua_setglobal(L, "rawlen");
 
+	// Remove metatable access
+	lua_pushnil(L);
+	lua_setglobal(L, "getmetatable");
+	lua_pushnil(L);
+	lua_setglobal(L, "setmetatable");
+
+	// Remove environment manipulation (Lua 5.1/LuaJIT)
+	lua_pushnil(L);
+	lua_setglobal(L, "getfenv");
+	lua_pushnil(L);
+	lua_setglobal(L, "setfenv");
+
+	// Remove other dangerous functions
+	lua_pushnil(L);
+	lua_setglobal(L, "collectgarbage");
+	lua_pushnil(L);
+	lua_setglobal(L, "newproxy");
+
+	// Neuter string.dump
+	lua_getglobal(L, "string");
+	if (lua_istable(L, -1)) {
+		lua_pushnil(L);
+		lua_setfield(L, -2, "dump");
+	}
+	lua_pop(L, 1);
+
+	// Initialize _LOADED table for module caching
+	lua_newtable(L);
+	lua_setglobal(L, "_LOADED");
+
+	// Register safe require function
+	lua_pushcfunction(L, l_safe_require);
+	lua_setglobal(L, "require");
+
 	note("Lua sandbox applied");
 }
 
@@ -178,35 +314,62 @@ static int load_mod_scripts(const char *mod_path, const char *mod_name)
 		return 0;
 	}
 
+	// Set current mod path for safe require
+	strncpy(current_mod_path, mod_path, sizeof(current_mod_path) - 1);
+	current_mod_path[sizeof(current_mod_path) - 1] = '\0';
+
 	// First, look for and load init.lua if it exists
 	char init_path[512];
-	snprintf(init_path, sizeof(init_path), "%s/init.lua", mod_path);
-	FILE *init_file = fopen(init_path, "r");
-	if (init_file) {
-		fclose(init_file);
-		if (load_script(init_path)) {
-			count++;
-		}
-	}
-
-	// Load all other .lua files (except init.lua)
-	while ((entry = readdir(dir)) != NULL) {
-		if (entry->d_type == DT_REG && is_lua_file(entry->d_name)) {
-			// Skip init.lua, we already loaded it
-			if (strcmp(entry->d_name, "init.lua") == 0) {
-				continue;
-			}
-
-			char full_path[512];
-			snprintf(full_path, sizeof(full_path), "%s/%s", mod_path, entry->d_name);
-
-			if (load_script(full_path)) {
+	int written = snprintf(init_path, sizeof(init_path), "%s/init.lua", mod_path);
+	if (written < (int)sizeof(init_path)) {
+		FILE *init_file = fopen(init_path, "r");
+		if (init_file) {
+			fclose(init_file);
+			if (load_script(init_path)) {
 				count++;
 			}
 		}
 	}
 
+	// Load all other .lua files (except init.lua)
+	while ((entry = readdir(dir)) != NULL) {
+		// Skip init.lua, we already loaded it
+		if (strcmp(entry->d_name, "init.lua") == 0) {
+			continue;
+		}
+
+		if (!is_lua_file(entry->d_name)) {
+			continue;
+		}
+
+		// Handle DT_UNKNOWN for portability (XFS, NFS, etc.)
+		if (entry->d_type != DT_REG && entry->d_type != DT_UNKNOWN) {
+			continue;
+		}
+
+		char full_path[512];
+		written = snprintf(full_path, sizeof(full_path), "%s/%s", mod_path, entry->d_name);
+		if (written >= (int)sizeof(full_path)) {
+			warn("Path too long, skipping: %s/%s", mod_path, entry->d_name);
+			continue;
+		}
+
+		if (entry->d_type == DT_UNKNOWN) {
+			struct stat st;
+			if (stat(full_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+				continue;
+			}
+		}
+
+		if (load_script(full_path)) {
+			count++;
+		}
+	}
+
 	closedir(dir);
+
+	// Clear current mod path (require only works during mod loading)
+	current_mod_path[0] = '\0';
 
 	// Track the mod name
 	if (count > 0 && loaded_mod_count < MAX_MODS) {
@@ -231,18 +394,20 @@ static int load_all_mods(void)
 	loaded_script_count = 0;
 	loaded_mod_count = 0;
 
-	// Try to find mods directory - first at game root level
-	snprintf(mods_path, sizeof(mods_path), "%s", MODS_DIR);
-	dir = opendir(mods_path);
-
-	if (!dir) {
-		// Try relative to bin/ (when running from bin/)
-		snprintf(mods_path, sizeof(mods_path), "../%s", MODS_DIR);
+	// Get SDL user data path (e.g., ~/.local/share/Astonia/mods/ on Linux)
+	char *pref_path = SDL_GetPrefPath(ORG_NAME, APP_NAME);
+	if (pref_path) {
+		snprintf(mods_path, sizeof(mods_path), "%s%s", pref_path, MODS_SUBDIR);
+		SDL_free(pref_path);
+		dir = opendir(mods_path);
+	} else {
+		// Fallback to relative path if SDL_GetPrefPath fails
+		snprintf(mods_path, sizeof(mods_path), "%s", MODS_SUBDIR);
 		dir = opendir(mods_path);
 	}
 
 	if (!dir) {
-		note("Mods directory '%s' not found, no Lua mods will be loaded", MODS_DIR);
+		note("Mods directory '%s' not found, no Lua mods will be loaded", mods_path);
 		return 0;
 	}
 
@@ -253,17 +418,30 @@ static int load_all_mods(void)
 			continue;
 		}
 
-		// Check if it's a directory
-		if (entry->d_type == DT_DIR) {
-			char mod_path[512];
-			snprintf(mod_path, sizeof(mod_path), "%s/%s", mods_path, entry->d_name);
+		// Check if it's a directory (handle DT_UNKNOWN for portability)
+		if (entry->d_type != DT_DIR && entry->d_type != DT_UNKNOWN) {
+			continue;
+		}
 
-			int scripts_loaded = load_mod_scripts(mod_path, entry->d_name);
-			if (scripts_loaded > 0) {
-				note("Loaded mod '%s' (%d scripts)", entry->d_name, scripts_loaded);
-				total_scripts += scripts_loaded;
-				mod_count++;
+		char mod_path[512];
+		int written = snprintf(mod_path, sizeof(mod_path), "%s/%s", mods_path, entry->d_name);
+		if (written >= (int)sizeof(mod_path)) {
+			warn("Mod path too long, skipping: %s/%s", mods_path, entry->d_name);
+			continue;
+		}
+
+		if (entry->d_type == DT_UNKNOWN) {
+			struct stat st;
+			if (stat(mod_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+				continue;
 			}
+		}
+
+		int scripts_loaded = load_mod_scripts(mod_path, entry->d_name);
+		if (scripts_loaded > 0) {
+			note("Loaded mod '%s' (%d scripts)", entry->d_name, scripts_loaded);
+			total_scripts += scripts_loaded;
+			mod_count++;
 		}
 	}
 
@@ -317,7 +495,11 @@ static int call_lua_handler(const char *name)
 	for (int i = 1; i <= len; i++) {
 		lua_rawgeti(L, -1, i);
 		if (lua_isfunction(L, -1)) {
-			if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+			enable_instruction_limit(L);
+			int status = lua_pcall(L, 0, 0, 0);
+			disable_instruction_limit(L);
+
+			if (status != LUA_OK) {
 				const char *error = lua_tostring(L, -1);
 				warn("Lua error in %s callback %d: %s", name, i, error ? error : "unknown");
 				lua_pop(L, 1);
@@ -374,7 +556,12 @@ static int call_lua_handler_int(const char *name, int nargs, ...)
 			for (int j = 0; j < nargs && j < 8; j++) {
 				lua_pushinteger(L, arg_values[j]);
 			}
-			if (lua_pcall(L, nargs, 1, 0) != LUA_OK) {
+
+			enable_instruction_limit(L);
+			int status = lua_pcall(L, nargs, 1, 0);
+			disable_instruction_limit(L);
+
+			if (status != LUA_OK) {
 				const char *error = lua_tostring(L, -1);
 				warn("Lua error in %s callback %d: %s", name, i, error ? error : "unknown");
 				lua_pop(L, 1);
@@ -424,7 +611,12 @@ static int call_lua_handler_str(const char *name, const char *str_arg)
 		lua_rawgeti(L, -1, i);
 		if (lua_isfunction(L, -1)) {
 			lua_pushstring(L, str_arg);
-			if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+
+			enable_instruction_limit(L);
+			int status = lua_pcall(L, 1, 1, 0);
+			disable_instruction_limit(L);
+
+			if (status != LUA_OK) {
 				const char *error = lua_tostring(L, -1);
 				warn("Lua error in %s callback %d: %s", name, i, error ? error : "unknown");
 				lua_pop(L, 1);
@@ -447,10 +639,9 @@ static int call_lua_handler_str(const char *name, const char *str_arg)
 }
 
 // List of callback event names
-static const char *callback_names[] = {"on_init",         "on_exit",       "on_gamestart",     "on_tick",
-                                       "on_frame",        "on_mouse_move", "on_mouse_click",   "on_keydown",
-                                       "on_keyup",        "on_client_cmd", "on_areachange",    "on_before_reload",
-                                       "on_after_reload", NULL};
+static const char *callback_names[] = {"on_init", "on_exit", "on_gamestart", "on_tick", "on_frame", "on_mouse_move",
+    "on_mouse_click", "on_keydown", "on_keyup", "on_client_cmd", "on_areachange", "on_before_reload", "on_after_reload",
+    NULL};
 
 // Set up the callback registration system in Lua
 static void setup_callback_system(void)
@@ -464,23 +655,42 @@ static void setup_callback_system(void)
 	lua_setglobal(L, "_callbacks");
 
 	// Create the register() function in Lua
-	const char *register_func =
-	    "function register(event_name, callback)\n"
-	    "    if type(callback) ~= 'function' then\n"
-	    "        client.warn('register: callback must be a function')\n"
-	    "        return false\n"
-	    "    end\n"
-	    "    if not _callbacks[event_name] then\n"
-	    "        client.warn('register: unknown event: ' .. tostring(event_name))\n"
-	    "        return false\n"
-	    "    end\n"
-	    "    table.insert(_callbacks[event_name], callback)\n"
-	    "    return true\n"
-	    "end\n";
+	const char *register_func = "function register(event_name, callback)\n"
+	                            "    if type(callback) ~= 'function' then\n"
+	                            "        client.warn('register: callback must be a function')\n"
+	                            "        return false\n"
+	                            "    end\n"
+	                            "    if not _callbacks[event_name] then\n"
+	                            "        client.warn('register: unknown event: ' .. tostring(event_name))\n"
+	                            "        return false\n"
+	                            "    end\n"
+	                            "    table.insert(_callbacks[event_name], callback)\n"
+	                            "    return true\n"
+	                            "end\n";
 
 	if (luaL_dostring(L, register_func) != LUA_OK) {
 		const char *error = lua_tostring(L, -1);
 		warn("Failed to create register function: %s", error ? error : "unknown");
+		lua_pop(L, 1);
+	}
+
+	// Create the unregister() function in Lua
+	const char *unregister_func = "function unregister(event_name, callback)\n"
+	                              "    if not _callbacks[event_name] then\n"
+	                              "        return false\n"
+	                              "    end\n"
+	                              "    for i = #_callbacks[event_name], 1, -1 do\n"
+	                              "        if _callbacks[event_name][i] == callback then\n"
+	                              "            table.remove(_callbacks[event_name], i)\n"
+	                              "            return true\n"
+	                              "        end\n"
+	                              "    end\n"
+	                              "    return false\n"
+	                              "end\n";
+
+	if (luaL_dostring(L, unregister_func) != LUA_OK) {
+		const char *error = lua_tostring(L, -1);
+		warn("Failed to create unregister function: %s", error ? error : "unknown");
 		lua_pop(L, 1);
 	}
 }
@@ -560,10 +770,14 @@ bool lua_scripting_reload(void)
 	// Call pre-reload handler
 	call_lua_handler("on_before_reload");
 
-	// Clear all mod state and callbacks
+	// Clear all mod state, callbacks, and loaded modules cache
 	lua_pushnil(L);
 	lua_setglobal(L, "MOD");
 	clear_callbacks();
+
+	// Clear _LOADED cache for fresh module loading
+	lua_newtable(L);
+	lua_setglobal(L, "_LOADED");
 
 	// Re-register API (in case it was modified)
 	lua_api_register(L);
@@ -619,13 +833,15 @@ int lua_scripting_keyup(int key)
 int lua_scripting_client_cmd(const char *buf)
 {
 	if (!L) {
-		// Lua not initialized
+		return 0;
+	}
+
+	if (!buf) {
 		return 0;
 	}
 
 	// Special command to reload scripts (allow trailing whitespace)
-	if (strncmp(buf, "#lua_reload", 11) == 0 &&
-	    (buf[11] == '\0' || buf[11] == ' ' || buf[11] == '\t')) {
+	if (strncmp(buf, "#lua_reload", 11) == 0 && (buf[11] == '\0' || buf[11] == ' ' || buf[11] == '\t')) {
 		lua_scripting_reload();
 		return 1;
 	}

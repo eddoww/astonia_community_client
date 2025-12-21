@@ -493,7 +493,7 @@ DLL_EXPORT extern int protocol_version;
 extern int looklevel;
 DLL_EXPORT extern uint32_t mirror, newmirror;
 extern int may_teleport[64 + 32];
-DLL_EXPORT extern int pspeed; // 0=ill 1=stealth 2=normal 3=fast
+DLL_EXPORT extern int pspeed; // 0=normal 1=fast 2=stealth
 
 DLL_EXPORT extern char username[40];
 DLL_EXPORT extern char password[16];

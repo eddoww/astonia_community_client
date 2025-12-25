@@ -80,12 +80,6 @@ $(ASTONIA_NET_LIB):
 		rustup target add $(ASTONIA_NET_TGT)
 		cd $(ASTONIA_NET_DIR) && RUSTFLAGS="$(RUST_CPU_FLAGS)" cargo build --release --target $(ASTONIA_NET_TGT)
 
-bin/amod.so:	src/amod/amod.o bin/moac
-		$(CC) $(LDFLAGS) -shared -o bin/amod.so src/amod/amod.o
-
-src/amod/amod.o:	src/amod/amod.c src/amod/amod.h src/amod/amod_structs.h
-		$(CC) $(CFLAGS_PIC) -c -o $@ $<
-
 bin/anicopy:	src/helper/anicopy.c
 		$(CC) $(OPT) $(DEBUG) -Wall -o bin/anicopy src/helper/anicopy.c
 
@@ -191,7 +185,6 @@ distrib: distrib-stage
 	@cd distrib && tar czf ../linux_client.tar.gz linux_client
 	@echo "Distribution package created: linux_client.tar.gz"
 
-amod:		bin/amod.so bin/moac
 convert:	bin/convert
 anicopy:	bin/anicopy
 

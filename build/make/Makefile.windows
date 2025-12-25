@@ -237,11 +237,6 @@ bin/moac_dbg.exe lib/moac_dbg.a:	$(OBJS) $(ASTONIA_NET_LIB)
 $(ASTONIA_NET_LIB):
 			cargo build --release --manifest-path $(ASTONIA_NET_DIR)/Cargo.toml --target $(ASTONIA_NET_TGT)
 
-bin/amod.dll:		src/amod/amod.o lib/moac.a
-			$(CC) $(LDFLAGS) $(OPT) $(DEBUG) -shared -o bin/amod.dll src/amod/amod.o lib/moac.a
-
-src/amod/amod.o:	src/amod/amod.c src/amod/amod.h src/amod/amod_structs.h
-
 bin/anicopy.exe:	src/helper/anicopy.c
 			$(CC) $(OPT) $(DEBUG) -Wall -o bin/anicopy.exe src/helper/anicopy.c
 
@@ -358,7 +353,6 @@ distrib: distrib-stage
 	@echo "Distribution package created: windows_client.zip"
 
 
-amod:		bin/amod.dll bin/moac.exe
 convert:	bin/convert.exe
 anicopy:	bin/anicopy.exe
 console:	bin/moac_dbg.exe

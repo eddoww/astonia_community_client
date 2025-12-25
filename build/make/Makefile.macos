@@ -122,11 +122,6 @@ $(LAUNCHER_BIN): $(LAUNCHER_SRC)
 		$(CC) -O2 $(STRICT_WARNING_FLAGS) -mmacosx-version-min=11.0 \
 		      -o $(LAUNCHER_BIN) $(LAUNCHER_SRC)
 
-bin/amod.dylib:	src/amod/amod.o bin/moac
-		$(CC) $(LDFLAGS) -dynamiclib -undefined dynamic_lookup -o bin/amod.dylib src/amod/amod.o
-
-src/amod/amod.o:	src/amod/amod.c src/amod/amod.h src/amod/amod_structs.h
-
 bin/anicopy:	src/helper/anicopy.c
 		$(CC) $(OPT) $(DEBUG) -Wall -o bin/anicopy src/helper/anicopy.c
 
@@ -234,7 +229,6 @@ distrib: distrib-stage
 	@cd distrib && tar czf ../macos_client.tar.gz macos_client
 	@echo "Distribution package created: macos_client.tar.gz"
 
-amod:		bin/amod.dylib bin/moac
 convert:	bin/convert
 anicopy:	bin/anicopy
 

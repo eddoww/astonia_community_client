@@ -80,6 +80,9 @@ void sdl_shaded_rect(int sx, int sy, int ex, int ey, unsigned short int color, u
 void sdl_pixel(int x, int y, unsigned short color, int x_offset, int y_offset);
 void sdl_line(int fx, int fy, int tx, int ty, unsigned short color, int clipsx, int clipsy, int clipex, int clipey,
     int x_offset, int y_offset);
+void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, int x_offset, int y_offset);
+void sdl_line_alpha(int fx, int fy, int tx, int ty, unsigned short color, unsigned char alpha, int clipsx, int clipsy,
+    int clipex, int clipey, int x_offset, int y_offset);
 DLL_EXPORT uint32_t *sdl_load_png(char *filename, int *dx, int *dy);
 void sdl_set_title(char *title);
 void *sdl_create_texture(int width, int height);
@@ -88,6 +91,26 @@ void sdl_render_copy_ex(void *tex, void *sr, void *dr, double angle);
 int sdl_tex_xres(int cache_index);
 int sdl_tex_yres(int cache_index);
 void sdl_render_circle(int32_t centreX, int32_t centreY, int32_t radius, uint32_t color);
+void sdl_set_blend_mode(int mode);
+int sdl_get_blend_mode(void);
+
+// Custom texture loading for modders
+int sdl_load_mod_texture(const char *path);
+void sdl_unload_mod_texture(int tex_id);
+void sdl_render_mod_texture(int tex_id, int x, int y, unsigned char alpha, int clipsx, int clipsy, int clipex,
+    int clipey, int x_offset, int y_offset);
+void sdl_render_mod_texture_scaled(int tex_id, int x, int y, float scale, unsigned char alpha, int clipsx, int clipsy,
+    int clipex, int clipey, int x_offset, int y_offset);
+int sdl_get_mod_texture_width(int tex_id);
+int sdl_get_mod_texture_height(int tex_id);
+
+// Render targets for modders
+int sdl_create_render_target(int width, int height);
+void sdl_destroy_render_target(int target_id);
+int sdl_set_render_target(int target_id);
+void sdl_render_target_to_screen(int target_id, int x, int y, unsigned char alpha);
+void sdl_clear_render_target(int target_id);
+
 void sdl_flush_textinput(void);
 void sdl_dump(FILE *fp);
 #ifdef DEVELOPER

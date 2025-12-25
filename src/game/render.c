@@ -141,12 +141,48 @@ DLL_EXPORT void render_more_clip(int sx, int sy, int ex, int ey)
  * @param ex End X coordinate for clipping bounds
  * @param ey End Y coordinate for clipping bounds
  */
-void render_set_clip(int sx, int sy, int ex, int ey)
+DLL_EXPORT void render_set_clip(int sx, int sy, int ex, int ey)
 {
 	clipsx = sx;
 	clipsy = sy;
 	clipex = ex;
 	clipey = ey;
+}
+
+/**
+ * Clear the clipping rectangle, resetting to full screen.
+ * After calling this, rendering will not be clipped.
+ */
+DLL_EXPORT void render_clear_clip(void)
+{
+	clipsx = 0;
+	clipsy = 0;
+	clipex = XRES;
+	clipey = YRES;
+}
+
+/**
+ * Get the current clipping rectangle bounds.
+ *
+ * @param sx Pointer to store start X coordinate
+ * @param sy Pointer to store start Y coordinate
+ * @param ex Pointer to store end X coordinate
+ * @param ey Pointer to store end Y coordinate
+ */
+DLL_EXPORT void render_get_clip(int *sx, int *sy, int *ex, int *ey)
+{
+	if (sx) {
+		*sx = clipsx;
+	}
+	if (sy) {
+		*sy = clipsy;
+	}
+	if (ex) {
+		*ex = clipex;
+	}
+	if (ey) {
+		*ey = clipey;
+	}
 }
 
 /**
@@ -682,6 +718,291 @@ DLL_EXPORT int render_text_break_length(int x, int y, int breakx, unsigned short
 DLL_EXPORT void render_pixel(int x, int y, unsigned short col)
 {
 	sdl_pixel(x, y, col, x_offset, y_offset);
+}
+
+/**
+ * Draw a single pixel with alpha blending.
+ *
+ * @param x X coordinate
+ * @param y Y coordinate
+ * @param col Pixel color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_pixel_alpha(int x, int y, unsigned short col, unsigned char alpha)
+{
+	sdl_pixel_alpha(x, y, col, alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw a filled rectangle with alpha blending.
+ * Exported version of render_shaded_rect for modders.
+ *
+ * @param sx Start X coordinate
+ * @param sy Start Y coordinate
+ * @param ex End X coordinate
+ * @param ey End Y coordinate
+ * @param color RGB color value (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_rect_alpha(int sx, int sy, int ex, int ey, unsigned short color, unsigned char alpha)
+{
+	sdl_shaded_rect(sx, sy, ex, ey, color, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw a line with alpha blending.
+ *
+ * @param fx From X coordinate
+ * @param fy From Y coordinate
+ * @param tx To X coordinate
+ * @param ty To Y coordinate
+ * @param col Line color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_line_alpha(int fx, int fy, int tx, int ty, unsigned short col, unsigned char alpha)
+{
+	sdl_line_alpha(fx, fy, tx, ty, col, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Set the blend mode for subsequent rendering operations.
+ * Affects how colors are blended when drawing with alpha.
+ *
+ * @param mode Blend mode: BLEND_NORMAL (0), BLEND_ADDITIVE (1), BLEND_MULTIPLY (2), BLEND_SCREEN (3)
+ */
+DLL_EXPORT void render_set_blend_mode(int mode)
+{
+	sdl_set_blend_mode(mode);
+}
+
+/**
+ * Get the current blend mode.
+ *
+ * @return Current blend mode: BLEND_NORMAL (0), BLEND_ADDITIVE (1), BLEND_MULTIPLY (2)
+ */
+DLL_EXPORT int render_get_blend_mode(void)
+{
+	return sdl_get_blend_mode();
+}
+
+// ============================================================================
+// Custom Texture Loading API for Modders
+// ============================================================================
+
+/**
+ * Load a texture from a PNG file.
+ * The texture can be rendered using render_texture() or render_texture_scaled().
+ *
+ * @param path Path to the PNG file (relative to game directory or absolute)
+ * @return Texture ID (>= 0) on success, -1 on failure
+ */
+DLL_EXPORT int render_load_texture(const char *path)
+{
+	return sdl_load_mod_texture(path);
+}
+
+/**
+ * Unload a previously loaded texture.
+ * Frees the GPU memory associated with the texture.
+ *
+ * @param tex_id Texture ID returned by render_load_texture()
+ */
+DLL_EXPORT void render_unload_texture(int tex_id)
+{
+	sdl_unload_mod_texture(tex_id);
+}
+
+/**
+ * Render a custom texture at the specified position.
+ *
+ * @param tex_id Texture ID returned by render_load_texture()
+ * @param x X coordinate for rendering
+ * @param y Y coordinate for rendering
+ * @param alpha Alpha transparency (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_texture(int tex_id, int x, int y, unsigned char alpha)
+{
+	sdl_render_mod_texture(tex_id, x, y, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Render a custom texture with scaling.
+ *
+ * @param tex_id Texture ID returned by render_load_texture()
+ * @param x X coordinate for rendering
+ * @param y Y coordinate for rendering
+ * @param scale Scale factor (1.0 = original size, 0.5 = half size, 2.0 = double size)
+ * @param alpha Alpha transparency (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_texture_scaled(int tex_id, int x, int y, float scale, unsigned char alpha)
+{
+	sdl_render_mod_texture_scaled(tex_id, x, y, scale, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Get the width of a loaded texture.
+ *
+ * @param tex_id Texture ID returned by render_load_texture()
+ * @return Width in pixels, or 0 if invalid texture ID
+ */
+DLL_EXPORT int render_texture_width(int tex_id)
+{
+	return sdl_get_mod_texture_width(tex_id);
+}
+
+/**
+ * Get the height of a loaded texture.
+ *
+ * @param tex_id Texture ID returned by render_load_texture()
+ * @return Height in pixels, or 0 if invalid texture ID
+ */
+DLL_EXPORT int render_texture_height(int tex_id)
+{
+	return sdl_get_mod_texture_height(tex_id);
+}
+
+// ============================================================================
+// Screen Effects for Modders
+// ============================================================================
+
+/**
+ * Apply a color tint to the entire screen.
+ * Draws a semi-transparent colored overlay over the current frame.
+ * Should be called after all other rendering, typically at the end of on_frame.
+ *
+ * @param color RGB color value (16-bit IRGB format)
+ * @param intensity Intensity of the tint (0=none, 255=fully opaque)
+ */
+DLL_EXPORT void render_screen_tint(unsigned short color, unsigned char intensity)
+{
+	if (intensity == 0) {
+		return;
+	}
+	sdl_shaded_rect(0, 0, XRES, YRES, color, intensity, 0, 0, XRES, YRES, x_offset, y_offset);
+}
+
+/**
+ * Apply a vignette effect (darken the edges of the screen).
+ * Creates a cinematic fade-to-black effect at the screen borders.
+ * Should be called after all other rendering, typically at the end of on_frame.
+ *
+ * @param intensity Intensity of the vignette (0=none, 255=very dark edges)
+ */
+DLL_EXPORT void render_vignette(unsigned char intensity)
+{
+	int border_size, i, band_start, band_end, band_count;
+	unsigned char alpha;
+
+	if (intensity == 0) {
+		return;
+	}
+
+	// Calculate border size based on intensity (max ~15% of screen)
+	border_size = (XRES < YRES ? XRES : YRES) * intensity / 1700;
+	if (border_size < 1) {
+		border_size = 1;
+	}
+
+	// Optimization: Use 16 bands maximum instead of per-pixel strips
+	// This reduces draw calls from 4*border_size to 4*16 = 64 maximum
+	band_count = border_size < 16 ? border_size : 16;
+
+	// Draw gradient borders using larger bands with averaged alpha
+	for (i = 0; i < band_count; i++) {
+		band_start = (border_size * i) / band_count;
+		band_end = (border_size * (i + 1)) / band_count;
+		if (band_end <= band_start) {
+			band_end = band_start + 1;
+		}
+
+		// Use alpha from the center of this band
+		alpha = (unsigned char)((intensity * (border_size - (band_start + band_end) / 2)) / border_size);
+
+		// Left edge
+		sdl_shaded_rect(band_start, 0, band_end, YRES, 0, alpha, 0, 0, XRES, YRES, x_offset, y_offset);
+		// Right edge
+		sdl_shaded_rect(XRES - band_end, 0, XRES - band_start, YRES, 0, alpha, 0, 0, XRES, YRES, x_offset, y_offset);
+		// Top edge
+		sdl_shaded_rect(0, band_start, XRES, band_end, 0, alpha, 0, 0, XRES, YRES, x_offset, y_offset);
+		// Bottom edge
+		sdl_shaded_rect(0, YRES - band_end, XRES, YRES - band_start, 0, alpha, 0, 0, XRES, YRES, x_offset, y_offset);
+	}
+}
+
+/**
+ * Flash the screen with a color effect.
+ * Useful for damage feedback, healing effects, or other visual cues.
+ *
+ * @param color RGB color value (16-bit IRGB format)
+ * @param intensity Intensity of the flash (0=none, 255=fully opaque)
+ */
+DLL_EXPORT void render_screen_flash(unsigned short color, unsigned char intensity)
+{
+	render_screen_tint(color, intensity);
+}
+
+// ============================================================================
+// Render Targets for Modders
+// ============================================================================
+
+/**
+ * Create a render target (offscreen buffer) for rendering.
+ * Useful for post-processing effects, motion blur, bloom, etc.
+ *
+ * @param width Width of the render target in pixels
+ * @param height Height of the render target in pixels
+ * @return Target ID (>= 0) on success, -1 on failure
+ */
+DLL_EXPORT int render_create_target(int width, int height)
+{
+	return sdl_create_render_target(width, height);
+}
+
+/**
+ * Destroy a previously created render target.
+ * Frees the GPU memory associated with the target.
+ *
+ * @param target_id Target ID returned by render_create_target()
+ */
+DLL_EXPORT void render_destroy_target(int target_id)
+{
+	sdl_destroy_render_target(target_id);
+}
+
+/**
+ * Set the current render target.
+ * All subsequent rendering will go to this target instead of the screen.
+ * Pass -1 or RENDER_TARGET_SCREEN to render to the screen again.
+ *
+ * @param target_id Target ID returned by render_create_target(), or -1 for screen
+ * @return 0 on success, -1 on failure
+ */
+DLL_EXPORT int render_set_target(int target_id)
+{
+	return sdl_set_render_target(target_id);
+}
+
+/**
+ * Render a target to the screen at the specified position.
+ *
+ * @param target_id Target ID returned by render_create_target()
+ * @param x X coordinate on screen
+ * @param y Y coordinate on screen
+ * @param alpha Alpha transparency (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_target_to_screen(int target_id, int x, int y, unsigned char alpha)
+{
+	sdl_render_target_to_screen(target_id, x, y, alpha);
+}
+
+/**
+ * Clear a render target to transparent black.
+ *
+ * @param target_id Target ID returned by render_create_target()
+ */
+DLL_EXPORT void render_clear_target(int target_id)
+{
+	sdl_clear_render_target(target_id);
 }
 
 /**
@@ -1363,16 +1684,11 @@ void render_text_lineup(void)
 {
 	int tmp;
 
-	// printf("up: textlines=%d,displaylines=%d\n",textlines,textdisplayline); fflush(stdout);
-
 	if (textlines <= TEXTDISPLAYLINES) {
 		return;
 	}
 
 	tmp = (textdisplayline + MAXTEXTLINES - 1) % MAXTEXTLINES;
-	// printf("up: tmp=%d\n",tmp); fflush(stdout);
-	// if (textlines<MAXTEXTLINES-1 && tmp>textlines) return; // TODO: test if this line causes the "chat will not
-	// scroll" bug
 	if (tmp != textnextline) {
 		textdisplayline = tmp;
 	}
@@ -1382,9 +1698,6 @@ void render_text_linedown(void)
 {
 	int tmp;
 
-	// printf("down: textlines=%d,displaylines=%d, textnextline=%d\n",textlines,textdisplayline,textnextline);
-	// fflush(stdout);
-
 	if (textlines <= TEXTDISPLAYLINES) {
 		return;
 	}
@@ -1393,7 +1706,6 @@ void render_text_linedown(void)
 	if (tmp != (textnextline + MAXTEXTLINES - TEXTDISPLAYLINES + 1) % MAXTEXTLINES) {
 		textdisplayline = tmp;
 	}
-	// printf("down: tmp=%d (%d)\n",tmp,(textnextline+MAXTEXTLINES-TEXTDISPLAYLINES+1)%MAXTEXTLINES); fflush(stdout);
 }
 
 void render_text_pageup(void)

@@ -51,6 +51,12 @@
 #define RENDERFX_NORMAL_LIGHT 15 // Normal lighting level
 #define RENDERFX_BRIGHT       0 // Maximum brightness
 
+// Blend mode constants for render_set_blend_mode()
+#define BLEND_NORMAL   0 // Standard alpha blending
+#define BLEND_ADDITIVE 1 // Additive blending (fire, glow effects)
+#define BLEND_MULTIPLY 2 // Multiply blending (shadows, darkening)
+#define BLEND_SCREEN   3 // Screen blending (lightening, simulated as additive)
+
 #define MMF_SIGHTBLOCK (1 << 1) // indicates sight block (set_map_lights)
 #define MMF_DOOR       (1 << 2) // a door - helpful when cutting sprites - (set_map_sprites)
 #define MMF_CUT        (1 << 3) // indicates cut (set_map_cut)
@@ -130,11 +136,43 @@ void render_shaded_rect(int sx, int sy, int ex, int ey, unsigned short color, un
 DLL_EXPORT void render_line(int fx, int fy, int tx, int ty, unsigned short col);
 DLL_EXPORT void render_pixel(int x, int y, unsigned short col);
 
+// Alpha blending primitives
+DLL_EXPORT void render_pixel_alpha(int x, int y, unsigned short col, unsigned char alpha);
+DLL_EXPORT void render_rect_alpha(int sx, int sy, int ex, int ey, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_line_alpha(int fx, int fy, int tx, int ty, unsigned short col, unsigned char alpha);
+
+// Blend mode control
+DLL_EXPORT void render_set_blend_mode(int mode);
+DLL_EXPORT int render_get_blend_mode(void);
+
+// Custom texture loading for modders
+DLL_EXPORT int render_load_texture(const char *path);
+DLL_EXPORT void render_unload_texture(int tex_id);
+DLL_EXPORT void render_texture(int tex_id, int x, int y, unsigned char alpha);
+DLL_EXPORT void render_texture_scaled(int tex_id, int x, int y, float scale, unsigned char alpha);
+DLL_EXPORT int render_texture_width(int tex_id);
+DLL_EXPORT int render_texture_height(int tex_id);
+
 // Clipping functions
 DLL_EXPORT void render_push_clip(void);
 DLL_EXPORT void render_pop_clip(void);
 DLL_EXPORT void render_more_clip(int sx, int sy, int ex, int ey);
-void render_set_clip(int sx, int sy, int ex, int ey);
+DLL_EXPORT void render_set_clip(int sx, int sy, int ex, int ey);
+DLL_EXPORT void render_clear_clip(void);
+DLL_EXPORT void render_get_clip(int *sx, int *sy, int *ex, int *ey);
+
+// Screen effects for modders
+DLL_EXPORT void render_screen_tint(unsigned short color, unsigned char intensity);
+DLL_EXPORT void render_vignette(unsigned char intensity);
+DLL_EXPORT void render_screen_flash(unsigned short color, unsigned char intensity);
+
+// Render targets for modders (offscreen rendering)
+#define RENDER_TARGET_SCREEN (-1)
+DLL_EXPORT int render_create_target(int width, int height);
+DLL_EXPORT void render_destroy_target(int target_id);
+DLL_EXPORT int render_set_target(int target_id);
+DLL_EXPORT void render_target_to_screen(int target_id, int x, int y, unsigned char alpha);
+DLL_EXPORT void render_clear_target(int target_id);
 
 // Chat window text functions
 void render_display_text(void);

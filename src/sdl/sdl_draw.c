@@ -37,6 +37,9 @@
 
 #define MAXFONTHEIGHT 64
 
+// Current blend mode for rendering operations (used by all drawing functions)
+static SDL_BlendMode current_blend_mode = SDL_BLENDMODE_BLEND;
+
 static void sdl_blit_tex(
     SDL_Texture *tex, int sx, int sy, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
@@ -298,7 +301,7 @@ void sdl_shaded_rect(int sx, int sy, int ex, int ey, unsigned short int color, u
 	rc.h = (float)((ey - sy) * sdl_scale);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 	SDL_RenderFillRect(sdlren, &rc);
 }
 
@@ -470,7 +473,7 @@ void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, in
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 	switch (sdl_scale) {
 	case 1:
 		SDL_RenderDrawPoint(sdlren, x + x_offset, y + y_offset);
@@ -590,12 +593,9 @@ void sdl_line_alpha(int fx, int fy, int tx, int ty, unsigned short color, unsign
 	ty += y_offset;
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 	SDL_RenderDrawLine(sdlren, fx * sdl_scale, fy * sdl_scale, tx * sdl_scale, ty * sdl_scale);
 }
-
-// Current blend mode for rendering operations
-static SDL_BlendMode current_blend_mode = SDL_BLENDMODE_BLEND;
 
 void sdl_set_blend_mode(int mode)
 {
@@ -1146,7 +1146,7 @@ void sdl_circle_alpha(int cx, int cy, int radius, unsigned short color, unsigned
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	// Midpoint circle algorithm
 	x = radius;
@@ -1194,7 +1194,7 @@ void sdl_circle_filled_alpha(
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	cx = (cx + x_offset) * sdl_scale;
 	cy = (cy + y_offset) * sdl_scale;
@@ -1236,7 +1236,7 @@ void sdl_ellipse_alpha(
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	cx = (cx + x_offset) * sdl_scale;
 	cy = (cy + y_offset) * sdl_scale;
@@ -1306,7 +1306,7 @@ void sdl_ellipse_filled_alpha(
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	cx = (cx + x_offset) * sdl_scale;
 	cy = (cy + y_offset) * sdl_scale;
@@ -1354,7 +1354,7 @@ void sdl_rect_outline_alpha(int sx, int sy, int ex, int ey, unsigned short color
 	}
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	sx = (sx + x_offset) * sdl_scale;
 	sy = (sy + y_offset) * sdl_scale;
@@ -1405,7 +1405,7 @@ void sdl_rounded_rect_alpha(int sx, int sy, int ex, int ey, int radius, unsigned
 	}
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	int osx = (sx + x_offset) * sdl_scale;
 	int osy = (sy + y_offset) * sdl_scale;
@@ -1489,7 +1489,7 @@ void sdl_rounded_rect_filled_alpha(int sx, int sy, int ex, int ey, int radius, u
 	}
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	int osx = (sx + x_offset) * sdl_scale;
 	int osy = (sy + y_offset) * sdl_scale;
@@ -1547,7 +1547,7 @@ void sdl_triangle_alpha(int x1, int y1, int x2, int y2, int x3, int y3, unsigned
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	// Apply clipping (simple bounds check)
 	int minx = (x1 < x2 ? (x1 < x3 ? x1 : x3) : (x2 < x3 ? x2 : x3));
@@ -1582,7 +1582,7 @@ void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, u
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	// Apply clipping (simple bounds check)
 	int minx = (x1 < x2 ? (x1 < x3 ? x1 : x3) : (x2 < x3 ? x2 : x3));
@@ -1677,7 +1677,7 @@ void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigne
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	// Apply offset and scale
 	fx = (fx + x_offset) * sdl_scale;
@@ -1719,7 +1719,7 @@ void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, u
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	cx = (cx + x_offset) * sdl_scale;
 	cy = (cy + y_offset) * sdl_scale;
@@ -1770,7 +1770,7 @@ void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, 
 		return;
 	}
 
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	float r1 = (float)R16TO32(color1), g1 = (float)G16TO32(color1), b1 = (float)B16TO32(color1);
 	float r2 = (float)R16TO32(color2), g2 = (float)G16TO32(color2), b2 = (float)B16TO32(color2);
@@ -1809,7 +1809,7 @@ void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, 
 		return;
 	}
 
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	float r1 = (float)R16TO32(color1), g1 = (float)G16TO32(color1), b1 = (float)B16TO32(color1);
 	float r2 = (float)R16TO32(color2), g2 = (float)G16TO32(color2), b2 = (float)B16TO32(color2);
@@ -1837,7 +1837,7 @@ void sdl_bezier_quadratic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, 
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	float fx0 = (float)((x0 + x_offset) * sdl_scale);
 	float fy0 = (float)((y0 + y_offset) * sdl_scale);
@@ -1869,7 +1869,7 @@ void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int 
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	float fx0 = (float)((x0 + x_offset) * sdl_scale);
 	float fy0 = (float)((y0 + y_offset) * sdl_scale);
@@ -1912,7 +1912,7 @@ void sdl_gradient_circle(int cx, int cy, int radius, unsigned short color, unsig
 	cy = (cy + y_offset) * sdl_scale;
 	int sr = radius * sdl_scale;
 
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	// Draw concentric circles with decreasing alpha from center to edge
 	for (int ri = 0; ri <= sr; ri++) {
@@ -1963,7 +1963,7 @@ void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned 
 	x1 = (x1 + x_offset) * sdl_scale;
 	y1 = (y1 + y_offset) * sdl_scale;
 
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	int steep = abs(y1 - y0) > abs(x1 - x0);
 	if (steep) {
@@ -2070,7 +2070,7 @@ void sdl_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int star
 	b = B16TO32(color);
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	cx = (cx + x_offset) * sdl_scale;
 	cy = (cy + y_offset) * sdl_scale;

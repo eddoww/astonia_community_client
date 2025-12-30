@@ -130,16 +130,54 @@ DLL_EXPORT int render_sprite_fx(RenderFX *fx, int scrx, int scry);
 DLL_EXPORT void render_sprite(unsigned int sprite, int scrx, int scry, char light, char align);
 void render_sprite_callfx(unsigned int sprite, int scrx, int scry, char light, char mli, char align);
 
-// Primitive drawing functions
-DLL_EXPORT void render_rect(int sx, int sy, int ex, int ey, unsigned short int color);
-void render_shaded_rect(int sx, int sy, int ex, int ey, unsigned short color, unsigned short alpha);
-DLL_EXPORT void render_line(int fx, int fy, int tx, int ty, unsigned short col);
+// Basic drawing primitives
 DLL_EXPORT void render_pixel(int x, int y, unsigned short col);
-
-// Alpha blending primitives
 DLL_EXPORT void render_pixel_alpha(int x, int y, unsigned short col, unsigned char alpha);
-DLL_EXPORT void render_rect_alpha(int sx, int sy, int ex, int ey, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_line(int fx, int fy, int tx, int ty, unsigned short col);
 DLL_EXPORT void render_line_alpha(int fx, int fy, int tx, int ty, unsigned short col, unsigned char alpha);
+DLL_EXPORT void render_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_thick_line_alpha(
+    int fx, int fy, int tx, int ty, int thickness, unsigned short color, unsigned char alpha);
+
+// Rectangle primitives
+DLL_EXPORT void render_rect(int sx, int sy, int ex, int ey, unsigned short int color);
+DLL_EXPORT void render_rect_alpha(int sx, int sy, int ex, int ey, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_rect_outline_alpha(int sx, int sy, int ex, int ey, unsigned short color, unsigned char alpha);
+void render_shaded_rect(int sx, int sy, int ex, int ey, unsigned short color, unsigned short alpha);
+DLL_EXPORT void render_rounded_rect_alpha(
+    int sx, int sy, int ex, int ey, int radius, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_rounded_rect_filled_alpha(
+    int sx, int sy, int ex, int ey, int radius, unsigned short color, unsigned char alpha);
+
+// Circle and ellipse primitives
+DLL_EXPORT void render_circle_alpha(int cx, int cy, int radius, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_circle_filled_alpha(int cx, int cy, int radius, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_ellipse_alpha(int cx, int cy, int rx, int ry, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_ellipse_filled_alpha(int cx, int cy, int rx, int ry, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int start_angle, int end_angle,
+    unsigned short color, unsigned char alpha);
+
+// Triangle primitives
+DLL_EXPORT void render_triangle_alpha(
+    int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_triangle_filled_alpha(
+    int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color, unsigned char alpha);
+
+// Arc and curve primitives
+DLL_EXPORT void render_arc_alpha(
+    int cx, int cy, int radius, int start_angle, int end_angle, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_bezier_quadratic_alpha(
+    int x0, int y0, int x1, int y1, int x2, int y2, unsigned short color, unsigned char alpha);
+DLL_EXPORT void render_bezier_cubic_alpha(
+    int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color, unsigned char alpha);
+
+// Gradient primitives
+DLL_EXPORT void render_gradient_rect_h(
+    int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2, unsigned char alpha);
+DLL_EXPORT void render_gradient_rect_v(
+    int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2, unsigned char alpha);
+DLL_EXPORT void render_gradient_circle(
+    int cx, int cy, int radius, unsigned short color, unsigned char center_alpha, unsigned char edge_alpha);
 
 // Blend mode control
 DLL_EXPORT void render_set_blend_mode(int mode);

@@ -764,6 +764,321 @@ DLL_EXPORT void render_line_alpha(int fx, int fy, int tx, int ty, unsigned short
 	sdl_line_alpha(fx, fy, tx, ty, col, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
 }
 
+// ============================================================================
+// Extended Rendering Primitives for Modders
+// ============================================================================
+
+/**
+ * Draw a circle outline with alpha blending.
+ *
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param radius Circle radius in pixels
+ * @param color Circle color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_circle_alpha(int cx, int cy, int radius, unsigned short color, unsigned char alpha)
+{
+	sdl_circle_alpha(cx, cy, radius, color, alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw a filled circle with alpha blending.
+ *
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param radius Circle radius in pixels
+ * @param color Fill color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_circle_filled_alpha(int cx, int cy, int radius, unsigned short color, unsigned char alpha)
+{
+	sdl_circle_filled_alpha(cx, cy, radius, color, alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw an ellipse outline with alpha blending.
+ *
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param rx Horizontal radius in pixels
+ * @param ry Vertical radius in pixels
+ * @param color Ellipse color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_ellipse_alpha(int cx, int cy, int rx, int ry, unsigned short color, unsigned char alpha)
+{
+	sdl_ellipse_alpha(cx, cy, rx, ry, color, alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw a filled ellipse with alpha blending.
+ *
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param rx Horizontal radius in pixels
+ * @param ry Vertical radius in pixels
+ * @param color Fill color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_ellipse_filled_alpha(int cx, int cy, int rx, int ry, unsigned short color, unsigned char alpha)
+{
+	sdl_ellipse_filled_alpha(cx, cy, rx, ry, color, alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw a rectangle outline (hollow) with alpha blending.
+ *
+ * @param sx Start X coordinate
+ * @param sy Start Y coordinate
+ * @param ex End X coordinate
+ * @param ey End Y coordinate
+ * @param color Outline color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_rect_outline_alpha(int sx, int sy, int ex, int ey, unsigned short color, unsigned char alpha)
+{
+	sdl_rect_outline_alpha(sx, sy, ex, ey, color, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw a rounded rectangle outline with alpha blending.
+ *
+ * @param sx Start X coordinate
+ * @param sy Start Y coordinate
+ * @param ex End X coordinate
+ * @param ey End Y coordinate
+ * @param radius Corner radius in pixels
+ * @param color Outline color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_rounded_rect_alpha(
+    int sx, int sy, int ex, int ey, int radius, unsigned short color, unsigned char alpha)
+{
+	sdl_rounded_rect_alpha(sx, sy, ex, ey, radius, color, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw a filled rounded rectangle with alpha blending.
+ *
+ * @param sx Start X coordinate
+ * @param sy Start Y coordinate
+ * @param ex End X coordinate
+ * @param ey End Y coordinate
+ * @param radius Corner radius in pixels
+ * @param color Fill color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_rounded_rect_filled_alpha(
+    int sx, int sy, int ex, int ey, int radius, unsigned short color, unsigned char alpha)
+{
+	sdl_rounded_rect_filled_alpha(
+	    sx, sy, ex, ey, radius, color, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw a triangle outline with alpha blending.
+ *
+ * @param x1 First vertex X coordinate
+ * @param y1 First vertex Y coordinate
+ * @param x2 Second vertex X coordinate
+ * @param y2 Second vertex Y coordinate
+ * @param x3 Third vertex X coordinate
+ * @param y3 Third vertex Y coordinate
+ * @param color Outline color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_triangle_alpha(
+    int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color, unsigned char alpha)
+{
+	sdl_triangle_alpha(x1, y1, x2, y2, x3, y3, color, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw a filled triangle with alpha blending.
+ *
+ * @param x1 First vertex X coordinate
+ * @param y1 First vertex Y coordinate
+ * @param x2 Second vertex X coordinate
+ * @param y2 Second vertex Y coordinate
+ * @param x3 Third vertex X coordinate
+ * @param y3 Third vertex Y coordinate
+ * @param color Fill color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_triangle_filled_alpha(
+    int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color, unsigned char alpha)
+{
+	sdl_triangle_filled_alpha(x1, y1, x2, y2, x3, y3, color, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw a thick line with alpha blending.
+ * Unlike render_line_alpha which is 1 pixel wide, this allows configurable thickness.
+ *
+ * @param fx From X coordinate
+ * @param fy From Y coordinate
+ * @param tx To X coordinate
+ * @param ty To Y coordinate
+ * @param thickness Line thickness in pixels
+ * @param color Line color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_thick_line_alpha(
+    int fx, int fy, int tx, int ty, int thickness, unsigned short color, unsigned char alpha)
+{
+	sdl_thick_line_alpha(fx, fy, tx, ty, thickness, color, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw an arc (partial circle outline) with alpha blending.
+ * Angles are in degrees, 0 = right (3 o'clock), increasing clockwise.
+ *
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param radius Arc radius in pixels
+ * @param start_angle Starting angle in degrees (0-359)
+ * @param end_angle Ending angle in degrees (0-359)
+ * @param color Arc color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_arc_alpha(
+    int cx, int cy, int radius, int start_angle, int end_angle, unsigned short color, unsigned char alpha)
+{
+	sdl_arc_alpha(cx, cy, radius, start_angle, end_angle, color, alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw a horizontal gradient rectangle with alpha blending.
+ * Colors interpolate from color1 (left) to color2 (right).
+ *
+ * @param sx Start X coordinate
+ * @param sy Start Y coordinate
+ * @param ex End X coordinate
+ * @param ey End Y coordinate
+ * @param color1 Left color (16-bit IRGB format)
+ * @param color2 Right color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_gradient_rect_h(
+    int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2, unsigned char alpha)
+{
+	sdl_gradient_rect_h(sx, sy, ex, ey, color1, color2, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw a vertical gradient rectangle with alpha blending.
+ * Colors interpolate from color1 (top) to color2 (bottom).
+ *
+ * @param sx Start X coordinate
+ * @param sy Start Y coordinate
+ * @param ex End X coordinate
+ * @param ey End Y coordinate
+ * @param color1 Top color (16-bit IRGB format)
+ * @param color2 Bottom color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_gradient_rect_v(
+    int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2, unsigned char alpha)
+{
+	sdl_gradient_rect_v(sx, sy, ex, ey, color1, color2, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw a quadratic Bezier curve with alpha blending.
+ * The curve passes through (x0,y0) and (x2,y2), with (x1,y1) as the control point.
+ *
+ * @param x0 Start X coordinate
+ * @param y0 Start Y coordinate
+ * @param x1 Control point X coordinate
+ * @param y1 Control point Y coordinate
+ * @param x2 End X coordinate
+ * @param y2 End Y coordinate
+ * @param color Curve color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_bezier_quadratic_alpha(
+    int x0, int y0, int x1, int y1, int x2, int y2, unsigned short color, unsigned char alpha)
+{
+	sdl_bezier_quadratic_alpha(x0, y0, x1, y1, x2, y2, color, alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw a cubic Bezier curve with alpha blending.
+ * The curve passes through (x0,y0) and (x3,y3), with (x1,y1) and (x2,y2) as control points.
+ *
+ * @param x0 Start X coordinate
+ * @param y0 Start Y coordinate
+ * @param x1 First control point X coordinate
+ * @param y1 First control point Y coordinate
+ * @param x2 Second control point X coordinate
+ * @param y2 Second control point Y coordinate
+ * @param x3 End X coordinate
+ * @param y3 End Y coordinate
+ * @param color Curve color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_bezier_cubic_alpha(
+    int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color, unsigned char alpha)
+{
+	sdl_bezier_cubic_alpha(x0, y0, x1, y1, x2, y2, x3, y3, color, alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw a radial gradient circle (glow effect) with alpha blending.
+ * Creates a soft glowing effect with bright center fading to transparent edge.
+ * Perfect for particles, auras, and light sources.
+ *
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param radius Circle radius in pixels
+ * @param color Glow color (16-bit IRGB format)
+ * @param center_alpha Alpha at center (0=transparent, 255=opaque)
+ * @param edge_alpha Alpha at edge (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_gradient_circle(
+    int cx, int cy, int radius, unsigned short color, unsigned char center_alpha, unsigned char edge_alpha)
+{
+	sdl_gradient_circle(cx, cy, radius, color, center_alpha, edge_alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw an anti-aliased line with alpha blending.
+ * Uses Xiaolin Wu's algorithm for smooth lines without jaggies.
+ * Ideal for lightning effects, beams, and trails.
+ *
+ * @param x0 Start X coordinate
+ * @param y0 Start Y coordinate
+ * @param x1 End X coordinate
+ * @param y1 End Y coordinate
+ * @param color Line color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned char alpha)
+{
+	sdl_line_aa(x0, y0, x1, y1, color, alpha, x_offset, y_offset);
+}
+
+/**
+ * Draw a filled ring (arc with inner and outer radius) with alpha blending.
+ * Perfect for shockwaves, expanding rings, circular sweeps.
+ * Angles are in degrees, 0 = right (3 o'clock), increasing clockwise.
+ *
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param inner_radius Inner radius in pixels (hole size)
+ * @param outer_radius Outer radius in pixels
+ * @param start_angle Starting angle in degrees (0-359)
+ * @param end_angle Ending angle in degrees (0-359)
+ * @param color Ring color (16-bit IRGB format)
+ * @param alpha Alpha transparency value (0=transparent, 255=opaque)
+ */
+DLL_EXPORT void render_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int start_angle, int end_angle,
+    unsigned short color, unsigned char alpha)
+{
+	sdl_ring_alpha(cx, cy, inner_radius, outer_radius, start_angle, end_angle, color, alpha, x_offset, y_offset);
+}
+
 /**
  * Set the blend mode for subsequent rendering operations.
  * Affects how colors are blended when drawing with alpha.

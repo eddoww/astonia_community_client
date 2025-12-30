@@ -7,6 +7,7 @@
  */
 
 #include <inttypes.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -1125,4 +1126,987 @@ void sdl_render_circle(int32_t centreX, int32_t centreY, int32_t radius, uint32_
 	SDL_SetRenderDrawColor(
 	    sdlren, (Uint8)IGET_R(color), (Uint8)IGET_G(color), (Uint8)IGET_B(color), (Uint8)IGET_A(color));
 	SDL_RenderPoints(sdlren, pts, (int)dC);
+}
+
+// ============================================================================
+// Extended Rendering Primitives for Modders
+// ============================================================================
+
+void sdl_circle_alpha(int cx, int cy, int radius, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
+{
+	int r, g, b;
+	int x, y, d;
+
+	if (radius <= 0) {
+		return;
+	}
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	// Midpoint circle algorithm
+	x = radius;
+	y = 0;
+	d = 1 - radius;
+
+	cx = (cx + x_offset) * sdl_scale;
+	cy = (cy + y_offset) * sdl_scale;
+	int sr = radius * sdl_scale;
+
+	while (x >= y) {
+		// Draw 8 symmetric points
+		SDL_RenderDrawPoint(sdlren, cx + x, cy + y);
+		SDL_RenderDrawPoint(sdlren, cx - x, cy + y);
+		SDL_RenderDrawPoint(sdlren, cx + x, cy - y);
+		SDL_RenderDrawPoint(sdlren, cx - x, cy - y);
+		SDL_RenderDrawPoint(sdlren, cx + y, cy + x);
+		SDL_RenderDrawPoint(sdlren, cx - y, cy + x);
+		SDL_RenderDrawPoint(sdlren, cx + y, cy - x);
+		SDL_RenderDrawPoint(sdlren, cx - y, cy - x);
+
+		y++;
+		if (d < 0) {
+			d += 2 * y + 1;
+		} else {
+			x--;
+			d += 2 * (y - x) + 1;
+		}
+	}
+	(void)sr; // unused but shows intention
+}
+
+void sdl_circle_filled_alpha(
+    int cx, int cy, int radius, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
+{
+	int r, g, b;
+	int x, y, d;
+
+	if (radius <= 0) {
+		return;
+	}
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	cx = (cx + x_offset) * sdl_scale;
+	cy = (cy + y_offset) * sdl_scale;
+	int sr = radius * sdl_scale;
+
+	// Midpoint circle algorithm with horizontal line fills
+	x = sr;
+	y = 0;
+	d = 1 - sr;
+
+	while (x >= y) {
+		// Draw horizontal lines to fill the circle
+		SDL_RenderDrawLine(sdlren, cx - x, cy + y, cx + x, cy + y);
+		SDL_RenderDrawLine(sdlren, cx - x, cy - y, cx + x, cy - y);
+		SDL_RenderDrawLine(sdlren, cx - y, cy + x, cx + y, cy + x);
+		SDL_RenderDrawLine(sdlren, cx - y, cy - x, cx + y, cy - x);
+
+		y++;
+		if (d < 0) {
+			d += 2 * y + 1;
+		} else {
+			x--;
+			d += 2 * (y - x) + 1;
+		}
+	}
+}
+
+void sdl_ellipse_alpha(
+    int cx, int cy, int rx, int ry, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	if (rx <= 0 || ry <= 0) {
+		return;
+	}
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	cx = (cx + x_offset) * sdl_scale;
+	cy = (cy + y_offset) * sdl_scale;
+	rx *= sdl_scale;
+	ry *= sdl_scale;
+
+	// Midpoint ellipse algorithm
+	int x = 0, y = ry;
+	long rx2 = (long)rx * rx;
+	long ry2 = (long)ry * ry;
+	long two_rx2 = 2 * rx2;
+	long two_ry2 = 2 * ry2;
+	long px = 0;
+	long py = two_rx2 * y;
+	long p;
+
+	// Region 1
+	p = ry2 - rx2 * ry + rx2 / 4;
+	while (px < py) {
+		SDL_RenderDrawPoint(sdlren, cx + x, cy + y);
+		SDL_RenderDrawPoint(sdlren, cx - x, cy + y);
+		SDL_RenderDrawPoint(sdlren, cx + x, cy - y);
+		SDL_RenderDrawPoint(sdlren, cx - x, cy - y);
+
+		x++;
+		px += two_ry2;
+		if (p < 0) {
+			p += ry2 + px;
+		} else {
+			y--;
+			py -= two_rx2;
+			p += ry2 + px - py;
+		}
+	}
+
+	// Region 2
+	p = ry2 * (x * 2 + 1) * (x * 2 + 1) / 4 + rx2 * (y - 1) * (y - 1) - rx2 * ry2;
+	while (y >= 0) {
+		SDL_RenderDrawPoint(sdlren, cx + x, cy + y);
+		SDL_RenderDrawPoint(sdlren, cx - x, cy + y);
+		SDL_RenderDrawPoint(sdlren, cx + x, cy - y);
+		SDL_RenderDrawPoint(sdlren, cx - x, cy - y);
+
+		y--;
+		py -= two_rx2;
+		if (p > 0) {
+			p += rx2 - py;
+		} else {
+			x++;
+			px += two_ry2;
+			p += rx2 - py + px;
+		}
+	}
+}
+
+void sdl_ellipse_filled_alpha(
+    int cx, int cy, int rx, int ry, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	if (rx <= 0 || ry <= 0) {
+		return;
+	}
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	cx = (cx + x_offset) * sdl_scale;
+	cy = (cy + y_offset) * sdl_scale;
+	rx *= sdl_scale;
+	ry *= sdl_scale;
+
+	// Fill using horizontal lines for each y
+	for (int yi = -ry; yi <= ry; yi++) {
+		// Calculate x extent at this y using ellipse equation
+		// x^2/rx^2 + y^2/ry^2 = 1  =>  x = rx * sqrt(1 - y^2/ry^2)
+		double ratio = 1.0 - ((double)yi * yi) / ((double)ry * ry);
+		if (ratio < 0) {
+			ratio = 0;
+		}
+		int xi = (int)(rx * sqrt(ratio));
+		SDL_RenderDrawLine(sdlren, cx - xi, cy + yi, cx + xi, cy + yi);
+	}
+}
+
+void sdl_rect_outline_alpha(int sx, int sy, int ex, int ey, unsigned short color, unsigned char alpha, int clipsx,
+    int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	// Apply clipping
+	if (sx < clipsx) {
+		sx = clipsx;
+	}
+	if (sy < clipsy) {
+		sy = clipsy;
+	}
+	if (ex > clipex) {
+		ex = clipex;
+	}
+	if (ey > clipey) {
+		ey = clipey;
+	}
+
+	if (sx >= ex || sy >= ey) {
+		return;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	sx = (sx + x_offset) * sdl_scale;
+	sy = (sy + y_offset) * sdl_scale;
+	ex = (ex + x_offset) * sdl_scale;
+	ey = (ey + y_offset) * sdl_scale;
+
+	// Draw 4 lines for outline
+	SDL_RenderDrawLine(sdlren, sx, sy, ex - 1, sy); // Top
+	SDL_RenderDrawLine(sdlren, sx, ey - 1, ex - 1, ey - 1); // Bottom
+	SDL_RenderDrawLine(sdlren, sx, sy, sx, ey - 1); // Left
+	SDL_RenderDrawLine(sdlren, ex - 1, sy, ex - 1, ey - 1); // Right
+}
+
+void sdl_rounded_rect_alpha(int sx, int sy, int ex, int ey, int radius, unsigned short color, unsigned char alpha,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	// Apply clipping
+	if (sx < clipsx) {
+		sx = clipsx;
+	}
+	if (sy < clipsy) {
+		sy = clipsy;
+	}
+	if (ex > clipex) {
+		ex = clipex;
+	}
+	if (ey > clipey) {
+		ey = clipey;
+	}
+
+	if (sx >= ex || sy >= ey) {
+		return;
+	}
+
+	// Limit radius to half the smallest dimension
+	int max_radius = ((ex - sx) < (ey - sy) ? (ex - sx) : (ey - sy)) / 2;
+	if (radius > max_radius) {
+		radius = max_radius;
+	}
+	if (radius < 0) {
+		radius = 0;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	int osx = (sx + x_offset) * sdl_scale;
+	int osy = (sy + y_offset) * sdl_scale;
+	int oex = (ex + x_offset) * sdl_scale;
+	int oey = (ey + y_offset) * sdl_scale;
+	int sr = radius * sdl_scale;
+
+	// Draw the 4 straight edges
+	SDL_RenderDrawLine(sdlren, osx + sr, osy, oex - sr - 1, osy); // Top
+	SDL_RenderDrawLine(sdlren, osx + sr, oey - 1, oex - sr - 1, oey - 1); // Bottom
+	SDL_RenderDrawLine(sdlren, osx, osy + sr, osx, oey - sr - 1); // Left
+	SDL_RenderDrawLine(sdlren, oex - 1, osy + sr, oex - 1, oey - sr - 1); // Right
+
+	// Draw the 4 corner arcs using midpoint circle algorithm
+	if (sr > 0) {
+		int x = sr, y = 0, d = 1 - sr;
+		int cx1 = osx + sr, cy1 = osy + sr; // Top-left
+		int cx2 = oex - sr - 1, cy2 = osy + sr; // Top-right
+		int cx3 = osx + sr, cy3 = oey - sr - 1; // Bottom-left
+		int cx4 = oex - sr - 1, cy4 = oey - sr - 1; // Bottom-right
+
+		while (x >= y) {
+			// Top-left corner
+			SDL_RenderDrawPoint(sdlren, cx1 - x, cy1 - y);
+			SDL_RenderDrawPoint(sdlren, cx1 - y, cy1 - x);
+			// Top-right corner
+			SDL_RenderDrawPoint(sdlren, cx2 + x, cy2 - y);
+			SDL_RenderDrawPoint(sdlren, cx2 + y, cy2 - x);
+			// Bottom-left corner
+			SDL_RenderDrawPoint(sdlren, cx3 - x, cy3 + y);
+			SDL_RenderDrawPoint(sdlren, cx3 - y, cy3 + x);
+			// Bottom-right corner
+			SDL_RenderDrawPoint(sdlren, cx4 + x, cy4 + y);
+			SDL_RenderDrawPoint(sdlren, cx4 + y, cy4 + x);
+
+			y++;
+			if (d < 0) {
+				d += 2 * y + 1;
+			} else {
+				x--;
+				d += 2 * (y - x) + 1;
+			}
+		}
+	}
+}
+
+void sdl_rounded_rect_filled_alpha(int sx, int sy, int ex, int ey, int radius, unsigned short color,
+    unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	// Apply clipping
+	if (sx < clipsx) {
+		sx = clipsx;
+	}
+	if (sy < clipsy) {
+		sy = clipsy;
+	}
+	if (ex > clipex) {
+		ex = clipex;
+	}
+	if (ey > clipey) {
+		ey = clipey;
+	}
+
+	if (sx >= ex || sy >= ey) {
+		return;
+	}
+
+	// Limit radius to half the smallest dimension
+	int max_radius = ((ex - sx) < (ey - sy) ? (ex - sx) : (ey - sy)) / 2;
+	if (radius > max_radius) {
+		radius = max_radius;
+	}
+	if (radius < 0) {
+		radius = 0;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	int osx = (sx + x_offset) * sdl_scale;
+	int osy = (sy + y_offset) * sdl_scale;
+	int oex = (ex + x_offset) * sdl_scale;
+	int oey = (ey + y_offset) * sdl_scale;
+	int sr = radius * sdl_scale;
+
+	// Fill center rectangle
+	SDL_Rect center = {osx, osy + sr, oex - osx, oey - osy - 2 * sr};
+	SDL_RenderFillRect(sdlren, &center);
+
+	// Fill top and bottom rectangles (between corners)
+	SDL_Rect top = {osx + sr, osy, oex - osx - 2 * sr, sr};
+	SDL_Rect bottom = {osx + sr, oey - sr, oex - osx - 2 * sr, sr};
+	SDL_RenderFillRect(sdlren, &top);
+	SDL_RenderFillRect(sdlren, &bottom);
+
+	// Fill the 4 corners with circle quadrants
+	if (sr > 0) {
+		int x = sr, y = 0, d = 1 - sr;
+		int cx1 = osx + sr, cy1 = osy + sr;
+		int cx2 = oex - sr - 1, cy2 = osy + sr;
+		int cx3 = osx + sr, cy3 = oey - sr - 1;
+		int cx4 = oex - sr - 1, cy4 = oey - sr - 1;
+
+		while (x >= y) {
+			// Fill horizontal lines for each corner
+			SDL_RenderDrawLine(sdlren, cx1 - x, cy1 - y, cx1, cy1 - y); // Top-left
+			SDL_RenderDrawLine(sdlren, cx1 - y, cy1 - x, cx1, cy1 - x);
+			SDL_RenderDrawLine(sdlren, cx2, cy2 - y, cx2 + x, cy2 - y); // Top-right
+			SDL_RenderDrawLine(sdlren, cx2, cy2 - x, cx2 + y, cy2 - x);
+			SDL_RenderDrawLine(sdlren, cx3 - x, cy3 + y, cx3, cy3 + y); // Bottom-left
+			SDL_RenderDrawLine(sdlren, cx3 - y, cy3 + x, cx3, cy3 + x);
+			SDL_RenderDrawLine(sdlren, cx4, cy4 + y, cx4 + x, cy4 + y); // Bottom-right
+			SDL_RenderDrawLine(sdlren, cx4, cy4 + x, cx4 + y, cy4 + x);
+
+			y++;
+			if (d < 0) {
+				d += 2 * y + 1;
+			} else {
+				x--;
+				d += 2 * (y - x) + 1;
+			}
+		}
+	}
+}
+
+void sdl_triangle_alpha(int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color, unsigned char alpha,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	// Apply clipping (simple bounds check)
+	int minx = (x1 < x2 ? (x1 < x3 ? x1 : x3) : (x2 < x3 ? x2 : x3));
+	int maxx = (x1 > x2 ? (x1 > x3 ? x1 : x3) : (x2 > x3 ? x2 : x3));
+	int miny = (y1 < y2 ? (y1 < y3 ? y1 : y3) : (y2 < y3 ? y2 : y3));
+	int maxy = (y1 > y2 ? (y1 > y3 ? y1 : y3) : (y2 > y3 ? y2 : y3));
+
+	if (maxx < clipsx || minx >= clipex || maxy < clipsy || miny >= clipey) {
+		return;
+	}
+
+	x1 = (x1 + x_offset) * sdl_scale;
+	y1 = (y1 + y_offset) * sdl_scale;
+	x2 = (x2 + x_offset) * sdl_scale;
+	y2 = (y2 + y_offset) * sdl_scale;
+	x3 = (x3 + x_offset) * sdl_scale;
+	y3 = (y3 + y_offset) * sdl_scale;
+
+	// Draw 3 lines
+	SDL_RenderDrawLine(sdlren, x1, y1, x2, y2);
+	SDL_RenderDrawLine(sdlren, x2, y2, x3, y3);
+	SDL_RenderDrawLine(sdlren, x3, y3, x1, y1);
+}
+
+void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color,
+    unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	// Apply clipping (simple bounds check)
+	int minx = (x1 < x2 ? (x1 < x3 ? x1 : x3) : (x2 < x3 ? x2 : x3));
+	int maxx = (x1 > x2 ? (x1 > x3 ? x1 : x3) : (x2 > x3 ? x2 : x3));
+	int miny = (y1 < y2 ? (y1 < y3 ? y1 : y3) : (y2 < y3 ? y2 : y3));
+	int maxy = (y1 > y2 ? (y1 > y3 ? y1 : y3) : (y2 > y3 ? y2 : y3));
+
+	if (maxx < clipsx || minx >= clipex || maxy < clipsy || miny >= clipey) {
+		return;
+	}
+
+	x1 = (x1 + x_offset) * sdl_scale;
+	y1 = (y1 + y_offset) * sdl_scale;
+	x2 = (x2 + x_offset) * sdl_scale;
+	y2 = (y2 + y_offset) * sdl_scale;
+	x3 = (x3 + x_offset) * sdl_scale;
+	y3 = (y3 + y_offset) * sdl_scale;
+
+	// Sort vertices by y coordinate
+	int tmp;
+	if (y1 > y2) {
+		tmp = y1;
+		y1 = y2;
+		y2 = tmp;
+		tmp = x1;
+		x1 = x2;
+		x2 = tmp;
+	}
+	if (y1 > y3) {
+		tmp = y1;
+		y1 = y3;
+		y3 = tmp;
+		tmp = x1;
+		x1 = x3;
+		x3 = tmp;
+	}
+	if (y2 > y3) {
+		tmp = y2;
+		y2 = y3;
+		y3 = tmp;
+		tmp = x2;
+		x2 = x3;
+		x3 = tmp;
+	}
+
+	// Scanline fill
+	int total_height = y3 - y1;
+	if (total_height == 0) {
+		return;
+	}
+
+	for (int y = y1; y <= y3; y++) {
+		int second_half = (y > y2) || (y2 == y1);
+		int segment_height = second_half ? (y3 - y2) : (y2 - y1);
+		if (segment_height == 0) {
+			segment_height = 1;
+		}
+
+		float alpha_val = (float)(y - y1) / (float)total_height;
+		float beta = second_half ? (float)(y - y2) / (float)segment_height : (float)(y - y1) / (float)segment_height;
+
+		int xa = x1 + (int)((float)(x3 - x1) * alpha_val);
+		int xb = second_half ? x2 + (int)((float)(x3 - x2) * beta) : x1 + (int)((float)(x2 - x1) * beta);
+
+		if (xa > xb) {
+			tmp = xa;
+			xa = xb;
+			xb = tmp;
+		}
+
+		SDL_RenderDrawLine(sdlren, xa, y, xb, y);
+	}
+}
+
+void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigned short color, unsigned char alpha,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	// Mark clipping params as intentionally unused for now (thick line uses simple approach)
+	(void)clipsx;
+	(void)clipsy;
+	(void)clipex;
+	(void)clipey;
+
+	if (thickness <= 0) {
+		thickness = 1;
+	}
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	// Apply offset and scale
+	fx = (fx + x_offset) * sdl_scale;
+	fy = (fy + y_offset) * sdl_scale;
+	tx = (tx + x_offset) * sdl_scale;
+	ty = (ty + y_offset) * sdl_scale;
+	thickness *= sdl_scale;
+
+	// Calculate perpendicular vector
+	float dx = (float)(tx - fx);
+	float dy = (float)(ty - fy);
+	float len = sqrtf(dx * dx + dy * dy);
+	if (len < 0.001f) {
+		return;
+	}
+
+	float nx = -dy / len;
+	float ny = dx / len;
+
+	// Draw multiple parallel lines
+	for (int i = -(thickness / 2); i <= thickness / 2; i++) {
+		int ox = (int)(nx * (float)i);
+		int oy = (int)(ny * (float)i);
+		SDL_RenderDrawLine(sdlren, fx + ox, fy + oy, tx + ox, ty + oy);
+	}
+}
+
+void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, unsigned short color,
+    unsigned char alpha, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	if (radius <= 0) {
+		return;
+	}
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	cx = (cx + x_offset) * sdl_scale;
+	cy = (cy + y_offset) * sdl_scale;
+	int sr = radius * sdl_scale;
+
+	// Normalize angles
+	while (start_angle < 0) {
+		start_angle += 360;
+	}
+	while (end_angle < 0) {
+		end_angle += 360;
+	}
+	start_angle %= 360;
+	end_angle %= 360;
+
+	// Draw arc using parametric approach
+	for (int angle = start_angle; angle != end_angle; angle = (angle + 1) % 360) {
+		double rad = angle * M_PI / 180.0;
+		int px = cx + (int)(sr * cos(rad));
+		int py = cy + (int)(sr * sin(rad));
+		SDL_RenderDrawPoint(sdlren, px, py);
+	}
+	// Draw the last point
+	double rad = end_angle * M_PI / 180.0;
+	int px = cx + (int)(sr * cos(rad));
+	int py = cy + (int)(sr * sin(rad));
+	SDL_RenderDrawPoint(sdlren, px, py);
+}
+
+void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2,
+    unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	// Apply clipping
+	if (sx < clipsx) {
+		sx = clipsx;
+	}
+	if (sy < clipsy) {
+		sy = clipsy;
+	}
+	if (ex > clipex) {
+		ex = clipex;
+	}
+	if (ey > clipey) {
+		ey = clipey;
+	}
+
+	if (sx >= ex || sy >= ey) {
+		return;
+	}
+
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	float r1 = (float)R16TO32(color1), g1 = (float)G16TO32(color1), b1 = (float)B16TO32(color1);
+	float r2 = (float)R16TO32(color2), g2 = (float)G16TO32(color2), b2 = (float)B16TO32(color2);
+
+	float width = (float)(ex - sx);
+	for (int x = sx; x < ex; x++) {
+		float t = (float)(x - sx) / width;
+		int r = (int)(r1 + t * (r2 - r1));
+		int g = (int)(g1 + t * (g2 - g1));
+		int b = (int)(b1 + t * (b2 - b1));
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+		SDL_RenderDrawLine(sdlren, (x + x_offset) * sdl_scale, (sy + y_offset) * sdl_scale, (x + x_offset) * sdl_scale,
+		    (ey - 1 + y_offset) * sdl_scale);
+	}
+}
+
+void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2,
+    unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	// Apply clipping
+	if (sx < clipsx) {
+		sx = clipsx;
+	}
+	if (sy < clipsy) {
+		sy = clipsy;
+	}
+	if (ex > clipex) {
+		ex = clipex;
+	}
+	if (ey > clipey) {
+		ey = clipey;
+	}
+
+	if (sx >= ex || sy >= ey) {
+		return;
+	}
+
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	float r1 = (float)R16TO32(color1), g1 = (float)G16TO32(color1), b1 = (float)B16TO32(color1);
+	float r2 = (float)R16TO32(color2), g2 = (float)G16TO32(color2), b2 = (float)B16TO32(color2);
+
+	float height = (float)(ey - sy);
+	for (int y = sy; y < ey; y++) {
+		float t = (float)(y - sy) / height;
+		int r = (int)(r1 + t * (r2 - r1));
+		int g = (int)(g1 + t * (g2 - g1));
+		int b = (int)(b1 + t * (b2 - b1));
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+		SDL_RenderDrawLine(sdlren, (sx + x_offset) * sdl_scale, (y + y_offset) * sdl_scale,
+		    (ex - 1 + x_offset) * sdl_scale, (y + y_offset) * sdl_scale);
+	}
+}
+
+void sdl_bezier_quadratic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, unsigned short color,
+    unsigned char alpha, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	float fx0 = (float)((x0 + x_offset) * sdl_scale);
+	float fy0 = (float)((y0 + y_offset) * sdl_scale);
+	float fx1 = (float)((x1 + x_offset) * sdl_scale);
+	float fy1 = (float)((y1 + y_offset) * sdl_scale);
+	float fx2 = (float)((x2 + x_offset) * sdl_scale);
+	float fy2 = (float)((y2 + y_offset) * sdl_scale);
+
+	// Draw quadratic Bezier using line segments
+	int prev_x = (int)fx0, prev_y = (int)fy0;
+	for (int i = 1; i <= 32; i++) {
+		float t = (float)i / 32.0f;
+		float u = 1.0f - t;
+		int x = (int)(u * u * fx0 + 2.0f * u * t * fx1 + t * t * fx2);
+		int y = (int)(u * u * fy0 + 2.0f * u * t * fy1 + t * t * fy2);
+		SDL_RenderDrawLine(sdlren, prev_x, prev_y, x, y);
+		prev_x = x;
+		prev_y = y;
+	}
+}
+
+void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color,
+    unsigned char alpha, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	float fx0 = (float)((x0 + x_offset) * sdl_scale);
+	float fy0 = (float)((y0 + y_offset) * sdl_scale);
+	float fx1 = (float)((x1 + x_offset) * sdl_scale);
+	float fy1 = (float)((y1 + y_offset) * sdl_scale);
+	float fx2 = (float)((x2 + x_offset) * sdl_scale);
+	float fy2 = (float)((y2 + y_offset) * sdl_scale);
+	float fx3 = (float)((x3 + x_offset) * sdl_scale);
+	float fy3 = (float)((y3 + y_offset) * sdl_scale);
+
+	// Draw cubic Bezier using line segments
+	int prev_x = (int)fx0, prev_y = (int)fy0;
+	for (int i = 1; i <= 48; i++) {
+		float t = (float)i / 48.0f;
+		float u = 1.0f - t;
+		float u2 = u * u;
+		float u3 = u2 * u;
+		float t2 = t * t;
+		float t3 = t2 * t;
+		int x = (int)(u3 * fx0 + 3.0f * u2 * t * fx1 + 3.0f * u * t2 * fx2 + t3 * fx3);
+		int y = (int)(u3 * fy0 + 3.0f * u2 * t * fy1 + 3.0f * u * t2 * fy2 + t3 * fy3);
+		SDL_RenderDrawLine(sdlren, prev_x, prev_y, x, y);
+		prev_x = x;
+		prev_y = y;
+	}
+}
+
+void sdl_gradient_circle(int cx, int cy, int radius, unsigned short color, unsigned char center_alpha,
+    unsigned char edge_alpha, int x_offset, int y_offset)
+{
+	if (radius <= 0) {
+		return;
+	}
+
+	int r = R16TO32(color);
+	int g = G16TO32(color);
+	int b = B16TO32(color);
+
+	cx = (cx + x_offset) * sdl_scale;
+	cy = (cy + y_offset) * sdl_scale;
+	int sr = radius * sdl_scale;
+
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	// Draw concentric circles with decreasing alpha from center to edge
+	for (int ri = 0; ri <= sr; ri++) {
+		// Interpolate alpha based on distance from center
+		float t = (float)ri / (float)sr;
+		int alpha = (int)((float)center_alpha + t * ((float)edge_alpha - (float)center_alpha));
+		if (alpha < 0) {
+			alpha = 0;
+		}
+		if (alpha > 255) {
+			alpha = 255;
+		}
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+
+		// Draw circle at this radius
+		int x = ri, y = 0, d = 1 - ri;
+		while (x >= y) {
+			SDL_RenderDrawPoint(sdlren, cx + x, cy + y);
+			SDL_RenderDrawPoint(sdlren, cx - x, cy + y);
+			SDL_RenderDrawPoint(sdlren, cx + x, cy - y);
+			SDL_RenderDrawPoint(sdlren, cx - x, cy - y);
+			SDL_RenderDrawPoint(sdlren, cx + y, cy + x);
+			SDL_RenderDrawPoint(sdlren, cx - y, cy + x);
+			SDL_RenderDrawPoint(sdlren, cx + y, cy - x);
+			SDL_RenderDrawPoint(sdlren, cx - y, cy - x);
+
+			y++;
+			if (d < 0) {
+				d += 2 * y + 1;
+			} else {
+				x--;
+				d += 2 * (y - x) + 1;
+			}
+		}
+	}
+}
+
+void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
+{
+	// Xiaolin Wu's line algorithm for anti-aliased lines
+	int r = R16TO32(color);
+	int g = G16TO32(color);
+	int b = B16TO32(color);
+
+	x0 = (x0 + x_offset) * sdl_scale;
+	y0 = (y0 + y_offset) * sdl_scale;
+	x1 = (x1 + x_offset) * sdl_scale;
+	y1 = (y1 + y_offset) * sdl_scale;
+
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	int steep = abs(y1 - y0) > abs(x1 - x0);
+	if (steep) {
+		int tmp = x0;
+		x0 = y0;
+		y0 = tmp;
+		tmp = x1;
+		x1 = y1;
+		y1 = tmp;
+	}
+	if (x0 > x1) {
+		int tmp = x0;
+		x0 = x1;
+		x1 = tmp;
+		tmp = y0;
+		y0 = y1;
+		y1 = tmp;
+	}
+
+	float dx = (float)(x1 - x0);
+	float dy = (float)(y1 - y0);
+	float gradient = (dx < 0.001f) ? 1.0f : dy / dx;
+
+	// Handle first endpoint
+	float xend = (float)x0;
+	float yend = (float)y0 + gradient * (xend - (float)x0);
+	float xgap = 1.0f - ((float)x0 + 0.5f - floorf((float)x0 + 0.5f));
+	int xpxl1 = (int)xend;
+	int ypxl1 = (int)floorf(yend);
+
+	if (steep) {
+		SDL_SetRenderDrawColor(
+		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
+		SDL_RenderDrawPoint(sdlren, ypxl1, xpxl1);
+		SDL_SetRenderDrawColor(
+		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
+		SDL_RenderDrawPoint(sdlren, ypxl1 + 1, xpxl1);
+	} else {
+		SDL_SetRenderDrawColor(
+		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
+		SDL_RenderDrawPoint(sdlren, xpxl1, ypxl1);
+		SDL_SetRenderDrawColor(
+		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
+		SDL_RenderDrawPoint(sdlren, xpxl1, ypxl1 + 1);
+	}
+
+	float intery = yend + gradient;
+
+	// Handle second endpoint
+	xend = (float)x1;
+	yend = (float)y1 + gradient * (xend - (float)x1);
+	xgap = (float)x1 + 0.5f - floorf((float)x1 + 0.5f);
+	int xpxl2 = (int)xend;
+	int ypxl2 = (int)floorf(yend);
+
+	if (steep) {
+		SDL_SetRenderDrawColor(
+		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
+		SDL_RenderDrawPoint(sdlren, ypxl2, xpxl2);
+		SDL_SetRenderDrawColor(
+		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
+		SDL_RenderDrawPoint(sdlren, ypxl2 + 1, xpxl2);
+	} else {
+		SDL_SetRenderDrawColor(
+		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
+		SDL_RenderDrawPoint(sdlren, xpxl2, ypxl2);
+		SDL_SetRenderDrawColor(
+		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
+		SDL_RenderDrawPoint(sdlren, xpxl2, ypxl2 + 1);
+	}
+
+	// Main loop
+	for (int x = xpxl1 + 1; x < xpxl2; x++) {
+		if (steep) {
+			SDL_SetRenderDrawColor(
+			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (intery - floorf(intery)))));
+			SDL_RenderDrawPoint(sdlren, (int)floorf(intery), x);
+			SDL_SetRenderDrawColor(
+			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (intery - floorf(intery))));
+			SDL_RenderDrawPoint(sdlren, (int)floorf(intery) + 1, x);
+		} else {
+			SDL_SetRenderDrawColor(
+			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (intery - floorf(intery)))));
+			SDL_RenderDrawPoint(sdlren, x, (int)floorf(intery));
+			SDL_SetRenderDrawColor(
+			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (intery - floorf(intery))));
+			SDL_RenderDrawPoint(sdlren, x, (int)floorf(intery) + 1);
+		}
+		intery += gradient;
+	}
+}
+
+void sdl_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int start_angle, int end_angle,
+    unsigned short color, unsigned char alpha, int x_offset, int y_offset)
+{
+	int r, g, b;
+
+	if (inner_radius <= 0 || outer_radius <= 0 || outer_radius <= inner_radius) {
+		return;
+	}
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, SDL_BLENDMODE_BLEND);
+
+	cx = (cx + x_offset) * sdl_scale;
+	cy = (cy + y_offset) * sdl_scale;
+	inner_radius *= sdl_scale;
+	outer_radius *= sdl_scale;
+
+	// Normalize angles
+	while (start_angle < 0) {
+		start_angle += 360;
+	}
+	while (end_angle < 0) {
+		end_angle += 360;
+	}
+	start_angle %= 360;
+	end_angle %= 360;
+
+	// Draw filled ring segment
+	for (int angle = start_angle; angle != end_angle; angle = (angle + 1) % 360) {
+		double rad = (double)angle * M_PI / 180.0;
+		double cos_a = cos(rad);
+		double sin_a = sin(rad);
+
+		// Draw radial line from inner to outer radius
+		int x1 = cx + (int)((double)inner_radius * cos_a);
+		int y1 = cy + (int)((double)inner_radius * sin_a);
+		int x2 = cx + (int)((double)outer_radius * cos_a);
+		int y2 = cy + (int)((double)outer_radius * sin_a);
+		SDL_RenderDrawLine(sdlren, x1, y1, x2, y2);
+	}
+	// Draw the last segment
+	double rad = (double)end_angle * M_PI / 180.0;
+	double cos_a = cos(rad);
+	double sin_a = sin(rad);
+	int x1 = cx + (int)((double)inner_radius * cos_a);
+	int y1 = cy + (int)((double)inner_radius * sin_a);
+	int x2 = cx + (int)((double)outer_radius * cos_a);
+	int y2 = cy + (int)((double)outer_radius * sin_a);
+	SDL_RenderDrawLine(sdlren, x1, y1, x2, y2);
 }

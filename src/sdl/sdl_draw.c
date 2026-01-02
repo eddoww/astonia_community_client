@@ -466,7 +466,7 @@ void sdl_bargraph(int sx, int sy, int dx, unsigned char *data, int x_offset, int
 void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
 {
 	int r, g, b, i;
-	SDL_Point pt[16];
+	SDL_FPoint pt[16];
 
 	r = R16TO32(color);
 	g = G16TO32(color);
@@ -476,11 +476,11 @@ void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, in
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 	switch (sdl_scale) {
 	case 1:
-		SDL_RenderDrawPoint(sdlren, x + x_offset, y + y_offset);
+		SDL_RenderPoint(sdlren, (float)(x + x_offset), (float)(y + y_offset));
 		return;
 	case 2:
-		pt[0].x = (x + x_offset) * sdl_scale;
-		pt[0].y = (y + y_offset) * sdl_scale;
+		pt[0].x = (float)((x + x_offset) * sdl_scale);
+		pt[0].y = (float)((y + y_offset) * sdl_scale);
 		pt[1].x = pt[0].x + 1;
 		pt[1].y = pt[0].y;
 		pt[2].x = pt[0].x;
@@ -490,8 +490,8 @@ void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, in
 		i = 4;
 		break;
 	case 3:
-		pt[0].x = (x + x_offset) * sdl_scale;
-		pt[0].y = (y + y_offset) * sdl_scale;
+		pt[0].x = (float)((x + x_offset) * sdl_scale);
+		pt[0].y = (float)((y + y_offset) * sdl_scale);
 		pt[1].x = pt[0].x + 1;
 		pt[1].y = pt[0].y;
 		pt[2].x = pt[0].x;
@@ -511,8 +511,8 @@ void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, in
 		i = 9;
 		break;
 	case 4:
-		pt[0].x = (x + x_offset) * sdl_scale;
-		pt[0].y = (y + y_offset) * sdl_scale;
+		pt[0].x = (float)((x + x_offset) * sdl_scale);
+		pt[0].y = (float)((y + y_offset) * sdl_scale);
 		pt[1].x = pt[0].x + 1;
 		pt[1].y = pt[0].y;
 		pt[2].x = pt[0].x;
@@ -549,7 +549,7 @@ void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, in
 		warn("unsupported scale %d in sdl_pixel_alpha()", sdl_scale);
 		return;
 	}
-	SDL_RenderDrawPoints(sdlren, pt, i);
+	SDL_RenderPoints(sdlren, pt, i);
 }
 
 void sdl_line_alpha(int fx, int fy, int tx, int ty, unsigned short color, unsigned char alpha, int clipsx, int clipsy,
@@ -594,7 +594,8 @@ void sdl_line_alpha(int fx, int fy, int tx, int ty, unsigned short color, unsign
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
-	SDL_RenderDrawLine(sdlren, fx * sdl_scale, fy * sdl_scale, tx * sdl_scale, ty * sdl_scale);
+	SDL_RenderLine(
+	    sdlren, (float)(fx * sdl_scale), (float)(fy * sdl_scale), (float)(tx * sdl_scale), (float)(ty * sdl_scale));
 }
 
 void sdl_set_blend_mode(int mode)
@@ -795,7 +796,7 @@ void sdl_unload_mod_texture(int tex_id)
 void sdl_render_mod_texture(int tex_id, int x, int y, unsigned char alpha, int clipsx, int clipsy, int clipex,
     int clipey, int x_offset, int y_offset)
 {
-	SDL_Rect dr, sr;
+	SDL_FRect dr, sr;
 	int dx, dy, addx = 0, addy = 0;
 
 	if (tex_id < 0 || tex_id >= MAX_MOD_TEXTURES) {
@@ -829,24 +830,24 @@ void sdl_render_mod_texture(int tex_id, int x, int y, unsigned char alpha, int c
 		return;
 	}
 
-	sr.x = addx;
-	sr.y = addy;
-	sr.w = dx;
-	sr.h = dy;
+	sr.x = (float)addx;
+	sr.y = (float)addy;
+	sr.w = (float)dx;
+	sr.h = (float)dy;
 
-	dr.x = (x + x_offset) * sdl_scale;
-	dr.y = (y + y_offset) * sdl_scale;
-	dr.w = dx * sdl_scale;
-	dr.h = dy * sdl_scale;
+	dr.x = (float)((x + x_offset) * sdl_scale);
+	dr.y = (float)((y + y_offset) * sdl_scale);
+	dr.w = (float)(dx * sdl_scale);
+	dr.h = (float)(dy * sdl_scale);
 
 	SDL_SetTextureAlphaMod(mod_textures[tex_id].tex, alpha);
-	SDL_RenderCopy(sdlren, mod_textures[tex_id].tex, &sr, &dr);
+	SDL_RenderTexture(sdlren, mod_textures[tex_id].tex, &sr, &dr);
 }
 
 void sdl_render_mod_texture_scaled(int tex_id, int x, int y, float scale, unsigned char alpha, int clipsx, int clipsy,
     int clipex, int clipey, int x_offset, int y_offset)
 {
-	SDL_Rect dr, sr;
+	SDL_FRect dr, sr;
 	int dx, dy, scaled_dx, scaled_dy;
 
 	if (tex_id < 0 || tex_id >= MAX_MOD_TEXTURES) {
@@ -871,18 +872,18 @@ void sdl_render_mod_texture_scaled(int tex_id, int x, int y, float scale, unsign
 		return;
 	}
 
-	sr.x = 0;
-	sr.y = 0;
-	sr.w = dx;
-	sr.h = dy;
+	sr.x = 0.0f;
+	sr.y = 0.0f;
+	sr.w = (float)dx;
+	sr.h = (float)dy;
 
-	dr.x = (x + x_offset) * sdl_scale;
-	dr.y = (y + y_offset) * sdl_scale;
-	dr.w = scaled_dx * sdl_scale;
-	dr.h = scaled_dy * sdl_scale;
+	dr.x = (float)((x + x_offset) * sdl_scale);
+	dr.y = (float)((y + y_offset) * sdl_scale);
+	dr.w = (float)(scaled_dx * sdl_scale);
+	dr.h = (float)(scaled_dy * sdl_scale);
 
 	SDL_SetTextureAlphaMod(mod_textures[tex_id].tex, alpha);
-	SDL_RenderCopy(sdlren, mod_textures[tex_id].tex, &sr, &dr);
+	SDL_RenderTexture(sdlren, mod_textures[tex_id].tex, &sr, &dr);
 }
 
 int sdl_get_mod_texture_width(int tex_id)
@@ -1017,7 +1018,7 @@ int sdl_set_render_target(int target_id)
 
 void sdl_render_target_to_screen(int target_id, int x, int y, unsigned char alpha)
 {
-	SDL_Rect dr;
+	SDL_FRect dr;
 
 	if (target_id < 0 || target_id >= MAX_RENDER_TARGETS) {
 		return;
@@ -1031,13 +1032,13 @@ void sdl_render_target_to_screen(int target_id, int x, int y, unsigned char alph
 		SDL_SetRenderTarget(sdlren, NULL);
 	}
 
-	dr.x = x * sdl_scale;
-	dr.y = y * sdl_scale;
-	dr.w = render_targets[target_id].width * sdl_scale;
-	dr.h = render_targets[target_id].height * sdl_scale;
+	dr.x = (float)(x * sdl_scale);
+	dr.y = (float)(y * sdl_scale);
+	dr.w = (float)(render_targets[target_id].width * sdl_scale);
+	dr.h = (float)(render_targets[target_id].height * sdl_scale);
 
 	SDL_SetTextureAlphaMod(render_targets[target_id].tex, alpha);
-	SDL_RenderCopy(sdlren, render_targets[target_id].tex, NULL, &dr);
+	SDL_RenderTexture(sdlren, render_targets[target_id].tex, NULL, &dr);
 
 	// Restore previous render target
 	if (current_render_target >= 0) {
@@ -1166,14 +1167,14 @@ void sdl_circle_alpha(int cx, int cy, int radius, unsigned short color, unsigned
 
 	while (x >= y) {
 		// Draw 8 symmetric points
-		SDL_RenderDrawPoint(sdlren, cx + x, cy + y);
-		SDL_RenderDrawPoint(sdlren, cx - x, cy + y);
-		SDL_RenderDrawPoint(sdlren, cx + x, cy - y);
-		SDL_RenderDrawPoint(sdlren, cx - x, cy - y);
-		SDL_RenderDrawPoint(sdlren, cx + y, cy + x);
-		SDL_RenderDrawPoint(sdlren, cx - y, cy + x);
-		SDL_RenderDrawPoint(sdlren, cx + y, cy - x);
-		SDL_RenderDrawPoint(sdlren, cx - y, cy - x);
+		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy + y));
+		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy + y));
+		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy - y));
+		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy - y));
+		SDL_RenderPoint(sdlren, (float)(cx + y), (float)(cy + x));
+		SDL_RenderPoint(sdlren, (float)(cx - y), (float)(cy + x));
+		SDL_RenderPoint(sdlren, (float)(cx + y), (float)(cy - x));
+		SDL_RenderPoint(sdlren, (float)(cx - y), (float)(cy - x));
 
 		y++;
 		if (d < 0) {
@@ -1214,10 +1215,10 @@ void sdl_circle_filled_alpha(
 
 	while (x >= y) {
 		// Draw horizontal lines to fill the circle
-		SDL_RenderDrawLine(sdlren, cx - x, cy + y, cx + x, cy + y);
-		SDL_RenderDrawLine(sdlren, cx - x, cy - y, cx + x, cy - y);
-		SDL_RenderDrawLine(sdlren, cx - y, cy + x, cx + y, cy + x);
-		SDL_RenderDrawLine(sdlren, cx - y, cy - x, cx + y, cy - x);
+		SDL_RenderLine(sdlren, (float)(cx - x), (float)(cy + y), (float)(cx + x), (float)(cy + y));
+		SDL_RenderLine(sdlren, (float)(cx - x), (float)(cy - y), (float)(cx + x), (float)(cy - y));
+		SDL_RenderLine(sdlren, (float)(cx - y), (float)(cy + x), (float)(cx + y), (float)(cy + x));
+		SDL_RenderLine(sdlren, (float)(cx - y), (float)(cy - x), (float)(cx + y), (float)(cy - x));
 
 		y++;
 		if (d < 0) {
@@ -1263,10 +1264,10 @@ void sdl_ellipse_alpha(
 	// Region 1
 	p = ry2 - rx2 * ry + rx2 / 4;
 	while (px < py) {
-		SDL_RenderDrawPoint(sdlren, cx + x, cy + y);
-		SDL_RenderDrawPoint(sdlren, cx - x, cy + y);
-		SDL_RenderDrawPoint(sdlren, cx + x, cy - y);
-		SDL_RenderDrawPoint(sdlren, cx - x, cy - y);
+		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy + y));
+		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy + y));
+		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy - y));
+		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy - y));
 
 		x++;
 		px += two_ry2;
@@ -1282,10 +1283,10 @@ void sdl_ellipse_alpha(
 	// Region 2
 	p = ry2 * (x * 2 + 1) * (x * 2 + 1) / 4 + rx2 * (y - 1) * (y - 1) - rx2 * ry2;
 	while (y >= 0) {
-		SDL_RenderDrawPoint(sdlren, cx + x, cy + y);
-		SDL_RenderDrawPoint(sdlren, cx - x, cy + y);
-		SDL_RenderDrawPoint(sdlren, cx + x, cy - y);
-		SDL_RenderDrawPoint(sdlren, cx - x, cy - y);
+		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy + y));
+		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy + y));
+		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy - y));
+		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy - y));
 
 		y--;
 		py -= two_rx2;
@@ -1329,7 +1330,7 @@ void sdl_ellipse_filled_alpha(
 			ratio = 0;
 		}
 		int xi = (int)(rx * sqrt(ratio));
-		SDL_RenderDrawLine(sdlren, cx - xi, cy + yi, cx + xi, cy + yi);
+		SDL_RenderLine(sdlren, (float)(cx - xi), (float)(cy + yi), (float)(cx + xi), (float)(cy + yi));
 	}
 }
 
@@ -1369,10 +1370,10 @@ void sdl_rect_outline_alpha(int sx, int sy, int ex, int ey, unsigned short color
 	ey = (ey + y_offset) * sdl_scale;
 
 	// Draw 4 lines for outline
-	SDL_RenderDrawLine(sdlren, sx, sy, ex - 1, sy); // Top
-	SDL_RenderDrawLine(sdlren, sx, ey - 1, ex - 1, ey - 1); // Bottom
-	SDL_RenderDrawLine(sdlren, sx, sy, sx, ey - 1); // Left
-	SDL_RenderDrawLine(sdlren, ex - 1, sy, ex - 1, ey - 1); // Right
+	SDL_RenderLine(sdlren, (float)sx, (float)sy, (float)(ex - 1), (float)sy); // Top
+	SDL_RenderLine(sdlren, (float)sx, (float)(ey - 1), (float)(ex - 1), (float)(ey - 1)); // Bottom
+	SDL_RenderLine(sdlren, (float)sx, (float)sy, (float)sx, (float)(ey - 1)); // Left
+	SDL_RenderLine(sdlren, (float)(ex - 1), (float)sy, (float)(ex - 1), (float)(ey - 1)); // Right
 }
 
 void sdl_rounded_rect_alpha(int sx, int sy, int ex, int ey, int radius, unsigned short color, unsigned char alpha,
@@ -1421,10 +1422,10 @@ void sdl_rounded_rect_alpha(int sx, int sy, int ex, int ey, int radius, unsigned
 	int sr = radius * sdl_scale;
 
 	// Draw the 4 straight edges
-	SDL_RenderDrawLine(sdlren, osx + sr, osy, oex - sr - 1, osy); // Top
-	SDL_RenderDrawLine(sdlren, osx + sr, oey - 1, oex - sr - 1, oey - 1); // Bottom
-	SDL_RenderDrawLine(sdlren, osx, osy + sr, osx, oey - sr - 1); // Left
-	SDL_RenderDrawLine(sdlren, oex - 1, osy + sr, oex - 1, oey - sr - 1); // Right
+	SDL_RenderLine(sdlren, (float)(osx + sr), (float)osy, (float)(oex - sr - 1), (float)osy); // Top
+	SDL_RenderLine(sdlren, (float)(osx + sr), (float)(oey - 1), (float)(oex - sr - 1), (float)(oey - 1)); // Bottom
+	SDL_RenderLine(sdlren, (float)osx, (float)(osy + sr), (float)osx, (float)(oey - sr - 1)); // Left
+	SDL_RenderLine(sdlren, (float)(oex - 1), (float)(osy + sr), (float)(oex - 1), (float)(oey - sr - 1)); // Right
 
 	// Draw the 4 corner arcs using midpoint circle algorithm
 	if (sr > 0) {
@@ -1436,17 +1437,17 @@ void sdl_rounded_rect_alpha(int sx, int sy, int ex, int ey, int radius, unsigned
 
 		while (x >= y) {
 			// Top-left corner
-			SDL_RenderDrawPoint(sdlren, cx1 - x, cy1 - y);
-			SDL_RenderDrawPoint(sdlren, cx1 - y, cy1 - x);
+			SDL_RenderPoint(sdlren, (float)(cx1 - x), (float)(cy1 - y));
+			SDL_RenderPoint(sdlren, (float)(cx1 - y), (float)(cy1 - x));
 			// Top-right corner
-			SDL_RenderDrawPoint(sdlren, cx2 + x, cy2 - y);
-			SDL_RenderDrawPoint(sdlren, cx2 + y, cy2 - x);
+			SDL_RenderPoint(sdlren, (float)(cx2 + x), (float)(cy2 - y));
+			SDL_RenderPoint(sdlren, (float)(cx2 + y), (float)(cy2 - x));
 			// Bottom-left corner
-			SDL_RenderDrawPoint(sdlren, cx3 - x, cy3 + y);
-			SDL_RenderDrawPoint(sdlren, cx3 - y, cy3 + x);
+			SDL_RenderPoint(sdlren, (float)(cx3 - x), (float)(cy3 + y));
+			SDL_RenderPoint(sdlren, (float)(cx3 - y), (float)(cy3 + x));
 			// Bottom-right corner
-			SDL_RenderDrawPoint(sdlren, cx4 + x, cy4 + y);
-			SDL_RenderDrawPoint(sdlren, cx4 + y, cy4 + x);
+			SDL_RenderPoint(sdlren, (float)(cx4 + x), (float)(cy4 + y));
+			SDL_RenderPoint(sdlren, (float)(cx4 + y), (float)(cy4 + x));
 
 			y++;
 			if (d < 0) {
@@ -1505,12 +1506,12 @@ void sdl_rounded_rect_filled_alpha(int sx, int sy, int ex, int ey, int radius, u
 	int sr = radius * sdl_scale;
 
 	// Fill center rectangle
-	SDL_Rect center = {osx, osy + sr, oex - osx, oey - osy - 2 * sr};
+	SDL_FRect center = {(float)osx, (float)(osy + sr), (float)(oex - osx), (float)(oey - osy - 2 * sr)};
 	SDL_RenderFillRect(sdlren, &center);
 
 	// Fill top and bottom rectangles (between corners)
-	SDL_Rect top = {osx + sr, osy, oex - osx - 2 * sr, sr};
-	SDL_Rect bottom = {osx + sr, oey - sr, oex - osx - 2 * sr, sr};
+	SDL_FRect top = {(float)(osx + sr), (float)osy, (float)(oex - osx - 2 * sr), (float)sr};
+	SDL_FRect bottom = {(float)(osx + sr), (float)(oey - sr), (float)(oex - osx - 2 * sr), (float)sr};
 	SDL_RenderFillRect(sdlren, &top);
 	SDL_RenderFillRect(sdlren, &bottom);
 
@@ -1524,14 +1525,14 @@ void sdl_rounded_rect_filled_alpha(int sx, int sy, int ex, int ey, int radius, u
 
 		while (x >= y) {
 			// Fill horizontal lines for each corner
-			SDL_RenderDrawLine(sdlren, cx1 - x, cy1 - y, cx1, cy1 - y); // Top-left
-			SDL_RenderDrawLine(sdlren, cx1 - y, cy1 - x, cx1, cy1 - x);
-			SDL_RenderDrawLine(sdlren, cx2, cy2 - y, cx2 + x, cy2 - y); // Top-right
-			SDL_RenderDrawLine(sdlren, cx2, cy2 - x, cx2 + y, cy2 - x);
-			SDL_RenderDrawLine(sdlren, cx3 - x, cy3 + y, cx3, cy3 + y); // Bottom-left
-			SDL_RenderDrawLine(sdlren, cx3 - y, cy3 + x, cx3, cy3 + x);
-			SDL_RenderDrawLine(sdlren, cx4, cy4 + y, cx4 + x, cy4 + y); // Bottom-right
-			SDL_RenderDrawLine(sdlren, cx4, cy4 + x, cx4 + y, cy4 + x);
+			SDL_RenderLine(sdlren, (float)(cx1 - x), (float)(cy1 - y), (float)cx1, (float)(cy1 - y)); // Top-left
+			SDL_RenderLine(sdlren, (float)(cx1 - y), (float)(cy1 - x), (float)cx1, (float)(cy1 - x));
+			SDL_RenderLine(sdlren, (float)cx2, (float)(cy2 - y), (float)(cx2 + x), (float)(cy2 - y)); // Top-right
+			SDL_RenderLine(sdlren, (float)cx2, (float)(cy2 - x), (float)(cx2 + y), (float)(cy2 - x));
+			SDL_RenderLine(sdlren, (float)(cx3 - x), (float)(cy3 + y), (float)cx3, (float)(cy3 + y)); // Bottom-left
+			SDL_RenderLine(sdlren, (float)(cx3 - y), (float)(cy3 + x), (float)cx3, (float)(cy3 + x));
+			SDL_RenderLine(sdlren, (float)cx4, (float)(cy4 + y), (float)(cx4 + x), (float)(cy4 + y)); // Bottom-right
+			SDL_RenderLine(sdlren, (float)cx4, (float)(cy4 + x), (float)(cx4 + y), (float)(cy4 + x));
 
 			y++;
 			if (d < 0) {
@@ -1574,9 +1575,9 @@ void sdl_triangle_alpha(int x1, int y1, int x2, int y2, int x3, int y3, unsigned
 	y3 = (y3 + y_offset) * sdl_scale;
 
 	// Draw 3 lines
-	SDL_RenderDrawLine(sdlren, x1, y1, x2, y2);
-	SDL_RenderDrawLine(sdlren, x2, y2, x3, y3);
-	SDL_RenderDrawLine(sdlren, x3, y3, x1, y1);
+	SDL_RenderLine(sdlren, (float)x1, (float)y1, (float)x2, (float)y2);
+	SDL_RenderLine(sdlren, (float)x2, (float)y2, (float)x3, (float)y3);
+	SDL_RenderLine(sdlren, (float)x3, (float)y3, (float)x1, (float)y1);
 }
 
 void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color,
@@ -1660,7 +1661,7 @@ void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, u
 			xb = tmp;
 		}
 
-		SDL_RenderDrawLine(sdlren, xa, y, xb, y);
+		SDL_RenderLine(sdlren, (float)xa, (float)y, (float)xb, (float)y);
 	}
 }
 
@@ -1708,7 +1709,7 @@ void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigne
 	for (int i = -(thickness / 2); i <= thickness / 2; i++) {
 		int ox = (int)(nx * (float)i);
 		int oy = (int)(ny * (float)i);
-		SDL_RenderDrawLine(sdlren, fx + ox, fy + oy, tx + ox, ty + oy);
+		SDL_RenderLine(sdlren, (float)(fx + ox), (float)(fy + oy), (float)(tx + ox), (float)(ty + oy));
 	}
 }
 
@@ -1747,13 +1748,13 @@ void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, u
 		double rad = angle * M_PI / 180.0;
 		int px = cx + (int)(sr * cos(rad));
 		int py = cy + (int)(sr * sin(rad));
-		SDL_RenderDrawPoint(sdlren, px, py);
+		SDL_RenderPoint(sdlren, (float)px, (float)py);
 	}
 	// Draw the last point
 	double rad = end_angle * M_PI / 180.0;
 	int px = cx + (int)(sr * cos(rad));
 	int py = cy + (int)(sr * sin(rad));
-	SDL_RenderDrawPoint(sdlren, px, py);
+	SDL_RenderPoint(sdlren, (float)px, (float)py);
 }
 
 void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2,
@@ -1790,8 +1791,8 @@ void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, 
 		int b = (int)(b1 + t * (b2 - b1));
 
 		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-		SDL_RenderDrawLine(sdlren, (x + x_offset) * sdl_scale, (sy + y_offset) * sdl_scale, (x + x_offset) * sdl_scale,
-		    (ey - 1 + y_offset) * sdl_scale);
+		SDL_RenderLine(sdlren, (float)((x + x_offset) * sdl_scale), (float)((sy + y_offset) * sdl_scale),
+		    (float)((x + x_offset) * sdl_scale), (float)((ey - 1 + y_offset) * sdl_scale));
 	}
 }
 
@@ -1829,8 +1830,8 @@ void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, 
 		int b = (int)(b1 + t * (b2 - b1));
 
 		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-		SDL_RenderDrawLine(sdlren, (sx + x_offset) * sdl_scale, (y + y_offset) * sdl_scale,
-		    (ex - 1 + x_offset) * sdl_scale, (y + y_offset) * sdl_scale);
+		SDL_RenderLine(sdlren, (float)((sx + x_offset) * sdl_scale), (float)((y + y_offset) * sdl_scale),
+		    (float)((ex - 1 + x_offset) * sdl_scale), (float)((y + y_offset) * sdl_scale));
 	}
 }
 
@@ -1860,7 +1861,7 @@ void sdl_bezier_quadratic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, 
 		float u = 1.0f - t;
 		int x = (int)(u * u * fx0 + 2.0f * u * t * fx1 + t * t * fx2);
 		int y = (int)(u * u * fy0 + 2.0f * u * t * fy1 + t * t * fy2);
-		SDL_RenderDrawLine(sdlren, prev_x, prev_y, x, y);
+		SDL_RenderLine(sdlren, (float)prev_x, (float)prev_y, (float)x, (float)y);
 		prev_x = x;
 		prev_y = y;
 	}
@@ -1898,7 +1899,7 @@ void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int 
 		float t3 = t2 * t;
 		int x = (int)(u3 * fx0 + 3.0f * u2 * t * fx1 + 3.0f * u * t2 * fx2 + t3 * fx3);
 		int y = (int)(u3 * fy0 + 3.0f * u2 * t * fy1 + 3.0f * u * t2 * fy2 + t3 * fy3);
-		SDL_RenderDrawLine(sdlren, prev_x, prev_y, x, y);
+		SDL_RenderLine(sdlren, (float)prev_x, (float)prev_y, (float)x, (float)y);
 		prev_x = x;
 		prev_y = y;
 	}
@@ -1938,14 +1939,14 @@ void sdl_gradient_circle(int cx, int cy, int radius, unsigned short color, unsig
 		// Draw circle at this radius
 		int x = ri, y = 0, d = 1 - ri;
 		while (x >= y) {
-			SDL_RenderDrawPoint(sdlren, cx + x, cy + y);
-			SDL_RenderDrawPoint(sdlren, cx - x, cy + y);
-			SDL_RenderDrawPoint(sdlren, cx + x, cy - y);
-			SDL_RenderDrawPoint(sdlren, cx - x, cy - y);
-			SDL_RenderDrawPoint(sdlren, cx + y, cy + x);
-			SDL_RenderDrawPoint(sdlren, cx - y, cy + x);
-			SDL_RenderDrawPoint(sdlren, cx + y, cy - x);
-			SDL_RenderDrawPoint(sdlren, cx - y, cy - x);
+			SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy + y));
+			SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy + y));
+			SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy - y));
+			SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy - y));
+			SDL_RenderPoint(sdlren, (float)(cx + y), (float)(cy + x));
+			SDL_RenderPoint(sdlren, (float)(cx - y), (float)(cy + x));
+			SDL_RenderPoint(sdlren, (float)(cx + y), (float)(cy - x));
+			SDL_RenderPoint(sdlren, (float)(cx - y), (float)(cy - x));
 
 			y++;
 			if (d < 0) {
@@ -2004,17 +2005,17 @@ void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned 
 	if (steep) {
 		SDL_SetRenderDrawColor(
 		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
-		SDL_RenderDrawPoint(sdlren, ypxl1, xpxl1);
+		SDL_RenderPoint(sdlren, (float)ypxl1, (float)xpxl1);
 		SDL_SetRenderDrawColor(
 		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
-		SDL_RenderDrawPoint(sdlren, ypxl1 + 1, xpxl1);
+		SDL_RenderPoint(sdlren, (float)(ypxl1 + 1), (float)xpxl1);
 	} else {
 		SDL_SetRenderDrawColor(
 		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
-		SDL_RenderDrawPoint(sdlren, xpxl1, ypxl1);
+		SDL_RenderPoint(sdlren, (float)xpxl1, (float)ypxl1);
 		SDL_SetRenderDrawColor(
 		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
-		SDL_RenderDrawPoint(sdlren, xpxl1, ypxl1 + 1);
+		SDL_RenderPoint(sdlren, (float)xpxl1, (float)(ypxl1 + 1));
 	}
 
 	float intery = yend + gradient;
@@ -2029,17 +2030,17 @@ void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned 
 	if (steep) {
 		SDL_SetRenderDrawColor(
 		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
-		SDL_RenderDrawPoint(sdlren, ypxl2, xpxl2);
+		SDL_RenderPoint(sdlren, (float)ypxl2, (float)xpxl2);
 		SDL_SetRenderDrawColor(
 		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
-		SDL_RenderDrawPoint(sdlren, ypxl2 + 1, xpxl2);
+		SDL_RenderPoint(sdlren, (float)(ypxl2 + 1), (float)xpxl2);
 	} else {
 		SDL_SetRenderDrawColor(
 		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
-		SDL_RenderDrawPoint(sdlren, xpxl2, ypxl2);
+		SDL_RenderPoint(sdlren, (float)xpxl2, (float)ypxl2);
 		SDL_SetRenderDrawColor(
 		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
-		SDL_RenderDrawPoint(sdlren, xpxl2, ypxl2 + 1);
+		SDL_RenderPoint(sdlren, (float)xpxl2, (float)(ypxl2 + 1));
 	}
 
 	// Main loop
@@ -2047,17 +2048,17 @@ void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned 
 		if (steep) {
 			SDL_SetRenderDrawColor(
 			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (intery - floorf(intery)))));
-			SDL_RenderDrawPoint(sdlren, (int)floorf(intery), x);
+			SDL_RenderPoint(sdlren, floorf(intery), (float)x);
 			SDL_SetRenderDrawColor(
 			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (intery - floorf(intery))));
-			SDL_RenderDrawPoint(sdlren, (int)floorf(intery) + 1, x);
+			SDL_RenderPoint(sdlren, floorf(intery) + 1, (float)x);
 		} else {
 			SDL_SetRenderDrawColor(
 			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (intery - floorf(intery)))));
-			SDL_RenderDrawPoint(sdlren, x, (int)floorf(intery));
+			SDL_RenderPoint(sdlren, (float)x, floorf(intery));
 			SDL_SetRenderDrawColor(
 			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (intery - floorf(intery))));
-			SDL_RenderDrawPoint(sdlren, x, (int)floorf(intery) + 1);
+			SDL_RenderPoint(sdlren, (float)x, floorf(intery) + 1);
 		}
 		intery += gradient;
 	}
@@ -2105,7 +2106,7 @@ void sdl_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int star
 		int y1 = cy + (int)((double)inner_radius * sin_a);
 		int x2 = cx + (int)((double)outer_radius * cos_a);
 		int y2 = cy + (int)((double)outer_radius * sin_a);
-		SDL_RenderDrawLine(sdlren, x1, y1, x2, y2);
+		SDL_RenderLine(sdlren, (float)x1, (float)y1, (float)x2, (float)y2);
 	}
 	// Draw the last segment
 	double rad = (double)end_angle * M_PI / 180.0;
@@ -2115,5 +2116,5 @@ void sdl_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int star
 	int y1 = cy + (int)((double)inner_radius * sin_a);
 	int x2 = cx + (int)((double)outer_radius * cos_a);
 	int y2 = cy + (int)((double)outer_radius * sin_a);
-	SDL_RenderDrawLine(sdlren, x1, y1, x2, y2);
+	SDL_RenderLine(sdlren, (float)x1, (float)y1, (float)x2, (float)y2);
 }

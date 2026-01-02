@@ -230,6 +230,20 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      - name: Upload mod SDK (import libraries)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-mod-sdk
+          path: |
+            lib/moac.a
+            lib/moac.lib
+            src/amod/amod.h
+            src/amod/amod_structs.h
+            src/dll.h
+            src/astonia.h
+          retention-days: 30
+          if-no-files-found: error
+
   build-macos-arm:
     name: Build macOS (Apple Silicon)
     runs-on: macos-latest

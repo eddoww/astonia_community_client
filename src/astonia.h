@@ -14,6 +14,7 @@ typedef uint16_t stat_t; // Character stats: hp, mana, rage, endurance, lifeshie
 typedef uint16_t char_id_t; // Character network ID (cn)
 typedef uint16_t sprite_id_t; // Sprite/texture ID
 typedef size_t map_index_t; // Map tile index, selection indices
+#define ASTONIA_TYPES_DEFINED // Prevents amod_structs.h from redefining these types
 
 // DEVELOPER mode: Enables extra debugging output and developer features
 // Can be enabled via compiler flag: -DDEVELOPER

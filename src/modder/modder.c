@@ -72,18 +72,28 @@ int amod_init(void)
 	void *tmp;
 	char fname[80];
 
+	note("amod_init: Starting mod loader, MAXMOD=%d", MAXMOD);
+
 	for (int i = 0; i < MAXMOD; i++) {
 #ifdef _WIN32
 		sprintf(fname, "bin\\%cmod.dll", i + 'a');
-#elif defined(SDL_PLATFORM_APPLE)
+#elif defined(__APPLE__)
 		sprintf(fname, "bin/%cmod.dylib", i + 'a');
 #else
 		sprintf(fname, "bin/%cmod.so", i + 'a');
 #endif
+		note("amod_init: Attempting to load '%s'", fname);
 		dll_instance = SDL_LoadObject(fname);
 		if (!dll_instance) {
+			const char *err = SDL_GetError();
+			if (err && *err) {
+				note("amod_init: Failed to load '%s': %s", fname, err);
+			} else {
+				note("amod_init: Failed to load '%s' (no error details)", fname);
+			}
 			continue;
 		};
+		note("amod_init: Successfully loaded '%s'", fname);
 
 		mod[i].loaded = 1;
 

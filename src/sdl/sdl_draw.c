@@ -553,11 +553,11 @@ void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, in
 }
 
 // Cohen-Sutherland outcodes for line clipping
-#define CLIP_INSIDE 0  // 0000
-#define CLIP_LEFT   1  // 0001
-#define CLIP_RIGHT  2  // 0010
-#define CLIP_BOTTOM 4  // 0100
-#define CLIP_TOP    8  // 1000
+#define CLIP_INSIDE 0 // 0000
+#define CLIP_LEFT   1 // 0001
+#define CLIP_RIGHT  2 // 0010
+#define CLIP_BOTTOM 4 // 0100
+#define CLIP_TOP    8 // 1000
 
 static int compute_outcode(int x, int y, int xmin, int ymin, int xmax, int ymax)
 {
@@ -1271,21 +1271,39 @@ void sdl_circle_alpha(int cx, int cy, int radius, unsigned short color, unsigned
 	cy = (cy + y_offset) * sdl_scale;
 	int sr = radius * sdl_scale;
 
+	// Batch render: collect all points first, then render in one call
+	// Max points: 8 per iteration, iterations ≈ radius * 0.71, so max ≈ radius * 6
+	// Use same formula as sdl_render_circle for consistency
+	int max_pts = ((sr * 8 * 35 / 49) + 7) & ~7;
+	if (max_pts < 64) {
+		max_pts = 64;
+	}
+	if (max_pts > MAX_CIRCLE_PTS) {
+		max_pts = MAX_CIRCLE_PTS;
+	}
+
+	SDL_FPoint pts[MAX_CIRCLE_PTS];
+	int pt_count = 0;
+
 	// Midpoint circle algorithm using scaled radius
 	x = sr;
 	y = 0;
 	d = 1 - sr;
 
 	while (x >= y) {
-		// Draw 8 symmetric points
-		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy + y));
-		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy + y));
-		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy - y));
-		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy - y));
-		SDL_RenderPoint(sdlren, (float)(cx + y), (float)(cy + x));
-		SDL_RenderPoint(sdlren, (float)(cx - y), (float)(cy + x));
-		SDL_RenderPoint(sdlren, (float)(cx + y), (float)(cy - x));
-		SDL_RenderPoint(sdlren, (float)(cx - y), (float)(cy - x));
+		if (pt_count + 8 > max_pts) {
+			break;
+		}
+
+		// Collect 8 symmetric points
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + x), (float)(cy + y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx - x), (float)(cy + y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + x), (float)(cy - y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx - x), (float)(cy - y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + y), (float)(cy + x)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx - y), (float)(cy + x)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + y), (float)(cy - x)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx - y), (float)(cy - x)};
 
 		y++;
 		if (d < 0) {
@@ -1295,13 +1313,17 @@ void sdl_circle_alpha(int cx, int cy, int radius, unsigned short color, unsigned
 			d += 2 * (y - x) + 1;
 		}
 	}
+
+	// Single batch render call
+	if (pt_count > 0) {
+		SDL_RenderPoints(sdlren, pts, pt_count);
+	}
 }
 
 void sdl_circle_filled_alpha(
     int cx, int cy, int radius, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
 {
 	int r, g, b;
-	int x, y, d;
 
 	if (radius <= 0) {
 		return;
@@ -1311,33 +1333,36 @@ void sdl_circle_filled_alpha(
 	g = G16TO32(color);
 	b = B16TO32(color);
 
-	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	float fcx = (float)((cx + x_offset) * sdl_scale);
+	float fcy = (float)((cy + y_offset) * sdl_scale);
+	float fsr = (float)(radius * sdl_scale);
 
-	cx = (cx + x_offset) * sdl_scale;
-	cy = (cy + y_offset) * sdl_scale;
-	int sr = radius * sdl_scale;
+// Use SDL_RenderGeometry with triangle fan for GPU-accelerated filled circle
+// 72 segments (every 5 degrees) provides smooth circles while keeping vertex count low
+#define CIRCLE_SEGMENTS 72
+	SDL_Vertex vertices[CIRCLE_SEGMENTS + 2]; // center + perimeter + closing vertex
+	int indices[CIRCLE_SEGMENTS * 3];
 
-	// Midpoint circle algorithm with horizontal line fills
-	x = sr;
-	y = 0;
-	d = 1 - sr;
+	// Center vertex
+	vertices[0] = (SDL_Vertex){{fcx, fcy}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}};
 
-	while (x >= y) {
-		// Draw horizontal lines to fill the circle
-		SDL_RenderLine(sdlren, (float)(cx - x), (float)(cy + y), (float)(cx + x), (float)(cy + y));
-		SDL_RenderLine(sdlren, (float)(cx - x), (float)(cy - y), (float)(cx + x), (float)(cy - y));
-		SDL_RenderLine(sdlren, (float)(cx - y), (float)(cy + x), (float)(cx + y), (float)(cy + x));
-		SDL_RenderLine(sdlren, (float)(cx - y), (float)(cy - x), (float)(cx + y), (float)(cy - x));
-
-		y++;
-		if (d < 0) {
-			d += 2 * y + 1;
-		} else {
-			x--;
-			d += 2 * (y - x) + 1;
-		}
+	// Perimeter vertices
+	for (int i = 0; i <= CIRCLE_SEGMENTS; i++) {
+		float angle = (float)i * (2.0f * (float)M_PI / (float)CIRCLE_SEGMENTS);
+		vertices[i + 1] = (SDL_Vertex){
+		    {fcx + fsr * cosf(angle), fcy + fsr * sinf(angle)}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}};
 	}
+
+	// Triangle fan indices (center to each adjacent pair of perimeter vertices)
+	for (int i = 0; i < CIRCLE_SEGMENTS; i++) {
+		indices[i * 3] = 0; // Center
+		indices[i * 3 + 1] = i + 1; // Current perimeter vertex
+		indices[i * 3 + 2] = i + 2; // Next perimeter vertex
+	}
+
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	SDL_RenderGeometry(sdlren, NULL, vertices, CIRCLE_SEGMENTS + 2, indices, CIRCLE_SEGMENTS * 3);
+#undef CIRCLE_SEGMENTS
 }
 
 void sdl_ellipse_alpha(
@@ -1361,6 +1386,17 @@ void sdl_ellipse_alpha(
 	rx *= sdl_scale;
 	ry *= sdl_scale;
 
+	// Batch render: collect all points, render once
+	// Ellipse perimeter ≈ π * (3(rx+ry) - sqrt((3rx+ry)(rx+3ry))) ≈ 2π * max(rx,ry)
+	// We draw 4 points per iteration, so max points ≈ 4 * (rx + ry)
+	int max_pts = 4 * (rx + ry + 2);
+	if (max_pts > MAX_CIRCLE_PTS) {
+		max_pts = MAX_CIRCLE_PTS;
+	}
+
+	SDL_FPoint pts[MAX_CIRCLE_PTS];
+	int pt_count = 0;
+
 	// Midpoint ellipse algorithm
 	int x = 0, y = ry;
 	long rx2 = (long)rx * rx;
@@ -1374,10 +1410,13 @@ void sdl_ellipse_alpha(
 	// Region 1
 	p = ry2 - rx2 * ry + rx2 / 4;
 	while (px < py) {
-		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy + y));
-		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy + y));
-		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy - y));
-		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy - y));
+		if (pt_count + 4 > max_pts) {
+			break;
+		}
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + x), (float)(cy + y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx - x), (float)(cy + y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + x), (float)(cy - y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx - x), (float)(cy - y)};
 
 		x++;
 		px += two_ry2;
@@ -1393,10 +1432,13 @@ void sdl_ellipse_alpha(
 	// Region 2
 	p = ry2 * (x * 2 + 1) * (x * 2 + 1) / 4 + rx2 * (y - 1) * (y - 1) - rx2 * ry2;
 	while (y >= 0) {
-		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy + y));
-		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy + y));
-		SDL_RenderPoint(sdlren, (float)(cx + x), (float)(cy - y));
-		SDL_RenderPoint(sdlren, (float)(cx - x), (float)(cy - y));
+		if (pt_count + 4 > max_pts) {
+			break;
+		}
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + x), (float)(cy + y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx - x), (float)(cy + y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + x), (float)(cy - y)};
+		pts[pt_count++] = (SDL_FPoint){(float)(cx - x), (float)(cy - y)};
 
 		y--;
 		py -= two_rx2;
@@ -1407,6 +1449,11 @@ void sdl_ellipse_alpha(
 			px += two_ry2;
 			p += rx2 - py + px;
 		}
+	}
+
+	// Single batch render call
+	if (pt_count > 0) {
+		SDL_RenderPoints(sdlren, pts, pt_count);
 	}
 }
 
@@ -1423,25 +1470,36 @@ void sdl_ellipse_filled_alpha(
 	g = G16TO32(color);
 	b = B16TO32(color);
 
-	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	float fcx = (float)((cx + x_offset) * sdl_scale);
+	float fcy = (float)((cy + y_offset) * sdl_scale);
+	float frx = (float)(rx * sdl_scale);
+	float fry = (float)(ry * sdl_scale);
 
-	cx = (cx + x_offset) * sdl_scale;
-	cy = (cy + y_offset) * sdl_scale;
-	rx *= sdl_scale;
-	ry *= sdl_scale;
+// Use SDL_RenderGeometry with triangle fan for GPU-accelerated filled ellipse
+#define ELLIPSE_SEGMENTS 72
+	SDL_Vertex vertices[ELLIPSE_SEGMENTS + 2];
+	int indices[ELLIPSE_SEGMENTS * 3];
 
-	// Fill using horizontal lines for each y
-	for (int yi = -ry; yi <= ry; yi++) {
-		// Calculate x extent at this y using ellipse equation
-		// x^2/rx^2 + y^2/ry^2 = 1  =>  x = rx * sqrt(1 - y^2/ry^2)
-		double ratio = 1.0 - ((double)yi * yi) / ((double)ry * ry);
-		if (ratio < 0) {
-			ratio = 0;
-		}
-		int xi = (int)(rx * sqrt(ratio));
-		SDL_RenderLine(sdlren, (float)(cx - xi), (float)(cy + yi), (float)(cx + xi), (float)(cy + yi));
+	// Center vertex
+	vertices[0] = (SDL_Vertex){{fcx, fcy}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}};
+
+	// Perimeter vertices (ellipse uses different x and y radii)
+	for (int i = 0; i <= ELLIPSE_SEGMENTS; i++) {
+		float angle = (float)i * (2.0f * (float)M_PI / (float)ELLIPSE_SEGMENTS);
+		vertices[i + 1] = (SDL_Vertex){
+		    {fcx + frx * cosf(angle), fcy + fry * sinf(angle)}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}};
 	}
+
+	// Triangle fan indices
+	for (int i = 0; i < ELLIPSE_SEGMENTS; i++) {
+		indices[i * 3] = 0;
+		indices[i * 3 + 1] = i + 1;
+		indices[i * 3 + 2] = i + 2;
+	}
+
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	SDL_RenderGeometry(sdlren, NULL, vertices, ELLIPSE_SEGMENTS + 2, indices, ELLIPSE_SEGMENTS * 3);
+#undef ELLIPSE_SEGMENTS
 }
 
 void sdl_rect_outline_alpha(int sx, int sy, int ex, int ey, unsigned short color, unsigned char alpha, int clipsx,
@@ -1474,16 +1532,20 @@ void sdl_rect_outline_alpha(int sx, int sy, int ex, int ey, unsigned short color
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
-	sx = (sx + x_offset) * sdl_scale;
-	sy = (sy + y_offset) * sdl_scale;
-	ex = (ex + x_offset) * sdl_scale;
-	ey = (ey + y_offset) * sdl_scale;
+	float fsx = (float)((sx + x_offset) * sdl_scale);
+	float fsy = (float)((sy + y_offset) * sdl_scale);
+	float fex = (float)((ex + x_offset) * sdl_scale - 1);
+	float fey = (float)((ey + y_offset) * sdl_scale - 1);
 
-	// Draw 4 lines for outline
-	SDL_RenderLine(sdlren, (float)sx, (float)sy, (float)(ex - 1), (float)sy); // Top
-	SDL_RenderLine(sdlren, (float)sx, (float)(ey - 1), (float)(ex - 1), (float)(ey - 1)); // Bottom
-	SDL_RenderLine(sdlren, (float)sx, (float)sy, (float)sx, (float)(ey - 1)); // Left
-	SDL_RenderLine(sdlren, (float)(ex - 1), (float)sy, (float)(ex - 1), (float)(ey - 1)); // Right
+	// Draw closed rectangle outline with single batch call (5 points for closed loop)
+	SDL_FPoint pts[5] = {
+	    {fsx, fsy}, // Top-left
+	    {fex, fsy}, // Top-right
+	    {fex, fey}, // Bottom-right
+	    {fsx, fey}, // Bottom-left
+	    {fsx, fsy} // Back to top-left (close the loop)
+	};
+	SDL_RenderLines(sdlren, pts, 5);
 }
 
 void sdl_rounded_rect_alpha(int sx, int sy, int ex, int ey, int radius, unsigned short color, unsigned char alpha,
@@ -1794,48 +1856,39 @@ void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigne
 	g = G16TO32(color);
 	b = B16TO32(color);
 
-	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
-
 	// Apply offset and scale
-	fx = (fx + x_offset) * sdl_scale;
-	fy = (fy + y_offset) * sdl_scale;
-	tx = (tx + x_offset) * sdl_scale;
-	ty = (ty + y_offset) * sdl_scale;
-	thickness *= sdl_scale;
+	float ffx = (float)((fx + x_offset) * sdl_scale);
+	float ffy = (float)((fy + y_offset) * sdl_scale);
+	float ftx = (float)((tx + x_offset) * sdl_scale);
+	float fty = (float)((ty + y_offset) * sdl_scale);
+	float half_thick = (float)(thickness * sdl_scale) / 2.0f;
 
 	// Calculate perpendicular vector
-	float dx = (float)(tx - fx);
-	float dy = (float)(ty - fy);
+	float dx = ftx - ffx;
+	float dy = fty - ffy;
 	float len = sqrtf(dx * dx + dy * dy);
 	if (len < 0.001f) {
 		return;
 	}
 
-	float nx = -dy / len;
-	float ny = dx / len;
+	// Perpendicular unit vector scaled by half thickness
+	float nx = (-dy / len) * half_thick;
+	float ny = (dx / len) * half_thick;
 
-	// Draw multiple parallel lines
-	// For thick lines, we also need to clip each parallel line to handle edge cases
-	int clip_min_x = (clipsx + x_offset) * sdl_scale;
-	int clip_min_y = (clipsy + y_offset) * sdl_scale;
-	int clip_max_x = (clipex - 1 + x_offset) * sdl_scale;
-	int clip_max_y = (clipey - 1 + y_offset) * sdl_scale;
+	// Use SDL_RenderGeometry for GPU-accelerated thick line (single draw call)
+	// Construct a quad from 4 corner points
+	SDL_Vertex vertices[4] = {
+	    {{ffx + nx, ffy + ny}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}}, // Start + perpendicular
+	    {{ffx - nx, ffy - ny}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}}, // Start - perpendicular
+	    {{ftx - nx, fty - ny}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}}, // End - perpendicular
+	    {{ftx + nx, fty + ny}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}} // End + perpendicular
+	};
 
-	for (int i = -(thickness / 2); i <= thickness / 2; i++) {
-		int ox = (int)(nx * (float)i);
-		int oy = (int)(ny * (float)i);
+	// Two triangles to form the quad
+	int indices[6] = {0, 1, 2, 0, 2, 3};
 
-		int lx0 = fx + ox;
-		int ly0 = fy + oy;
-		int lx1 = tx + ox;
-		int ly1 = ty + oy;
-
-		// Clip each parallel line (the offset may push it outside the clip rect)
-		if (clip_line(&lx0, &ly0, &lx1, &ly1, clip_min_x, clip_min_y, clip_max_x, clip_max_y)) {
-			SDL_RenderLine(sdlren, (float)lx0, (float)ly0, (float)lx1, (float)ly1);
-		}
-	}
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	SDL_RenderGeometry(sdlren, NULL, vertices, 4, indices, 6);
 }
 
 void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, unsigned short color,
@@ -1868,18 +1921,25 @@ void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, u
 	start_angle %= 360;
 	end_angle %= 360;
 
-	// Draw arc using parametric approach
-	for (int angle = start_angle; angle != end_angle; angle = (angle + 1) % 360) {
+	// Batch render: collect all points, render once (max 361 points for full circle)
+	SDL_FPoint pts[362];
+	int pt_count = 0;
+
+	// Collect arc points
+	for (int angle = start_angle; angle != end_angle && pt_count < 361; angle = (angle + 1) % 360) {
 		double rad = angle * M_PI / 180.0;
-		int px = cx + (int)(sr * cos(rad));
-		int py = cy + (int)(sr * sin(rad));
-		SDL_RenderPoint(sdlren, (float)px, (float)py);
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + (int)(sr * cos(rad))), (float)(cy + (int)(sr * sin(rad)))};
 	}
-	// Draw the last point
-	double rad = end_angle * M_PI / 180.0;
-	int px = cx + (int)(sr * cos(rad));
-	int py = cy + (int)(sr * sin(rad));
-	SDL_RenderPoint(sdlren, (float)px, (float)py);
+	// Add the last point
+	if (pt_count < 362) {
+		double rad = end_angle * M_PI / 180.0;
+		pts[pt_count++] = (SDL_FPoint){(float)(cx + (int)(sr * cos(rad))), (float)(cy + (int)(sr * sin(rad)))};
+	}
+
+	// Single batch render call
+	if (pt_count > 0) {
+		SDL_RenderPoints(sdlren, pts, pt_count);
+	}
 }
 
 void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2,
@@ -1920,7 +1980,7 @@ void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, 
 	    {{fsx, fsy}, {r1, g1, b1, alpha}, {0, 0}}, // Top-left
 	    {{fex, fsy}, {r2, g2, b2, alpha}, {0, 0}}, // Top-right
 	    {{fex, fey}, {r2, g2, b2, alpha}, {0, 0}}, // Bottom-right
-	    {{fsx, fey}, {r1, g1, b1, alpha}, {0, 0}}  // Bottom-left
+	    {{fsx, fey}, {r1, g1, b1, alpha}, {0, 0}} // Bottom-left
 	};
 
 	int indices[6] = {0, 1, 2, 0, 2, 3};
@@ -1966,7 +2026,7 @@ void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, 
 	    {{fsx, fsy}, {r1, g1, b1, alpha}, {0, 0}}, // Top-left
 	    {{fex, fsy}, {r1, g1, b1, alpha}, {0, 0}}, // Top-right
 	    {{fex, fey}, {r2, g2, b2, alpha}, {0, 0}}, // Bottom-right
-	    {{fsx, fey}, {r2, g2, b2, alpha}, {0, 0}}  // Bottom-left
+	    {{fsx, fey}, {r2, g2, b2, alpha}, {0, 0}} // Bottom-left
 	};
 
 	int indices[6] = {0, 1, 2, 0, 2, 3};
@@ -1993,17 +2053,18 @@ void sdl_bezier_quadratic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, 
 	float fx2 = (float)((x2 + x_offset) * sdl_scale);
 	float fy2 = (float)((y2 + y_offset) * sdl_scale);
 
-	// Draw quadratic Bezier using line segments
-	int prev_x = (int)fx0, prev_y = (int)fy0;
+	// Batch render: collect all curve points, render once (33 points for 32 segments)
+	SDL_FPoint pts[33];
+	pts[0] = (SDL_FPoint){fx0, fy0};
+
 	for (int i = 1; i <= 32; i++) {
 		float t = (float)i / 32.0f;
 		float u = 1.0f - t;
-		int x = (int)(u * u * fx0 + 2.0f * u * t * fx1 + t * t * fx2);
-		int y = (int)(u * u * fy0 + 2.0f * u * t * fy1 + t * t * fy2);
-		SDL_RenderLine(sdlren, (float)prev_x, (float)prev_y, (float)x, (float)y);
-		prev_x = x;
-		prev_y = y;
+		pts[i] = (SDL_FPoint){
+		    u * u * fx0 + 2.0f * u * t * fx1 + t * t * fx2, u * u * fy0 + 2.0f * u * t * fy1 + t * t * fy2};
 	}
+
+	SDL_RenderLines(sdlren, pts, 33);
 }
 
 void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, unsigned short color,
@@ -2027,8 +2088,10 @@ void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int 
 	float fx3 = (float)((x3 + x_offset) * sdl_scale);
 	float fy3 = (float)((y3 + y_offset) * sdl_scale);
 
-	// Draw cubic Bezier using line segments
-	int prev_x = (int)fx0, prev_y = (int)fy0;
+	// Batch render: collect all curve points, render once (49 points for 48 segments)
+	SDL_FPoint pts[49];
+	pts[0] = (SDL_FPoint){fx0, fy0};
+
 	for (int i = 1; i <= 48; i++) {
 		float t = (float)i / 48.0f;
 		float u = 1.0f - t;
@@ -2036,12 +2099,11 @@ void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int 
 		float u3 = u2 * u;
 		float t2 = t * t;
 		float t3 = t2 * t;
-		int x = (int)(u3 * fx0 + 3.0f * u2 * t * fx1 + 3.0f * u * t2 * fx2 + t3 * fx3);
-		int y = (int)(u3 * fy0 + 3.0f * u2 * t * fy1 + 3.0f * u * t2 * fy2 + t3 * fy3);
-		SDL_RenderLine(sdlren, (float)prev_x, (float)prev_y, (float)x, (float)y);
-		prev_x = x;
-		prev_y = y;
+		pts[i] = (SDL_FPoint){u3 * fx0 + 3.0f * u2 * t * fx1 + 3.0f * u * t2 * fx2 + t3 * fx3,
+		    u3 * fy0 + 3.0f * u2 * t * fy1 + 3.0f * u * t2 * fy2 + t3 * fy3};
 	}
+
+	SDL_RenderLines(sdlren, pts, 49);
 }
 
 void sdl_gradient_circle(int cx, int cy, int radius, unsigned short color, unsigned char center_alpha,

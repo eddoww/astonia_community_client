@@ -9,7 +9,8 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <SDL2/SDL_loadso.h>
+#include <SDL3/SDL_loadso.h>
+#include <SDL3/SDL_keycode.h>
 
 #include "astonia.h"
 #include "modder/modder.h"
@@ -30,8 +31,8 @@ struct mod {
 	int (*_amod_mouse_click)(int x, int y, int what);
 	void (*_amod_mouse_capture)(int onoff);
 	void (*_amod_areachange)(void);
-	int (*_amod_keydown)(int);
-	int (*_amod_keyup)(int);
+	int (*_amod_keydown)(SDL_Keycode);
+	int (*_amod_keyup)(SDL_Keycode);
 	void (*_amod_update_hover_texts)(void);
 	int (*_amod_client_cmd)(const char *buf);
 	char *(*_amod_version)(void);
@@ -71,6 +72,8 @@ int amod_init(void)
 	void *tmp;
 	char fname[80];
 
+	note("amod_init: Starting mod loader, MAXMOD=%d", MAXMOD);
+
 	for (int i = 0; i < MAXMOD; i++) {
 #ifdef _WIN32
 		sprintf(fname, "bin\\%cmod.dll", i + 'a');
@@ -79,10 +82,18 @@ int amod_init(void)
 #else
 		sprintf(fname, "bin/%cmod.so", i + 'a');
 #endif
+		note("amod_init: Attempting to load '%s'", fname);
 		dll_instance = SDL_LoadObject(fname);
 		if (!dll_instance) {
+			const char *err = SDL_GetError();
+			if (err && *err) {
+				note("amod_init: Failed to load '%s': %s", fname, err);
+			} else {
+				note("amod_init: Failed to load '%s' (no error details)", fname);
+			}
 			continue;
 		};
+		note("amod_init: Successfully loaded '%s'", fname);
 
 		mod[i].loaded = 1;
 
@@ -115,10 +126,10 @@ int amod_init(void)
 			mod[i]._amod_areachange = (void (*)(void))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_keydown"))) {
-			mod[i]._amod_keydown = (int (*)(int))tmp;
+			mod[i]._amod_keydown = (int (*)(SDL_Keycode))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_keyup"))) {
-			mod[i]._amod_keyup = (int (*)(int))tmp;
+			mod[i]._amod_keyup = (int (*)(SDL_Keycode))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_update_hover_texts"))) {
 			mod[i]._amod_update_hover_texts = (void (*)(void))tmp;
@@ -327,7 +338,7 @@ void amod_areachange(void)
 	}
 }
 
-int amod_keydown(int key)
+int amod_keydown(SDL_Keycode key)
 {
 	int ret = 0, tmp;
 	for (int i = 0; i < MAXMOD; i++) {
@@ -343,7 +354,7 @@ int amod_keydown(int key)
 	return ret;
 }
 
-int amod_keyup(int key)
+int amod_keyup(SDL_Keycode key)
 {
 	int ret = 0, tmp;
 	for (int i = 0; i < MAXMOD; i++) {

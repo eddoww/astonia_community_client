@@ -283,8 +283,13 @@ static void display_game_spells(void)
 					break;
 
 				case 10: // heal
-					dl = dl_next_set(
-					    GME_LAY, 50114, scrx + map[mn].xadd, scry + map[mn].yadd + 1, RENDERFX_NORMAL_LIGHT);
+					if (sv_ver == 35) {
+						dl_call_heal(GME_LAY, scrx + map[mn].xadd, scry + map[mn].yadd, (int)ceffect[nr].heal.start, 1);
+						dl_call_heal(GME_LAY, scrx + map[mn].xadd, scry + map[mn].yadd, (int)ceffect[nr].heal.start, 0);
+					} else {
+						dl = dl_next_set(
+						    GME_LAY, 50114, scrx + map[mn].xadd, scry + map[mn].yadd + 1, RENDERFX_NORMAL_LIGHT);
+					}
 					if (!dl) {
 						note("error in heal #1");
 						break;

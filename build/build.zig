@@ -351,6 +351,51 @@ pub fn build(b: *std.Build) void {
         b.getInstallStep().dependOn(&amod_install.step);
     }
 
+    // V35 mod (amod_v35) - separate artifact for v35 server compatibility
+    const amod_v35 = b.addLibrary(.{
+        .name = "amod_v35",
+        .linkage = .dynamic,
+        .root_module = b.createModule(.{
+            .target = resolved,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+        .version = .{ .major = 0, .minor = 0, .patch = 0 },
+    });
+    if (optimize == .ReleaseFast) {
+        amod_v35.root_module.strip = true;
+    }
+
+    if (tgt.os.tag == .windows) {
+        amod_v35.addCSourceFile(.{ .file = b.path("src/amod/v35/v35_mod.c"), .flags = win_cflags });
+    } else {
+        amod_v35.addCSourceFile(.{ .file = b.path("src/amod/v35/v35_mod.c"), .flags = base_cflags });
+    }
+    amod_v35.root_module.addIncludePath(b.path(include_root));
+    amod_v35.root_module.addIncludePath(b.path(src_root));
+    if (developer) {
+        amod_v35.root_module.addCMacro("DEVELOPER", "1");
+    }
+    addSearchPathsForWindowsTarget(b, amod_v35, tgt, host);
+    linkCommonLibs(b, amod_v35, tgt);
+
+    if (tgt.os.tag == .windows) {
+        amod_v35.addObjectFile(.{ .generated = .{ .file = exe.generated_implib.? } });
+        amod_v35.step.dependOn(&exe.step);
+        b.installArtifact(amod_v35);
+    } else if (tgt.os.tag == .macos) {
+        amod_v35.linker_allow_shlib_undefined = true;
+        amod_v35.step.dependOn(&exe.step);
+        const amod_v35_install = b.addInstallFileWithDir(amod_v35.getEmittedBin(), .bin, "amod_v35.dylib");
+        amod_v35_install.step.dependOn(&amod_v35.step);
+        b.getInstallStep().dependOn(&amod_v35_install.step);
+    } else {
+        amod_v35.step.dependOn(&exe.step);
+        const amod_v35_install = b.addInstallFileWithDir(amod_v35.getEmittedBin(), .bin, "amod_v35.so");
+        amod_v35_install.step.dependOn(&amod_v35.step);
+        b.getInstallStep().dependOn(&amod_v35_install.step);
+    }
+
     // Helper tools (anicopy, convert) are built via Makefile instead of Zig
 
     const run = b.addRunArtifact(exe);

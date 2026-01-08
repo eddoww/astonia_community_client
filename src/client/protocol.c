@@ -314,7 +314,7 @@ static void sv_setitem(unsigned char *buf)
 	int n;
 
 	n = buf[1];
-	if (n < 0 || n >= INVENTORYSIZE) {
+	if (n < 0 || n >= _inventorysize) {
 		return;
 	}
 
@@ -383,6 +383,9 @@ static size_t sv_text(unsigned char *buf)
 			if (!isdigit(line[1])) {
 				strcpy(tutor_text, line + 1);
 				show_tutor = 1;
+			} else if (line[1] == '0') {
+				// '#0' prefix: allow mod to handle (e.g., v35 otext)
+				amod_process_text(line);
 			} else if (line[1] == '1') {
 				strcpy(look_name, line + 2);
 			} else if (line[1] == '2') {
@@ -792,7 +795,7 @@ static void sv_container(unsigned char *buf)
 	uint8_t nr;
 
 	nr = buf[1];
-	if (nr >= CONTAINERSIZE) {
+	if (nr >= _containersize) {
 		fail("illegal nr %d in sv_container!", nr);
 		exit(-1);
 	}
@@ -806,7 +809,7 @@ static void sv_price(unsigned char *buf)
 	uint8_t nr;
 
 	nr = buf[1];
-	if (nr >= CONTAINERSIZE) {
+	if (nr >= _containersize) {
 		fail("illegal nr %d in sv_price!", nr);
 		exit(-1);
 	}
@@ -819,7 +822,7 @@ static void sv_itemprice(unsigned char *buf)
 	uint8_t nr;
 
 	nr = buf[1];
-	if (nr >= CONTAINERSIZE) {
+	if (nr >= _containersize) {
 		fail("illegal nr %d in sv_itemprice!", nr);
 		exit(-1);
 	}
@@ -842,7 +845,7 @@ static void sv_concnt(unsigned char *buf)
 	uint8_t nr;
 
 	nr = buf[1];
-	if (nr > CONTAINERSIZE) {
+	if (nr > _containersize) {
 		fail("illegal nr %d in sv_contcnt!", nr);
 		exit(-1);
 	}
@@ -991,6 +994,9 @@ void sv_protocol(unsigned char *buf)
 {
 	protocol_version = buf[1];
 	// note("Astonia Protocol Version %d established!",protocol_version);
+
+	// Notify mod of version for configuration
+	amod_configure_version(protocol_version);
 }
 
 void process(unsigned char *buf, int size)
@@ -1194,7 +1200,10 @@ void process(unsigned char *buf, int size)
 				break;
 			case SV_TELEPORT:
 				sv_teleport(buf);
-				len = 13;
+				len = (size_t)amod_get_packet_length(SV_TELEPORT);
+				if (!len) {
+					len = 13; // default v3
+				}
 				break;
 
 			case SV_MIRROR:
@@ -1203,7 +1212,10 @@ void process(unsigned char *buf, int size)
 				break;
 			case SV_PROF:
 				sv_prof(buf);
-				len = 21;
+				len = (size_t)amod_get_packet_length(SV_PROF);
+				if (!len) {
+					len = 21; // default v3
+				}
 				break;
 			case SV_PING:
 				len = sv_ping(buf);
@@ -1423,10 +1435,16 @@ uint32_t prefetch(unsigned char *buf, int size)
 				len = 13;
 				break;
 			case SV_TELEPORT:
-				len = 13;
+				len = (size_t)amod_get_packet_length(SV_TELEPORT);
+				if (!len) {
+					len = 13; // default v3
+				}
 				break;
 			case SV_PROF:
-				len = 21;
+				len = (size_t)amod_get_packet_length(SV_PROF);
+				if (!len) {
+					len = 21; // default v3
+				}
 				break;
 			case SV_PING:
 				len = svl_ping(buf);

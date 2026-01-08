@@ -68,7 +68,8 @@ Uint64 vk_special_time = 0;
 DLL_EXPORT int weatab[12] = {9, 6, 8, 11, 0, 1, 2, 4, 5, 3, 7, 10};
 char weaname[12][32] = {"RING", "HAND", "HAND", "RING", "NECK", "HEAD", "BACK", "BODY", "BELT", "ARMS", "LEGS", "FEET"};
 
-KEYTAB keytab[] = {
+// Default v3 keytab - can be overridden by mod
+static KEYTAB _default_keytab[] = {
     {'1', 0, 0, 1, 0, "FIREBALL", TGT_CHR, CL_FIREBALL, V_FIREBALL, 0},
     {'2', 0, 0, 1, 0, "LIGHTNINGBALL", TGT_CHR, CL_BALL, V_FLASH, 0},
     {'3', 0, 0, 1, 0, "FLASH", TGT_SLF, CL_FLASH, V_FLASH, 0},
@@ -103,7 +104,8 @@ KEYTAB keytab[] = {
     {'0', 0, 0, 0, 1, "FIRERING", TGT_SLF, CL_FIREBALL, V_FIREBALL, 0},
 };
 
-int max_keytab = sizeof(keytab) / sizeof(KEYTAB);
+KEYTAB *keytab = _default_keytab;
+int max_keytab = sizeof(_default_keytab) / sizeof(KEYTAB);
 
 struct special_tab special_tab[] = {{"Walk", 0, 0, 0, 0, 0}, {"Use/Take", 1, 0, 0, 0, 0},
     {"Attack/Give", 0, 1, 0, 0, 0}, {"Warcry", 0, 0, CL_WARCRY, TGT_SLF, V_WARCRY},

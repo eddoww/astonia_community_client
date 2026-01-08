@@ -41,11 +41,13 @@ DLL_EXPORT extern unsigned short int textcolor;
 extern int update_skltab;
 
 extern int teleporter;
+extern int *tele;
+extern int max_teleport;
 extern int show_tutor;
 extern char tutor_text[1024];
 extern int show_look;
 
-void mtos(unsigned int mapx, unsigned int mapy, int *scrx, int *scry);
+DLL_EXPORT void mtos(unsigned int mapx, unsigned int mapy, int *scrx, int *scry);
 int stom(int scrx, int scry, int *mapx, int *mapy);
 void set_mapoff(int cx, int cy, int mdx, int mdy);
 void set_mapadd(int addx, int addy);
@@ -79,7 +81,10 @@ DLL_EXPORT int _do_display_random(void);
 extern int (*do_display_help)(int);
 DLL_EXPORT int _do_display_help(int nr);
 
-extern char action_row[2][MAXACTIONSLOT];
+extern char (*action_row)[MAXACTIONSLOT];
+extern char **action_text;
+extern char **action_desc;
+extern int *action_skill;
 extern int action_enabled;
 void actions_loaded(void);
 

@@ -311,7 +311,7 @@ DLL_EXPORT extern SKLTAB *skltab;
 extern int skltab_max;
 DLL_EXPORT extern int skltab_cnt;
 
-extern KEYTAB keytab[];
+extern KEYTAB *keytab;
 extern int max_keytab;
 
 extern int clan_offset;

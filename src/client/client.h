@@ -136,8 +136,13 @@
 #define PAC_GIVE        15
 #define PAC_BERSERK     16
 
+// Max array sizes (must accommodate all server versions)
 #define INVENTORYSIZE 110
-#define CONTAINERSIZE (INVENTORYSIZE)
+#define CONTAINERSIZE 130
+
+// Dynamic active sizes (set by mod for version-specific limits)
+DLL_EXPORT extern int _inventorysize;
+DLL_EXPORT extern int _containersize;
 
 #define IF_USE         (1 << 4)
 #define IF_WNHEAD      (1 << 5) // can be worn on head
@@ -535,6 +540,12 @@ DLL_EXPORT extern struct shrine_ppd shrine;
 
 void cmd_text(char *text);
 DLL_EXPORT map_index_t mapmn(unsigned int x, unsigned int y);
+
+// Version configuration setters (for mod use)
+DLL_EXPORT void set_inventory_size(int size);
+DLL_EXPORT void set_container_size(int size);
+DLL_EXPORT void set_profbase(int profbase);
+DLL_EXPORT void set_v_max(int v_max);
 int find_cn_ceffect(int cn, int skip);
 int find_ceffect(unsigned int fn);
 DLL_EXPORT int level2exp(int level);

@@ -16,10 +16,25 @@
 #include "client/client.h"
 
 int _game_v_profbase = 43;
-int *game_v_profbase = &_game_v_profbase;
+DLL_EXPORT int *game_v_profbase = &_game_v_profbase;
 
 int _game_v_max = 43 + 20;
-int *game_v_max = &_game_v_max;
+DLL_EXPORT int *game_v_max = &_game_v_max;
+
+// Configuration setters for mods
+DLL_EXPORT void set_profbase(int profbase)
+{
+	if (profbase > 0 && profbase < V_MAX) {
+		_game_v_profbase = profbase;
+	}
+}
+
+DLL_EXPORT void set_v_max(int v_max)
+{
+	if (v_max > 0 && v_max <= V_MAX) {
+		_game_v_max = v_max;
+	}
+}
 
 struct skill _game_skill[V_MAX] = {
     //  Bases          Cost W M (0=not raisable, 1=skill, 2=attribute, 3=power)

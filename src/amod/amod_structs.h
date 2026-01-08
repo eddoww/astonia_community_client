@@ -22,13 +22,14 @@
 #define bzero(ptr, size) memset(ptr, 0, size)
 #endif
 
-#define V_MAX         200
-#define DIST          ((unsigned int)25)
-#define MAPDX         (DIST * 2 + 1)
-#define MAPDY         (DIST * 2 + 1)
-#define MAXMN         (MAPDX * MAPDY)
+#define V_MAX 200
+#define DIST  ((unsigned int)25)
+#define MAPDX (DIST * 2 + 1)
+#define MAPDY (DIST * 2 + 1)
+#define MAXMN (MAPDX * MAPDY)
+// Max array sizes (must accommodate all server versions)
 #define INVENTORYSIZE 110
-#define CONTAINERSIZE (INVENTORYSIZE)
+#define CONTAINERSIZE 130
 #define MAXCHARS      2048
 #define MAXEF         64
 

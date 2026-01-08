@@ -1,4 +1,4 @@
-.PHONY: all debug release console amod convert anicopy clean distrib-stage distrib build-sdl3 build-sdl3-mixer verify-sdl3 verify-sdl3-mixer
+.PHONY: all debug release console amod amod_v35 convert anicopy clean distrib-stage distrib build-sdl3 build-sdl3-mixer verify-sdl3 verify-sdl3-mixer
 
 # Build type: release (default) or debug
 # Usage: make BUILD_TYPE=debug
@@ -268,6 +268,12 @@ bin/amod.dll:		src/amod/amod.o lib/moac.a
 
 src/amod/amod.o:	src/amod/amod.c src/amod/amod.h src/amod/amod_structs.h
 
+# V35 Support Mod - separate DLL for v3.5 server compatibility
+bin/amod_v35.dll:	src/amod/v35/v35_mod.o lib/moac.a
+			$(CC) $(LDFLAGS) $(OPT) $(DEBUG) -shared -o bin/amod_v35.dll src/amod/v35/v35_mod.o lib/moac.a
+
+src/amod/v35/v35_mod.o:	src/amod/v35/v35_mod.c src/amod/v35/v35_skills.c src/amod/v35/v35_keytab.c src/amod/v35/v35_actions.c src/amod/v35/v35_teleport.c src/amod/amod.h
+
 bin/anicopy.exe:	src/helper/anicopy.c
 			$(CC) $(OPT) $(DEBUG) -Wall -o bin/anicopy.exe src/helper/anicopy.c
 
@@ -458,6 +464,7 @@ distrib: distrib-stage
 
 
 amod:		bin/amod.dll bin/moac.exe
+amod_v35:	bin/amod_v35.dll bin/moac.exe
 convert:	bin/convert.exe
 anicopy:	bin/anicopy.exe
 console:	bin/moac_dbg.exe

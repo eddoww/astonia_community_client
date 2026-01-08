@@ -20,43 +20,44 @@ int teleporter = 0;
 // Forward declaration
 DLL_EXPORT void set_teleport(int idx, int x, int y);
 
-static int tele[64 * 2] = {
+// Default v3 teleport data - can be overridden by mod
+static int _default_tele[64 * 2] = {
     133,
-    229, // 0	Cameron
+    229, // 0  Cameron
     -1,
     -1, // 1
     143,
-    206, // 2	Aston
+    206, // 2  Aston
     370,
-    191, // 3	Tribe of the Isara
+    191, // 3  Tribe of the Isara
     370,
-    179, // 4	Tribe of the Cerasa
+    179, // 4  Tribe of the Cerasa
     370,
-    167, // 5	Cerasa Maze
+    167, // 5  Cerasa Maze
     370,
-    155, // 6	Cerasa Tunnels
+    155, // 6  Cerasa Tunnels
     370,
-    143, // 7	Zalina Entrance
+    143, // 7  Zalina Entrance
     370,
-    131, // 8	Tribe of the Zalina
+    131, // 8  Tribe of the Zalina
     130,
-    123, // 9	Teufelheim
+    123, // 9  Teufelheim
     -1,
     -1, // 10
     -1,
     -1, // 11
     458,
-    108, // 12	Ice 8
+    108, // 12 Ice 8
     458,
-    96, // 13	Ice 7
+    96, // 13 Ice 7
     458,
-    84, // 14	Ice 6
+    84, // 14 Ice 6
     458,
-    72, // 15	Ice 5
+    72, // 15 Ice 5
     458,
-    60, // 16	Ice 4
+    60, // 16 Ice 4
     225,
-    123, // 17	Nomad Plains
+    123, // 17 Nomad Plains
     -1,
     -1, // 18
     -1,
@@ -76,6 +77,8 @@ static int tele[64 * 2] = {
     0,
     0,
 };
+int *tele = _default_tele;
+int max_teleport = 64;
 
 static int mirror_pos[26 * 2] = {346, 210, 346, 222, 346, 234, 346, 246, 346, 258, 346, 270, 346, 282, 346, 294,
 
@@ -106,7 +109,7 @@ int get_teleport(int x, int y)
 	}
 
 	// map teleports
-	for (n = 0; n < 64; n++) {
+	for (n = 0; n < max_teleport; n++) {
 		if (!tele[n * 2]) {
 			break;
 		}
@@ -170,7 +173,7 @@ void display_teleport(void)
 		render_sprite(53520, dotx(DOT_TEL) + 520 / 2, doty(DOT_TEL) + 320 / 2, 14, 0);
 	}
 
-	for (n = 0; n < 64; n++) {
+	for (n = 0; n < max_teleport; n++) {
 		if (!tele[n * 2]) {
 			break;
 		}

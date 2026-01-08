@@ -118,6 +118,25 @@ int may_teleport[64 + 32];
 
 DLL_EXPORT int frames_per_second = TICKS;
 
+// Dynamic active sizes for inventory/container (default to v3 sizes)
+DLL_EXPORT int _inventorysize = INVENTORYSIZE;
+DLL_EXPORT int _containersize = 110; // v3 default, mod can change to 130 for v35
+
+// Configuration setters for mods
+DLL_EXPORT void set_inventory_size(int size)
+{
+	if (size > 0 && size <= INVENTORYSIZE) {
+		_inventorysize = size;
+	}
+}
+
+DLL_EXPORT void set_container_size(int size)
+{
+	if (size > 0 && size <= CONTAINERSIZE) {
+		_containersize = size;
+	}
+}
+
 // Unaligned load/store helpers
 DLL_EXPORT void client_send(void *buf, size_t len)
 {

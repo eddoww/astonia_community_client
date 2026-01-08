@@ -1,4 +1,4 @@
-.PHONY: all debug release windows linux macos macos-appbundle macos-signed-bundle clean distrib distrib-stage amod convert anicopy zig-build docker-linux docker-linux-debug docker-linux-dev docker-distrib-linux appimage zen4-appimage sanitizer coverage test
+.PHONY: all debug release windows linux macos macos-appbundle macos-signed-bundle clean distrib distrib-stage amod amod_v35 convert anicopy zig-build docker-linux docker-linux-debug docker-linux-dev docker-distrib-linux appimage zen4-appimage sanitizer coverage test
 
 # Root Makefile - Platform dispatcher
 #
@@ -137,6 +137,9 @@ distrib:
 # Helper targets (delegates to platform-specific Makefile)
 amod:
 	@$(MAKE) -f build/make/Makefile.$(PLATFORM) amod
+
+amod_v35:
+	@$(MAKE) -f build/make/Makefile.$(PLATFORM) amod_v35
 
 convert:
 	@$(MAKE) -f build/make/Makefile.$(PLATFORM) convert

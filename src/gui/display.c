@@ -1056,15 +1056,19 @@ void display_game_special(void)
 	}
 }
 
-char action_row[2][MAXACTIONSLOT] = {
+// Default v3 action bar data - can be overridden by mod
+static char _default_action_row[2][MAXACTIONSLOT] = {
     // 01234567890123
     "asd  fg   h l", " qwertzuiop m"};
+char (*action_row)[MAXACTIONSLOT] = _default_action_row;
 int action_enabled = 1;
 
-static char *action_text[MAXACTIONSLOT] = {"Attack", "Fireball", "Lightning Ball", "Flash", "Freeze", "Magic Shield",
-    "Bless", "Heal", "Warcry", "Pulse", "Firering", "Take/Use/Give/Drop", "Map", "Look"};
+static char *_default_action_text[MAXACTIONSLOT] = {"Attack", "Fireball", "Lightning Ball", "Flash", "Freeze",
+    "Magic Shield", "Bless", "Heal", "Warcry", "Pulse", "Firering", "Take/Use/Give/Drop", "Map", "Look"};
+char **action_text = _default_action_text;
 
-static char *action_desc[MAXACTIONSLOT] = {"Attacks another character using your equipped weapon, or your hands.",
+static char *_default_action_desc[MAXACTIONSLOT] = {
+    "Attacks another character using your equipped weapon, or your hands.",
     "Throws a fireball. Explodes for huge splash damage when it hits.",
     "Throws a slow moving ball of lightning. It will deal medium damage over time to enemies it passes.",
     "Summons a small ball of lightning to your side. It will deal medium damage over time to enemies near you.",
@@ -1079,9 +1083,11 @@ static char *action_desc[MAXACTIONSLOT] = {"Attacks another character using your
     "Interact with items. Can be used to take or use an item on the ground, or to drop or give an item on your mouse "
     "cursor.",
     "Cycles between the minimap, the big map and no map.", "Look at characters or items in the world."};
+char **action_desc = _default_action_desc;
 
-static int action_skill[MAXACTIONSLOT] = {V_PERCEPT, V_FIREBALL, V_FLASH, V_FLASH, V_FREEZE, V_MAGICSHIELD, V_BLESS,
-    V_HEAL, V_WARCRY, V_PULSE, V_FIREBALL, V_PERCEPT, -1, -1};
+static int _default_action_skill[MAXACTIONSLOT] = {V_PERCEPT, V_FIREBALL, V_FLASH, V_FLASH, V_FREEZE, V_MAGICSHIELD,
+    V_BLESS, V_HEAL, V_WARCRY, V_PULSE, V_FIREBALL, V_PERCEPT, -1, -1};
+int *action_skill = _default_action_skill;
 
 void actions_loaded(void)
 {

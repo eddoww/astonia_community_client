@@ -25,6 +25,7 @@
 
 DLL_EXPORT char hover_bless_text[120];
 DLL_EXPORT char hover_freeze_text[120];
+DLL_EXPORT char hover_heal_text[120];
 DLL_EXPORT char hover_potion_text[120];
 DLL_EXPORT char hover_rage_text[120];
 DLL_EXPORT char hover_level_text[120];
@@ -55,8 +56,13 @@ void display_mouseover(void)
 			    hover_bless_text);
 		}
 		if (mousex >= dotx(DOT_SSP) + 8 && mousex <= dotx(DOT_SSP) + 15) {
-			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-			    hover_freeze_text);
+			if (sv_ver == 35) {
+				render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
+				    hover_heal_text);
+			} else {
+				render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
+				    hover_freeze_text);
+			}
 		}
 		if (mousex >= dotx(DOT_SSP) - 2 && mousex <= dotx(DOT_SSP) + 5) {
 			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,

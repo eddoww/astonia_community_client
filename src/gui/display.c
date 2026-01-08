@@ -818,6 +818,7 @@ void display_selfspells(void)
 
 	sprintf(hover_bless_text, "Bless: Not active");
 	sprintf(hover_freeze_text, "Freeze: Not active");
+	sprintf(hover_heal_text, "Heal: Not active");
 	sprintf(hover_potion_text, "Potion: Not active");
 
 	for (int n = 0; n < 4; n++) {
@@ -842,6 +843,17 @@ void display_selfspells(void)
 			sprintf(hover_bless_text, "Bless: %us to go", (ceffect[nr].bless.stop - tick) / 24);
 			break;
 		}
+		case 10:
+#define HEALDURATION (TICKS * 8)
+			int step = 50 * (tick - ceffect[nr].heal.start) / HEALDURATION;
+			render_push_clip();
+			render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
+			render_sprite(
+			    997, dotx(DOT_SSP) + 1 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+			render_pop_clip();
+			sprintf(hover_heal_text, "Heal: %.1fs to go", (ceffect[nr].heal.start + HEALDURATION - tick) / 24.0);
+			break;
+
 		case 11: {
 			int step = 50 - 50 * (int)(ceffect[nr].freeze.stop - tick) /
 			                    (int)(ceffect[nr].freeze.stop - ceffect[nr].freeze.start);

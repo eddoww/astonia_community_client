@@ -19,6 +19,7 @@
 #include "game/game_private.h"
 #include "client/client.h"
 #include "gui/gui.h"
+#include "gui/gui_private.h"
 #include "sdl/sdl.h"
 
 struct mod {
@@ -61,6 +62,21 @@ int (*_amod_is_playersprite)(int sprite) = NULL;
 int (*_amod_display_skill_line)(int v, int base, int curr, int cn, char *buf) = NULL;
 int (*_amod_process)(const unsigned char *buf) = NULL;
 int (*_amod_prefetch)(const unsigned char *buf) = NULL;
+
+// New version abstraction hooks
+void (*_amod_configure_version)(int version) = NULL;
+int (*_amod_get_packet_length)(unsigned char cmd) = NULL;
+struct skill *(*_amod_get_skill_table)(int *count) = NULL;
+char **(*_amod_get_skill_descriptions)(int *count) = NULL;
+struct keytab *(*_amod_get_keytab)(int *count) = NULL;
+int *(*_amod_get_action_skills)(void) = NULL;
+char **(*_amod_get_action_texts)(void) = NULL;
+char **(*_amod_get_action_descs)(void) = NULL;
+char (*(*_amod_get_action_row)(void))[14] = NULL;
+int *(*_amod_get_teleport_data)(int *count) = NULL;
+int (*_amod_get_teleport_mirror_offset)(void) = NULL;
+int (*_amod_display_rage)(int rage, int max_rage, char *hover_text) = NULL;
+int (*_amod_get_warcry_cost)(int *cost) = NULL;
 
 char *game_email_main = "<no one>";
 char *game_email_cash = "<no one>";
@@ -145,6 +161,47 @@ int amod_init(void)
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_is_playersprite"))) {
 			_amod_is_playersprite = (int (*)(int))tmp;
+		}
+
+		// Version abstraction hooks
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_configure_version"))) {
+			_amod_configure_version = (void (*)(int))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_packet_length"))) {
+			_amod_get_packet_length = (int (*)(unsigned char))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_skill_table"))) {
+			_amod_get_skill_table = (struct skill * (*)(int *)) tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_skill_descriptions"))) {
+			_amod_get_skill_descriptions = (char **(*)(int *))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_keytab"))) {
+			_amod_get_keytab = (struct keytab * (*)(int *)) tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_action_skills"))) {
+			_amod_get_action_skills = (int *(*)(void))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_action_texts"))) {
+			_amod_get_action_texts = (char **(*)(void))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_action_descs"))) {
+			_amod_get_action_descs = (char **(*)(void))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_action_row"))) {
+			_amod_get_action_row = (char (*(*)(void))[14])tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_teleport_data"))) {
+			_amod_get_teleport_data = (int *(*)(int *))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_teleport_mirror_offset"))) {
+			_amod_get_teleport_mirror_offset = (int (*)(void))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_display_rage"))) {
+			_amod_display_rage = (int (*)(int, int, char *))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_warcry_cost"))) {
+			_amod_get_warcry_cost = (int (*)(int *))tmp;
 		}
 
 		// client functions
@@ -430,4 +487,153 @@ char *amod_version(int idx)
 	}
 
 	return NULL;
+}
+
+// Version abstraction hook wrappers
+void amod_configure_version(int version)
+{
+	// First let the mod do its configuration
+	if (_amod_configure_version) {
+		_amod_configure_version(version);
+	}
+
+	// Then apply any data overrides the mod provides
+	int count;
+	KEYTAB *mod_keytab = amod_get_keytab(&count);
+	if (mod_keytab) {
+		extern KEYTAB *keytab;
+		extern int max_keytab;
+		keytab = mod_keytab;
+		max_keytab = count;
+	}
+
+	// Action bar overrides
+	int *mod_action_skill = amod_get_action_skills();
+	if (mod_action_skill) {
+		extern int *action_skill;
+		action_skill = mod_action_skill;
+	}
+
+	char **mod_action_text = amod_get_action_texts();
+	if (mod_action_text) {
+		extern char **action_text;
+		action_text = mod_action_text;
+	}
+
+	char **mod_action_desc = amod_get_action_descs();
+	if (mod_action_desc) {
+		extern char **action_desc;
+		action_desc = mod_action_desc;
+	}
+
+	char (*mod_action_row)[14] = amod_get_action_row();
+	if (mod_action_row) {
+		extern char (*action_row)[14];
+		action_row = mod_action_row;
+	}
+
+	// Teleport data override
+	int *mod_teleport = amod_get_teleport_data(&count);
+	if (mod_teleport) {
+		extern int *tele;
+		extern int max_teleport;
+		tele = mod_teleport;
+		max_teleport = count;
+	}
+}
+
+int amod_get_packet_length(unsigned char cmd)
+{
+	if (_amod_get_packet_length) {
+		return _amod_get_packet_length(cmd);
+	}
+	return 0; // use default
+}
+
+struct skill *amod_get_skill_table(int *count)
+{
+	if (_amod_get_skill_table) {
+		return _amod_get_skill_table(count);
+	}
+	return NULL; // use default
+}
+
+char **amod_get_skill_descriptions(int *count)
+{
+	if (_amod_get_skill_descriptions) {
+		return _amod_get_skill_descriptions(count);
+	}
+	return NULL; // use default
+}
+
+struct keytab *amod_get_keytab(int *count)
+{
+	if (_amod_get_keytab) {
+		return _amod_get_keytab(count);
+	}
+	return NULL; // use default
+}
+
+int *amod_get_action_skills(void)
+{
+	if (_amod_get_action_skills) {
+		return _amod_get_action_skills();
+	}
+	return NULL; // use default
+}
+
+char **amod_get_action_texts(void)
+{
+	if (_amod_get_action_texts) {
+		return _amod_get_action_texts();
+	}
+	return NULL; // use default
+}
+
+char **amod_get_action_descs(void)
+{
+	if (_amod_get_action_descs) {
+		return _amod_get_action_descs();
+	}
+	return NULL; // use default
+}
+
+char (*amod_get_action_row(void))[14]
+{
+	if (_amod_get_action_row) {
+		return _amod_get_action_row();
+	}
+	return NULL; // use default
+}
+
+int *amod_get_teleport_data(int *count)
+{
+	if (_amod_get_teleport_data) {
+		return _amod_get_teleport_data(count);
+	}
+	return NULL; // use default
+}
+
+int amod_get_teleport_mirror_offset(void)
+{
+	if (_amod_get_teleport_mirror_offset) {
+		return _amod_get_teleport_mirror_offset();
+	}
+	return 0; // use default (100)
+}
+
+int amod_display_rage(int rage, int max_rage, char *hover_text)
+{
+	if (_amod_display_rage) {
+		return _amod_display_rage(rage, max_rage, hover_text);
+	}
+	return 0; // not handled
+}
+
+int amod_get_warcry_cost(int *cost)
+{
+	if (_amod_get_warcry_cost) {
+		return _amod_get_warcry_cost(cost);
+	}
+	return 0; // not handled
 }

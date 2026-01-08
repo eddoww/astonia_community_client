@@ -283,13 +283,8 @@ static void display_game_spells(void)
 					break;
 
 				case 10: // heal
-					if (sv_ver == 35) {
-						dl_call_heal(GME_LAY, scrx + map[mn].xadd, scry + map[mn].yadd, (int)ceffect[nr].heal.start, 1);
-						dl_call_heal(GME_LAY, scrx + map[mn].xadd, scry + map[mn].yadd, (int)ceffect[nr].heal.start, 0);
-					} else {
-						dl = dl_next_set(
-						    GME_LAY, 50114, scrx + map[mn].xadd, scry + map[mn].yadd + 1, RENDERFX_NORMAL_LIGHT);
-					}
+					dl = dl_next_set(
+					    GME_LAY, 50114, scrx + map[mn].xadd, scry + map[mn].yadd + 1, RENDERFX_NORMAL_LIGHT);
 					if (!dl) {
 						note("error in heal #1");
 						break;
@@ -677,7 +672,7 @@ static void display_game_names(void)
 		frame = RENDER_TEXT_FRAMED;
 
 		if (player[map[mn].cn].clan) {
-			col = clancolor[((player[map[mn].cn].clan - 1) % 32) + 1];
+			col = clancolor[player[map[mn].cn].clan];
 			if (player[map[mn].cn].clan == 3) {
 				frame = RENDER_TEXT_WFRAME;
 			}
@@ -1386,40 +1381,6 @@ void display_pents(void)
 	}
 }
 
-static void display_otext(void)
-{
-	int n, cnt;
-	unsigned short col;
-
-	for (n = cnt = 0; n < MAXOTEXT; n++) {
-		if (!otext[n].text) {
-			continue;
-		}
-		if (otext[n].type < 3 && tick - otext[n].time > TICKS * 5) {
-			continue;
-		}
-		if (tick - otext[n].time > TICKS * 65) {
-			continue;
-		}
-		if (otext[n].type > 1) {
-			if (n == 0) {
-				col = redcolor;
-			} else {
-				col = darkredcolor;
-			}
-		} else {
-			if (n == 0) {
-				col = greencolor;
-			} else {
-				col = darkgreencolor;
-			}
-		}
-		render_text(
-		    400, 420 - cnt * 12, col, RENDER_TEXT_LARGE | RENDER_TEXT_FRAMED | RENDER_TEXT_CENTER, otext[n].text);
-		cnt++;
-	}
-}
-
 void display_game(void)
 {
 	display_game_spells();
@@ -1427,7 +1388,6 @@ void display_game(void)
 	display_game_map(map);
 	display_game_names();
 	display_pents();
-	display_otext();
 }
 
 void prefetch_game(tick_t attick)

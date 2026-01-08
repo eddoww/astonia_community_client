@@ -31,6 +31,37 @@ DLL_EXPORT int amod_prefetch(const unsigned char *buf); // return length of serv
 DLL_EXPORT int amod_display_skill_line(int v, int base, int curr, int cn, char *buf);
 DLL_EXPORT int amod_is_playersprite(int sprite);
 
+// ------------- Version abstraction hooks (main mod only) ---------------
+
+// Called after server version is detected - mod can configure itself for that version
+DLL_EXPORT void amod_configure_version(int version);
+
+// Protocol packet length override - return packet length for command, 0 = use default
+DLL_EXPORT int amod_get_packet_length(unsigned char cmd);
+
+// Skill table override - return custom skill array and count, NULL = use default
+DLL_EXPORT struct skill *amod_get_skill_table(int *count);
+DLL_EXPORT char **amod_get_skill_descriptions(int *count);
+
+// Keytab override - return custom keytab and count, NULL = use default
+// Note: KEYTAB is defined in gui_private.h
+struct keytab;
+DLL_EXPORT struct keytab *amod_get_keytab(int *count);
+
+// Action bar override - return custom arrays, NULL = use default
+DLL_EXPORT int *amod_get_action_skills(void);
+DLL_EXPORT char **amod_get_action_texts(void);
+DLL_EXPORT char **amod_get_action_descs(void);
+DLL_EXPORT char (*amod_get_action_row(void))[14]; // Returns pointer to action_row[2][14]
+
+// Teleport data override
+DLL_EXPORT int *amod_get_teleport_data(int *count);
+DLL_EXPORT int amod_get_teleport_mirror_offset(void); // return 0 for default (100)
+
+// Display hooks - return 1 if handled by mod
+DLL_EXPORT int amod_display_rage(int rage, int max_rage, char *hover_text);
+DLL_EXPORT int amod_get_warcry_cost(int *cost); // return 1 if cost is set by mod
+
 // --------- Client exported functions -----------
 
 // basics
@@ -74,6 +105,11 @@ DLL_IMPORT int mil_rank(int exp);
 // client / server communication
 DLL_IMPORT void client_send(void *buf, size_t len);
 
+// ---------- Version configuration setters (mod calls these) -------------
+DLL_IMPORT void set_inventory_size(int size);
+DLL_IMPORT void set_container_size(int size);
+DLL_IMPORT void set_profbase(int profbase);
+DLL_IMPORT void set_v_max(int v_max);
 
 // ---------- Client exported data structures -------------
 DLL_IMPORT extern int skltab_cnt;

@@ -19,66 +19,63 @@
 
 #define VERSION 0x030100
 
-#define V3_HP        0
-#define V3_ENDURANCE 1
-#define V3_MANA      2
+#define V_HP        0
+#define V_ENDURANCE 1
+#define V_MANA      2
 
-#define V3_WIS 3
-#define V3_INT 4
-#define V3_AGI 5
-#define V3_STR 6
+#define V_WIS 3
+#undef V_INT // everyone likes windoof
+#define V_INT 4
+#define V_AGI 5
+#define V_STR 6
 
-#define V3_ARMOR  7
-#define V3_WEAPON 8
-#define V3_LIGHT  9
-#define V3_SPEED  10
+#define V_ARMOR  7
+#define V_WEAPON 8
+#define V_LIGHT  9
+#define V_SPEED  10
 
-#define V3_PULSE   11
-#define V3_DAGGER  12
-#define V3_HAND    13
-#define V3_STAFF   14
-#define V3_SWORD   15
-#define V3_TWOHAND 16
+#define V_PULSE   11
+#define V_DAGGER  12
+#define V_HAND    13
+#define V_STAFF   14
+#define V_SWORD   15
+#define V_TWOHAND 16
 
-#define V3_ARMORSKILL  17
-#define V3_ATTACK      18
-#define V3_PARRY       19
-#define V3_WARCRY      20
-#define V3_TACTICS     21
-#define V3_SURROUND    22
-#define V3_BODYCONTROL 23
-#define V3_SPEEDSKILL  24
+#define V_ARMORSKILL  17
+#define V_ATTACK      18
+#define V_PARRY       19
+#define V_WARCRY      20
+#define V_TACTICS     21
+#define V_SURROUND    22
+#define V_BODYCONTROL 23
+#define V_SPEEDSKILL  24
 
-#define V3_BARTER  25
-#define V3_PERCEPT 26
-#define V3_STEALTH 27
+#define V_BARTER  25
+#define V_PERCEPT 26
+#define V_STEALTH 27
 
-#define V3_BLESS       28
-#define V3_HEAL        29
-#define V3_FREEZE      30
-#define V3_MAGICSHIELD 31
-#define V3_FLASH       32
+#define V_BLESS       28
+#define V_HEAL        29
+#define V_FREEZE      30
+#define V_MAGICSHIELD 31
+#define V_FLASH       32
 
-#define V3_FIREBALL 33
+#define V_FIREBALL 33
+// #define V_BALL		34
 
-#define V3_REGENERATE 35
-#define V3_MEDITATE   36
-#define V3_IMMUNITY   37
+#define V_REGENERATE 35
+#define V_MEDITATE   36
+#define V_IMMUNITY   37
 
-#define V3_DEMON      38
-#define V3_DURATION   39
-#define V3_RAGE       40
-#define V3_COLD       41
-#define V3_PROFESSION 42
+#define V_DEMON      38
+#define V_DURATION   39
+#define V_RAGE       40
+#define V_COLD       41
+#define V_PROFESSION 42
 
-#define V3_PROFBASE  43
-#define V35_PROFBASE 50
-#define V_PROFBASE   (*game_v_profbase)
-
-#define P3_MAX  20
-#define P35_MAX 10
-
-#define V_MAX 200
+#define V_PROFBASE (*game_v_profbase) // 43
+#define P_MAX      20
+#define V_MAX      200
 
 #define CL_NOP            1
 #define CL_MOVE           2
@@ -139,16 +136,13 @@
 #define PAC_GIVE        15
 #define PAC_BERSERK     16
 
-#define V3_INVENTORYSIZE 110
-#define V3_CONTAINERSIZE (V3_INVENTORYSIZE)
+// Max array sizes (must accommodate all server versions)
+#define INVENTORYSIZE 110
+#define CONTAINERSIZE 130
 
-#define V35_INVENTORYSIZE 70
-#define V35_CONTAINERSIZE 130
-
-#define VMAX_INVENTORYSIZE (V3_INVENTORYSIZE)
-#define VMAX_CONTAINERSIZE (V35_CONTAINERSIZE)
-
-DLL_EXPORT extern int _inventorysize, _containersize;
+// Dynamic active sizes (set by mod for version-specific limits)
+DLL_EXPORT extern int _inventorysize;
+DLL_EXPORT extern int _containersize;
 
 #define IF_USE         (1 << 4)
 #define IF_WNHEAD      (1 << 5) // can be worn on head
@@ -475,8 +469,8 @@ DLL_EXPORT extern struct map map2[MAPDX * MAPDY];
 DLL_EXPORT extern uint16_t value[2][V_MAX];
 DLL_EXPORT extern int *game_v_max;
 DLL_EXPORT extern int *game_v_profbase;
-DLL_EXPORT extern uint32_t item[VMAX_INVENTORYSIZE];
-DLL_EXPORT extern uint32_t item_flags[VMAX_INVENTORYSIZE];
+DLL_EXPORT extern uint32_t item[INVENTORYSIZE];
+DLL_EXPORT extern uint32_t item_flags[INVENTORYSIZE];
 DLL_EXPORT extern stat_t hp;
 DLL_EXPORT extern stat_t mana;
 DLL_EXPORT extern stat_t rage;
@@ -495,9 +489,9 @@ DLL_EXPORT extern unsigned int csprite; // and sprite
 DLL_EXPORT extern int con_cnt;
 DLL_EXPORT extern int con_type;
 DLL_EXPORT extern char con_name[80];
-DLL_EXPORT extern uint32_t container[VMAX_CONTAINERSIZE];
-DLL_EXPORT extern uint32_t price[VMAX_CONTAINERSIZE];
-DLL_EXPORT extern uint32_t itemprice[VMAX_CONTAINERSIZE];
+DLL_EXPORT extern uint32_t container[CONTAINERSIZE];
+DLL_EXPORT extern uint32_t price[CONTAINERSIZE];
+DLL_EXPORT extern uint32_t itemprice[CONTAINERSIZE];
 DLL_EXPORT extern uint32_t cprice;
 DLL_EXPORT extern int protocol_version;
 
@@ -546,6 +540,12 @@ DLL_EXPORT extern struct shrine_ppd shrine;
 
 void cmd_text(char *text);
 DLL_EXPORT map_index_t mapmn(unsigned int x, unsigned int y);
+
+// Version configuration setters (for mod use)
+DLL_EXPORT void set_inventory_size(int size);
+DLL_EXPORT void set_container_size(int size);
+DLL_EXPORT void set_profbase(int profbase);
+DLL_EXPORT void set_v_max(int v_max);
 int find_cn_ceffect(int cn, int skip);
 int find_ceffect(unsigned int fn);
 DLL_EXPORT int level2exp(int level);
@@ -592,55 +592,3 @@ extern int change_area;
 extern int login_done;
 extern unsigned int unique;
 extern unsigned int usum;
-
-// Version 3.5 overlay text
-#define MAXOTEXT 10
-
-struct otext {
-	char *text;
-	tick_t time;
-	int type;
-};
-extern struct otext otext[MAXOTEXT];
-
-#define V35_HP          0
-#define V35_ENDURANCE   1
-#define V35_MANA        2
-#define V35_WIS         3
-#define V35_INT         4
-#define V35_AGI         5
-#define V35_STR         6
-#define V35_ARMOR       7
-#define V35_WEAPON      8
-#define V35_OFFENSE     9
-#define V35_DEFENSE     10
-#define V35_LIGHT       11
-#define V35_SPEED       12
-#define V35_DAGGER      13
-#define V35_HAND        14
-#define V35_STAFF       15
-#define V35_SWORD       16
-#define V35_TWOHAND     17
-#define V35_ATTACK      18
-#define V35_PARRY       19
-#define V35_WARCRY      20
-#define V35_TACTICS     21
-#define V35_SURROUND    22
-#define V35_SPEEDSKILL  23
-#define V35_BARTER      24
-#define V35_PERCEPT     25
-#define V35_STEALTH     26
-#define V35_BLESS       27
-#define V35_HEAL        28
-#define V35_FREEZE      29
-#define V35_MAGICSHIELD 30
-#define V35_FLASH       31
-#define V35_FIRE        32
-#define V35_REGENERATE  33
-#define V35_MEDITATE    34
-#define V35_IMMUNITY    35
-#define V35_DEMON       36
-#define V35_DURATION    37
-#define V35_RAGE        38
-#define V35_COLD        39
-#define V35_PROFESSION  40

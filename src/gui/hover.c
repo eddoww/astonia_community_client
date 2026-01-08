@@ -25,7 +25,6 @@
 
 DLL_EXPORT char hover_bless_text[120];
 DLL_EXPORT char hover_freeze_text[120];
-DLL_EXPORT char hover_heal_text[120];
 DLL_EXPORT char hover_potion_text[120];
 DLL_EXPORT char hover_rage_text[120];
 DLL_EXPORT char hover_level_text[120];
@@ -56,13 +55,8 @@ void display_mouseover(void)
 			    hover_bless_text);
 		}
 		if (mousex >= dotx(DOT_SSP) + 8 && mousex <= dotx(DOT_SSP) + 15) {
-			if (sv_ver == 35) {
-				render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-				    hover_heal_text);
-			} else {
-				render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-				    hover_freeze_text);
-			}
+			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
+			    hover_freeze_text);
 		}
 		if (mousex >= dotx(DOT_SSP) - 2 && mousex <= dotx(DOT_SSP) + 5) {
 			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
@@ -105,7 +99,7 @@ struct hover_item {
 	char *desc[MAXDESC];
 };
 
-static struct hover_item hi[VMAX_INVENTORYSIZE + VMAX_CONTAINERSIZE] = {0};
+static struct hover_item hi[INVENTORYSIZE + CONTAINERSIZE] = {0};
 
 static int last_look = 0, last_invsel = -1, last_line = 0, capture = 0;
 static tick_t last_tick = 0;
@@ -148,9 +142,9 @@ int hover_capture_text(char *line)
 	    strncmp(line + 3, "ITEMDESC", 8) == 0) {
 		last_invsel = atoi(line + 11);
 		if (last_invsel >= 1000) {
-			last_invsel = last_invsel % 1000 + _inventorysize;
+			last_invsel = last_invsel % 1000 + INVENTORYSIZE;
 		}
-		if (last_invsel < 0 || last_invsel > _inventorysize * 2) {
+		if (last_invsel < 0 || last_invsel > INVENTORYSIZE * 2) {
 			last_invsel = capture = last_look = 0;
 			return 1;
 		}
@@ -205,7 +199,7 @@ void hover_capture_tick(void)
 
 void hover_invalidate_inv(int slot)
 {
-	if (slot < 0 || slot >= _inventorysize) {
+	if (slot < 0 || slot >= INVENTORYSIZE) {
 		return;
 	}
 	hi[slot].valid_till = 0;
@@ -213,7 +207,7 @@ void hover_invalidate_inv(int slot)
 
 void hover_invalidate_inv_delayed(int slot)
 {
-	if (slot < 0 || slot >= _inventorysize) {
+	if (slot < 0 || slot >= INVENTORYSIZE) {
 		return;
 	}
 	hi[slot].valid_till = tick + TICKS / 2;
@@ -221,10 +215,10 @@ void hover_invalidate_inv_delayed(int slot)
 
 void hover_invalidate_con(int slot)
 {
-	if (slot < 0 || slot >= _inventorysize) {
+	if (slot < 0 || slot >= INVENTORYSIZE) {
 		return;
 	}
-	hi[slot + _inventorysize].valid_till = 0;
+	hi[slot + INVENTORYSIZE].valid_till = 0;
 }
 
 static int display_hover(void)
@@ -237,7 +231,7 @@ static int display_hover(void)
 			if (consel == -1) {
 				return 0;
 			} else {
-				slot = consel + _inventorysize;
+				slot = consel + INVENTORYSIZE;
 			}
 		} else {
 			slot = weatab[weasel];
@@ -246,7 +240,7 @@ static int display_hover(void)
 		slot = invsel;
 	}
 
-	if ((slot < _inventorysize && !item[slot]) || (slot >= _inventorysize && !container[slot - _inventorysize])) {
+	if ((slot < INVENTORYSIZE && !item[slot]) || (slot >= INVENTORYSIZE && !container[slot - INVENTORYSIZE])) {
 		return 0;
 	}
 
@@ -311,10 +305,10 @@ static int display_hover(void)
 		return 0;
 	} else {
 		if (!last_look && hi[slot].valid_till < tick) {
-			if (slot < _inventorysize) {
+			if (slot < INVENTORYSIZE) {
 				cmd_look_inv(slot);
 			} else {
-				cmd_look_con(slot - _inventorysize);
+				cmd_look_con(slot - INVENTORYSIZE);
 			}
 			last_line = 0;
 			last_look = 20;
@@ -365,32 +359,17 @@ uint16_t tactics2spell(int val)
 
 static char *vbasename(int v)
 {
-	if (sv_ver == 35) {
-		switch (v) {
-		case V35_WIS:
-			return "WIS";
-		case V35_INT:
-			return "INT";
-		case V35_AGI:
-			return "AGI";
-		case V35_STR:
-			return "STR";
-		default:
-			return "err";
-		}
-	} else {
-		switch (v) {
-		case V3_WIS:
-			return "WIS";
-		case V3_INT:
-			return "INT";
-		case V3_AGI:
-			return "AGI";
-		case V3_STR:
-			return "STR";
-		default:
-			return "err";
-		}
+	switch (v) {
+	case V_WIS:
+		return "WIS";
+	case V_INT:
+		return "INT";
+	case V_AGI:
+		return "AGI";
+	case V_STR:
+		return "STR";
+	default:
+		return "err";
 	}
 }
 
@@ -415,41 +394,6 @@ static int display_hover_skill(void)
 		return 0; // dont display hover when dragging scrollthumb
 	}
 
-	if (sv_ver == 35) {
-		if (skltab && sklsel2 != -1 && tick - last_tick > HOVER_DELAY) {
-			int height = 0, width = 200;
-
-			int v = skltab[sklsel2 + skloff].v;
-			if (v < 0 || v >= *game_v_max) {
-				return 0;
-			}
-
-			height += render_text_break_length(0, 0, width - 12, 0xffff, 0, game_skilldesc[v]);
-
-			int sx = mousex + 8;
-			if (sx < dotx(DOT_TL)) {
-				sx = dotx(DOT_TL);
-			}
-			if (sx > dotx(DOT_BR) - width - 8) {
-				sx = dotx(DOT_BR) - width - 8;
-			}
-
-			int sy = mousey - height / 2 - 4;
-			if (sy < doty(DOT_TL)) {
-				sy = doty(DOT_TL);
-			}
-			if (sy > doty(DOT_BR) - height - 8) {
-				sy = doty(DOT_BR) - height - 8;
-			}
-
-			render_shaded_rect(sx, sy, sx + width + 8, sy + height + 8, 0x0000, 150);
-
-			sy = render_text_break(sx + 4, sy + 4, sx + width - 8, 0xffff, 0, game_skilldesc[v]) + 10;
-		}
-
-		return 0;
-	}
-
 	if (skltab && sklsel2 != -1 && tick - last_tick > HOVER_DELAY) {
 		int height = 0, width = 200;
 		int base = 0, cap = 0, raisecost = 0, unused = -1;
@@ -465,7 +409,7 @@ static int display_hover_skill(void)
 		int v2 = game_skill[v].base2;
 		int v3 = game_skill[v].base3;
 
-		if (game_skill[v].cost && v != V3_DEMON) {
+		if (game_skill[v].cost && v != V_DEMON) {
 			raisecost = raise_cost(v, value[1][v]);
 			height += 10;
 			if (experience >= experience_used) {
@@ -474,7 +418,7 @@ static int display_hover_skill(void)
 			}
 		}
 
-		if (v1 != -1 && v2 != -1 && v3 != -3 && v != V3_DEMON) {
+		if (v1 != -1 && v2 != -1 && v3 != -3 && v != V_DEMON) {
 			base = (value[0][v1] + value[0][v2] + value[0][v3]) / 5;
 			height += 10;
 			if (base > max(15, value[1][v] * 2)) {
@@ -482,41 +426,41 @@ static int display_hover_skill(void)
 			}
 		}
 
-		if (v == V3_DAGGER || v == V3_SWORD || v == V3_TWOHAND || v == V3_STAFF || v == V3_HAND) {
+		if (v == V_DAGGER || v == V_SWORD || v == V_TWOHAND || v == V_STAFF || v == V_HAND) {
 			offense = value[0][v];
 			defense = value[0][v];
 			height += 20;
-		} else if (v == V3_ATTACK) {
+		} else if (v == V_ATTACK) {
 			offense = (uint16_t)(value[0][v] * 2);
 			height += 10;
-		} else if (v == V3_PARRY) {
+		} else if (v == V_PARRY) {
 			defense = (uint16_t)(value[0][v] * 2);
 			height += 10;
-		} else if (v == V3_TACTICS) {
+		} else if (v == V_TACTICS) {
 			offense = tactics2melee(value[0][v]);
 			defense = tactics2melee(value[0][v]);
 			immune = tactics2immune(value[0][v] + 14);
-			if (value[0][V3_BLESS]) {
+			if (value[0][V_BLESS]) {
 				spells = tactics2spell(value[0][v]);
 				height += 10;
 			}
 			height += 30;
-		} else if (v == V3_SPEEDSKILL) {
+		} else if (v == V_SPEEDSKILL) {
 			speed = (uint16_t)(value[0][v] / 2);
 			height += 10;
-		} else if (v == V3_BODYCONTROL) {
+		} else if (v == V_BODYCONTROL) {
 			armor = (uint16_t)(value[0][v] * 5);
 			weapon = (uint16_t)(value[0][v] / 4);
 			height += 20;
-		} else if (value[0][V3_TACTICS] && (v == V3_PULSE || v == V3_WARCRY || v == V3_HEAL || v == V3_FREEZE ||
-		                                       v == V3_FLASH || v == V3_FIREBALL)) {
-			tactics = tactics2spell(value[0][V3_TACTICS]);
+		} else if (value[0][V_TACTICS] &&
+		           (v == V_PULSE || v == V_WARCRY || v == V_HEAL || v == V_FREEZE || v == V_FLASH || v == V_FIREBALL)) {
+			tactics = tactics2spell(value[0][V_TACTICS]);
 			height += 10;
-		} else if (value[0][V3_TACTICS] && v == V3_IMMUNITY) {
-			tactics = tactics2immune(value[0][V3_TACTICS] + 14);
+		} else if (value[0][V_TACTICS] && v == V_IMMUNITY) {
+			tactics = tactics2immune(value[0][V_TACTICS] + 14);
 			height += 10;
-		} else if (v == V3_SPEED) {
-			if (value[0][V3_SPEEDSKILL]) {
+		} else if (v == V_SPEED) {
+			if (value[0][V_SPEEDSKILL]) {
 				height += 10;
 			}
 			if (value[1][V_PROFBASE]) {
@@ -525,15 +469,15 @@ static int display_hover_skill(void)
 			}
 		}
 
-		if (!value[0][V3_BODYCONTROL]) {
+		if (!value[0][V_BODYCONTROL]) {
 			switch (v) {
-			case V3_BLESS:
-			case V3_HEAL:
-			case V3_FREEZE:
-			case V3_MAGICSHIELD:
-			case V3_FLASH:
-			case V3_FIREBALL:
-			case V3_PULSE:
+			case V_BLESS:
+			case V_HEAL:
+			case V_FREEZE:
+			case V_MAGICSHIELD:
+			case V_FLASH:
+			case V_FIREBALL:
+			case V_PULSE:
 				armor = (uint16_t)((float)value[0][v] / 8.0f * 17.5f);
 				height += 10;
 				break;
@@ -567,7 +511,7 @@ static int display_hover_skill(void)
 		sy = render_text_break(sx + 4, sy + 4, sx + width - 8, 0xffff, 0, game_skilldesc[v]) + 10;
 
 		if (base) {
-			if (cap && v != V3_SPEED) {
+			if (cap && v != V_SPEED) {
 				render_text_fmt(sx + 4, sy, 0xffff, 0, "Gets +%d from (%s+%s+%s) (capped at %d)", base, vbasename(v1),
 				    vbasename(v2), vbasename(v3), cap);
 			} else {
@@ -576,8 +520,8 @@ static int display_hover_skill(void)
 			}
 			sy += 10;
 		}
-		if (v == V3_SPEED && value[0][V3_SPEEDSKILL]) {
-			render_text_fmt(sx + 4, sy, 0xffff, 0, "Gets +%d from Speedskill", value[0][V3_SPEEDSKILL] / 2);
+		if (v == V_SPEED && value[0][V_SPEEDSKILL]) {
+			render_text_fmt(sx + 4, sy, 0xffff, 0, "Gets +%d from Speedskill", value[0][V_SPEEDSKILL] / 2);
 			sy += 10;
 		}
 		if (athlete) {

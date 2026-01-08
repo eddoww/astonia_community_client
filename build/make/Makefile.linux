@@ -1,4 +1,4 @@
-.PHONY: all debug release build-sdl3 build-sdl3-mixer verify-sdl3 verify-sdl3-mixer
+.PHONY: all debug release build-sdl3 build-sdl3-mixer verify-sdl3 verify-sdl3-mixer amod amod_v35
 
 # Build type: release (default) or debug
 # Usage: make BUILD_TYPE=debug
@@ -87,6 +87,13 @@ bin/amod.so:	src/amod/amod.o bin/moac
 		$(CC) $(LDFLAGS) -shared -o bin/amod.so src/amod/amod.o
 
 src/amod/amod.o:	src/amod/amod.c src/amod/amod.h src/amod/amod_structs.h
+		$(CC) $(CFLAGS_PIC) -c -o $@ $<
+
+# V35 Support Mod - separate shared library for v3.5 server compatibility
+bin/amod_v35.so:	src/amod/v35/v35_mod.o bin/moac
+		$(CC) $(LDFLAGS) -shared -o bin/amod_v35.so src/amod/v35/v35_mod.o
+
+src/amod/v35/v35_mod.o:	src/amod/v35/v35_mod.c src/amod/v35/v35_skills.c src/amod/v35/v35_keytab.c src/amod/v35/v35_actions.c src/amod/v35/v35_teleport.c src/amod/amod.h
 		$(CC) $(CFLAGS_PIC) -c -o $@ $<
 
 bin/anicopy:	src/helper/anicopy.c
@@ -195,6 +202,7 @@ distrib: distrib-stage
 	@echo "Distribution package created: linux_client.tar.gz"
 
 amod:		bin/amod.so bin/moac
+amod_v35:	bin/amod_v35.so bin/moac
 convert:	bin/convert
 anicopy:	bin/anicopy
 

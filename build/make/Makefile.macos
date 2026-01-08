@@ -1,4 +1,4 @@
-.PHONY: all debug release build-sdl3 build-sdl3-mixer verify-sdl3 verify-sdl3-mixer
+.PHONY: all debug release amod amod_v35 build-sdl3 build-sdl3-mixer verify-sdl3 verify-sdl3-mixer
 
 # Build type: release (default) or debug
 # Usage: make BUILD_TYPE=debug
@@ -132,6 +132,12 @@ bin/amod.dylib:	src/amod/amod.o bin/moac
 		$(CC) $(LDFLAGS) -dynamiclib -undefined dynamic_lookup -o bin/amod.dylib src/amod/amod.o
 
 src/amod/amod.o:	src/amod/amod.c src/amod/amod.h src/amod/amod_structs.h
+
+bin/amod_v35.dylib:	src/amod/v35/v35_mod.o bin/moac
+		$(CC) $(LDFLAGS) -dynamiclib -undefined dynamic_lookup -o bin/amod_v35.dylib src/amod/v35/v35_mod.o
+
+src/amod/v35/v35_mod.o:	src/amod/v35/v35_mod.c src/amod/v35/v35_skills.c src/amod/v35/v35_keytab.c src/amod/v35/v35_actions.c src/amod/v35/v35_teleport.c src/amod/amod.h
+		$(CC) $(CFLAGS_PIC) -c -o $@ $<
 
 bin/anicopy:	src/helper/anicopy.c
 		$(CC) $(OPT) $(DEBUG) -Wall -o bin/anicopy src/helper/anicopy.c
@@ -310,6 +316,7 @@ distrib: distrib-stage
 	@echo "Distribution package created: macos_client.tar.gz"
 
 amod:		bin/amod.dylib bin/moac
+amod_v35:	bin/amod_v35.dylib bin/moac
 convert:	bin/convert
 anicopy:	bin/anicopy
 

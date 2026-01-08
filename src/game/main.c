@@ -43,7 +43,6 @@ void init_logging(void);
 void determine_resolution(void);
 
 int quit = 0;
-int sv_ver = 30;
 
 char *localdata;
 
@@ -415,26 +414,6 @@ int parse_args(int argc, char *argv[])
 					server_port = 0;
 				} else {
 					server_port = (int)p;
-				}
-			}
-			break;
-		case 'v':
-			if (!val && i + 1 < argc) {
-				val = argv[++i];
-			}
-			if (val) {
-				long v = strtol(val, &end, 10);
-				if (v < INT_MIN || v > INT_MAX) {
-					sv_ver = 30;
-				} else {
-					sv_ver = 35;
-					target_port = 27584;
-					_inventorysize = V35_INVENTORYSIZE;
-					_containersize = V35_CONTAINERSIZE;
-					set_v35_keytab();
-					set_v35_actions();
-					set_v35_skilltab();
-					set_v35_skilldesc();
 				}
 			}
 			break;

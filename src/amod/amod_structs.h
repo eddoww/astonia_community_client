@@ -22,17 +22,16 @@
 #define bzero(ptr, size) memset(ptr, 0, size)
 #endif
 
-#define V_MAX             200
-#define DIST              ((unsigned int)25)
-#define MAPDX             (DIST * 2 + 1)
-#define MAPDY             (DIST * 2 + 1)
-#define MAXMN             (MAPDX * MAPDY)
-#define V3_INVENTORYSIZE  110
-#define V3_CONTAINERSIZE  (V3_INVENTORYSIZE)
-#define V35_INVENTORYSIZE 70
-#define V35_CONTAINERSIZE 130
-#define MAXCHARS          2048
-#define MAXEF             64
+#define V_MAX 200
+#define DIST  ((unsigned int)25)
+#define MAPDX (DIST * 2 + 1)
+#define MAPDY (DIST * 2 + 1)
+#define MAXMN (MAPDX * MAPDY)
+// Max array sizes (must accommodate all server versions)
+#define INVENTORYSIZE 110
+#define CONTAINERSIZE 130
+#define MAXCHARS      2048
+#define MAXEF         64
 
 #define RENDER_ALIGN_OFFSET 0 // this has to be zero, so bzero on the structures default this
 #define RENDER_ALIGN_CENTER 1 // also used in render_text

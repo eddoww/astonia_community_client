@@ -677,7 +677,7 @@ static void display_game_names(void)
 		frame = RENDER_TEXT_FRAMED;
 
 		if (player[map[mn].cn].clan) {
-			col = clancolor[player[map[mn].cn].clan];
+			col = clancolor[((player[map[mn].cn].clan - 1) % 32) + 1];
 			if (player[map[mn].cn].clan == 3) {
 				frame = RENDER_TEXT_WFRAME;
 			}

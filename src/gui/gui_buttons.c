@@ -591,7 +591,7 @@ void exec_cmd(int cmd, int a)
 		return;
 	case CMD_CON_LOOK:
 		cmd_look_con(consel);
-		last_right_click_invsel = INVENTORYSIZE + consel;
+		last_right_click_invsel = _inventorysize + consel;
 		return;
 
 	case CMD_MAP_CAST_L:
@@ -928,7 +928,7 @@ static void update_fkeyitems(void)
 {
 	int i, c;
 	fkeyitem[0] = fkeyitem[1] = fkeyitem[2] = fkeyitem[3] = 0;
-	for (i = 30; i < INVENTORYSIZE; i++) {
+	for (i = 30; i < _inventorysize; i++) {
 		c = (i - 2) % 4;
 		if (fkeyitem[c] == 0 && (is_fkey_use_item(i))) {
 			fkeyitem[c] = i;

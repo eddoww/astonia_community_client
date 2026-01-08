@@ -452,7 +452,7 @@ void update_ui_layout(void)
 		set_conoff(0, conoff);
 		set_skloff(0, skloff);
 	}
-	max_invoff = ((INVENTORYSIZE - 30) / INVDX) - INVDY;
+	max_invoff = ((_inventorysize - 30) / INVDX) - INVDY;
 	set_button_flags();
 }
 

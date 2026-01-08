@@ -41,6 +41,8 @@ int *amod_get_teleport_data(int *count);
 int amod_get_teleport_mirror_offset(void);
 int amod_display_rage(int rage, int max_rage, char *hover_text);
 int amod_get_warcry_cost(int *cost);
+int amod_process_text(const char *line);
+void amod_display_game_extra(void);
 
 int sharedmem_init(void);
 void sharedmem_update(void);

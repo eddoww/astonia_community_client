@@ -62,6 +62,14 @@ DLL_EXPORT int amod_get_teleport_mirror_offset(void); // return 0 for default (1
 DLL_EXPORT int amod_display_rage(int rage, int max_rage, char *hover_text);
 DLL_EXPORT int amod_get_warcry_cost(int *cost); // return 1 if cost is set by mod
 
+// Text processing hook - called for '#' prefixed text in sv_text
+// Return 1 if handled by mod, 0 for default processing
+DLL_EXPORT int amod_process_text(const char *line);
+
+// Extra game display hook - called at end of display_game() for mod rendering
+// Use for otext display, custom effects, overlays, etc.
+DLL_EXPORT void amod_display_game_extra(void);
+
 // --------- Client exported functions -----------
 
 // basics
@@ -97,6 +105,7 @@ DLL_IMPORT size_t get_near_ground(int x, int y);
 DLL_IMPORT size_t get_near_item(int x, int y, unsigned int flag, unsigned int looksize);
 DLL_IMPORT size_t get_near_char(int x, int y, unsigned int looksize);
 DLL_IMPORT map_index_t mapmn(unsigned int x, unsigned int y);
+DLL_IMPORT void mtos(unsigned int mapx, unsigned int mapy, int *scrx, int *scry); // map to screen coords
 // misc
 DLL_IMPORT void set_teleport(int idx, int x, int y);
 DLL_IMPORT int exp2level(int val);
@@ -176,6 +185,7 @@ DLL_IMPORT char hover_bless_text[120];
 DLL_IMPORT char hover_freeze_text[120];
 DLL_IMPORT char hover_potion_text[120];
 DLL_IMPORT char hover_rage_text[120];
+DLL_IMPORT char hover_heal_text[120]; // V35: heal effect hover text
 DLL_IMPORT char hover_level_text[120];
 DLL_IMPORT char hover_rank_text[120];
 DLL_IMPORT char hover_time_text[120];

@@ -383,6 +383,9 @@ static size_t sv_text(unsigned char *buf)
 			if (!isdigit(line[1])) {
 				strcpy(tutor_text, line + 1);
 				show_tutor = 1;
+			} else if (line[1] == '0') {
+				// '#0' prefix: allow mod to handle (e.g., v35 otext)
+				amod_process_text(line);
 			} else if (line[1] == '1') {
 				strcpy(look_name, line + 2);
 			} else if (line[1] == '2') {

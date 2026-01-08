@@ -77,6 +77,8 @@ int *(*_amod_get_teleport_data)(int *count) = NULL;
 int (*_amod_get_teleport_mirror_offset)(void) = NULL;
 int (*_amod_display_rage)(int rage, int max_rage, char *hover_text) = NULL;
 int (*_amod_get_warcry_cost)(int *cost) = NULL;
+int (*_amod_process_text)(const char *line) = NULL;
+void (*_amod_display_game_extra)(void) = NULL;
 
 char *game_email_main = "<no one>";
 char *game_email_cash = "<no one>";
@@ -202,6 +204,12 @@ int amod_init(void)
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_get_warcry_cost"))) {
 			_amod_get_warcry_cost = (int (*)(int *))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_process_text"))) {
+			_amod_process_text = (int (*)(const char *))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_display_game_extra"))) {
+			_amod_display_game_extra = (void (*)(void))tmp;
 		}
 
 		// client functions
@@ -636,4 +644,19 @@ int amod_get_warcry_cost(int *cost)
 		return _amod_get_warcry_cost(cost);
 	}
 	return 0; // not handled
+}
+
+int amod_process_text(const char *line)
+{
+	if (_amod_process_text) {
+		return _amod_process_text(line);
+	}
+	return 0; // not handled
+}
+
+void amod_display_game_extra(void)
+{
+	if (_amod_display_game_extra) {
+		_amod_display_game_extra();
+	}
 }

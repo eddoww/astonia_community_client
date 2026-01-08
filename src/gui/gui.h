@@ -47,7 +47,7 @@ extern int show_tutor;
 extern char tutor_text[1024];
 extern int show_look;
 
-void mtos(unsigned int mapx, unsigned int mapy, int *scrx, int *scry);
+DLL_EXPORT void mtos(unsigned int mapx, unsigned int mapy, int *scrx, int *scry);
 int stom(int scrx, int scry, int *mapx, int *mapy);
 void set_mapoff(int cx, int cy, int mdx, int mdy);
 void set_mapadd(int addx, int addy);

@@ -16,6 +16,7 @@
 #include "game/game_private.h"
 #include "gui/gui.h"
 #include "client/client.h"
+#include "modder/modder.h"
 
 static int trans_x(int frx, int fry, int tox, int toy, int step, uint32_t start)
 {
@@ -1388,6 +1389,7 @@ void display_game(void)
 	display_game_map(map);
 	display_game_names();
 	display_pents();
+	amod_display_game_extra(); // mod hook for extra rendering (otext, heal, etc.)
 }
 
 void prefetch_game(tick_t attick)

@@ -8,7 +8,9 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "../amod.h"
 
 // V35 skill indices (different from V3)
@@ -477,4 +479,116 @@ DLL_EXPORT int trans_charno(int csprite, int *pscale, int *pcr, int *pcg, int *p
 
 	// Fall back to default handler for other sprites
 	return _trans_charno(csprite, pscale, pcr, pcg, pcb, plight, psat, pc1, pc2, pc3, pshine, attick);
+}
+
+// ============================================================================
+// V35 Otext Display System
+// ============================================================================
+
+#define MAXOTEXT 10
+
+struct v35_otext {
+	char *text;
+	int time;
+	int type;
+};
+
+static struct v35_otext otext[MAXOTEXT];
+
+// Process text messages with '#0' prefix (otext)
+DLL_EXPORT int amod_process_text(const char *line)
+{
+	if (!is_v35) {
+		return 0; // not handled
+	}
+
+	// '#0' prefix indicates otext
+	if (line[0] == '#' && line[1] == '0') {
+		// Free old text at end of queue
+		if (otext[MAXOTEXT - 1].text) {
+			free(otext[MAXOTEXT - 1].text);
+		}
+		// Shift all entries down
+		memmove(otext + 1, otext, sizeof(otext) - sizeof(otext[0]));
+		// Add new text at front
+		otext[0].text = strdup(line + 3); // skip '#0X' where X is type
+		otext[0].time = tick;
+		otext[0].type = line[2] - '0';
+		return 1; // handled
+	}
+
+	return 0; // not handled
+}
+
+// Otext display
+DLL_EXPORT void amod_display_game_extra(void)
+{
+	if (!is_v35) {
+		return;
+	}
+
+	// Display otext messages
+	int n, cnt;
+	unsigned short col;
+
+	for (n = cnt = 0; n < MAXOTEXT; n++) {
+		if (!otext[n].text) {
+			continue;
+		}
+		if (otext[n].type < 3 && tick - otext[n].time > TICKS * 5) {
+			continue;
+		}
+		if (tick - otext[n].time > TICKS * 65) {
+			continue;
+		}
+		if (otext[n].type > 1) {
+			if (n == 0) {
+				col = redcolor;
+			} else {
+				col = darkredcolor;
+			}
+		} else {
+			if (n == 0) {
+				col = greencolor;
+			} else {
+				col = darkgreencolor;
+			}
+		}
+		render_text(
+		    400, 420 - cnt * 12, col, RENDER_TEXT_LARGE | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, otext[n].text);
+		cnt++;
+	}
+
+	// Note: Heal animation requires integration into the map rendering loop
+	// and can't be easily done from this hook. The default heal sprite (50114)
+	// will still display from the base client's display_game_spells().
+}
+
+// Update hover texts for V35-specific displays
+DLL_EXPORT void amod_update_hover_texts(void)
+{
+	if (!is_v35) {
+		return;
+	}
+
+	// Update hover_heal_text for any active heal effects
+	int has_heal = 0;
+	int heal_time = 0;
+
+	for (int nr = 0; nr < MAXEF; nr++) {
+		if (ueffect[nr] == 10) { // heal effect
+			has_heal = 1;
+			// Track how long heal has been active
+			int elapsed = tick - (int)ceffect[nr].heal.start;
+			if (elapsed > heal_time) {
+				heal_time = elapsed;
+			}
+		}
+	}
+
+	if (has_heal) {
+		snprintf(hover_heal_text, sizeof(hover_heal_text), "Healing active");
+	} else {
+		hover_heal_text[0] = '\0';
+	}
 }

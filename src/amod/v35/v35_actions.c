@@ -43,8 +43,8 @@ static char *v35_action_desc[MAXACTIONSLOT] = {"Attacks another character using 
     "A powerful shout that damages and stuns nearby enemies.",
     "Deals high damage to all adjacent enemies.", // V35: Surround Hit description
     "Deals high damage to adjacent enemies.",
-    "Interact with items. Can be used to take or use an item on the ground, or to drop or give an item on your mouse "
-    "cursor.",
+    ("Interact with items. Can be used to take or use an item on the ground, or to drop or give an item on your mouse "
+    "cursor."),
     "Cycles between the minimap, the big map and no map.", "Look at characters or items in the world."};
 
 // V35 action row key mappings (same as V3)

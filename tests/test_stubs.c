@@ -131,11 +131,7 @@ int rrand(int min, int max)
 // ============================================================================
 
 // These are called by sdl_draw.c but we don't actually render in tests
-bool SDL_SetRenderDrawBlendMode(
-    SDL_Renderer *renderer __attribute__((unused)), SDL_BlendMode blendMode __attribute__((unused)))
-{
-	return true;
-}
+// Note: SDL_SetRenderDrawBlendMode is already defined in sdl_test.c
 
 bool SDL_SetTextureBlendMode(
     SDL_Texture *texture __attribute__((unused)), SDL_BlendMode blendMode __attribute__((unused)))

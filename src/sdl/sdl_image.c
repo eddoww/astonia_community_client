@@ -19,6 +19,7 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "sdl/sdl_gpu.h"
 
 // Module-local variables
 static int sdlm_sprite = 0;
@@ -1134,11 +1135,25 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 			// (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)",st->sprite,st->sink,st->freeze,st->scale,st->cr,st->cg,st->cb,st->light,st->sat,st->c1,st->c2,st->c3,st->shine,st->ml,st->ll,st->rl,st->ul,st->dl);
 			return;
 		}
+		// Check both CPU and GPU texture flags to prevent double creation
 		if (flags_load(st) & SF_DIDTEX) {
 			fail("double texture for sprite %d (%d)", st->sprite, preload);
-			// note("... sprite=%d
-			// (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)",st->sprite,st->sink,st->freeze,st->scale,st->cr,st->cg,st->cb,st->light,st->sat,st->c1,st->c2,st->c3,st->shine,st->ml,st->ll,st->rl,st->ul,st->dl);
 			return;
+		}
+		// GPU mode: If GPU texture already exists and is valid, skip recreation
+		if (use_gpu_rendering && (flags_load(st) & SF_DIDGPUTEX)) {
+			if (st->gpu_tex) {
+				// Already have a valid GPU texture
+				return;
+			}
+			// Inconsistent state: flag set but texture NULL
+			// Clear the flag and let it try to recreate
+			uint16_t *flags_ptr = (uint16_t *)&st->flags;
+			__atomic_fetch_and(flags_ptr, (uint16_t)~SF_DIDGPUTEX, __ATOMIC_RELEASE);
+			static int inconsistent_count = 0;
+			if (inconsistent_count++ < 10) {
+				note("sdl_make: cleared inconsistent SF_DIDGPUTEX for sprite %d", st->sprite);
+			}
 		}
 
 #ifdef DEVELOPER
@@ -1146,18 +1161,46 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 #endif
 
 		if (st->xres > 0 && st->yres > 0) {
-			texture = SDL_CreateTexture(
-			    sdlren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, st->xres * sdl_scale, st->yres * sdl_scale);
-			if (!texture) {
-				warn("SDL_texture Error: %s in sprite %d (%s, %d,%d) preload=%d", SDL_GetError(), st->sprite, st->text,
-				    st->xres, st->yres, preload);
-				return;
+			// GPU path: Create GPU texture
+			if (use_gpu_rendering) {
+				if (st->pixel) {
+					st->gpu_tex = gpu_texture_create(st->pixel, st->xres * sdl_scale, st->yres * sdl_scale);
+					if (st->gpu_tex) {
+						// Update memory accounting
+						extern long long mem_tex;
+						__atomic_add_fetch(&mem_tex, st->xres * st->yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+					} else {
+						static int gpu_tex_fail_count = 0;
+						if (gpu_tex_fail_count++ < 10) {
+							note("sdl_make: gpu_texture_create failed for sprite %d (%dx%d)", st->sprite, st->xres, st->yres);
+						}
+					}
+				} else {
+					// Pixel data not available - cannot create GPU texture
+					// This happens when entry was recycled but pixel data wasn't reloaded
+					static int no_pixel_count = 0;
+					if (no_pixel_count++ < 10) {
+						note("sdl_make: no pixel data for GPU texture sprite %d - flags=%d preload=%d",
+						     st->sprite, flags_load(st), preload);
+					}
+					st->gpu_tex = NULL;
+				}
+				texture = NULL; // No SDL texture in GPU mode
+			} else {
+				// CPU fallback: Create SDL texture
+				texture = SDL_CreateTexture(
+				    sdlren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, st->xres * sdl_scale, st->yres * sdl_scale);
+				if (!texture) {
+					warn("SDL_texture Error: %s in sprite %d (%s, %d,%d) preload=%d", SDL_GetError(), st->sprite, st->text,
+					    st->xres, st->yres, preload);
+					return;
+				}
+				SDL_UpdateTexture(texture, NULL, st->pixel, (int)(st->xres * sizeof(uint32_t) * (size_t)sdl_scale));
+				SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+				// Update memory accounting when texture is actually created
+				extern long long mem_tex;
+				__atomic_add_fetch(&mem_tex, st->xres * st->yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 			}
-			SDL_UpdateTexture(texture, NULL, st->pixel, (int)(st->xres * sizeof(uint32_t) * (size_t)sdl_scale));
-			SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-			// Update memory accounting when texture is actually created
-			extern long long mem_tex;
-			__atomic_add_fetch(&mem_tex, st->xres * st->yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 		} else {
 			texture = NULL;
 		}
@@ -1169,8 +1212,11 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 		st->pixel = NULL;
 		st->tex = texture;
 
-		// Only set SF_DIDTEX if we actually created a texture
-		if (texture) {
+		// Set appropriate flag based on which texture was created
+		if (use_gpu_rendering && st->gpu_tex) {
+			uint16_t *flags_ptr = (uint16_t *)&st->flags;
+			__atomic_fetch_or(flags_ptr, SF_DIDGPUTEX, __ATOMIC_RELEASE);
+		} else if (texture) {
 			uint16_t *flags_ptr = (uint16_t *)&st->flags;
 			__atomic_fetch_or(flags_ptr, SF_DIDTEX, __ATOMIC_RELEASE);
 		}

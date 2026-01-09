@@ -21,6 +21,10 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "sdl/sdl_gpu.h"
+#include "sdl/sdl_gpu_post.h"
+#include "sdl/sdl_gpu_draw.h"
+#include "sdl/sdl_gpu_batch.h"
 #include "gui/gui.h"
 
 // SDL window and renderer
@@ -83,6 +87,9 @@ void sdl_dump(FILE *fp)
 	fprintf(fp, "texc_pre: %lld\n", texc_pre);
 
 	fprintf(fp, "\n");
+
+	// Dump GPU state
+	gpu_dump(fp);
 }
 
 #define GO_DEFAULTS (GO_CONTEXT | GO_ACTION | GO_BIGBAR | GO_PREDICT | GO_SHORT | GO_MAPSAVE)
@@ -154,34 +161,60 @@ int sdl_init(int width, int height, char *title)
 	const char *renderers_to_try[] = {"metal", NULL};
 #endif
 
-	for (int i = 0; renderers_to_try[i] != NULL; i++) {
-		SDL_PropertiesID renderer_props_create = SDL_CreateProperties();
-		if (renderer_props_create != 0) {
-			SDL_SetPointerProperty(renderer_props_create, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, sdlwnd);
-			SDL_SetStringProperty(renderer_props_create, SDL_PROP_RENDERER_CREATE_NAME_STRING, renderers_to_try[i]);
-			SDL_SetNumberProperty(
-			    renderer_props_create, SDL_PROP_RENDERER_CREATE_OUTPUT_COLORSPACE_NUMBER, (Sint64)SDL_COLORSPACE_SRGB);
-			sdlren = SDL_CreateRendererWithProperties(renderer_props_create);
-			SDL_DestroyProperties(renderer_props_create);
-			if (sdlren) {
-				break; // Success, use this renderer
+	// Try GPU rendering first (SDL_GPUDevice and SDL_Renderer are mutually exclusive for a window)
+	// If GPU init succeeds, we'll use the GPU path. Otherwise, fall back to SDL_Renderer.
+	if (gpu_init(sdlwnd)) {
+		note("GPU rendering enabled - shaders will be loaded when available");
+		// GPU path: sdlren will remain NULL, all rendering goes through GPU API
+		sdlren = NULL;
+
+		// Initialize post-processing system (may fail if shaders not compiled yet)
+		if (!gpu_postfx_init(width, height)) {
+			note("Post-processing not available - shaders may need to be compiled");
+		}
+
+		// Initialize simple GPU drawing (may fail if shaders not compiled yet)
+		if (!gpu_draw_init(width, height)) {
+			note("GPU drawing not available - shaders may need to be compiled");
+		}
+
+		// Initialize sprite batching system for performance
+		if (!gpu_batch_init(width, height)) {
+			note("Sprite batching not available - shaders may need to be compiled");
+		}
+	} else {
+		note("GPU rendering not available - using SDL_Renderer fallback");
+
+		// CPU fallback: Create SDL_Renderer
+		for (int i = 0; renderers_to_try[i] != NULL; i++) {
+			SDL_PropertiesID renderer_props_create = SDL_CreateProperties();
+			if (renderer_props_create != 0) {
+				SDL_SetPointerProperty(renderer_props_create, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, sdlwnd);
+				SDL_SetStringProperty(renderer_props_create, SDL_PROP_RENDERER_CREATE_NAME_STRING, renderers_to_try[i]);
+				SDL_SetNumberProperty(
+				    renderer_props_create, SDL_PROP_RENDERER_CREATE_OUTPUT_COLORSPACE_NUMBER, (Sint64)SDL_COLORSPACE_SRGB);
+				sdlren = SDL_CreateRendererWithProperties(renderer_props_create);
+				SDL_DestroyProperties(renderer_props_create);
+				if (sdlren) {
+					break; // Success, use this renderer
+				}
 			}
 		}
-	}
-	if (!sdlren) {
-		// Fallback to default if all options fail.
-		sdlren = SDL_CreateRenderer(sdlwnd, NULL);
-	}
+		if (!sdlren) {
+			// Fallback to default if all options fail.
+			sdlren = SDL_CreateRenderer(sdlwnd, NULL);
+		}
 
-	if (!sdlren) {
-		// Even the fallback didn't work, so we need to exit.
-		SDL_DestroyWindow(sdlwnd);
-		fail("SDL_Init Error: %s", SDL_GetError());
-		SDL_Quit();
-		return 0;
-	}
+		if (!sdlren) {
+			// Even the fallback didn't work, so we need to exit.
+			SDL_DestroyWindow(sdlwnd);
+			fail("SDL_Init Error: %s", SDL_GetError());
+			SDL_Quit();
+			return 0;
+		}
 
-	SDL_SetRenderVSync(sdlren, 1);
+		SDL_SetRenderVSync(sdlren, 1);
+	}
 
 	// Initialize hash table (statically allocated)
 	for (i = 0; i < MAX_TEXHASH; i++) {
@@ -504,29 +537,56 @@ int sdl_init(int width, int height, char *title)
 
 int sdl_clear(void)
 {
-	// SDL_SetRenderDrawColor(sdlren,255,63,63,255);     // clear with bright red to spot broken sprites
-	SDL_SetRenderDrawColor(sdlren, 0, 0, 0, 255);
-	SDL_RenderClear(sdlren);
-	// note("mem: %.2fM PNG, %.2fM Tex, Hit: %ld, Miss: %ld, Max:
-	// %d\n",mem_png/(1024.0*1024.0),mem_tex/(1024.0*1024.0),texc_hit,texc_miss,maxpanic);
+	if (use_gpu_rendering) {
+		// GPU path: Begin frame (acquires command buffer and swapchain)
+		if (!gpu_frame_begin()) {
+			// GPU frame failed, skip this frame
+			return 0;
+		}
+	} else {
+		// CPU fallback: Use SDL_Renderer
+		SDL_SetRenderDrawColor(sdlren, 0, 0, 0, 255);
+		SDL_RenderClear(sdlren);
+	}
+
 	maxpanic = 0;
 
 	// Reset blend mode to default at start of each frame to prevent mods from
 	// accidentally leaving non-default blend modes that affect subsequent rendering
-	sdl_reset_blend_mode();
+	if (!use_gpu_rendering) {
+		sdl_reset_blend_mode();
+	}
 
 	return 1;
 }
 
 int sdl_render(void)
 {
-	SDL_RenderPresent(sdlren);
+	if (use_gpu_rendering) {
+		// GPU path: End frame (submits command buffer, presents swapchain)
+		gpu_frame_end();
+	} else {
+		// CPU fallback: Present renderer
+		SDL_RenderPresent(sdlren);
+	}
 	sdl_frames++;
 	return 1;
 }
 
 void sdl_exit(void)
 {
+	// Shutdown sprite batching first (before GPU device is destroyed)
+	gpu_batch_shutdown();
+
+	// Shutdown GPU drawing (before GPU device is destroyed)
+	gpu_draw_shutdown();
+
+	// Shutdown post-processing (before GPU device is destroyed)
+	gpu_postfx_shutdown();
+
+	// Shutdown GPU rendering (waits for GPU to finish all work)
+	gpu_shutdown();
+
 	// Signal workers to quit and join them
 	if (sdl_multi && worker_threads) {
 		SDL_SetAtomicInt(&worker_quit, 1);

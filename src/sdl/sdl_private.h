@@ -5,11 +5,15 @@
 #ifndef SDL_PRIVATE_H
 #define SDL_PRIVATE_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <zip.h>
 #include <png.h>
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
+
+// Forward declaration for GPU types (full header included in implementation files)
+// Use sdl_gpu.h for full GPU API access
 
 // Fixed upper bound for the texture cache metadata.
 // Statically allocated at compile time
@@ -31,6 +35,7 @@
 #define SF_DIDALLOC (1 << 3)
 #define SF_DIDMAKE  (1 << 4)
 #define SF_DIDTEX   (1 << 5)
+#define SF_DIDGPUTEX (1 << 6) // GPU texture created (SDL_GPU path)
 
 // Texture job work state enum
 typedef enum texture_work_state {
@@ -41,6 +46,7 @@ typedef enum texture_work_state {
 
 struct sdl_texture {
 	SDL_Texture *tex;
+	SDL_GPUTexture *gpu_tex; // GPU texture for SDL_GPU path (NULL if not created)
 	uint32_t *pixel;
 
 	int prev, next;
@@ -182,6 +188,12 @@ int png_load_helper(struct png_helper *p);
 void png_load_helper_exit(struct png_helper *p);
 
 // ============================================================================
+// Shared variables from sdl_gpu.c
+// ============================================================================
+extern bool use_gpu_rendering; // true if SDL_GPU path is active
+extern SDL_GPUDevice *sdlgpu;  // GPU device (NULL if not available)
+
+// ============================================================================
 // Shared variables from sdl_core.c
 // ============================================================================
 extern SDL_Window *sdlwnd;
@@ -268,6 +280,8 @@ uint32_t sdl_colorbalance(uint32_t irgb, char cr, char cg, char cb, char light, 
 // Internal functions from sdl_draw.c
 // ============================================================================
 SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t color, int flags);
+SDL_GPUTexture *sdl_maketext_gpu(const char *text, struct renderfont *font, uint32_t color, int flags,
+    int *out_width, int *out_height);
 
 // ============================================================================
 // Internal functions from sdl_core.c

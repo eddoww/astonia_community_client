@@ -80,6 +80,10 @@ pub fn build(b: *std.Build) void {
         "src/sdl/sdl_image.c",
         "src/sdl/sdl_effects.c",
         "src/sdl/sdl_draw.c",
+        "src/sdl/sdl_gpu.c",
+        "src/sdl/sdl_gpu_post.c",
+        "src/sdl/sdl_gpu_batch.c",
+        "src/sdl/sdl_gpu_draw.c",
         "src/sdl/sound.c",
 
         // HELPERS

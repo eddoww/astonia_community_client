@@ -1,0 +1,163 @@
+# Shader Compilation Makefile for Astonia Client
+#
+# This Makefile handles cross-platform shader compilation for SDL3 GPU API.
+# Shaders are written in HLSL and compiled to platform-specific formats:
+#   - SPIR-V for Vulkan (Linux)
+#   - DXIL/DXBC for Direct3D 12/11 (Windows)
+#   - Metal Shading Language/metallib for Metal (macOS)
+#
+# Requirements:
+#   - DirectX Shader Compiler (dxc) for HLSL->SPIRV and HLSL->DXIL
+#   - SPIRV-Cross for SPIRV->MSL translation (optional, for macOS)
+#   - xcrun/metal for MSL->metallib (macOS only)
+#
+# Usage:
+#   make -f build/make/Makefile.shaders all      - Build all shaders
+#   make -f build/make/Makefile.shaders spirv    - Build SPIR-V only
+#   make -f build/make/Makefile.shaders dxil     - Build DXIL only
+#   make -f build/make/Makefile.shaders metal    - Build Metal only
+#   make -f build/make/Makefile.shaders clean    - Clean compiled shaders
+
+.PHONY: all spirv dxil metal clean help
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+SHADER_SRC_DIR := res/shaders
+SHADER_OUT_DIR := res/shaders/compiled
+
+# Shader compiler executables
+DXC ?= dxc
+SPIRV_CROSS ?= spirv-cross
+XCRUN ?= xcrun
+
+# Shader source files
+SHADER_SOURCES := $(wildcard $(SHADER_SRC_DIR)/*.hlsl)
+
+# Output file lists
+SPIRV_VS := $(patsubst $(SHADER_SRC_DIR)/%.hlsl,$(SHADER_OUT_DIR)/%_vs.spv,$(SHADER_SOURCES))
+SPIRV_PS := $(patsubst $(SHADER_SRC_DIR)/%.hlsl,$(SHADER_OUT_DIR)/%_ps.spv,$(SHADER_SOURCES))
+DXIL_VS := $(patsubst $(SHADER_SRC_DIR)/%.hlsl,$(SHADER_OUT_DIR)/%_vs.dxil,$(SHADER_SOURCES))
+DXIL_PS := $(patsubst $(SHADER_SRC_DIR)/%.hlsl,$(SHADER_OUT_DIR)/%_ps.dxil,$(SHADER_SOURCES))
+MSL_VS := $(patsubst $(SHADER_SRC_DIR)/%.hlsl,$(SHADER_OUT_DIR)/%_vs.msl,$(SHADER_SOURCES))
+MSL_PS := $(patsubst $(SHADER_SRC_DIR)/%.hlsl,$(SHADER_OUT_DIR)/%_ps.msl,$(SHADER_SOURCES))
+METALLIB := $(patsubst $(SHADER_SRC_DIR)/%.hlsl,$(SHADER_OUT_DIR)/%.metallib,$(SHADER_SOURCES))
+
+# DXC flags
+DXC_FLAGS_COMMON := -Wno-ignored-attributes -O3
+DXC_FLAGS_SPIRV := -spirv -fspv-target-env=vulkan1.1
+DXC_FLAGS_DXIL := -Zpr
+
+# Shader model (6.0 for maximum compatibility)
+SHADER_MODEL_VS := vs_6_0
+SHADER_MODEL_PS := ps_6_0
+
+# ============================================================================
+# Targets
+# ============================================================================
+
+# Default: build all platform targets
+all: spirv dxil
+	@echo "All shaders compiled successfully"
+
+# SPIR-V for Vulkan (Linux, Android)
+spirv: $(SPIRV_VS) $(SPIRV_PS)
+	@echo "SPIR-V shaders compiled"
+
+# DXIL for Direct3D 12 (Windows)
+dxil: $(DXIL_VS) $(DXIL_PS)
+	@echo "DXIL shaders compiled"
+
+# Metal for macOS/iOS (requires macOS build environment)
+metal: $(MSL_VS) $(MSL_PS)
+	@echo "Metal shaders compiled"
+	@echo "Note: Compile MSL to metallib on macOS with: xcrun -sdk macosx metal"
+
+# Help target
+help:
+	@echo "Shader Compilation Targets:"
+	@echo "  make -f build/make/Makefile.shaders all     - Build SPIR-V and DXIL"
+	@echo "  make -f build/make/Makefile.shaders spirv   - Build SPIR-V only"
+	@echo "  make -f build/make/Makefile.shaders dxil    - Build DXIL only"
+	@echo "  make -f build/make/Makefile.shaders metal   - Build MSL (requires spirv-cross)"
+	@echo "  make -f build/make/Makefile.shaders clean   - Clean compiled shaders"
+	@echo ""
+	@echo "Shader Sources: $(SHADER_SOURCES)"
+
+# ============================================================================
+# SPIR-V Compilation Rules
+# ============================================================================
+
+# Ensure output directory exists
+$(SHADER_OUT_DIR):
+	mkdir -p $(SHADER_OUT_DIR)
+
+# Vertex shader -> SPIR-V
+$(SHADER_OUT_DIR)/%_vs.spv: $(SHADER_SRC_DIR)/%.hlsl | $(SHADER_OUT_DIR)
+	@echo "Compiling $< (vertex) -> SPIR-V"
+	$(DXC) -T $(SHADER_MODEL_VS) -E VSMain $(DXC_FLAGS_COMMON) $(DXC_FLAGS_SPIRV) -Fo $@ $<
+
+# Fragment/Pixel shader -> SPIR-V
+$(SHADER_OUT_DIR)/%_ps.spv: $(SHADER_SRC_DIR)/%.hlsl | $(SHADER_OUT_DIR)
+	@echo "Compiling $< (pixel) -> SPIR-V"
+	$(DXC) -T $(SHADER_MODEL_PS) -E PSMain $(DXC_FLAGS_COMMON) $(DXC_FLAGS_SPIRV) -Fo $@ $<
+
+# ============================================================================
+# DXIL Compilation Rules (Direct3D 12)
+# ============================================================================
+
+# Vertex shader -> DXIL
+$(SHADER_OUT_DIR)/%_vs.dxil: $(SHADER_SRC_DIR)/%.hlsl | $(SHADER_OUT_DIR)
+	@echo "Compiling $< (vertex) -> DXIL"
+	$(DXC) -T $(SHADER_MODEL_VS) -E VSMain $(DXC_FLAGS_COMMON) $(DXC_FLAGS_DXIL) -Fo $@ $<
+
+# Fragment/Pixel shader -> DXIL
+$(SHADER_OUT_DIR)/%_ps.dxil: $(SHADER_SRC_DIR)/%.hlsl | $(SHADER_OUT_DIR)
+	@echo "Compiling $< (pixel) -> DXIL"
+	$(DXC) -T $(SHADER_MODEL_PS) -E PSMain $(DXC_FLAGS_COMMON) $(DXC_FLAGS_DXIL) -Fo $@ $<
+
+# ============================================================================
+# Metal Compilation Rules (macOS/iOS)
+# ============================================================================
+
+# SPIR-V -> MSL (Metal Shading Language)
+$(SHADER_OUT_DIR)/%_vs.msl: $(SHADER_OUT_DIR)/%_vs.spv
+	@echo "Converting $< -> MSL"
+	$(SPIRV_CROSS) --msl $< --output $@
+
+$(SHADER_OUT_DIR)/%_ps.msl: $(SHADER_OUT_DIR)/%_ps.spv
+	@echo "Converting $< -> MSL"
+	$(SPIRV_CROSS) --msl $< --output $@
+
+# Note: metallib compilation requires macOS
+# To compile MSL to metallib on macOS:
+#   xcrun -sdk macosx metal -c shader.msl -o shader.air
+#   xcrun -sdk macosx metallib shader.air -o shader.metallib
+
+# ============================================================================
+# Clean
+# ============================================================================
+
+clean:
+	@echo "Cleaning compiled shaders..."
+	rm -f $(SHADER_OUT_DIR)/*.spv
+	rm -f $(SHADER_OUT_DIR)/*.dxil
+	rm -f $(SHADER_OUT_DIR)/*.dxbc
+	rm -f $(SHADER_OUT_DIR)/*.msl
+	rm -f $(SHADER_OUT_DIR)/*.air
+	rm -f $(SHADER_OUT_DIR)/*.metallib
+	@echo "Clean complete"
+
+# ============================================================================
+# Dependency Checking
+# ============================================================================
+
+.PHONY: check-deps
+
+check-deps:
+	@echo "Checking shader compilation dependencies..."
+	@which $(DXC) > /dev/null 2>&1 || (echo "ERROR: dxc (DirectX Shader Compiler) not found"; exit 1)
+	@echo "  dxc: found at $$(which $(DXC))"
+	@which $(SPIRV_CROSS) > /dev/null 2>&1 && echo "  spirv-cross: found at $$(which $(SPIRV_CROSS))" || echo "  spirv-cross: not found (Metal compilation unavailable)"
+	@echo "Dependencies check complete"

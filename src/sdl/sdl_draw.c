@@ -18,6 +18,9 @@
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
 #include "sdl/font_manager.h"
+#include "sdl/sdl_gpu.h"
+#include "sdl/sdl_gpu_batch.h"
+#include "sdl/sdl_gpu_draw.h"
 
 #define RENDER_TEXT_LEFT    0
 #define RENDER_ALIGN_CENTER 1
@@ -48,6 +51,11 @@ static void sdl_blit_tex(
 	float f_dx, f_dy;
 	SDL_FRect dr, sr;
 	Uint64 start = SDL_GetTicks();
+
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU sprite batching)
+	if (use_gpu_rendering) {
+		return;
+	}
 
 	SDL_GetTextureSize(tex, &f_dx, &f_dy);
 	int dx = (int)f_dx;
@@ -92,36 +100,82 @@ static void sdl_blit_tex(
 void sdl_blit(
     int cache_index, int sx, int sy, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
+	// GPU path: use GPU texture for direct drawing
+	if (use_gpu_rendering && sdlt[cache_index].gpu_tex) {
+		int xres = sdlt[cache_index].xres;
+		int yres = sdlt[cache_index].yres;
+
+		// Apply clipping
+		int addx = 0, addy = 0;
+		int dx = xres;
+		int dy = yres;
+
+		if (sx < clipsx) {
+			addx = clipsx - sx;
+			dx -= addx;
+			sx = clipsx;
+		}
+		if (sy < clipsy) {
+			addy = clipsy - sy;
+			dy -= addy;
+			sy = clipsy;
+		}
+		if (sx + dx >= clipex) {
+			dx = clipex - sx;
+		}
+		if (sy + dy >= clipey) {
+			dy = clipey - sy;
+		}
+
+		if (dx <= 0 || dy <= 0) {
+			return; // Completely clipped
+		}
+
+		// Destination rect (screen coordinates, scaled)
+		SDL_FRect dest = {.x = (float)((sx + x_offset) * sdl_scale),
+		    .y = (float)((sy + y_offset) * sdl_scale),
+		    .w = (float)(dx * sdl_scale),
+		    .h = (float)(dy * sdl_scale)};
+
+		// NOTE: Batching disabled - each sprite has a unique texture, so batching
+		// can't combine draws and the fence wait overhead makes it slower.
+		// TODO: Re-enable batching once texture atlases are implemented.
+
+		// Use direct GPU drawing
+		if (gpu_draw_is_available()) {
+			// Source rect (texture pixels, scaled)
+			SDL_FRect src = {.x = (float)(addx * sdl_scale),
+			    .y = (float)(addy * sdl_scale),
+			    .w = (float)(dx * sdl_scale),
+			    .h = (float)(dy * sdl_scale)};
+
+			gpu_draw_texture(sdlt[cache_index].gpu_tex, &dest, &src, xres * sdl_scale, yres * sdl_scale, NULL, 255);
+			return;
+		}
+	}
+
+	// CPU fallback path
 	if (sdlt[cache_index].tex) {
 		sdl_blit_tex(sdlt[cache_index].tex, sx, sy, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+	} else if (use_gpu_rendering) {
+		// In GPU mode, we have gpu_tex but no SDL texture - this means GPU draw path failed
+		static int cpu_fallback_fail_count = 0;
+		if (cpu_fallback_fail_count++ < 30) {
+			note("sdl_blit: CPU fallback with no SDL tex for sprite=%d (GPU mode, no fallback available)",
+			    sdlt[cache_index].sprite);
+		}
 	}
 }
 
-SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t color, int flags)
+// Helper function to render text to a pixel buffer
+// Returns pixel buffer (caller must free) and sets *out_width, *out_height
+static uint32_t *sdl_rendertext_to_pixels(
+    const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width, int *out_height)
 {
 	uint32_t *pixel, *dst;
 	unsigned char *rawrun;
 	int x, y = 0, sizex, sizey = 0, sx = 0;
-	const char *c, *otext = text;
-	Uint64 start = SDL_GetTicks();
-
-	/* TTF path (experimental, opt-in): render via SDL_ttf at device
-	 * resolution. On failure fall through to the classic bitmap raster. */
-	if (fm_active()) {
-		SDL_Surface *surface = fm_render_text_surface(text, color, flags);
-
-		if (surface) {
-			SDL_Texture *ttf_tex = SDL_CreateTextureFromSurface(sdlren, surface);
-
-			SDL_DestroySurface(surface);
-			sdl_time_text += (long long)(SDL_GetTicks() - start);
-			if (ttf_tex) {
-				SDL_SetTextureBlendMode(ttf_tex, SDL_BLENDMODE_BLEND);
-				return ttf_tex;
-			}
-			warn("SDL_texture Error: %s maketext ttf (%s)", SDL_GetError(), otext);
-		}
-	}
+	const char *c;
 
 	for (sizex = 0, c = text; *c && *c != RENDER_TEXT_TERMINATOR; c++) {
 		if (*c < 0) {
@@ -132,6 +186,10 @@ SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t co
 
 	if (flags & (RENDER__FRAMED_FONT | RENDER__SHADED_FONT)) {
 		sizex += sdl_scale * 2;
+	}
+
+	if (sizex < 1) {
+		sizex = 1;
 	}
 
 #ifdef SDL_FAST_MALLOC
@@ -178,14 +236,49 @@ SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t co
 		sx += font[(unsigned char)*text++].dim * sdl_scale;
 	}
 
-	if (sizex < 1) {
-		sizex = 1;
-	}
 	if (sizey < 1) {
 		sizey = 1;
 	}
-
 	sizey++;
+
+	*out_width = sizex;
+	*out_height = sizey;
+	return pixel;
+}
+
+SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t color, int flags)
+{
+	Uint64 start = SDL_GetTicks();
+
+	// GPU path: text handled separately via sdl_maketext_gpu
+	if (use_gpu_rendering) {
+		return NULL;
+	}
+
+	/* TTF path (experimental, opt-in): render via SDL_ttf at device
+	 * resolution. On failure fall through to the classic bitmap raster. */
+	if (fm_active()) {
+		SDL_Surface *surface = fm_render_text_surface(text, color, flags);
+
+		if (surface) {
+			SDL_Texture *ttf_tex = SDL_CreateTextureFromSurface(sdlren, surface);
+
+			SDL_DestroySurface(surface);
+			sdl_time_text += (long long)(SDL_GetTicks() - start);
+			if (ttf_tex) {
+				SDL_SetTextureBlendMode(ttf_tex, SDL_BLENDMODE_BLEND);
+				return ttf_tex;
+			}
+			warn("SDL_texture Error: %s maketext ttf (%s)", SDL_GetError(), text);
+		}
+	}
+
+	int sizex, sizey;
+	uint32_t *pixel = sdl_rendertext_to_pixels(text, font, color, flags, &sizex, &sizey);
+	if (!pixel) {
+		return NULL;
+	}
+
 	sdl_time_text += (long long)(SDL_GetTicks() - start);
 
 	start = SDL_GetTicks();
@@ -194,7 +287,7 @@ SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t co
 		SDL_UpdateTexture(texture, NULL, pixel, (int)((size_t)sizex * sizeof(uint32_t)));
 		SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
 	} else {
-		warn("SDL_texture Error: %s maketext (%s)", SDL_GetError(), otext);
+		warn("SDL_texture Error: %s maketext (%s)", SDL_GetError(), text);
 	}
 #ifdef SDL_FAST_MALLOC
 	FREE(pixel);
@@ -206,11 +299,91 @@ SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t co
 	return texture;
 }
 
+// GPU version of text rendering - creates GPU texture
+SDL_GPUTexture *sdl_maketext_gpu(
+    const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width, int *out_height)
+{
+	Uint64 start = SDL_GetTicks();
+	int sizex, sizey;
+
+	/* TTF path (experimental, opt-in): the same SDL_ttf glyphs as the
+	 * SDL_Renderer TTF path, uploaded into a GPU texture. On failure fall
+	 * through to the classic bitmap raster below. */
+	if (fm_active()) {
+		SDL_Surface *surface = fm_render_text_surface(text, color, flags);
+
+		if (surface) {
+			SDL_Surface *argb = surface;
+			SDL_GPUTexture *ttf_tex = NULL;
+			int tw = 0, th = 0;
+
+			if (surface->format != SDL_PIXELFORMAT_ARGB8888) {
+				argb = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_ARGB8888);
+			}
+			if (argb) {
+				tw = argb->w;
+				th = argb->h;
+				if (argb->pitch == tw * (int)sizeof(uint32_t)) {
+					/* rows are tightly packed - upload directly */
+					ttf_tex = gpu_texture_create((const uint32_t *)argb->pixels, tw, th);
+				} else {
+					/* gpu_texture_create expects tightly packed rows */
+					uint32_t *tight = malloc((size_t)tw * th * sizeof(uint32_t));
+
+					if (tight) {
+						for (int row = 0; row < th; row++) {
+							memcpy(tight + (size_t)row * tw, (const uint8_t *)argb->pixels + (size_t)row * argb->pitch,
+							    (size_t)tw * sizeof(uint32_t));
+						}
+						ttf_tex = gpu_texture_create(tight, tw, th);
+						free(tight);
+					}
+				}
+				if (argb != surface) {
+					SDL_DestroySurface(argb);
+				}
+			}
+			SDL_DestroySurface(surface);
+			sdl_time_text += (long long)(SDL_GetTicks() - start);
+			if (ttf_tex) {
+				*out_width = tw;
+				*out_height = th;
+				return ttf_tex;
+			}
+			warn("maketext ttf gpu failed (%s)", text);
+			start = SDL_GetTicks();
+		}
+	}
+
+	uint32_t *pixel = sdl_rendertext_to_pixels(text, font, color, flags, &sizex, &sizey);
+	if (!pixel) {
+		return NULL;
+	}
+
+	sdl_time_text += (long long)(SDL_GetTicks() - start);
+
+	start = SDL_GetTicks();
+	SDL_GPUTexture *gpu_tex = gpu_texture_create(pixel, sizex, sizey);
+
+#ifdef SDL_FAST_MALLOC
+	FREE(pixel);
+#else
+	xfree(pixel);
+#endif
+	sdl_time_tex += SDL_GetTicks() - start;
+
+	if (gpu_tex) {
+		*out_width = sizex;
+		*out_height = sizey;
+	}
+	return gpu_tex;
+}
+
 int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, const char *text, struct renderfont *font,
     int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset, unsigned char alpha)
 {
-	int dx, cache_index;
-	SDL_Texture *tex;
+	int dx, cache_index = -1;
+	SDL_Texture *tex = NULL;
 	int r, g, b, a;
 	const char *c;
 
@@ -223,7 +396,10 @@ int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, cons
 	b = B16TO32(color);
 	a = 255;
 
-	if (flags & RENDER_TEXT_NOCACHE) {
+	/* GPU mode: transient GPU textures cannot be destroyed safely while the
+	 * frame still references them, so uncached text goes through the texture
+	 * cache too (only the debug overlays use RENDER_TEXT_NOCACHE). */
+	if ((flags & RENDER_TEXT_NOCACHE) && !use_gpu_rendering) {
 		tex = sdl_maketext(text, font, (uint32_t)IRGBA(r, g, b, a), flags);
 	} else {
 		cache_index = sdl_tx_load(
@@ -243,6 +419,69 @@ int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, cons
 		}
 	}
 
+	// GPU path: use GPU texture if available (cached text only)
+	if (use_gpu_rendering && gpu_draw_is_available() && cache_index >= 0 && sdlt[cache_index].gpu_tex) {
+		// Apply alignment
+		if (flags & RENDER_ALIGN_CENTER) {
+			sx -= dx / 2;
+		} else if (flags & RENDER_TEXT_RIGHT) {
+			sx -= dx;
+		}
+
+		// Text texture dimensions are already in pixels (pre-scaled)
+		int tex_w = sdlt[cache_index].xres;
+		int tex_h = sdlt[cache_index].yres;
+
+		// Convert texture pixel dimensions to logical dimensions
+		int logical_w = tex_w / sdl_scale;
+		int logical_h = tex_h / sdl_scale;
+
+		// Apply clipping in logical coordinates
+		int draw_x = sx + x_offset;
+		int draw_y = sy + y_offset;
+		int draw_w = logical_w;
+		int draw_h = logical_h;
+		int src_x = 0, src_y = 0;
+
+		// Clip left
+		if (draw_x < clipsx + x_offset) {
+			int clip = clipsx + x_offset - draw_x;
+			src_x = clip;
+			draw_w -= clip;
+			draw_x = clipsx + x_offset;
+		}
+		// Clip top
+		if (draw_y < clipsy + y_offset) {
+			int clip = clipsy + y_offset - draw_y;
+			src_y = clip;
+			draw_h -= clip;
+			draw_y = clipsy + y_offset;
+		}
+		// Clip right
+		if (draw_x + draw_w > clipex + x_offset) {
+			draw_w = clipex + x_offset - draw_x;
+		}
+		// Clip bottom
+		if (draw_y + draw_h > clipey + y_offset) {
+			draw_h = clipey + y_offset - draw_y;
+		}
+
+		if (draw_w > 0 && draw_h > 0) {
+			// Scale back to pixels for GPU rendering
+			SDL_FRect dest = {.x = (float)(draw_x * sdl_scale),
+			    .y = (float)(draw_y * sdl_scale),
+			    .w = (float)(draw_w * sdl_scale),
+			    .h = (float)(draw_h * sdl_scale)};
+			SDL_FRect src = {.x = (float)(src_x * sdl_scale),
+			    .y = (float)(src_y * sdl_scale),
+			    .w = (float)(draw_w * sdl_scale),
+			    .h = (float)(draw_h * sdl_scale)};
+			gpu_draw_texture(sdlt[cache_index].gpu_tex, &dest, &src, tex_w, tex_h, NULL, alpha);
+		}
+		return sx + dx;
+	}
+
+	// CPU path (SDL_Renderer)
 	if (tex) {
 		if (flags & RENDER_ALIGN_CENTER) {
 			sx -= dx / 2;
@@ -279,13 +518,13 @@ void sdl_rect(int sx, int sy, int ex, int ey, unsigned short int color, int clip
     int x_offset, int y_offset)
 {
 	int r, g, b, a;
-	SDL_FRect rc;
 
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
 	a = 255;
 
+	// Apply clipping
 	if (sx < clipsx) {
 		sx = clipsx;
 	}
@@ -303,6 +542,16 @@ void sdl_rect(int sx, int sy, int ex, int ey, unsigned short int color, int clip
 		return;
 	}
 
+	// GPU path: use GPU primitive drawing
+	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
+		gpu_draw_rect((float)((sx + x_offset) * sdl_scale), (float)((sy + y_offset) * sdl_scale),
+		    (float)((ex - sx) * sdl_scale), (float)((ey - sy) * sdl_scale), (float)r / 255.0f, (float)g / 255.0f,
+		    (float)b / 255.0f, (float)a / 255.0f);
+		return;
+	}
+
+	// CPU fallback path
+	SDL_FRect rc;
 	rc.x = (float)((sx + x_offset) * sdl_scale);
 	rc.w = (float)((ex - sx) * sdl_scale);
 	rc.y = (float)((sy + y_offset) * sdl_scale);
@@ -316,13 +565,13 @@ void sdl_shaded_rect(int sx, int sy, int ex, int ey, unsigned short int color, u
     int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
 	int r, g, b, a;
-	SDL_FRect rc;
 
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
 	a = alpha;
 
+	// Apply clipping
 	if (sx < clipsx) {
 		sx = clipsx;
 	}
@@ -340,6 +589,16 @@ void sdl_shaded_rect(int sx, int sy, int ex, int ey, unsigned short int color, u
 		return;
 	}
 
+	// GPU path: use GPU primitive drawing
+	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
+		gpu_draw_rect((float)((sx + x_offset) * sdl_scale), (float)((sy + y_offset) * sdl_scale),
+		    (float)((ex - sx) * sdl_scale), (float)((ey - sy) * sdl_scale), (float)r / 255.0f, (float)g / 255.0f,
+		    (float)b / 255.0f, (float)a / 255.0f);
+		return;
+	}
+
+	// CPU fallback path
+	SDL_FRect rc;
 	rc.x = (float)((sx + x_offset) * sdl_scale);
 	rc.w = (float)((ex - sx) * sdl_scale);
 	rc.y = (float)((sy + y_offset) * sdl_scale);
@@ -359,6 +618,13 @@ void sdl_pixel(int x, int y, unsigned short color, int x_offset, int y_offset)
 	g = G16TO32(color);
 	b = B16TO32(color);
 	a = 255;
+
+	// GPU path: use GPU rectangle for pixel (1x1 logical pixel = sdl_scale x sdl_scale physical)
+	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
+		gpu_draw_rect((float)((x + x_offset) * sdl_scale), (float)((y + y_offset) * sdl_scale), (float)sdl_scale,
+		    (float)sdl_scale, (float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, (float)a / 255.0f);
+		return;
+	}
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a);
 	switch (sdl_scale) {
@@ -734,6 +1000,40 @@ void sdl_line(int fx, int fy, int tx, int ty, unsigned short color, int clipsx, 
 	b = B16TO32(color);
 	a = 255;
 
+	// GPU path: use GPU line drawing
+	if (use_gpu_rendering && gpu_draw_line_is_available()) {
+		// Clipping
+		if (fx < clipsx) {
+			fx = clipsx;
+		}
+		if (fy < clipsy) {
+			fy = clipsy;
+		}
+		if (fx >= clipex) {
+			fx = clipex - 1;
+		}
+		if (fy >= clipey) {
+			fy = clipey - 1;
+		}
+		if (tx < clipsx) {
+			tx = clipsx;
+		}
+		if (ty < clipsy) {
+			ty = clipsy;
+		}
+		if (tx >= clipex) {
+			tx = clipex - 1;
+		}
+		if (ty >= clipey) {
+			ty = clipey - 1;
+		}
+
+		gpu_draw_line((float)((fx + x_offset) * sdl_scale), (float)((fy + y_offset) * sdl_scale),
+		    (float)((tx + x_offset) * sdl_scale), (float)((ty + y_offset) * sdl_scale), (float)r / 255.0f,
+		    (float)g / 255.0f, (float)b / 255.0f, (float)a / 255.0f);
+		return;
+	}
+
 	if (fx < clipsx) {
 		fx = clipsx;
 	}
@@ -781,6 +1081,26 @@ void sdl_bargraph(int sx, int sy, int dx, unsigned char *data, int x_offset, int
 {
 	int n;
 
+	// GPU path: use GPU line drawing
+	if (use_gpu_rendering && gpu_draw_line_is_available()) {
+		for (n = 0; n < dx; n++) {
+			float r, g, b;
+			if (data[n] > 40) {
+				r = 255.0f / 255.0f;
+				g = 80.0f / 255.0f;
+				b = 80.0f / 255.0f;
+			} else {
+				r = 80.0f / 255.0f;
+				g = 255.0f / 255.0f;
+				b = 80.0f / 255.0f;
+			}
+			gpu_draw_line((float)((sx + n + x_offset) * sdl_scale), (float)((sy + y_offset) * sdl_scale),
+			    (float)((sx + n + x_offset) * sdl_scale), (float)((sy - data[n] + y_offset) * sdl_scale), r, g, b,
+			    127.0f / 255.0f);
+		}
+		return;
+	}
+
 	for (n = 0; n < dx; n++) {
 		if (data[n] > 40) {
 			SDL_SetRenderDrawColor(sdlren, 255, 80, 80, 127);
@@ -801,6 +1121,13 @@ void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, in
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
+
+	// GPU path: use GPU rectangle for pixel (1x1 logical pixel = sdl_scale x sdl_scale physical)
+	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
+		gpu_draw_rect((float)((x + x_offset) * sdl_scale), (float)((y + y_offset) * sdl_scale), (float)sdl_scale,
+		    (float)sdl_scale, (float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, (float)alpha / 255.0f);
+		return;
+	}
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
@@ -990,6 +1317,14 @@ void sdl_line_alpha(int fx, int fy, int tx, int ty, unsigned short color, unsign
 		return;
 	}
 
+	// GPU path: use GPU line drawing
+	if (use_gpu_rendering && gpu_draw_line_is_available()) {
+		gpu_draw_line((float)((fx + x_offset) * sdl_scale), (float)((fy + y_offset) * sdl_scale),
+		    (float)((tx + x_offset) * sdl_scale), (float)((ty + y_offset) * sdl_scale), (float)r / 255.0f,
+		    (float)g / 255.0f, (float)b / 255.0f, (float)alpha / 255.0f);
+		return;
+	}
+
 	// Apply offset
 	fx += x_offset;
 	tx += x_offset;
@@ -1024,7 +1359,10 @@ void sdl_set_blend_mode(int mode)
 		current_blend_mode = SDL_BLENDMODE_BLEND;
 		break;
 	}
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	// GPU path: track blend mode but don't call SDL_Renderer
+	if (!use_gpu_rendering) {
+		SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	}
 }
 
 int sdl_get_blend_mode(void)
@@ -1048,7 +1386,10 @@ int sdl_get_blend_mode(void)
 void sdl_reset_blend_mode(void)
 {
 	current_blend_mode = SDL_BLENDMODE_BLEND;
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	// GPU path: track blend mode but don't call SDL_Renderer
+	if (!use_gpu_rendering) {
+		SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	}
 }
 
 // ============================================================================
@@ -1164,6 +1505,11 @@ int sdl_load_mod_texture(const char *path)
 	SDL_Texture *tex;
 	int i;
 
+	// GPU path: mod textures require SDL_Renderer (TODO: implement GPU mod textures)
+	if (use_gpu_rendering) {
+		return -1;
+	}
+
 	init_mod_textures();
 
 	// Security: validate path before loading
@@ -1244,6 +1590,11 @@ void sdl_render_mod_texture(int tex_id, int x, int y, unsigned char alpha, int c
 	SDL_FRect dr, sr;
 	int dx, dy, addx = 0, addy = 0;
 
+	// GPU path: mod textures require SDL_Renderer (TODO: implement GPU mod textures)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	if (tex_id < 0 || tex_id >= MAX_MOD_TEXTURES) {
 		return;
 	}
@@ -1294,6 +1645,11 @@ void sdl_render_mod_texture_scaled(int tex_id, int x, int y, float scale, unsign
 {
 	SDL_FRect dr, sr;
 	int dx, dy, scaled_dx, scaled_dy;
+
+	// GPU path: mod textures require SDL_Renderer (TODO: implement GPU mod textures)
+	if (use_gpu_rendering) {
+		return;
+	}
 
 	if (tex_id < 0 || tex_id >= MAX_MOD_TEXTURES) {
 		return;
@@ -1378,6 +1734,11 @@ int sdl_create_render_target(int width, int height)
 	SDL_Texture *tex;
 	int i;
 
+	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
+	if (use_gpu_rendering) {
+		return -1;
+	}
+
 	init_render_targets();
 
 	// Security: validate dimensions to prevent memory exhaustion
@@ -1421,6 +1782,11 @@ int sdl_create_render_target(int width, int height)
 
 void sdl_destroy_render_target(int target_id)
 {
+	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	if (target_id < 0 || target_id >= MAX_RENDER_TARGETS) {
 		return;
 	}
@@ -1445,6 +1811,11 @@ void sdl_destroy_render_target(int target_id)
 
 int sdl_set_render_target(int target_id)
 {
+	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
+	if (use_gpu_rendering) {
+		return -1;
+	}
+
 	if (target_id < 0) {
 		// Reset to screen
 		SDL_SetRenderTarget(sdlren, NULL);
@@ -1464,6 +1835,11 @@ int sdl_set_render_target(int target_id)
 void sdl_render_target_to_screen(int target_id, int x, int y, unsigned char alpha)
 {
 	SDL_FRect dr;
+
+	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
+	if (use_gpu_rendering) {
+		return;
+	}
 
 	if (target_id < 0 || target_id >= MAX_RENDER_TARGETS) {
 		return;
@@ -1495,6 +1871,11 @@ void sdl_clear_render_target(int target_id)
 {
 	int prev_target = current_render_target;
 
+	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	if (target_id < 0 || target_id >= MAX_RENDER_TARGETS) {
 		return;
 	}
@@ -1516,6 +1897,11 @@ void sdl_clear_render_target(int target_id)
 
 void sdl_render_circle(int32_t centreX, int32_t centreY, int32_t radius, uint32_t color)
 {
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 // Maximum reasonable radius for screen rendering (2000 pixels)
 // Formula: ((radius * 8 * 35 / 49) + (8 - 1)) & -8
 // For radius=2000: ((2000 * 8 * 35 / 49) + 7) & -8 = 11428 & -8 = 11424
@@ -1598,6 +1984,45 @@ void sdl_circle_alpha(int cx, int cy, int radius, unsigned short color, unsigned
 	g = G16TO32(color);
 	b = B16TO32(color);
 
+	// GPU path: use pixels (small rectangles) for circle outline
+	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		// Scale center and radius
+		int scx = (cx + x_offset) * sdl_scale;
+		int scy = (cy + y_offset) * sdl_scale;
+		int sr = radius * sdl_scale;
+
+		// Midpoint circle algorithm
+		x = sr;
+		y = 0;
+		d = 1 - sr;
+
+		while (x >= y) {
+			// Draw 8 symmetric points as small rectangles
+			gpu_draw_rect((float)(scx + x), (float)(scy + y), 1.0f, 1.0f, nr, ng, nb, na);
+			gpu_draw_rect((float)(scx - x), (float)(scy + y), 1.0f, 1.0f, nr, ng, nb, na);
+			gpu_draw_rect((float)(scx + x), (float)(scy - y), 1.0f, 1.0f, nr, ng, nb, na);
+			gpu_draw_rect((float)(scx - x), (float)(scy - y), 1.0f, 1.0f, nr, ng, nb, na);
+			gpu_draw_rect((float)(scx + y), (float)(scy + x), 1.0f, 1.0f, nr, ng, nb, na);
+			gpu_draw_rect((float)(scx - y), (float)(scy + x), 1.0f, 1.0f, nr, ng, nb, na);
+			gpu_draw_rect((float)(scx + y), (float)(scy - x), 1.0f, 1.0f, nr, ng, nb, na);
+			gpu_draw_rect((float)(scx - y), (float)(scy - x), 1.0f, 1.0f, nr, ng, nb, na);
+
+			y++;
+			if (d < 0) {
+				d += 2 * y + 1;
+			} else {
+				x--;
+				d += 2 * (y - x) + 1;
+			}
+		}
+		return;
+	}
+
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
@@ -1668,6 +2093,55 @@ void sdl_circle_filled_alpha(
 	float fb = (float)B16TO32(color) / 255.0f;
 	float fa = (float)alpha / 255.0f;
 
+	// GPU path: use horizontal rectangles (scanlines) for filled circle
+	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		// Scale center and radius
+		int scx = (cx + x_offset) * sdl_scale;
+		int scy = (cy + y_offset) * sdl_scale;
+		int sr = radius * sdl_scale;
+
+		// Midpoint circle algorithm to draw horizontal scanlines
+		int x = sr;
+		int y = 0;
+		int d = 1 - sr;
+		int prev_x = x + 1; // Track to avoid duplicate lines
+
+		while (x >= y) {
+			// Draw horizontal lines using midpoint circle symmetry
+			// Only draw when x changes to avoid overdraw
+			if (x != prev_x) {
+				// Horizontal line at y offset from center (top half)
+				gpu_draw_rect((float)(scx - x), (float)(scy - y), (float)(2 * x + 1), 1.0f, nr, ng, nb, na);
+				// Horizontal line at -y offset from center (bottom half)
+				if (y != 0) {
+					gpu_draw_rect((float)(scx - x), (float)(scy + y), (float)(2 * x + 1), 1.0f, nr, ng, nb, na);
+				}
+			}
+
+			// Draw lines at x offset from center (swapped coordinates)
+			// Horizontal line at x offset from center
+			gpu_draw_rect((float)(scx - y), (float)(scy - x), (float)(2 * y + 1), 1.0f, nr, ng, nb, na);
+			if (x != 0) {
+				gpu_draw_rect((float)(scx - y), (float)(scy + x), (float)(2 * y + 1), 1.0f, nr, ng, nb, na);
+			}
+
+			prev_x = x;
+			y++;
+			if (d < 0) {
+				d += 2 * y + 1;
+			} else {
+				x--;
+				d += 2 * (y - x) + 1;
+			}
+		}
+		return;
+	}
+
 	float fcx = (float)((cx + x_offset) * sdl_scale);
 	float fcy = (float)((cy + y_offset) * sdl_scale);
 	float fsr = (float)(radius * sdl_scale);
@@ -1711,6 +2185,31 @@ void sdl_ellipse_alpha(
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
+
+	// GPU path: use pixels (small rectangles) for ellipse outline
+	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		int scx = (cx + x_offset) * sdl_scale;
+		int scy = (cy + y_offset) * sdl_scale;
+		int srx = rx * sdl_scale;
+		int sry = ry * sdl_scale;
+
+		// Draw ellipse using parametric approach
+		int segments = 72; // Match SDL_Renderer version
+
+		for (int i = 0; i < segments; i++) {
+			float angle = (float)i * (2.0f * (float)M_PI / (float)segments);
+			float px = (float)scx + (float)srx * cosf(angle);
+			float py = (float)scy + (float)sry * sinf(angle);
+			// Draw point at current position
+			gpu_draw_rect(px, py, 1.0f, 1.0f, nr, ng, nb, na);
+		}
+		return;
+	}
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
@@ -1804,6 +2303,34 @@ void sdl_ellipse_filled_alpha(
 	float fb = (float)B16TO32(color) / 255.0f;
 	float fa = (float)alpha / 255.0f;
 
+	// GPU path: use horizontal rectangles for filled ellipse
+	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		int scx = (cx + x_offset) * sdl_scale;
+		int scy = (cy + y_offset) * sdl_scale;
+		int srx = rx * sdl_scale;
+		int sry = ry * sdl_scale;
+
+		// Draw horizontal scanlines for each row
+		for (int dy = -sry; dy <= sry; dy++) {
+			// Calculate x extent at this y using ellipse equation
+			// x^2/rx^2 + y^2/ry^2 = 1  =>  x = rx * sqrt(1 - y^2/ry^2)
+			float t = 1.0f - ((float)(dy * dy)) / ((float)(sry * sry));
+			if (t < 0) {
+				t = 0;
+			}
+			int dx = (int)((float)srx * sqrtf(t));
+			if (dx > 0) {
+				gpu_draw_rect((float)(scx - dx), (float)(scy + dy), (float)(2 * dx + 1), 1.0f, nr, ng, nb, na);
+			}
+		}
+		return;
+	}
+
 	float fcx = (float)((cx + x_offset) * sdl_scale);
 	float fcy = (float)((cy + y_offset) * sdl_scale);
 	float frx = (float)(rx * sdl_scale);
@@ -1862,6 +2389,25 @@ void sdl_rect_outline_alpha(int sx, int sy, int ex, int ey, unsigned short color
 		return;
 	}
 
+	// GPU path: use GPU lines for rectangle outline
+	if (use_gpu_rendering && gpu_draw_line_is_available()) {
+		float fsx = (float)((sx + x_offset) * sdl_scale);
+		float fsy = (float)((sy + y_offset) * sdl_scale);
+		float fex = (float)((ex + x_offset) * sdl_scale - 1);
+		float fey = (float)((ey + y_offset) * sdl_scale - 1);
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		// Draw 4 lines for rectangle outline
+		gpu_draw_line(fsx, fsy, fex, fsy, nr, ng, nb, na); // Top
+		gpu_draw_line(fex, fsy, fex, fey, nr, ng, nb, na); // Right
+		gpu_draw_line(fex, fey, fsx, fey, nr, ng, nb, na); // Bottom
+		gpu_draw_line(fsx, fey, fsx, fsy, nr, ng, nb, na); // Left
+		return;
+	}
+
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
@@ -1885,6 +2431,11 @@ void sdl_rounded_rect_alpha(int sx, int sy, int ex, int ey, int radius, unsigned
     int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
 	int r, g, b;
+
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
 
 	r = R16TO32(color);
 	g = G16TO32(color);
@@ -1969,6 +2520,11 @@ void sdl_rounded_rect_filled_alpha(int sx, int sy, int ex, int ey, int radius, u
     unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
 	int r, g, b;
+
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
 
 	r = R16TO32(color);
 	g = G16TO32(color);
@@ -2055,6 +2611,11 @@ void sdl_triangle_alpha(int x1, int y1, int x2, int y2, int x3, int y3, unsigned
 {
 	int r, g, b;
 
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
@@ -2089,6 +2650,11 @@ void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, u
     unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
 	int r, g, b;
+
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
 
 	r = R16TO32(color);
 	g = G16TO32(color);
@@ -2173,6 +2739,11 @@ void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, u
 void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigned short color, unsigned char alpha,
     int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	if (thickness <= 0) {
 		thickness = 1;
 	}
@@ -2229,6 +2800,11 @@ void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, u
 {
 	int r, g, b;
 
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	if (radius <= 0) {
 		return;
 	}
@@ -2278,6 +2854,11 @@ void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, u
 void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2,
     unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	// Apply clipping
 	if (sx < clipsx) {
 		sx = clipsx;
@@ -2328,6 +2909,11 @@ void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, 
 void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2,
     unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	// Apply clipping
 	if (sx < clipsx) {
 		sx = clipsx;
@@ -2380,6 +2966,11 @@ void sdl_bezier_quadratic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, 
 {
 	int r, g, b;
 
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
@@ -2412,6 +3003,11 @@ void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int 
     unsigned char alpha, int x_offset, int y_offset)
 {
 	int r, g, b;
+
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
 
 	r = R16TO32(color);
 	g = G16TO32(color);
@@ -2450,6 +3046,11 @@ void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int 
 void sdl_gradient_circle(int cx, int cy, int radius, unsigned short color, unsigned char center_alpha,
     unsigned char edge_alpha, int x_offset, int y_offset)
 {
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	if (radius <= 0) {
 		return;
 	}
@@ -2503,6 +3104,11 @@ void sdl_gradient_circle(int cx, int cy, int radius, unsigned short color, unsig
 
 void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
 {
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
+
 	// Xiaolin Wu's line algorithm for anti-aliased lines
 	int r = R16TO32(color);
 	int g = G16TO32(color);
@@ -2610,6 +3216,11 @@ void sdl_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int star
     unsigned short color, unsigned char alpha, int x_offset, int y_offset)
 {
 	int r, g, b;
+
+	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
+	if (use_gpu_rendering) {
+		return;
+	}
 
 	if (inner_radius <= 0 || outer_radius <= 0 || outer_radius <= inner_radius) {
 		return;

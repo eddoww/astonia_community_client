@@ -1819,30 +1819,51 @@ void render_list_text(void)
 
 void render_text_lineup(void)
 {
-	int tmp;
+	int oldest_line;
 
+	// Can't scroll up if all lines fit on screen
 	if (textlines <= TEXTDISPLAYLINES) {
 		return;
 	}
 
-	tmp = (textdisplayline + MAXTEXTLINES - 1) % MAXTEXTLINES;
-	if (tmp != textnextline) {
-		textdisplayline = tmp;
+	// Calculate the oldest valid line in the circular buffer
+	if (textlines >= MAXTEXTLINES) {
+		// Buffer is full - oldest line is right after textnextline
+		oldest_line = textnextline;
+	} else {
+		// Buffer not full - oldest line is at index 0
+		oldest_line = 0;
 	}
+
+	// Don't scroll past the oldest line
+	if (textdisplayline == oldest_line) {
+		return;
+	}
+
+	// Move display one line up (toward older text)
+	textdisplayline = (textdisplayline + MAXTEXTLINES - 1) % MAXTEXTLINES;
 }
 
 void render_text_linedown(void)
 {
-	int tmp;
+	int bottom_edge_line;
 
+	// Can't scroll down if all lines fit on screen
 	if (textlines <= TEXTDISPLAYLINES) {
 		return;
 	}
 
-	tmp = (textdisplayline + 1) % MAXTEXTLINES;
-	if (tmp != (textnextline + MAXTEXTLINES - TEXTDISPLAYLINES + 1) % MAXTEXTLINES) {
-		textdisplayline = tmp;
+	// Calculate where the bottom edge of the display window would be
+	bottom_edge_line = (textdisplayline + TEXTDISPLAYLINES) % MAXTEXTLINES;
+
+	// Don't scroll past the newest line (textnextline)
+	// The bottom of our window should stop at textnextline
+	if (bottom_edge_line == textnextline) {
+		return;
 	}
+
+	// Move display one line down (toward newer text)
+	textdisplayline = (textdisplayline + 1) % MAXTEXTLINES;
 }
 
 void render_text_pageup(void)

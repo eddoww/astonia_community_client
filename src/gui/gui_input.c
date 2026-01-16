@@ -465,6 +465,35 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		if (game_options & GO_WHEELSPEED) {
+			// Mousewheel toggles movement speed mode
+			// pspeed: 0=normal, 1=fast, 2=stealth
+			// cmd_speed: 0=normal, 1=fast, 2=stealth
+			while (delta > 0) {
+				// Scroll up: cycle through normal->fast->stealth->normal
+				if (pspeed == 0) {
+					cmd_speed(1); // normal to fast
+				} else if (pspeed == 1) {
+					cmd_speed(2); // fast to stealth
+				} else if (pspeed == 2) {
+					cmd_speed(0); // stealth to normal
+				}
+				delta--;
+			}
+			while (delta < 0) {
+				// Scroll down: cycle through normal->stealth->fast->normal
+				if (pspeed == 0) {
+					cmd_speed(2); // normal to stealth
+				} else if (pspeed == 2) {
+					cmd_speed(1); // stealth to fast
+				} else if (pspeed == 1) {
+					cmd_speed(0); // fast to normal
+				}
+				delta++;
+			}
+			break;
+		}
+
 		if (game_options & GO_WHEEL) {
 			while (delta > 0) {
 				vk_special_inc();

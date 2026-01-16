@@ -54,6 +54,9 @@ void minimap_init(void)
 	maptex2 = sdl_create_texture(MINIMAP * 2, MINIMAP * 2);
 	SDL_SetTextureBlendMode(maptex1, SDL_BLENDMODE_BLEND);
 	SDL_SetTextureBlendMode(maptex2, SDL_BLENDMODE_BLEND);
+	// Use nearest neighbor scaling for crisp pixel-perfect minimap rendering
+	SDL_SetTextureScaleMode(maptex1, SDL_SCALEMODE_NEAREST);
+	SDL_SetTextureScaleMode(maptex2, SDL_SCALEMODE_NEAREST);
 }
 
 static void set_pix(int x, int y, unsigned char val)

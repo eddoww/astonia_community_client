@@ -50,9 +50,10 @@ typedef size_t map_index_t; // Map tile index, selection indices
 
 #define XRES  800
 #define YRES  (__yres)
-#define YRES0 600
-#define YRES1 650
-#define YRES2 500
+#define YRES0 600 // 4:3 aspect ratio
+#define YRES1 650 // Tall
+#define YRES2 500 // 16:10 aspect ratio
+#define YRES3 450 // 16:9 widescreen aspect ratio
 
 #ifndef bzero
 #define bzero(ptr, size) memset(ptr, 0, size)

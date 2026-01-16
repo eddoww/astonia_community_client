@@ -573,7 +573,7 @@ void display_keys(void)
 			col = textcolor;
 		}
 
-		x = 10 + u++ * ((800 - 20) / 10);
+		x = 10 + u++ * ((XRES - 20) / 10);
 
 		if (keytab[i].skill == -1) {
 			continue;
@@ -788,7 +788,7 @@ void display_selfspells(void)
 			int step = 50 - 50 * (int)(ceffect[nr].bless.stop - tick) /
 			                    (int)(ceffect[nr].bless.stop - ceffect[nr].bless.start);
 			render_push_clip();
-			render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
+			render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
 			if (ceffect[nr].bless.stop - tick < 24 * 30 && (tick & 4)) {
 				render_sprite(997, dotx(DOT_SSP) + 2 * 10, doty(DOT_SSP) + step, RENDERFX_BRIGHT, RENDER_ALIGN_NORMAL);
 			} else {
@@ -803,7 +803,7 @@ void display_selfspells(void)
 			int step = 50 - 50 * (int)(ceffect[nr].freeze.stop - tick) /
 			                    (int)(ceffect[nr].freeze.stop - ceffect[nr].freeze.start);
 			render_push_clip();
-			render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
+			render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
 			render_sprite(
 			    997, dotx(DOT_SSP) + 1 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 			render_pop_clip();
@@ -814,7 +814,7 @@ void display_selfspells(void)
 			int step = 50 - 50 * (int)(ceffect[nr].potion.stop - tick) /
 			                    (int)(ceffect[nr].potion.stop - ceffect[nr].potion.start);
 			render_push_clip();
-			render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
+			render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
 			if (step >= 40 && (tick & 4)) {
 				render_sprite(997, dotx(DOT_SSP) + 0 * 10, doty(DOT_SSP) + step, RENDERFX_BRIGHT, RENDER_ALIGN_NORMAL);
 			} else {

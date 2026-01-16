@@ -310,6 +310,34 @@ DLL_EXPORT void render_sprite(unsigned int sprite, int scrx, int scry, char ligh
 }
 
 /**
+ * Render a sprite with custom scaling.
+ * Like render_sprite but allows specifying a scale percentage.
+ *
+ * @param sprite The sprite number to render
+ * @param scrx Screen X coordinate
+ * @param scry Screen Y coordinate
+ * @param light Lighting level
+ * @param align Alignment mode
+ * @param scale Scale percentage (100 = normal, 50 = half size, 200 = double)
+ */
+DLL_EXPORT void render_sprite_scaled(
+    unsigned int sprite, int scrx, int scry, char light, char align, unsigned char scale)
+{
+	RenderFX fx;
+
+	bzero(&fx, sizeof(RenderFX));
+
+	fx.sprite = sprite;
+	fx.light = RENDERFX_NORMAL_LIGHT;
+	fx.align = align;
+
+	fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = light;
+	fx.scale = scale;
+
+	render_sprite_fx(&fx, scrx, scry);
+}
+
+/**
  * Draw a filled rectangle.
  * Renders a solid colored rectangle with clipping support.
  *
@@ -1439,7 +1467,8 @@ int render_char_len(char c)
 
 #define TEXTDISPLAY_DY (textdisplay_dy)
 
-#define TEXTDISPLAY_SX 396
+int __textdisplay_sx = 396; // default, will be scaled by ui_bot_scale
+#define TEXTDISPLAY_SX (__textdisplay_sx)
 #define TEXTDISPLAY_SY (__textdisplay_sy)
 
 #define TEXTDISPLAYLINES (TEXTDISPLAY_SY / TEXTDISPLAY_DY)

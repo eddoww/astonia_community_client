@@ -27,6 +27,7 @@
 #include "game/game_private.h"
 #include "sdl/sdl.h"
 #include "gui/gui.h"
+#include "gui/gui_private.h"
 #include "client/client.h"
 #include "modder/modder.h"
 
@@ -445,6 +446,8 @@ void save_options(void)
 	fwrite(&action_row, sizeof(action_row), 1, fp);
 	fwrite(&action_enabled, sizeof(action_enabled), 1, fp);
 	fwrite(&gear_lock, sizeof(gear_lock), 1, fp);
+	fwrite(&ui_top_scale, sizeof(ui_top_scale), 1, fp);
+	fwrite(&ui_bot_scale, sizeof(ui_bot_scale), 1, fp);
 	fclose(fp);
 }
 
@@ -468,6 +471,21 @@ void load_options(void)
 	fread(&action_row, sizeof(action_row), 1, fp);
 	fread(&action_enabled, sizeof(action_enabled), 1, fp);
 	fread(&gear_lock, sizeof(gear_lock), 1, fp);
+
+	// Load UI scale values (may fail if file is old format - that's OK, defaults remain)
+	if (fread(&ui_top_scale, sizeof(ui_top_scale), 1, fp) == 1) {
+		// Validate range
+		if (ui_top_scale < 0.5f || ui_top_scale > 1.5f) {
+			ui_top_scale = 1.0f;
+		}
+	}
+	if (fread(&ui_bot_scale, sizeof(ui_bot_scale), 1, fp) == 1) {
+		// Validate range
+		if (ui_bot_scale < 0.5f || ui_bot_scale > 1.5f) {
+			ui_bot_scale = 1.0f;
+		}
+	}
+
 	fclose(fp);
 
 	actions_loaded();

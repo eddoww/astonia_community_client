@@ -268,6 +268,29 @@ extern int gui_topoff;
 extern DOT *dot;
 extern BUT *but;
 
+// Independent UI scaling (0.5 to 1.5, where 1.0 = 100%)
+DLL_EXPORT extern float ui_top_scale;
+DLL_EXPORT extern float ui_bot_scale;
+
+// Base heights of UI panels (before scaling)
+#define UI_TOP_HEIGHT_NORMAL 40
+#define UI_TOP_HEIGHT_SMALL  0
+#define UI_BOT_HEIGHT_NORMAL 170
+#define UI_BOT_HEIGHT_SMALL  130
+
+// Get scaled UI heights
+int ui_get_top_height(void);
+int ui_get_bot_height(void);
+
+// Scale a value for bottom UI (relative offsets within the panel)
+int ui_scale_bot(int value);
+// Scale a value for top UI
+int ui_scale_top(int value);
+
+// Get X offset to center UI panels on screen
+int ui_bot_x_offset(void);
+int ui_top_x_offset(void);
+
 extern int invsel; // index into item
 extern int weasel; // index into weatab
 extern int consel; // index into item

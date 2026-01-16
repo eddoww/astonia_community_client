@@ -235,6 +235,7 @@ void display_inventory(void)
 	unsigned short c1, c2, c3, shine;
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
+	unsigned char bot_scale_pct = (unsigned char)(ui_bot_scale * 100);
 
 	// fkey[0]=fkey[1]=fkey[2]=fkey[3]=0;
 
@@ -243,14 +244,15 @@ void display_inventory(void)
 		int c = (i - 2) % 4;
 		int x = butx(b);
 		int y = buty(b);
-		if (y > doty(DOT_IN2) - 20) {
+		if (y > doty(DOT_IN2) - ui_scale_bot(20)) {
 			break;
 		}
-		int yt = y + 12;
+		int yt = y + ui_scale_bot(12);
 
-		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+		render_sprite_scaled(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER, bot_scale_pct);
 		if (i == invsel) {
-			render_sprite(opt_sprite(SPR_ITSEL), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+			render_sprite_scaled(
+			    opt_sprite(SPR_ITSEL), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER, bot_scale_pct);
 		}
 		if (item[i]) {
 			bzero(&fx, sizeof(fx));
@@ -266,7 +268,8 @@ void display_inventory(void)
 			fx.cb = (char)cb;
 			fx.clight = (char)light;
 			fx.sat = (char)sat;
-			fx.scale = scale;
+			// Apply UI scale to item scale
+			fx.scale = (unsigned char)((scale * bot_scale_pct) / 100);
 			fx.sink = 0;
 			fx.align = RENDER_ALIGN_CENTER;
 			fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = (i == invsel) ? FX_ITEMBRIGHT : FX_ITEMLIGHT;
@@ -277,7 +280,8 @@ void display_inventory(void)
 			}
 		}
 		if (fkeyitem[c] == i) {
-			render_text(x, y - 18, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, fstr[c]);
+			render_text(x, y - ui_scale_bot(18), textcolor,
+			    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, fstr[c]);
 		}
 		if (con_cnt && con_type == 2 && itemprice[i]) {
 			dx_drawtext_gold(x, yt, textcolor, (int)itemprice[i]);
@@ -292,26 +296,29 @@ void display_container(void)
 	unsigned short c1, c2, c3, shine;
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
+	unsigned char bot_scale_pct = (unsigned char)(ui_bot_scale * 100);
 
-	render_sprite(
-	    opt_sprite(SPR_TEXTF), dot[DOT_CON].x - 20, dot[DOT_CON].y - 55, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_sprite_scaled(opt_sprite(SPR_TEXTF), dot[DOT_CON].x - ui_scale_bot(20), dot[DOT_CON].y - ui_scale_bot(55),
+	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, bot_scale_pct);
 	if (con_type == 1) {
-		render_text(dot[DOT_CON].x, dot[DOT_CON].y - 50 + 2, textcolor, RENDER_TEXT_LEFT | RENDER_TEXT_LARGE, con_name);
+		render_text(dot[DOT_CON].x, dot[DOT_CON].y - ui_scale_bot(50) + ui_scale_bot(2), textcolor,
+		    RENDER_TEXT_LEFT | RENDER_TEXT_LARGE, con_name);
 	} else {
-		render_text_fmt(dot[DOT_CON].x, dot[DOT_CON].y - 50 + 2, textcolor, RENDER_TEXT_LEFT | RENDER_TEXT_LARGE,
-		    "%s's Shop", con_name);
+		render_text_fmt(dot[DOT_CON].x, dot[DOT_CON].y - ui_scale_bot(50) + ui_scale_bot(2), textcolor,
+		    RENDER_TEXT_LEFT | RENDER_TEXT_LARGE, "%s's Shop", con_name);
 	}
 
 	for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
 		int i = conoff * CONDX + b - BUT_CON_BEG;
 		int x = butx(b);
 		int y = buty(b);
-		int yt = y + 12;
+		int yt = y + ui_scale_bot(12);
 		unsigned short int color;
 
-		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+		render_sprite_scaled(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER, bot_scale_pct);
 		if (i == consel) {
-			render_sprite(opt_sprite(SPR_ITSEL), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+			render_sprite_scaled(
+			    opt_sprite(SPR_ITSEL), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER, bot_scale_pct);
 		}
 		if (i >= con_cnt) {
 			continue;
@@ -330,7 +337,8 @@ void display_container(void)
 			fx.cb = (char)cb;
 			fx.clight = (char)light;
 			fx.sat = (char)sat;
-			fx.scale = scale;
+			// Apply UI scale to item scale
+			fx.scale = (unsigned char)((scale * bot_scale_pct) / 100);
 			fx.sink = 0;
 			fx.align = RENDER_ALIGN_CENTER;
 			fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = i == consel ? FX_ITEMBRIGHT : FX_ITEMLIGHT;
@@ -356,21 +364,22 @@ void display_container(void)
 void display_gold(void)
 {
 	int x, y;
+	unsigned char bot_scale_pct = (unsigned char)(ui_bot_scale * 100);
 
 	x = but[BUT_GLD].x;
 	y = but[BUT_GLD].y;
 
 	if (!(game_options & GO_SMALLBOT)) {
-		render_sprite(SPR_GOLD_BEG + 7, x, y - 10,
+		render_sprite_scaled(SPR_GOLD_BEG + 7, x, y - ui_scale_bot(10),
 		    lcmd == CMD_TAKE_GOLD || lcmd == CMD_DROP_GOLD ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT,
-		    RENDER_ALIGN_CENTER);
+		    RENDER_ALIGN_CENTER, bot_scale_pct);
 	}
 
 	if (capbut == BUT_GLD) {
-		dx_drawtext_gold(x, y - 10, textcolor, (int)takegold);
-		dx_drawtext_gold(x, y + 2, textcolor, (int)(gold - takegold));
+		dx_drawtext_gold(x, y - ui_scale_bot(10), textcolor, (int)takegold);
+		dx_drawtext_gold(x, y + ui_scale_bot(2), textcolor, (int)(gold - takegold));
 	} else {
-		dx_drawtext_gold(x, y + 2, textcolor, (int)gold);
+		dx_drawtext_gold(x, y + ui_scale_bot(2), textcolor, (int)gold);
 	}
 }
 
@@ -381,12 +390,14 @@ void display_citem(void)
 	unsigned short c1, c2, c3, shine;
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
+	unsigned char bot_scale_pct = (unsigned char)(ui_bot_scale * 100);
 
 	// trashcan
 	if (vk_item || csprite) {
 		x = but[BUT_JNK].x;
 		y = but[BUT_JNK].y;
-		render_sprite(25, x, y, lcmd == CMD_JUNK_ITEM ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+		render_sprite_scaled(25, x, y, lcmd == CMD_JUNK_ITEM ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT,
+		    RENDER_ALIGN_CENTER, bot_scale_pct);
 	}
 
 	// citem
@@ -441,19 +452,21 @@ void display_citem(void)
 
 void display_scrollbars(void)
 {
-	render_sprite(SPR_SCRUP, but[BUT_SCL_UP].x, but[BUT_SCL_UP].y, butsel == BUT_SCL_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRLT, but[BUT_SCL_TR].x, but[BUT_SCL_TR].y, butsel == BUT_SCL_TR ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRDW, but[BUT_SCL_DW].x, but[BUT_SCL_DW].y, butsel == BUT_SCL_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
+	unsigned char bot_scale_pct = (unsigned char)(ui_bot_scale * 100);
 
-	render_sprite(SPR_SCRUP, but[BUT_SCR_UP].x, but[BUT_SCR_UP].y, butsel == BUT_SCR_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRRT, but[BUT_SCR_TR].x, but[BUT_SCR_TR].y, butsel == BUT_SCR_TR ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRDW, but[BUT_SCR_DW].x, but[BUT_SCR_DW].y, butsel == BUT_SCR_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
+	render_sprite_scaled(SPR_SCRUP, but[BUT_SCL_UP].x, but[BUT_SCL_UP].y,
+	    butsel == BUT_SCL_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT, RENDER_ALIGN_OFFSET, bot_scale_pct);
+	render_sprite_scaled(SPR_SCRLT, but[BUT_SCL_TR].x, but[BUT_SCL_TR].y,
+	    butsel == BUT_SCL_TR ? FX_ITEMBRIGHT : FX_ITEMLIGHT, RENDER_ALIGN_OFFSET, bot_scale_pct);
+	render_sprite_scaled(SPR_SCRDW, but[BUT_SCL_DW].x, but[BUT_SCL_DW].y,
+	    butsel == BUT_SCL_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT, RENDER_ALIGN_OFFSET, bot_scale_pct);
+
+	render_sprite_scaled(SPR_SCRUP, but[BUT_SCR_UP].x, but[BUT_SCR_UP].y,
+	    butsel == BUT_SCR_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT, RENDER_ALIGN_OFFSET, bot_scale_pct);
+	render_sprite_scaled(SPR_SCRRT, but[BUT_SCR_TR].x, but[BUT_SCR_TR].y,
+	    butsel == BUT_SCR_TR ? FX_ITEMBRIGHT : FX_ITEMLIGHT, RENDER_ALIGN_OFFSET, bot_scale_pct);
+	render_sprite_scaled(SPR_SCRDW, but[BUT_SCR_DW].x, but[BUT_SCR_DW].y,
+	    butsel == BUT_SCR_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT, RENDER_ALIGN_OFFSET, bot_scale_pct);
 }
 
 void display_skill(void)
@@ -461,18 +474,19 @@ void display_skill(void)
 	int b;
 	char buf[256];
 	int cn = (int)map[MAPDX * MAPDY / 2].cn;
+	int scaled_sklwidth = ui_scale_bot(SKLWIDTH);
 
 	for (b = BUT_SKL_BEG; b <= BUT_SKL_END; b++) {
 		int i = skloff + b - BUT_SKL_BEG;
 		int x = butx(b);
 		int y = buty(b);
-		int yt = y - 4;
-		int bsx = x + 10;
-		int bex = x + SKLWIDTH;
-		int bsy = y + 4;
+		int yt = y - ui_scale_bot(4);
+		int bsx = x + ui_scale_bot(10);
+		int bex = x + scaled_sklwidth;
+		int bsy = y + ui_scale_bot(4);
 		int barsize;
 
-		if (y + 4 > doty(DOT_SK2)) {
+		if (y + ui_scale_bot(4) > doty(DOT_SK2)) {
 			continue;
 		}
 
@@ -501,7 +515,7 @@ void display_skill(void)
 		}
 
 		if (skltab[i].button) {
-			barsize = skltab[i].barsize;
+			barsize = ui_scale_bot(skltab[i].barsize);
 		} else {
 			barsize = 0;
 		}
@@ -664,7 +678,13 @@ void display_screen(void)
 	int h1, h2, m1, m2;
 	static int rh1 = 0, rh2 = 0, rm1 = 0, rm2 = 0;
 
-	render_sprite(opt_sprite(999), dotx(DOT_TOP), doty(DOT_TOP), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	// Convert float scale (0.5-1.5) to unsigned char percentage (50-150)
+	unsigned char top_scale_pct = (unsigned char)(ui_top_scale * 100);
+	unsigned char bot_scale_pct = (unsigned char)(ui_bot_scale * 100);
+
+	// Render top UI panel with scaling
+	render_sprite_scaled(
+	    opt_sprite(999), dotx(DOT_TOP), doty(DOT_TOP), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, top_scale_pct);
 
 	trans_date((int)realtime, &h, &m);
 
@@ -701,21 +721,25 @@ void display_screen(void)
 		rm2 = 0;
 	}
 
-	render_sprite((unsigned int)(200 + rh1), dotx(DOT_TOP) + 730 + 0 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rh2), dotx(DOT_TOP) + 730 + 1 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rm1), dotx(DOT_TOP) + 734 + 2 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rm2), dotx(DOT_TOP) + 734 + 3 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	// Time display digits (scaled for top panel)
+	render_sprite_scaled((unsigned int)(200 + rh1), dotx(DOT_TOP) + ui_scale_top(730 + 0 * 10 - 2),
+	    doty(DOT_TOP) + ui_scale_top(5 + 3), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, top_scale_pct);
+	render_sprite_scaled((unsigned int)(200 + rh2), dotx(DOT_TOP) + ui_scale_top(730 + 1 * 10 - 2),
+	    doty(DOT_TOP) + ui_scale_top(5 + 3), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, top_scale_pct);
+	render_sprite_scaled((unsigned int)(200 + rm1), dotx(DOT_TOP) + ui_scale_top(734 + 2 * 10 - 2),
+	    doty(DOT_TOP) + ui_scale_top(5 + 3), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, top_scale_pct);
+	render_sprite_scaled((unsigned int)(200 + rm2), dotx(DOT_TOP) + ui_scale_top(734 + 3 * 10 - 2),
+	    doty(DOT_TOP) + ui_scale_top(5 + 3), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, top_scale_pct);
 
 	sprintf(hover_time_text, "%02d:%02d Astonia Standard Time", h, m);
 
+	// Render bottom UI panel with scaling
 	if (game_options & GO_SMALLBOT) {
-		render_sprite(opt_sprite(991), dotx(DOT_BOT), doty(DOT_BOT), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+		render_sprite_scaled(
+		    opt_sprite(991), dotx(DOT_BOT), doty(DOT_BOT), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, bot_scale_pct);
 	} else {
-		render_sprite(opt_sprite(998), dotx(DOT_BOT), doty(DOT_BOT), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+		render_sprite_scaled(
+		    opt_sprite(998), dotx(DOT_BOT), doty(DOT_BOT), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, bot_scale_pct);
 	}
 }
 
@@ -753,15 +777,15 @@ void display_mode(void)
 	dx_copysprite_emerald(but[BUT_MOD_WALK1].x, but[BUT_MOD_WALK1].y, 4, sel == 1 ? 2 : pspeed == 1 ? 1 : 0);
 	dx_copysprite_emerald(but[BUT_MOD_WALK2].x, but[BUT_MOD_WALK2].y, 4, sel == 2 ? 2 : pspeed == 2 ? 1 : 0);
 
-	render_text(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y + 7, bluecolor,
+	render_text(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y + ui_scale_bot(7), bluecolor,
 	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "F6");
-	render_text(but[BUT_MOD_WALK1].x, but[BUT_MOD_WALK1].y + 7, bluecolor,
+	render_text(but[BUT_MOD_WALK1].x, but[BUT_MOD_WALK1].y + ui_scale_bot(7), bluecolor,
 	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "F5");
-	render_text(but[BUT_MOD_WALK2].x, but[BUT_MOD_WALK2].y + 7, bluecolor,
+	render_text(but[BUT_MOD_WALK2].x, but[BUT_MOD_WALK2].y + ui_scale_bot(7), bluecolor,
 	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "F7");
 
 	if (*speedtext[sel]) {
-		render_text(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y - 13, col,
+		render_text(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y - ui_scale_bot(13), col,
 		    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, speedtext[sel]);
 	}
 }
@@ -769,6 +793,7 @@ void display_mode(void)
 void display_selfspells(void)
 {
 	int cn = (int)map[mapmn(MAPDX / 2, MAPDY / 2)].cn;
+	unsigned char bot_scale_pct = (unsigned char)(ui_bot_scale * 100);
 	if (!cn) {
 		return;
 	}
@@ -785,41 +810,43 @@ void display_selfspells(void)
 
 		switch (ceffect[nr].generic.type) {
 		case 9: {
-			int step = 50 - 50 * (int)(ceffect[nr].bless.stop - tick) /
-			                    (int)(ceffect[nr].bless.stop - ceffect[nr].bless.start);
+			int step = ui_scale_bot(50 - 50 * (int)(ceffect[nr].bless.stop - tick) /
+			                                 (int)(ceffect[nr].bless.stop - ceffect[nr].bless.start));
 			render_push_clip();
-			render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
+			render_more_clip(0, 0, 800, doty(DOT_SSP) + ui_scale_bot(119 - 68));
 			if (ceffect[nr].bless.stop - tick < 24 * 30 && (tick & 4)) {
-				render_sprite(997, dotx(DOT_SSP) + 2 * 10, doty(DOT_SSP) + step, RENDERFX_BRIGHT, RENDER_ALIGN_NORMAL);
+				render_sprite_scaled(997, dotx(DOT_SSP) + ui_scale_bot(2 * 10), doty(DOT_SSP) + step, RENDERFX_BRIGHT,
+				    RENDER_ALIGN_NORMAL, bot_scale_pct);
 			} else {
-				render_sprite(
-				    997, dotx(DOT_SSP) + 2 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+				render_sprite_scaled(997, dotx(DOT_SSP) + ui_scale_bot(2 * 10), doty(DOT_SSP) + step,
+				    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, bot_scale_pct);
 			}
 			render_pop_clip();
 			sprintf(hover_bless_text, "Bless: %us to go", (ceffect[nr].bless.stop - tick) / 24);
 			break;
 		}
 		case 11: {
-			int step = 50 - 50 * (int)(ceffect[nr].freeze.stop - tick) /
-			                    (int)(ceffect[nr].freeze.stop - ceffect[nr].freeze.start);
+			int step = ui_scale_bot(50 - 50 * (int)(ceffect[nr].freeze.stop - tick) /
+			                                 (int)(ceffect[nr].freeze.stop - ceffect[nr].freeze.start));
 			render_push_clip();
-			render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
-			render_sprite(
-			    997, dotx(DOT_SSP) + 1 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+			render_more_clip(0, 0, 800, doty(DOT_SSP) + ui_scale_bot(119 - 68));
+			render_sprite_scaled(997, dotx(DOT_SSP) + ui_scale_bot(1 * 10), doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT,
+			    RENDER_ALIGN_NORMAL, bot_scale_pct);
 			render_pop_clip();
 			sprintf(hover_freeze_text, "Freeze: %us to go", (ceffect[nr].freeze.stop - tick) / 24);
 			break;
 		}
 		case 14: {
-			int step = 50 - 50 * (int)(ceffect[nr].potion.stop - tick) /
-			                    (int)(ceffect[nr].potion.stop - ceffect[nr].potion.start);
+			int step = ui_scale_bot(50 - 50 * (int)(ceffect[nr].potion.stop - tick) /
+			                                 (int)(ceffect[nr].potion.stop - ceffect[nr].potion.start));
 			render_push_clip();
-			render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
-			if (step >= 40 && (tick & 4)) {
-				render_sprite(997, dotx(DOT_SSP) + 0 * 10, doty(DOT_SSP) + step, RENDERFX_BRIGHT, RENDER_ALIGN_NORMAL);
+			render_more_clip(0, 0, 800, doty(DOT_SSP) + ui_scale_bot(119 - 68));
+			if (step >= ui_scale_bot(40) && (tick & 4)) {
+				render_sprite_scaled(997, dotx(DOT_SSP) + ui_scale_bot(0 * 10), doty(DOT_SSP) + step, RENDERFX_BRIGHT,
+				    RENDER_ALIGN_NORMAL, bot_scale_pct);
 			} else {
-				render_sprite(
-				    997, dotx(DOT_SSP) + 0 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+				render_sprite_scaled(997, dotx(DOT_SSP) + ui_scale_bot(0 * 10), doty(DOT_SSP) + step,
+				    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, bot_scale_pct);
 			}
 			render_pop_clip();
 			sprintf(hover_potion_text, "Potion: %us to go", (ceffect[nr].potion.stop - tick) / 24);
@@ -832,6 +859,7 @@ void display_selfspells(void)
 void display_exp(void)
 {
 	static int last_exp = 0, exp_ticker = 0;
+	unsigned char top_scale_pct = (unsigned char)(ui_top_scale * 100);
 
 	sprintf(hover_level_text, "Level: unknown");
 
@@ -854,10 +882,16 @@ void display_exp(void)
 			last_exp = expe;
 		}
 
+		// Scale exp bar position and clip region
+		int bar_x = dotx(DOT_TOP) + ui_scale_top(31);
+		int bar_y = doty(DOT_TOP) + ui_scale_top(7);
+		int bar_width = ui_scale_top(100);
+		int fill_width = bar_width - (int)((long long)bar_width * step / total);
+
 		render_push_clip();
-		render_more_clip(0, 0, dotx(DOT_TOP) + 31 + 100 - (int)(100ll * step / total), doty(DOT_TOP) + 8 + 7);
-		render_sprite(996, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 7, exp_ticker ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT,
-		    RENDER_ALIGN_NORMAL);
+		render_more_clip(0, 0, bar_x + fill_width, bar_y + ui_scale_top(8));
+		render_sprite_scaled(996, bar_x, bar_y, exp_ticker ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT,
+		    RENDER_ALIGN_NORMAL, top_scale_pct);
 		render_pop_clip();
 
 		if (exp_ticker) {
@@ -917,6 +951,7 @@ DLL_EXPORT int mil_rank(int exp)
 void display_military(void)
 {
 	int step, total, rank, cost1, cost2;
+	unsigned char top_scale_pct = (unsigned char)(ui_top_scale * 100);
 
 	sprintf(hover_rank_text, "Rank: none or unknown");
 
@@ -932,9 +967,15 @@ void display_military(void)
 
 	if (mil_exp && total) {
 		if (rank < *game_rankcount - 1) {
+			// Scale military bar position and clip region
+			int bar_x = dotx(DOT_TOP) + ui_scale_top(31);
+			int bar_y = doty(DOT_TOP) + ui_scale_top(24);
+			int bar_width = ui_scale_top(100);
+			int fill_width = bar_width * step / total;
+
 			render_push_clip();
-			render_more_clip(0, 0, dotx(DOT_TOP) + 31 + 100 * step / total, doty(DOT_TOP) + 8 + 24);
-			render_sprite(993, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 24, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+			render_more_clip(0, 0, bar_x + fill_width, bar_y + ui_scale_top(8));
+			render_sprite_scaled(993, bar_x, bar_y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL, top_scale_pct);
 			render_pop_clip();
 
 			sprintf(hover_rank_text, "Rank: '%s' to '%s'", game_rankname[rank], game_rankname[rank + 1]);
@@ -947,6 +988,7 @@ void display_military(void)
 void display_rage(void)
 {
 	int step;
+	unsigned char bot_scale_pct = (unsigned char)(ui_bot_scale * 100);
 
 	sprintf(hover_rage_text, "Rage: Not active");
 
@@ -954,10 +996,11 @@ void display_rage(void)
 		return;
 	}
 
-	step = (int)(50 - 50 * rage / value[0][V_RAGE]);
+	step = ui_scale_bot((int)(50 - 50 * rage / value[0][V_RAGE]));
 	render_push_clip();
-	render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
-	render_sprite(997, dotx(DOT_SSP) + 3 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_more_clip(0, 0, 800, doty(DOT_SSP) + ui_scale_bot(119 - 68));
+	render_sprite_scaled(997, dotx(DOT_SSP) + ui_scale_bot(3 * 10), doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT,
+	    RENDER_ALIGN_NORMAL, bot_scale_pct);
 	render_pop_clip();
 
 	sprintf(hover_rage_text, "Rage: %d%%", 100 * rage / value[0][V_RAGE]);

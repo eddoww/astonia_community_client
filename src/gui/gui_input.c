@@ -6,6 +6,7 @@
  */
 
 #include <inttypes.h>
+#include <math.h>
 #include <time.h>
 #include <ctype.h>
 #include <SDL3/SDL.h>
@@ -268,12 +269,32 @@ void gui_sdl_keyproc(SDL_Keycode wparam)
 
 	case '+':
 	case '=':
-		if (!context_key_isset()) {
+	case SDLK_KP_PLUS:
+		// Ctrl+Plus: scale UI up, Ctrl+Shift: top UI, Ctrl only: bottom UI
+		if (vk_control) {
+			if (vk_shift) {
+				ui_top_scale = fminf(1.5f, ui_top_scale + 0.05f);
+			} else {
+				ui_bot_scale = fminf(1.5f, ui_bot_scale + 0.05f);
+			}
+			init_dots();
+			note("UI Scale: top=%.0f%% bot=%.0f%%", (double)(ui_top_scale * 100), (double)(ui_bot_scale * 100));
+		} else if (!context_key_isset()) {
 			context_action_enable(1);
 		}
 		break;
 	case '-':
-		if (!context_key_isset()) {
+	case SDLK_KP_MINUS:
+		// Ctrl+Minus: scale UI down, Ctrl+Shift: top UI, Ctrl only: bottom UI
+		if (vk_control) {
+			if (vk_shift) {
+				ui_top_scale = fmaxf(0.5f, ui_top_scale - 0.05f);
+			} else {
+				ui_bot_scale = fmaxf(0.5f, ui_bot_scale - 0.05f);
+			}
+			init_dots();
+			note("UI Scale: top=%.0f%% bot=%.0f%%", (double)(ui_top_scale * 100), (double)(ui_bot_scale * 100));
+		} else if (!context_key_isset()) {
 			context_action_enable(0);
 		}
 		break;

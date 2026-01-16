@@ -106,6 +106,7 @@ extern SDL_Keycode user_keys[10];
 extern int namesize;
 extern int stom_off_x, stom_off_y;
 extern int __textdisplay_sy;
+extern int __textdisplay_sx;
 extern int x_offset, y_offset;
 
 // Text rendering functions
@@ -129,6 +130,8 @@ int render_create_font_png(RenderFont *dst, uint32_t *pixel, int dx, int dy, int
 // Sprite rendering functions
 DLL_EXPORT int render_sprite_fx(RenderFX *fx, int scrx, int scry);
 DLL_EXPORT void render_sprite(unsigned int sprite, int scrx, int scry, char light, char align);
+DLL_EXPORT void render_sprite_scaled(
+    unsigned int sprite, int scrx, int scry, char light, char align, unsigned char scale);
 void render_sprite_callfx(unsigned int sprite, int scrx, int scry, char light, char mli, char align);
 
 // Basic drawing primitives

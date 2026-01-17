@@ -459,7 +459,7 @@ void context_keydown(SDL_Keycode key)
 	}
 
 	// ignore key-down while over action bar
-	if (actsel != MAXMN) {
+	if (actsel != -1) {
 		return;
 	}
 

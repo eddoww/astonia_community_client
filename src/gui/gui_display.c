@@ -224,7 +224,7 @@ void display(void)
 	if (sockstate == 4 && last_tick_received_time > 0) {
 		uint64_t lag_ms = SDL_GetTicks() - last_tick_received_time;
 		if (lag_ms > 500) {
-			render_text_fmt(XRES / 2, doty(DOT_TOP) + 35, IRGB(31, 0, 0),
+			render_text_fmt(XRES / 2, doty(DOT_MTL) + 35, IRGB(31, 0, 0),
 			    RENDER_TEXT_LARGE | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED | RENDER_TEXT_NOCACHE,
 			    "LAG: %" PRIu64 "ms", lag_ms);
 		}

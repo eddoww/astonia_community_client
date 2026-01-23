@@ -130,6 +130,34 @@ DLL_EXPORT unsigned int _trans_asprite(map_index_t mn, unsigned int sprite, tick
 	unsigned int result =
 	    sprite_config_apply_animated(v, mn, sprite, attick, &scale, &cr, &cg, &cb, &light, &sat, &c1, &c2, &c3, &shine);
 
+	/*
+	 * Handle character-format sprite IDs (>= 100000) used as items.
+	 * The server may send fsprites in the format: 100000 + charno*1000 + offset
+	 * We need to transform the character number via trans_charno.
+	 */
+	if (result >= 100000) {
+		int charno = (int)((result - 100000) / 1000);
+		int offset = (int)(result % 1000);
+		int c_scale, c_cr, c_cg, c_cb, c_light, c_sat, c_c1, c_c2, c_c3, c_shine;
+
+		int base = trans_charno(
+		    charno, &c_scale, &c_cr, &c_cg, &c_cb, &c_light, &c_sat, &c_c1, &c_c2, &c_c3, &c_shine, (int)attick);
+
+		result = (unsigned int)(100000 + base * 1000 + offset);
+
+		/* Use character variant's color/scale values */
+		scale = (unsigned char)c_scale;
+		cr = (unsigned char)c_cr;
+		cg = (unsigned char)c_cg;
+		cb = (unsigned char)c_cb;
+		light = (unsigned char)c_light;
+		sat = (unsigned char)c_sat;
+		c1 = (unsigned short)c_c1;
+		c2 = (unsigned short)c_c2;
+		c3 = (unsigned short)c_c3;
+		shine = (unsigned short)c_shine;
+	}
+
 	/* Assign to output pointers (NULL pointers are allowed) */
 	if (pscale) {
 		*pscale = scale;

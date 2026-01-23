@@ -327,6 +327,15 @@ TEST(animated_variant_lookup_not_exists)
 	ASSERT_TRUE(v == NULL, "Sprite 1 should not have animated variant");
 }
 
+TEST(animated_variant_dark_skeleton_body)
+{
+	/* Sprite 59299 is the dark skeleton body (dead body item) */
+	/* This was causing Issue #100 - invisible skeleton bodies when dead */
+	const AnimatedVariant *v = sprite_config_lookup_animated(59299);
+	ASSERT_TRUE(v != NULL, "Sprite 59299 (dark skeleton body) should have animated variant");
+	ASSERT_EQ(51617, (int)v->base_sprite, "Sprite 59299 should map to base sprite 51617");
+}
+
 /* ========== Stats test ========== */
 
 TEST(config_stats)
@@ -554,6 +563,7 @@ int main(int argc, char *argv[])
 	printf("[animated_variants]\n");
 	RUN_TEST(animated_variant_lookup_exists);
 	RUN_TEST(animated_variant_lookup_not_exists);
+	RUN_TEST(animated_variant_dark_skeleton_body);
 	printf("\n");
 
 	printf("[metadata]\n");

@@ -132,7 +132,7 @@ void minimap_update(void)
 			}
 		}
 	}
-	if (rewrite_cnt > 4) {
+	if (rewrite_cnt > 8) {
 		memset(_mmap, 0, sizeof(_mmap));
 		update1 = update2 = 1;
 		note("MAP CHANGED: %d", rewrite_cnt);
@@ -507,7 +507,7 @@ void minimap_compact(void)
 			if (map_compare(tmap, xmap)) {
 				map_merge(tmap, xmap);
 				filename = mapname(i);
-				fp = fopen(filename, "rb");
+				fp = fopen(filename, "wb");
 				if (!fp) {
 					continue;
 				}

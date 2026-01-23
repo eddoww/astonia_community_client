@@ -10,7 +10,7 @@
 #define INVDX      4
 #define INVDY      (__invdy)
 #define CONDX      4
-#define CONDY      4
+#define CONDY      (__invdy)
 #define SKLDY      (__skldy)
 #define SKLWIDTH   145
 #define LINEHEIGHT 10
@@ -45,6 +45,7 @@
 #define BUT_HELP_PREV  74
 #define BUT_HELP_MISC  75
 #define BUT_HELP_CLOSE 76
+#define BUT_HELP_INDEX 102
 #define BUT_EXIT       77
 #define BUT_HELP       78
 #define BUT_NOLOOK     79
@@ -61,8 +62,9 @@
 #define BUT_ACT_END 100
 
 #define BUT_WEA_LCK 101
+// BUT_HELP_INDEX is 102
 
-#define MAX_BUT 102
+#define MAX_BUT 103
 
 #define BUTF_NOHIT    (1 << 1) // button is ignored int hit processing
 #define BUTF_CAPTURE  (1 << 2) // button captures mouse on lclick
@@ -182,7 +184,8 @@
 #define CMD_ACTION_LOCK 79
 #define CMD_ACTION_OPEN 80
 
-#define CMD_WEAR_LOCK 81
+#define CMD_WEAR_LOCK  81
+#define CMD_HELP_INDEX 82
 
 #define STV_EMPTYLINE  -1
 #define STV_JUSTAVALUE -2 // value is in curr
@@ -311,7 +314,7 @@ DLL_EXPORT extern SKLTAB *skltab;
 extern int skltab_max;
 DLL_EXPORT extern int skltab_cnt;
 
-extern KEYTAB keytab[];
+extern KEYTAB *keytab;
 extern int max_keytab;
 
 extern int clan_offset;
@@ -337,7 +340,7 @@ extern int control_override;
 extern int vk_rbut, vk_lbut;
 extern int vk_special;
 extern Uint64 vk_special_time;
-extern struct special_tab special_tab[];
+extern struct special_tab *special_tab;
 extern int max_special;
 extern int plrmn;
 extern map_index_t mapsel;
@@ -409,6 +412,22 @@ void display_wheel(void);
 void display(void);
 void update_ui_layout(void);
 
+// Help data (loaded from JSON)
+#define HELP_TEXT_WIDTH              192
+#define HELP_INDEX_COL_WIDTH         100
+#define HELP_INDEX_ROW_HEIGHT        10
+#define HELP_PAGE_MARGIN_TOP         8
+#define HELP_PAGE_MARGIN_BOTTOM      20
+#define HELP_INDEX_TITLE_SPACING     10
+#define HELP_FAST_HELP_TITLE_SPACING 5
+#define HELP_TITLE_SPACING           5
+#define HELP_PARAGRAPH_SPACING       10
+
+extern int help_page_count;
+extern int help_index_count;
+
+int help_index_page_for_entry(int entry);
+
 // From gui_map.c (already declared in gui.h but repeated here for clarity)
 // void set_mapoff(int cx, int cy, int mdx, int mdy);
 // void set_mapadd(int dx, int dy);
@@ -477,6 +496,7 @@ int context_key_click(void);
 
 DLL_EXPORT extern char hover_bless_text[];
 DLL_EXPORT extern char hover_freeze_text[];
+DLL_EXPORT extern char hover_heal_text[];
 DLL_EXPORT extern char hover_potion_text[];
 DLL_EXPORT extern char hover_rage_text[];
 DLL_EXPORT extern char hover_level_text[];

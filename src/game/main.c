@@ -25,6 +25,7 @@
 #include "astonia.h"
 #include "game/game.h"
 #include "game/game_private.h"
+#include "game/sprite_config.h"
 #include "sdl/sdl.h"
 #include "gui/gui.h"
 #include "client/client.h"
@@ -43,6 +44,7 @@ void init_logging(void);
 void determine_resolution(void);
 
 int quit = 0;
+int sv_ver = 30;
 
 char *localdata;
 
@@ -286,6 +288,7 @@ DLL_EXPORT char server_url[256];
 DLL_EXPORT int server_port = 0;
 DLL_EXPORT int want_width = 0;
 DLL_EXPORT int want_height = 0;
+DLL_EXPORT int want_monitor = 0; // Monitor number for multi-monitor support (0=default)
 
 int parse_args(int argc, char *argv[])
 {
@@ -417,6 +420,32 @@ int parse_args(int argc, char *argv[])
 				}
 			}
 			break;
+		case 'v':
+			if (!val && i + 1 < argc) {
+				val = argv[++i];
+			}
+			if (val) {
+				long v = strtol(val, &end, 10);
+				if (v < INT_MIN || v > INT_MAX) {
+					sv_ver = 30;
+				} else {
+					sv_ver = (int)v;
+				}
+			}
+			break;
+		case 'n': // -n monitor number for multi-monitor support
+			if (!val && i + 1 < argc) {
+				val = argv[++i];
+			}
+			if (val) {
+				long n = strtol(val, &end, 10);
+				if (n < INT_MIN || n > INT_MAX) {
+					want_monitor = 0;
+				} else {
+					want_monitor = (int)n;
+				}
+			}
+			break;
 		default:
 			// Unknown option, ignore or warn?
 			break;
@@ -431,9 +460,17 @@ void save_options(void)
 	char filename[MAX_PATH];
 
 	if (localdata) {
-		sprintf(filename, "%s%s", localdata, "moac.dat");
+		if (sv_ver == 35) {
+			sprintf(filename, "%s%s", localdata, "moac35.dat");
+		} else {
+			sprintf(filename, "%s%s", localdata, "moac.dat");
+		}
 	} else {
-		sprintf(filename, "%s", "bin/data/moac.dat");
+		if (sv_ver == 35) {
+			sprintf(filename, "%s", "bin/data/moac35.dat");
+		} else {
+			sprintf(filename, "%s", "bin/data/moac.dat");
+		}
 	}
 
 	fp = fopen(filename, "wb");
@@ -442,7 +479,11 @@ void save_options(void)
 	}
 
 	fwrite(&user_keys, sizeof(user_keys), 1, fp);
-	fwrite(&action_row, sizeof(action_row), 1, fp);
+	if (sv_ver == 35) {
+		fwrite(&v35_action_row, sizeof(v35_action_row), 1, fp);
+	} else {
+		fwrite(&v3_action_row, sizeof(v3_action_row), 1, fp);
+	}
 	fwrite(&action_enabled, sizeof(action_enabled), 1, fp);
 	fwrite(&gear_lock, sizeof(gear_lock), 1, fp);
 	fclose(fp);
@@ -454,9 +495,17 @@ void load_options(void)
 	char filename[MAX_PATH];
 
 	if (localdata) {
-		sprintf(filename, "%s%s", localdata, "moac.dat");
+		if (sv_ver == 35) {
+			sprintf(filename, "%s%s", localdata, "moac35.dat");
+		} else {
+			sprintf(filename, "%s%s", localdata, "moac.dat");
+		}
 	} else {
-		sprintf(filename, "%s", "bin/data/moac.dat");
+		if (sv_ver == 35) {
+			sprintf(filename, "%s", "bin/data/moac35.dat");
+		} else {
+			sprintf(filename, "%s", "bin/data/moac.dat");
+		}
 	}
 
 	fp = fopen(filename, "rb");
@@ -465,7 +514,11 @@ void load_options(void)
 	}
 
 	fread(&user_keys, sizeof(user_keys), 1, fp);
-	fread(&action_row, sizeof(action_row), 1, fp);
+	if (sv_ver == 35) {
+		fread(&v35_action_row, sizeof(v35_action_row), 1, fp);
+	} else {
+		fread(&v3_action_row, sizeof(v3_action_row), 1, fp);
+	}
 	fread(&action_enabled, sizeof(action_enabled), 1, fp);
 	fread(&gear_lock, sizeof(gear_lock), 1, fp);
 	fclose(fp);
@@ -529,6 +582,15 @@ void determine_resolution(void)
 	}
 }
 
+static void set_v35_values(void)
+{
+	target_port = 27584;
+	set_v35_inventory();
+	set_v35_keytab();
+	set_v35_actions();
+	set_v35_skilltab();
+}
+
 // main
 int main(int argc, char *argv[])
 {
@@ -548,6 +610,10 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	if (sv_ver == 35) {
+		set_v35_values();
+	}
+
 	init_logging();
 
 #ifdef ENABLE_CRASH_HANDLER
@@ -555,6 +621,8 @@ int main(int argc, char *argv[])
 #endif
 
 	amod_init();
+	sprite_config_init();
+	amod_sprite_config();
 #ifdef ENABLE_SHAREDMEM
 	sharedmem_init();
 #endif
@@ -589,7 +657,7 @@ int main(int argc, char *argv[])
 	determine_resolution();
 
 	sprintf(buf, "Astonia 3 v%d.%d.%d", (VERSION >> 16) & 255, (VERSION >> 8) & 255, (VERSION) & 255);
-	if (!sdl_init(want_width, want_height, buf)) {
+	if (!sdl_init(want_width, want_height, buf, want_monitor)) {
 		render_exit();
 		return -1;
 	}
@@ -603,6 +671,7 @@ int main(int argc, char *argv[])
 	}
 
 	main_init();
+	help_init();
 	update_user_keys();
 
 	main_loop();

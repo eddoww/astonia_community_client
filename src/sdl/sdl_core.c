@@ -89,9 +89,12 @@ void sdl_dump(FILE *fp)
 
 // #define GO_DEFAULTS (GO_CONTEXT|GO_ACTION|GO_BIGBAR|GO_PREDICT|GO_SHORT|GO_MAPSAVE|GO_NOMAP)
 
-int sdl_init(int width, int height, char *title)
+int sdl_init(int width, int height, char *title, int monitor)
 {
 	int i;
+	int num_displays;
+	SDL_DisplayID *displays;
+	SDL_DisplayID display_id;
 
 	if (!SDL_Init(SDL_INIT_VIDEO | ((game_options & GO_SOUND) ? SDL_INIT_AUDIO : 0))) {
 		fail("SDL_Init Error: %s", SDL_GetError());
@@ -100,7 +103,24 @@ int sdl_init(int width, int height, char *title)
 
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
-	SDL_DisplayID display_id = SDL_GetPrimaryDisplay();
+	// Get all available displays
+	displays = SDL_GetDisplays(&num_displays);
+	if (!displays || num_displays == 0) {
+		fail("SDL_GetDisplays Error: %s", SDL_GetError());
+		SDL_Quit();
+		return 0;
+	}
+
+	// Validate monitor number and select display
+	if (monitor < 0 || monitor >= num_displays) {
+		note("Invalid monitor %d, using default (0). Available monitors: %d", monitor, num_displays);
+		monitor = 0;
+	} else if (monitor > 0) {
+		note("Using monitor %d of %d available monitors", monitor, num_displays);
+	}
+	display_id = displays[monitor];
+	SDL_free(displays);
+
 	const SDL_DisplayMode *DM = SDL_GetCurrentDisplayMode(display_id);
 
 	if (!DM) {
@@ -114,7 +134,17 @@ int sdl_init(int width, int height, char *title)
 		height = DM->h;
 	}
 
+	// Create window and position on selected monitor
 	sdlwnd = SDL_CreateWindow(title, width, height, 0);
+	if (sdlwnd && monitor > 0) {
+		// Position window on the selected monitor
+		SDL_Rect display_bounds;
+		if (SDL_GetDisplayBounds(display_id, &display_bounds)) {
+			int x_pos = display_bounds.x + (DM->w - width) / 2;
+			int y_pos = display_bounds.y + (DM->h - height) / 2;
+			SDL_SetWindowPosition(sdlwnd, x_pos, y_pos);
+		}
+	}
 	if (!sdlwnd) {
 		fail("SDL_Init Error: %s", SDL_GetError());
 		SDL_Quit();
@@ -510,6 +540,11 @@ int sdl_clear(void)
 	// note("mem: %.2fM PNG, %.2fM Tex, Hit: %ld, Miss: %ld, Max:
 	// %d\n",mem_png/(1024.0*1024.0),mem_tex/(1024.0*1024.0),texc_hit,texc_miss,maxpanic);
 	maxpanic = 0;
+
+	// Reset blend mode to default at start of each frame to prevent mods from
+	// accidentally leaving non-default blend modes that affect subsequent rendering
+	sdl_reset_blend_mode();
+
 	return 1;
 }
 
@@ -604,6 +639,10 @@ void sdl_exit(void)
 	if (game_options & GO_SOUND) {
 		MIX_Quit();
 	}
+
+	// Clean up mod textures (gated behind DEVELOPER for address sanitizer)
+	sdl_cleanup_mod_textures();
+
 #ifdef DEVELOPER
 	sdl_dump_spritecache();
 #endif

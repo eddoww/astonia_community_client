@@ -57,8 +57,10 @@ BIN_DIR = ../bin
 TEST_SERIALIZED = $(BIN_DIR)/test_serialized
 TEST_CONCURRENT = $(BIN_DIR)/test_concurrent
 TEST_HASH_DIAG = $(BIN_DIR)/test_hash_distribution
+TEST_RENDER_PRIMS = $(BIN_DIR)/test_render_primitives
+TEST_SPRITE_CONFIG = $(BIN_DIR)/test_sprite_config
 
-all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG)
+all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG)
 test: run
 
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
@@ -72,6 +74,17 @@ $(TEST_CONCURRENT): test_texture_workers.c $(ALL_SRCS)
 $(TEST_HASH_DIAG): test_hash_distribution.c $(ALL_SRCS)
 	@mkdir -p $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+$(TEST_RENDER_PRIMS): test_render_primitives.c $(ALL_SRCS)
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# Sprite config test (no SDL dependencies, self-contained stubs)
+SPRITE_CONFIG_SRCS = ../src/game/sprite_config.c ../src/lib/cjson/cJSON.c
+
+$(TEST_SPRITE_CONFIG): test_sprite_config.c $(SPRITE_CONFIG_SRCS)
+	@mkdir -p $(BIN_DIR)
+	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
 
 # Run serialized tests (single-threaded cache tests)
 test_serialized: $(TEST_SERIALIZED)
@@ -97,14 +110,30 @@ test_hash_diag: $(TEST_HASH_DIAG)
 	@echo "==============================================="
 	cd .. && ./bin/test_hash_distribution
 
+# Run render primitives tests
+test_render_prims: $(TEST_RENDER_PRIMS)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running render primitives tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_render_primitives
+
+# Run sprite config tests
+test_sprite_config: $(TEST_SPRITE_CONFIG)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running sprite config tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_sprite_config
+
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag
+run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"
 	@echo "==============================================="
 
 clean:
-	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) *.o
+	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) *.o
 
-.PHONY: all clean run test_serialized test_concurrent
+.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config

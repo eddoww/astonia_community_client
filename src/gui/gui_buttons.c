@@ -17,7 +17,6 @@
 #include "sdl/sdl.h"
 #include "modder/modder.h"
 
-#define MAXHELP   24
 #define MAXQUEST2 10
 
 // Forward declarations for functions used by exec_cmd
@@ -245,6 +244,7 @@ static void set_cmd_cursor(int cmd)
 	case CMD_HELP_NEXT:
 	case CMD_HELP_PREV:
 	case CMD_HELP_CLOSE:
+	case CMD_HELP_INDEX:
 		cursor = SDL_CUR_c_use;
 		break;
 
@@ -328,15 +328,35 @@ static void detect_hover_target(void)
 		if (mousex >= dotx(DOT_HLP) && mousex <= dotx(DOT_HL2) && mousey >= doty(DOT_HLP) && mousey <= doty(DOT_HL2)) {
 			butsel = BUT_HELP_MISC;
 
-			if (display_help == 1 && mousex >= dotx(DOT_HLP) + 7 && mousex <= dotx(DOT_HLP) + 136 &&
-			    mousey >= 198 + doty(DOT_HLP) && mousey <= 198 + doty(DOT_HLP) + 12 * 10) {
-				helpsel = (mousey - (198 + doty(DOT_HLP))) / 10 + 2;
-				if (mousex > dotx(DOT_HLP) + 110) {
-					helpsel += 12;
-				}
+			if (display_help == 2) {
+				if (help_index_count > 0) {
+					int start_x = dotx(DOT_HLP) + 10;
+					int start_y = doty(DOT_HLP) + HELP_PAGE_MARGIN_TOP;
+					int content_bottom = doty(DOT_HL2) - HELP_PAGE_MARGIN_BOTTOM;
+					int rows;
+					int columns = 2;
+					int max_entries;
+					int visible;
+					int title_height = render_text_break_length(0, 0, HELP_TEXT_WIDTH, whitecolor, 0, "Help Index");
 
-				if (helpsel < 2 || helpsel > MAXHELP) {
-					helpsel = -1;
+					start_y += title_height + HELP_INDEX_TITLE_SPACING;
+					rows = (content_bottom - start_y) / HELP_INDEX_ROW_HEIGHT;
+					if (rows < 1) {
+						rows = 1;
+					}
+					max_entries = rows * columns;
+					visible = min(help_index_count, max_entries);
+
+					if (mousex >= start_x && mousex < start_x + HELP_INDEX_COL_WIDTH * columns && mousey >= start_y &&
+					    mousey < start_y + rows * HELP_INDEX_ROW_HEIGHT) {
+						int col = (mousex - start_x) / HELP_INDEX_COL_WIDTH;
+						int row = (mousey - start_y) / HELP_INDEX_ROW_HEIGHT;
+						int entry = row + col * rows;
+
+						if (entry >= 0 && entry < visible) {
+							helpsel = help_index_page_for_entry(entry);
+						}
+					}
 				}
 			}
 
@@ -354,13 +374,28 @@ static void detect_hover_target(void)
 				}
 			}
 		}
-		if (mousex >= dotx(DOT_HLP) + 177 && mousex <= dotx(DOT_HLP) + 196 && mousey >= doty(DOT_HL2) - 20 &&
-		    mousey <= doty(DOT_HL2) - 10) {
-			butsel = BUT_HELP_PREV;
-		}
-		if (mousex >= dotx(DOT_HLP) + 200 && mousex <= dotx(DOT_HLP) + 219 && mousey >= doty(DOT_HL2) - 20 &&
-		    mousey <= doty(DOT_HL2) - 10) {
-			butsel = BUT_HELP_NEXT;
+		if (display_help) {
+			if (mousex >= dotx(DOT_HLP) + 135 && mousex <= dotx(DOT_HLP) + 156 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_PREV;
+			}
+			if (mousex >= dotx(DOT_HLP) + 159 && mousex <= dotx(DOT_HLP) + 194 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_INDEX;
+			}
+			if (mousex >= dotx(DOT_HLP) + 197 && mousex <= dotx(DOT_HLP) + 218 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_NEXT;
+			}
+		} else {
+			if (mousex >= dotx(DOT_HLP) + 177 && mousex <= dotx(DOT_HLP) + 196 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_PREV;
+			}
+			if (mousex >= dotx(DOT_HLP) + 200 && mousex <= dotx(DOT_HLP) + 219 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_NEXT;
+			}
 		}
 		if (mousex >= dotx(DOT_HLP) + 211 && mousex <= dotx(DOT_HLP) + 224 && mousey >= doty(DOT_HLP) + 2 &&
 		    mousey <= doty(DOT_HLP) + 12) {
@@ -483,6 +518,8 @@ static void detect_hover_target(void)
 
 void exec_cmd(int cmd, int a)
 {
+	int offset = 100, clan_bound = 16;
+
 	action_ovr = -1;
 	context_key_reset();
 
@@ -591,7 +628,7 @@ void exec_cmd(int cmd, int a)
 		return;
 	case CMD_CON_LOOK:
 		cmd_look_con(consel);
-		last_right_click_invsel = INVENTORYSIZE + consel;
+		last_right_click_invsel = _inventorysize + consel;
 		return;
 
 	case CMD_MAP_CAST_L:
@@ -698,10 +735,18 @@ void exec_cmd(int cmd, int a)
 		return;
 
 	case CMD_TELEPORT:
+		if (sv_ver == 35) {
+			offset = 200;
+			clan_bound = 48;
+		}
+
 		if (telsel == 1042) {
-			clan_offset = 16 - clan_offset;
+			clan_offset += 16;
+			if (clan_offset > clan_bound) {
+				clan_offset = 0;
+			}
 		} else {
-			if (telsel >= 64 && telsel <= 100) {
+			if (telsel >= 64 && telsel <= offset) {
 				cmd_teleport(telsel + clan_offset);
 			} else {
 				cmd_teleport(telsel);
@@ -718,7 +763,7 @@ void exec_cmd(int cmd, int a)
 	case CMD_HELP_NEXT:
 		if (display_help) {
 			display_help++;
-			if (display_help > MAXHELP) {
+			if (display_help > help_page_count) {
 				display_help = 1;
 			}
 		}
@@ -729,11 +774,16 @@ void exec_cmd(int cmd, int a)
 			}
 		}
 		return;
+	case CMD_HELP_INDEX:
+		if (display_help) {
+			display_help = 2;
+		}
+		return;
 	case CMD_HELP_PREV:
 		if (display_help) {
 			display_help--;
 			if (display_help < 1) {
-				display_help = MAXHELP;
+				display_help = help_page_count;
 			}
 		}
 		if (display_quest) {
@@ -748,7 +798,7 @@ void exec_cmd(int cmd, int a)
 		display_quest = 0;
 		return;
 	case CMD_HELP_MISC:
-		if (helpsel > 0 && helpsel <= MAXHELP && display_help) {
+		if (helpsel > 0 && helpsel <= help_page_count && display_help) {
 			display_help = helpsel;
 		}
 		if (questsel != -1) {
@@ -928,7 +978,7 @@ static void update_fkeyitems(void)
 {
 	int i, c;
 	fkeyitem[0] = fkeyitem[1] = fkeyitem[2] = fkeyitem[3] = 0;
-	for (i = 30; i < INVENTORYSIZE; i++) {
+	for (i = 30; i < _inventorysize; i++) {
 		c = (i - 2) % 4;
 		if (fkeyitem[c] == 0 && (is_fkey_use_item(i))) {
 			fkeyitem[c] = i;
@@ -1083,6 +1133,9 @@ void handle_special_buttons_logic(void)
 		}
 		if (butsel == BUT_HELP_PREV) {
 			lcmd = CMD_HELP_PREV;
+		}
+		if (butsel == BUT_HELP_INDEX) {
+			lcmd = CMD_HELP_INDEX;
 		}
 		if (butsel == BUT_HELP_NEXT) {
 			lcmd = CMD_HELP_NEXT;

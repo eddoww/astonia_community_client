@@ -115,15 +115,18 @@ typedef struct {
  * Sprite metadata for is_cut_sprite, is_door_sprite, etc.
  *
  * Cut sprite patterns:
- *   - cut_result > 0, !cut_offset: specific cut sprite ID
- *   - cut_result > 0, cut_offset: cut sprite = id + cut_result
+ *   - has_cut=0: not a cut sprite, return original sprite
+ *   - has_cut=1, cut_result=0: cut to sprite 0 (invisible)
+ *   - has_cut=1, cut_result>0, cut_offset=0: cut to specific sprite ID
+ *   - has_cut=1, cut_result>0, cut_offset=1: cut to id + cut_result
  *   - cut_negative: return value is negated
  */
 typedef struct {
 	uint32_t id; /* Sprite ID (key) */
 
 	/* is_cut_sprite result */
-	int32_t cut_result; /* 0 = not cut, >0 = offset or sprite ID */
+	int32_t cut_result; /* Offset or specific sprite ID for cut */
+	uint8_t has_cut; /* If true, this sprite has cut data */
 	uint8_t cut_offset; /* If true, cut_result is offset from sprite ID */
 	uint8_t cut_negative; /* If true, negate the return value */
 
@@ -143,8 +146,6 @@ typedef struct {
 
 	/* no_lighting_sprite */
 	uint8_t no_lighting; /* Disable lighting for this sprite? */
-
-	uint8_t _padding; /* Alignment padding */
 } SpriteMetadata;
 
 typedef struct {

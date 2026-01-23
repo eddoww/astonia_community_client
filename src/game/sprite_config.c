@@ -1115,9 +1115,11 @@ static int parse_sprite_metadata(cJSON *item, SpriteMetadata *m)
 	if (cut_offset && cJSON_IsNumber(cut_offset)) {
 		m->cut_result = cut_offset->valueint;
 		m->cut_offset = 1;
+		m->has_cut = 1;
 	} else if (cut_sprite && cJSON_IsNumber(cut_sprite)) {
 		m->cut_result = cut_sprite->valueint;
 		m->cut_offset = 0;
+		m->has_cut = 1;
 	}
 
 	if (cut_negative && cJSON_IsBool(cut_negative)) {
@@ -1232,12 +1234,11 @@ const SpriteMetadata *sprite_config_lookup_metadata(unsigned int id)
 int sprite_config_is_cut_sprite(unsigned int sprite)
 {
 	const SpriteMetadata *m = sprite_config_lookup_metadata(sprite);
-	if (!m || m->cut_result == 0) {
+	if (!m || !m->has_cut) {
 		/*
 		 * Return the sprite ID itself when not a cut sprite.
 		 * game_lighting.c uses: tmp = abs(is_cut_sprite(sprite));
 		 *                       if (tmp != sprite) sprite = tmp;
-		 * Returning 0 would incorrectly hide the sprite.
 		 * Returning sprite means abs(sprite) == sprite, no change.
 		 */
 		return (int)sprite;
@@ -1248,7 +1249,7 @@ int sprite_config_is_cut_sprite(unsigned int sprite)
 		/* cut_result is offset from sprite ID */
 		result = (int)sprite + m->cut_result;
 	} else {
-		/* cut_result is the specific sprite ID */
+		/* cut_result is the specific sprite ID (can be 0 to hide sprite) */
 		result = m->cut_result;
 	}
 

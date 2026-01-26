@@ -1689,6 +1689,7 @@ void render_add_text(char *ptr)
 				textdisplayline = (textdisplayline + 1) % MAXTEXTLINES;
 			}
 			textnextline = (textnextline + 1) % MAXTEXTLINES;
+			textlines++; // Count wrapped continuation lines for scroll logic
 			pos = textnextline * MAXTEXTLETTERS;
 			bzero(text + pos, sizeof(struct letter) * MAXTEXTLETTERS);
 			x = tmp;

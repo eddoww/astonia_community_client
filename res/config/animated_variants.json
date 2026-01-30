@@ -52,7 +52,7 @@
       "base_sprite": 11127,
       "animation": {
         "type": "bidirectional",
-        "frames": 16,
+        "frames": 8,
         "divisor": 4
       }
     },
@@ -145,8 +145,7 @@
         "type": "position_cycle",
         "frames": 8,
         "divisor": 31
-      },
-      "c3": 16384
+      }
     },
     {
       "id": 14353,
@@ -156,8 +155,7 @@
         "type": "position_cycle",
         "frames": 8,
         "divisor": 31
-      },
-      "c3": 16384
+      }
     },
     {
       "id": 12164,
@@ -167,8 +165,7 @@
         "type": "position_cycle",
         "frames": 8,
         "divisor": 5
-      },
-      "c3": 16384
+      }
     },
     {
       "id": 12165,
@@ -178,8 +175,7 @@
         "type": "position_cycle",
         "frames": 8,
         "divisor": 5
-      },
-      "c3": 16384
+      }
     },
     {
       "id": 12166,
@@ -189,8 +185,7 @@
         "type": "position_cycle",
         "frames": 8,
         "divisor": 5
-      },
-      "c3": 16384
+      }
     },
     {
       "id": 14361,
@@ -200,8 +195,7 @@
         "type": "position_cycle",
         "frames": 8,
         "divisor": 5
-      },
-      "c3": 16384
+      }
     },
     {
       "id": 1024,
@@ -1537,9 +1531,11 @@
       "comment": "dungeon_walllight_se_on",
       "base_sprite": 20388,
       "animation": {
-        "type": "bidirectional",
-        "frames": 16,
-        "divisor": 10
+        "type": "random_offset",
+        "frames": 8,
+        "divisor": 10,
+        "random_range": 2,
+        "branches": [{"threshold": 15}]
       }
     },
     {
@@ -1547,9 +1543,11 @@
       "comment": "dungeon_walllight_sw_on",
       "base_sprite": 20397,
       "animation": {
-        "type": "bidirectional",
-        "frames": 16,
-        "divisor": 10
+        "type": "random_offset",
+        "frames": 8,
+        "divisor": 10,
+        "random_range": 2,
+        "branches": [{"threshold": 15}]
       }
     },
     {
@@ -1557,9 +1555,11 @@
       "comment": "dungeon_walllight_nw_on",
       "base_sprite": 20406,
       "animation": {
-        "type": "bidirectional",
-        "frames": 16,
-        "divisor": 10
+        "type": "random_offset",
+        "frames": 8,
+        "divisor": 10,
+        "random_range": 2,
+        "branches": [{"threshold": 15}]
       }
     },
     {
@@ -1567,9 +1567,11 @@
       "comment": "dungeon_walllight_ne_on",
       "base_sprite": 20415,
       "animation": {
-        "type": "bidirectional",
-        "frames": 16,
-        "divisor": 10
+        "type": "random_offset",
+        "frames": 8,
+        "divisor": 10,
+        "random_range": 2,
+        "branches": [{"threshold": 15}]
       }
     },
     {
@@ -1699,7 +1701,7 @@
       "animation": {
         "type": "position_cycle",
         "frames": 64,
-        "divisor": 1
+        "divisor": 2
       }
     },
     {
@@ -1708,7 +1710,7 @@
       "animation": {
         "type": "position_cycle",
         "frames": 64,
-        "divisor": 1
+        "divisor": 2
       }
     },
     {
@@ -1717,7 +1719,7 @@
       "animation": {
         "type": "position_cycle",
         "frames": 64,
-        "divisor": 1
+        "divisor": 2
       }
     },
     {
@@ -1933,7 +1935,7 @@
       "base_sprite": 50289,
       "animation": {
         "type": "bidirectional",
-        "frames": 16,
+        "frames": 8,
         "divisor": 2
       }
     },
@@ -1942,7 +1944,7 @@
       "base_sprite": 50297,
       "animation": {
         "type": "bidirectional",
-        "frames": 16,
+        "frames": 8,
         "divisor": 2
       }
     },
@@ -2007,7 +2009,8 @@
       "animation": {
         "type": "position_cycle",
         "frames": 8,
-        "divisor": 1
+        "divisor": 1,
+        "frame_step": 2
       }
     },
     {
@@ -2016,7 +2019,8 @@
       "animation": {
         "type": "position_cycle",
         "frames": 8,
-        "divisor": 1
+        "divisor": 1,
+        "frame_step": 2
       }
     },
     {
@@ -2030,7 +2034,7 @@
       "base_sprite": 51625,
       "animation": {
         "type": "bidirectional",
-        "frames": 10,
+        "frames": 5,
         "divisor": 2
       }
     },
@@ -2046,7 +2050,7 @@
       "base_sprite": 56002,
       "animation": {
         "type": "bidirectional",
-        "frames": 8,
+        "frames": 5,
         "divisor": 2
       }
     },

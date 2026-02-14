@@ -43,6 +43,18 @@ typedef struct {
 
 #define MAX_ANIM_BRANCHES 4
 
+/* Bitmask for which fields were explicitly set in JSON */
+#define CHARVAR_FIELD_SCALE (1 << 0)
+#define CHARVAR_FIELD_CR    (1 << 1)
+#define CHARVAR_FIELD_CG    (1 << 2)
+#define CHARVAR_FIELD_CB    (1 << 3)
+#define CHARVAR_FIELD_LIGHT (1 << 4)
+#define CHARVAR_FIELD_SAT   (1 << 5)
+#define CHARVAR_FIELD_C1    (1 << 6)
+#define CHARVAR_FIELD_C2    (1 << 7)
+#define CHARVAR_FIELD_C3    (1 << 8)
+#define CHARVAR_FIELD_SHINE (1 << 9)
+
 /* Character variant (trans_charno) - uses int for output params */
 typedef struct {
 	int32_t id; /* Variant sprite ID (key) */
@@ -53,6 +65,7 @@ typedef struct {
 	int16_t sat; /* Saturation adjustment */
 	int16_t c1, c2, c3; /* Color replacement values (RGB555) */
 	int16_t shine; /* Shine effect value */
+	uint16_t fields_set; /* Bitmask of explicitly set fields */
 
 	/* Dynamic effects (e.g., pulsing fire demon) */
 	uint8_t dynamic_type; /* DynamicType enum */

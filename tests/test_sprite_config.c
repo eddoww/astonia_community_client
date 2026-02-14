@@ -309,6 +309,50 @@ TEST(character_variant_apply)
 	}
 }
 
+TEST(character_variant_base_sprite_defaults)
+{
+	/* Base sprite entry: id=14 (Nomad) should have scale=85 */
+	const CharacterVariant *v = sprite_config_lookup_character(14);
+	ASSERT_TRUE(v != NULL, "Base sprite 14 (Nomad) should exist");
+	int scale, cr, cg, cb, light, sat, c1, c2, c3, shine;
+	int result = sprite_config_apply_character(v, 14, &scale, &cr, &cg, &cb, &light, &sat, &c1, &c2, &c3, &shine, 0);
+	ASSERT_EQ(14, result, "Self-referencing entry should return same sprite");
+	ASSERT_EQ(85, scale, "Nomad base should have scale=85");
+}
+
+TEST(character_variant_inherits_base_defaults)
+{
+	/* Variant 339 (Nomad variant, base_sprite=14) should inherit scale=85 from base */
+	const CharacterVariant *v = sprite_config_lookup_character(339);
+	ASSERT_TRUE(v != NULL, "Variant 339 (Nomad variant) should exist");
+	int scale, cr, cg, cb, light, sat, c1, c2, c3, shine;
+	int result = sprite_config_apply_character(v, 339, &scale, &cr, &cg, &cb, &light, &sat, &c1, &c2, &c3, &shine, 0);
+	ASSERT_EQ(14, result, "Variant 339 should return base sprite 14");
+	ASSERT_EQ(85, scale, "Variant 339 should inherit scale=85 from base sprite 14");
+}
+
+TEST(character_variant_override_beats_base)
+{
+	/* Variant 154 (Earth Demon, base_sprite=29) has scale=95, overriding base's scale=75 */
+	const CharacterVariant *v = sprite_config_lookup_character(154);
+	ASSERT_TRUE(v != NULL, "Variant 154 (Earth Demon) should exist");
+	int scale, cr, cg, cb, light, sat, c1, c2, c3, shine;
+	int result = sprite_config_apply_character(v, 154, &scale, &cr, &cg, &cb, &light, &sat, &c1, &c2, &c3, &shine, 0);
+	ASSERT_EQ(29, result, "Variant 154 should return base sprite 29");
+	ASSERT_EQ(95, scale, "Variant 154 should use its own scale=95, not base's 75");
+}
+
+TEST(character_variant_inherits_shine)
+{
+	/* Variant 570 (bridge guard 2, base_sprite=81) should inherit shine=5 from base */
+	const CharacterVariant *v = sprite_config_lookup_character(570);
+	ASSERT_TRUE(v != NULL, "Variant 570 (bridge guard 2) should exist");
+	int scale, cr, cg, cb, light, sat, c1, c2, c3, shine;
+	int result = sprite_config_apply_character(v, 570, &scale, &cr, &cg, &cb, &light, &sat, &c1, &c2, &c3, &shine, 0);
+	ASSERT_EQ(81, result, "Variant 570 should return base sprite 81");
+	ASSERT_EQ(5, shine, "Variant 570 should inherit shine=5 from base sprite 81");
+}
+
 /* ========== Animated variant tests ========== */
 
 TEST(animated_variant_lookup_exists)
@@ -558,6 +602,10 @@ int main(int argc, char *argv[])
 	RUN_TEST(character_variant_lookup_not_exists);
 	RUN_TEST(character_variant_dark_skeleton);
 	RUN_TEST(character_variant_apply);
+	RUN_TEST(character_variant_base_sprite_defaults);
+	RUN_TEST(character_variant_inherits_base_defaults);
+	RUN_TEST(character_variant_override_beats_base);
+	RUN_TEST(character_variant_inherits_shine);
 	printf("\n");
 
 	printf("[animated_variants]\n");

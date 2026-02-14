@@ -77,17 +77,19 @@ jobs:
 
       - name: Build SDL3_mixer from source
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
+        env:
+          SDL3_MIXER_VERSION: prerelease-3.1.2
         run: |
           cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL_mixer.git
-          cmake -S SDL_mixer -B SDL_mixer-build -G Ninja \
+          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
+          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
             -DCMAKE_PREFIX_PATH=/tmp/sdl3-install \
             -DSDL3MIXER_VENDORED=ON
           cmake --build SDL_mixer-build
           cmake --install SDL_mixer-build
-          rm -rf SDL_mixer SDL_mixer-build
+          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
 
   build-sdl3-windows:
     name: Build SDL3 for Windows
@@ -140,17 +142,19 @@ jobs:
 
       - name: Build SDL3_mixer from source
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
+        env:
+          SDL3_MIXER_VERSION: prerelease-3.1.2
         run: |
           cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL_mixer.git
-          cmake -S SDL_mixer -B SDL_mixer-build -G Ninja \
+          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
+          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/sdl3-tmp \
             -DCMAKE_PREFIX_PATH=/sdl3-tmp \
             -DSDL3MIXER_VENDORED=ON
           cmake --build SDL_mixer-build
           cmake --install SDL_mixer-build
-          rm -rf SDL_mixer SDL_mixer-build
+          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
 
   build-sdl3-macos:
     name: Build SDL3 for macOS
@@ -198,10 +202,12 @@ jobs:
 
       - name: Build SDL3_mixer from source
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
+        env:
+          SDL3_MIXER_VERSION: prerelease-3.1.2
         run: |
           cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL_mixer.git
-          cmake -S SDL_mixer -B SDL_mixer-build -G Ninja \
+          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
+          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/opt/homebrew \
             -DCMAKE_INSTALL_NAME_DIR=/opt/homebrew/lib \
@@ -209,7 +215,7 @@ jobs:
             -DSDL3MIXER_VENDORED=ON
           cmake --build SDL_mixer-build
           sudo cmake --install SDL_mixer-build
-          rm -rf SDL_mixer SDL_mixer-build
+          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
 
   build-linux:
     needs: build-sdl3-linux

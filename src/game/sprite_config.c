@@ -225,26 +225,31 @@ static int parse_character_variant(cJSON *item, CharacterVariant *v)
 	cJSON *scale = cJSON_GetObjectItem(item, "scale");
 	if (scale && cJSON_IsNumber(scale)) {
 		v->scale = (int16_t)scale->valueint;
+		v->fields_set |= CHARVAR_FIELD_SCALE;
 	}
 
 	cJSON *cr = cJSON_GetObjectItem(item, "cr");
 	if (cr && cJSON_IsNumber(cr)) {
 		v->cr = (int16_t)cr->valueint;
+		v->fields_set |= CHARVAR_FIELD_CR;
 	}
 
 	cJSON *cg = cJSON_GetObjectItem(item, "cg");
 	if (cg && cJSON_IsNumber(cg)) {
 		v->cg = (int16_t)cg->valueint;
+		v->fields_set |= CHARVAR_FIELD_CG;
 	}
 
 	cJSON *cb = cJSON_GetObjectItem(item, "cb");
 	if (cb && cJSON_IsNumber(cb)) {
 		v->cb = (int16_t)cb->valueint;
+		v->fields_set |= CHARVAR_FIELD_CB;
 	}
 
 	cJSON *light = cJSON_GetObjectItem(item, "light");
 	if (light && cJSON_IsNumber(light)) {
 		v->light = (int16_t)light->valueint;
+		v->fields_set |= CHARVAR_FIELD_LIGHT;
 	}
 
 	cJSON *sat = cJSON_GetObjectItem(item, "saturation");
@@ -253,27 +258,32 @@ static int parse_character_variant(cJSON *item, CharacterVariant *v)
 	}
 	if (sat && cJSON_IsNumber(sat)) {
 		v->sat = (int16_t)sat->valueint;
+		v->fields_set |= CHARVAR_FIELD_SAT;
 	}
 
 	cJSON *shine = cJSON_GetObjectItem(item, "shine");
 	if (shine && cJSON_IsNumber(shine)) {
 		v->shine = (int16_t)shine->valueint;
+		v->fields_set |= CHARVAR_FIELD_SHINE;
 	}
 
 	/* Color replacements - can be object {r,g,b} or direct integer */
 	cJSON *c1 = cJSON_GetObjectItem(item, "c1");
 	if (c1) {
 		v->c1 = cJSON_IsNumber(c1) ? (int16_t)c1->valueint : (int16_t)parse_color_rgb555(c1);
+		v->fields_set |= CHARVAR_FIELD_C1;
 	}
 
 	cJSON *c2 = cJSON_GetObjectItem(item, "c2");
 	if (c2) {
 		v->c2 = cJSON_IsNumber(c2) ? (int16_t)c2->valueint : (int16_t)parse_color_rgb555(c2);
+		v->fields_set |= CHARVAR_FIELD_C2;
 	}
 
 	cJSON *c3 = cJSON_GetObjectItem(item, "c3");
 	if (c3) {
 		v->c3 = cJSON_IsNumber(c3) ? (int16_t)c3->valueint : (int16_t)parse_color_rgb555(c3);
+		v->fields_set |= CHARVAR_FIELD_C3;
 	}
 
 	/* Dynamic/animation effects */
@@ -787,17 +797,72 @@ int sprite_config_apply_character(const CharacterVariant *v, int csprite, int *p
 		return csprite; /* No variant, return unchanged */
 	}
 
-	/* Apply static values */
-	*pscale = v->scale;
-	*pcr = v->cr;
-	*pcg = v->cg;
-	*pcb = v->cb;
-	*plight = v->light;
-	*psat = v->sat;
-	*pc1 = v->c1;
-	*pc2 = v->c2;
-	*pc3 = v->c3;
-	*pshine = v->shine;
+	/* If this variant references a different base sprite, inherit the base's
+	 * defaults first. This allows base sprite entries (e.g., id=14 with
+	 * scale=85) to provide defaults that variants inherit unless they
+	 * explicitly override them. */
+	if (v->base_sprite != v->id) {
+		const CharacterVariant *base = sprite_config_lookup_character(v->base_sprite);
+		if (base) {
+			*pscale = base->scale;
+			*pcr = base->cr;
+			*pcg = base->cg;
+			*pcb = base->cb;
+			*plight = base->light;
+			*psat = base->sat;
+			*pc1 = base->c1;
+			*pc2 = base->c2;
+			*pc3 = base->c3;
+			*pshine = base->shine;
+		}
+	}
+
+	/* Apply variant values, overriding base defaults only for explicitly set fields */
+	if (v->base_sprite != v->id && v->fields_set) {
+		/* Variant with a base: only override fields that were explicitly set */
+		if (v->fields_set & CHARVAR_FIELD_SCALE) {
+			*pscale = v->scale;
+		}
+		if (v->fields_set & CHARVAR_FIELD_CR) {
+			*pcr = v->cr;
+		}
+		if (v->fields_set & CHARVAR_FIELD_CG) {
+			*pcg = v->cg;
+		}
+		if (v->fields_set & CHARVAR_FIELD_CB) {
+			*pcb = v->cb;
+		}
+		if (v->fields_set & CHARVAR_FIELD_LIGHT) {
+			*plight = v->light;
+		}
+		if (v->fields_set & CHARVAR_FIELD_SAT) {
+			*psat = v->sat;
+		}
+		if (v->fields_set & CHARVAR_FIELD_C1) {
+			*pc1 = v->c1;
+		}
+		if (v->fields_set & CHARVAR_FIELD_C2) {
+			*pc2 = v->c2;
+		}
+		if (v->fields_set & CHARVAR_FIELD_C3) {
+			*pc3 = v->c3;
+		}
+		if (v->fields_set & CHARVAR_FIELD_SHINE) {
+			*pshine = v->shine;
+		}
+	} else {
+		/* Self-referencing base entry or no fields_set: apply all values directly */
+		*pscale = v->scale;
+		*pcr = v->cr;
+		*pcg = v->cg;
+		*pcb = v->cb;
+		*plight = v->light;
+		*psat = v->sat;
+		*pc1 = v->c1;
+		*pc2 = v->c2;
+		*pc3 = v->c3;
+		*pshine = v->shine;
+	}
 
 	/* Apply dynamic effects */
 	if (v->dynamic_type != DYNAMIC_NONE && v->pulse_period > 0) {

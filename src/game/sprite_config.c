@@ -32,6 +32,10 @@ static CharacterVariantTable char_table = {NULL, 0, 0};
 static AnimatedVariantTable anim_table = {NULL, 0, 0};
 static SpriteMetadataTable meta_table = {NULL, 0, 0};
 
+/* Character height overrides (separate namespace from sprite IDs) */
+static ChrHeightEntry chr_heights[MAX_CHR_HEIGHTS];
+static size_t chr_height_count = 0;
+
 /*
  * Initialize hash tables with empty slots.
  */
@@ -576,7 +580,12 @@ void sprite_config_shutdown(void)
 		meta_table.entries = NULL;
 		meta_table.capacity = 0;
 		meta_table.count = 0;
+		memset(meta_table.ranges, 0, sizeof(meta_table.ranges));
+		meta_table.range_count = 0;
 	}
+
+	memset(chr_heights, 0, sizeof(chr_heights));
+	chr_height_count = 0;
 }
 
 DLL_EXPORT int sprite_config_load_characters(const char *path)
@@ -1069,12 +1078,26 @@ static int init_metadata_table(void)
 		memset(meta_table.entries, 0, META_TABLE_SIZE * sizeof(SpriteMetadata));
 		meta_table.capacity = META_TABLE_SIZE;
 		meta_table.count = 0;
+		memset(meta_table.ranges, 0, sizeof(meta_table.ranges));
+		meta_table.range_count = 0;
 	}
 	return 0;
 }
 
 static int insert_metadata(const SpriteMetadata *m)
 {
+	/* Range entries go into the separate range array */
+	if (m->id_end > 0) {
+		if (meta_table.range_count >= MAX_META_RANGES) {
+			warn("sprite_config: Metadata range table is full (%d max)", MAX_META_RANGES);
+			return -1;
+		}
+		memcpy(&meta_table.ranges[meta_table.range_count], m, sizeof(SpriteMetadata));
+		meta_table.range_count++;
+		return 0;
+	}
+
+	/* Individual entries go into the hash table */
 	if (meta_table.count >= meta_table.capacity * 3 / 4) {
 		warn("sprite_config: Metadata table is full (>75%% load)");
 		return -1;
@@ -1106,6 +1129,22 @@ static int parse_sprite_metadata(cJSON *item, SpriteMetadata *m)
 		return -1;
 	}
 	m->id = (uint32_t)id->valueint;
+
+	/* Range end (optional) */
+	cJSON *id_end = cJSON_GetObjectItem(item, "id_end");
+	if (id_end && cJSON_IsNumber(id_end)) {
+		m->id_end = (uint32_t)id_end->valueint;
+		if (m->id_end < m->id) {
+			warn("sprite_config: Metadata entry %u has id_end %u < id", m->id, m->id_end);
+			m->id_end = 0;
+		}
+	}
+
+	/* Stride (optional, only meaningful for ranges) */
+	cJSON *stride = cJSON_GetObjectItem(item, "stride");
+	if (stride && cJSON_IsNumber(stride)) {
+		m->stride = (uint16_t)stride->valueint;
+	}
 
 	/* Cut sprite */
 	cJSON *cut_offset = cJSON_GetObjectItem(item, "cut_offset");
@@ -1165,6 +1204,22 @@ static int parse_sprite_metadata(cJSON *item, SpriteMetadata *m)
 		m->no_lighting = cJSON_IsTrue(no_lighting) ? 1 : 0;
 	}
 
+	/* Image processing properties */
+	cJSON *smoothify = cJSON_GetObjectItem(item, "smoothify");
+	if (smoothify && cJSON_IsBool(smoothify)) {
+		m->smoothify = cJSON_IsTrue(smoothify) ? 1 : 0;
+	}
+
+	cJSON *no_smoothify = cJSON_GetObjectItem(item, "no_smoothify");
+	if (no_smoothify && cJSON_IsBool(no_smoothify)) {
+		m->no_smoothify = cJSON_IsTrue(no_smoothify) ? 1 : 0;
+	}
+
+	cJSON *drop_alpha = cJSON_GetObjectItem(item, "drop_alpha");
+	if (drop_alpha && cJSON_IsBool(drop_alpha)) {
+		m->drop_alpha = cJSON_IsTrue(drop_alpha) ? 1 : 0;
+	}
+
 	return 0;
 }
 
@@ -1207,6 +1262,24 @@ DLL_EXPORT int sprite_config_load_metadata(const char *path)
 		}
 	}
 
+	/* Parse character height overrides (separate namespace) */
+	cJSON *heights = cJSON_GetObjectItem(root, "chr_heights");
+	if (heights && cJSON_IsArray(heights)) {
+		cJSON *h;
+		cJSON_ArrayForEach(h, heights)
+		{
+			cJSON *cs = cJSON_GetObjectItem(h, "csprite");
+			cJSON *ht = cJSON_GetObjectItem(h, "height");
+			if (cs && cJSON_IsNumber(cs) && ht && cJSON_IsNumber(ht)) {
+				if (chr_height_count < MAX_CHR_HEIGHTS) {
+					chr_heights[chr_height_count].csprite = (uint16_t)cs->valueint;
+					chr_heights[chr_height_count].height = (int16_t)ht->valueint;
+					chr_height_count++;
+				}
+			}
+		}
+	}
+
 	cJSON_Delete(root);
 	return count;
 }
@@ -1217,14 +1290,28 @@ const SpriteMetadata *sprite_config_lookup_metadata(unsigned int id)
 		return NULL;
 	}
 
+	/* Check individual entries first (O(1) hash lookup) */
 	unsigned int idx = META_HASH(id);
 	for (unsigned int i = 0; i < meta_table.capacity; i++) {
 		unsigned int probe = (idx + i) & (META_TABLE_SIZE - 1);
 		if (meta_table.entries[probe].id == EMPTY_SLOT) {
-			return NULL;
+			break; /* Not found in hash table */
 		}
 		if (meta_table.entries[probe].id == id) {
 			return &meta_table.entries[probe];
+		}
+	}
+
+	/* Check range entries (O(n) scan, small n) */
+	for (size_t i = 0; i < meta_table.range_count; i++) {
+		if (id >= meta_table.ranges[i].id && id <= meta_table.ranges[i].id_end) {
+			/* If stride is set, only match IDs at the correct step */
+			if (meta_table.ranges[i].stride > 0) {
+				if ((id - meta_table.ranges[i].id) % meta_table.ranges[i].stride != 0) {
+					continue;
+				}
+			}
+			return &meta_table.ranges[i];
 		}
 	}
 
@@ -1306,4 +1393,85 @@ int sprite_config_no_lighting_sprite(unsigned int sprite)
 {
 	const SpriteMetadata *m = sprite_config_lookup_metadata(sprite);
 	return m ? m->no_lighting : 0;
+}
+
+int sprite_config_do_smoothify(unsigned int sprite)
+{
+	if (!meta_table.entries || sprite == 0) {
+		return -1;
+	}
+
+	int found_smoothify = 0;
+	int found_no_smoothify = 0;
+	int found_drop_alpha = 0;
+
+	/* Check individual hash entry first */
+	unsigned int idx = META_HASH(sprite);
+	for (unsigned int i = 0; i < meta_table.capacity; i++) {
+		unsigned int probe = (idx + i) & (META_TABLE_SIZE - 1);
+		if (meta_table.entries[probe].id == EMPTY_SLOT) {
+			break;
+		}
+		if (meta_table.entries[probe].id == sprite) {
+			const SpriteMetadata *m = &meta_table.entries[probe];
+			if (m->no_smoothify) {
+				found_no_smoothify = 1;
+			}
+			if (m->smoothify) {
+				found_smoothify = 1;
+			}
+			if (m->drop_alpha) {
+				found_drop_alpha = 1;
+			}
+			break;
+		}
+	}
+
+	/* Check ALL matching range entries (not just the first) */
+	for (size_t i = 0; i < meta_table.range_count; i++) {
+		if (sprite >= meta_table.ranges[i].id && sprite <= meta_table.ranges[i].id_end) {
+			/* If stride is set, only match IDs at the correct step */
+			if (meta_table.ranges[i].stride > 0) {
+				if ((sprite - meta_table.ranges[i].id) % meta_table.ranges[i].stride != 0) {
+					continue;
+				}
+			}
+			const SpriteMetadata *m = &meta_table.ranges[i];
+			if (m->no_smoothify) {
+				found_no_smoothify = 1;
+			}
+			if (m->smoothify) {
+				found_smoothify = 1;
+			}
+			if (m->drop_alpha) {
+				found_drop_alpha = 1;
+			}
+		}
+	}
+
+	/* no_smoothify and drop_alpha always win */
+	if (found_no_smoothify || found_drop_alpha) {
+		return 0;
+	}
+	if (found_smoothify) {
+		return 1;
+	}
+
+	return -1; /* No config found */
+}
+
+int sprite_config_drop_alpha(unsigned int sprite)
+{
+	const SpriteMetadata *m = sprite_config_lookup_metadata(sprite);
+	return m ? m->drop_alpha : 0;
+}
+
+int sprite_config_chr_height(unsigned int csprite)
+{
+	for (size_t i = 0; i < chr_height_count; i++) {
+		if (chr_heights[i].csprite == csprite) {
+			return chr_heights[i].height;
+		}
+	}
+	return 0; /* No override found, caller uses default */
 }

@@ -19,6 +19,7 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "game/sprite_config.h"
 
 // Module-local variables
 static int sdlm_sprite = 0;
@@ -605,40 +606,16 @@ int sdl_load_image_png(struct sdl_image *si, char *filename, zip_t *zip, int smo
 
 int do_smoothify(int sprite)
 {
-	// TODO: add more to this list
-	if (sprite >= 50 && sprite <= 56) {
+	if (sprite <= 0) {
 		return 0;
 	}
-	if (sprite > 0 && sprite <= 1000) {
-		return 1; // GUI
-	}
-	if (sprite >= 10000 && sprite < 11000) {
-		return 1; // items
-	}
-	if (sprite >= 11000 && sprite < 12000) {
-		return 1; // coffin, berries, farn, ...
-	}
-	if (sprite >= 13000 && sprite < 14000) {
-		return 1; // bones and towers, ...
-	}
-	if (sprite >= 16000 && sprite < 17000) {
-		return 1; // cameron doors, carts, ...
-	}
-	if (sprite >= 20025 && sprite < 20034) {
-		return 1; // torches
-	}
-	if (sprite >= 20042 && sprite < 20082) {
-		return 1; // torches
-	}
-	if (sprite >= 20086 && sprite < 20119) {
-		return 1; // chests, chairs
+
+	int result = sprite_config_do_smoothify((unsigned int)sprite);
+	if (result >= 0) {
+		return result;
 	}
 
-	if (sprite >= 100000) {
-		return 1; // all character sprites
-	}
-
-	return 0;
+	return 0; /* Default: no smoothing */
 }
 
 int sdl_load_image(struct sdl_image *si, int sprite, struct zip_handles *zips)
@@ -804,7 +781,7 @@ retry:
 void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 {
 	SDL_Texture *texture;
-	int x, y, scale, sink;
+	int x, y, scale, sink, dropalpha;
 	double ix, iy, low_x, low_y, high_x, high_y, dbr, dbg, dbb, dba;
 	uint32_t irgb;
 #ifdef DEVELOPER
@@ -817,11 +794,8 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 		scale = st->scale;
 	}
 
-	// hack to adjust the size of mages to old client levels
-	// this was originally done during loading from PAKs.
-	if (st->sprite >= 160000 && st->sprite < 170000) {
-		scale = (uint8_t)(scale * 0.88);
-	}
+	// Check JSON config for drop_alpha
+	dropalpha = sprite_config_drop_alpha((unsigned int)st->sprite);
 
 	if (scale != 100) {
 		st->xres = (uint16_t)ceil((si->xres - 1) * (double)scale / 100.0);
@@ -968,6 +942,12 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 				}
 				if (st->shine) {
 					irgb = sdl_shine_pix(irgb, st->shine);
+				}
+
+				if (dropalpha) {
+					if (IGET_A(irgb) < 255) {
+						irgb = 0;
+					}
 				}
 
 				if (st->ll != st->ml || st->rl != st->ml || st->ul != st->ml || st->dl != st->ml) {

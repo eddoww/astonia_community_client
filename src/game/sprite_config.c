@@ -30,7 +30,7 @@
 /* Global hash tables */
 static CharacterVariantTable char_table = {NULL, 0, 0};
 static AnimatedVariantTable anim_table = {NULL, 0, 0};
-static SpriteMetadataTable meta_table = {NULL, 0, 0};
+static SpriteMetadataTable meta_table = {0};
 
 /* Character height overrides (separate namespace from sprite IDs) */
 static ChrHeightEntry chr_heights[MAX_CHR_HEIGHTS];

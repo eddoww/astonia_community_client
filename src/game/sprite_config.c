@@ -830,7 +830,9 @@ int sprite_config_apply_character(const CharacterVariant *v, int csprite, int *p
 	if (v->base_sprite != v->id && v->fields_set) {
 		/* Variant with a base: only override fields that were explicitly set */
 		if (v->fields_set & CHARVAR_FIELD_SCALE) {
-			*pscale = v->scale;
+			/* Scale is multiplicative with base: variant scale=140 on base scale=75
+			 * gives effective scale 75*140/100=105, matching old PAK behavior */
+			*pscale = *pscale * v->scale / 100;
 		}
 		if (v->fields_set & CHARVAR_FIELD_CR) {
 			*pcr = v->cr;

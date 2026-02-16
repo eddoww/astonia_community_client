@@ -331,15 +331,17 @@ TEST(character_variant_inherits_base_defaults)
 	ASSERT_EQ(85, scale, "Variant 339 should inherit scale=85 from base sprite 14");
 }
 
-TEST(character_variant_override_beats_base)
+TEST(character_variant_scale_is_multiplicative)
 {
-	/* Variant 154 (Earth Demon, base_sprite=29) has scale=95, overriding base's scale=75 */
+	/* Variant 154 (Earth Demon, base_sprite=29) has scale=75.
+	 * Base 29 also has scale=75. Scale is multiplicative with the base:
+	 * effective = 75 * 75 / 100 = 56 (matching old PAK behavior). */
 	const CharacterVariant *v = sprite_config_lookup_character(154);
 	ASSERT_TRUE(v != NULL, "Variant 154 (Earth Demon) should exist");
 	int scale, cr, cg, cb, light, sat, c1, c2, c3, shine;
 	int result = sprite_config_apply_character(v, 154, &scale, &cr, &cg, &cb, &light, &sat, &c1, &c2, &c3, &shine, 0);
 	ASSERT_EQ(29, result, "Variant 154 should return base sprite 29");
-	ASSERT_EQ(95, scale, "Variant 154 should use its own scale=95, not base's 75");
+	ASSERT_EQ(56, scale, "Variant 154: base scale 75 * variant scale 75 / 100 = 56");
 }
 
 TEST(character_variant_inherits_shine)
@@ -604,7 +606,7 @@ int main(int argc, char *argv[])
 	RUN_TEST(character_variant_apply);
 	RUN_TEST(character_variant_base_sprite_defaults);
 	RUN_TEST(character_variant_inherits_base_defaults);
-	RUN_TEST(character_variant_override_beats_base);
+	RUN_TEST(character_variant_scale_is_multiplicative);
 	RUN_TEST(character_variant_inherits_shine);
 	printf("\n");
 

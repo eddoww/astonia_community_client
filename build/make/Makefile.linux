@@ -308,14 +308,15 @@ build-sdl3:
 # Build SDL3_mixer from source (always builds, no detection)
 # Note: SDL3 must be installed first
 # Installs to /usr/local (standard for Linux source builds)
+SDL3_MIXER_VERSION ?= prerelease-3.1.2
 build-sdl3-mixer: verify-sdl3
-	@echo "Building SDL3_mixer from source..."
+	@echo "Building SDL3_mixer $(SDL3_MIXER_VERSION) from source..."
 	@TMP_DIR=$${TMPDIR:-$${TMP:-/tmp}}; \
 	BUILD_DIR=$$([ -d "$$TMP_DIR" ] && echo "$$TMP_DIR" || echo "/tmp"); \
 	cd "$$BUILD_DIR" && \
-		rm -rf SDL_mixer SDL_mixer-build && \
-		git clone --depth 1 --branch main https://github.com/libsdl-org/SDL_mixer.git SDL_mixer && \
-		cmake -S SDL_mixer -B SDL_mixer-build \
+		rm -rf SDL_mixer-$(SDL3_MIXER_VERSION) SDL_mixer-build && \
+		curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/$(SDL3_MIXER_VERSION).tar.gz | tar xz && \
+		cmake -S SDL_mixer-$(SDL3_MIXER_VERSION) -B SDL_mixer-build \
 			-DCMAKE_BUILD_TYPE=Release \
 			-DCMAKE_INSTALL_PREFIX=/usr/local \
 			-DCMAKE_PREFIX_PATH=/usr/local \
@@ -324,5 +325,5 @@ build-sdl3-mixer: verify-sdl3
 		sudo cmake --install SDL_mixer-build && \
 		sudo ldconfig && \
 		cd "$$BUILD_DIR" && \
-		rm -rf SDL_mixer SDL_mixer-build && \
-		echo "SDL3_mixer installed to /usr/local"
+		rm -rf SDL_mixer-$(SDL3_MIXER_VERSION) SDL_mixer-build && \
+		echo "SDL3_mixer $(SDL3_MIXER_VERSION) installed to /usr/local"

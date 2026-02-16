@@ -17,7 +17,8 @@ RUN pacman-key --init && \
     pacman -Syyu --noconfirm --needed --ask=4 --overwrite="*"
 
 # Install basic dependencies and development tools
-# Note: libvorbis and libogg are required BEFORE sdl3_mixer-git so it builds with OGG support
+# Note: sdl3 and mimalloc are now available in the official Arch repos
+# Note: libvorbis and libogg are required so SDL3_mixer builds with OGG support
 RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
     curl \
     wget \
@@ -32,33 +33,26 @@ RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
     ninja \
     libvorbis \
     libogg \
+    sdl3 \
+    mimalloc \
     && pacman -Scc --noconfirm
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install paru AUR helper
-# Create a non-root user for building paru (AUR helpers shouldn't run as root)
-RUN useradd -m -G wheel -s /bin/bash builder && \
-    sed -i 's/^# %wheel ALL=(ALL:ALL) NOPASSWD: ALL/%wheel ALL=(ALL:ALL) NOPASSWD: ALL/' /etc/sudoers
-
-USER builder
-WORKDIR /home/builder
-RUN git clone https://aur.archlinux.org/paru.git && \
-    cd paru && \
-    makepkg -si --noconfirm && \
-    cd .. && \
-    rm -rf paru
-
-# Sync AUR databases with paru
-RUN paru -Syu --noconfirm
-
-# Note: SDL3_mixer must be installed separately after sdl3-git to avoid conflicts
-USER root
-WORKDIR /
-RUN sudo -u builder paru -S --noconfirm --needed mimalloc-git sdl3-git && \
-    sudo -u builder paru -S --noconfirm --needed sdl3_mixer-git
+# Build SDL3_mixer from source (not yet available in official repos)
+# Using tagged release instead of AUR to avoid sdl3-git conflicts
+ARG SDL3_MIXER_VERSION=prerelease-3.1.2
+RUN cd /tmp && \
+    curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz && \
+    cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DSDL3MIXER_VENDORED=ON && \
+    cmake --build SDL_mixer-build && \
+    cmake --install SDL_mixer-build && \
+    rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
 
 # Set default toolchain (needed even though we specified it above, to ensure it's configured)
 RUN rustup default stable
@@ -70,8 +64,26 @@ RUN rustup default stable
 ENV ZIG_GLOBAL_CACHE_DIR="/root/.cache/zig"
 ENV ZIG_LOCAL_CACHE_DIR="/tmp/zig-local-cache"
 
-# Create wrapper script that builds and fixes ownership
-RUN printf '#!/bin/bash\nset -e\ncp build/build.zig .\nzig build "$@" --prefix .\nrm -f build.zig\nif [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then\n    chown -R "$HOST_UID:$HOST_GID" /app/bin /app/.cache 2>/dev/null || true\nfi\n' > /usr/local/bin/build.sh && \
+# Create wrapper script that builds, copies shared libs, and fixes ownership
+RUN printf '#!/bin/bash\n\
+set -e\n\
+cp build/build.zig .\n\
+zig build "$@" --prefix .\n\
+rm -f build.zig\n\
+\n\
+# Copy required shared libraries into bin/ for portable deployment\n\
+# The binary already has $ORIGIN rpath set, so it will find .so files next to itself\n\
+for lib in libSDL3.so libSDL3_mixer.so libmimalloc.so; do\n\
+    for dir in /usr/lib /usr/local/lib; do\n\
+        if [ -f "$dir/$lib" ]; then\n\
+            cp -L "$dir/$lib"* /app/bin/ 2>/dev/null || true\n\
+        fi\n\
+    done\n\
+done\n\
+\n\
+if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then\n\
+    chown -R "$HOST_UID:$HOST_GID" /app/bin /app/.cache 2>/dev/null || true\n\
+fi\n' > /usr/local/bin/build.sh && \
     chmod +x /usr/local/bin/build.sh
 
 # Set working directory

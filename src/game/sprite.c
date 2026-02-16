@@ -28,36 +28,8 @@ int (*get_chr_height)(unsigned int csprite) = _get_chr_height;
 
 DLL_EXPORT int _get_chr_height(unsigned int csprite)
 {
-	switch (csprite) {
-	case 20:
-		return -35;
-	case 21:
-		return -20;
-
-	case 247:
-		return -54;
-	case 248:
-		return -58;
-	case 249:
-		return -62;
-	case 250:
-		return -66;
-
-	case 255:
-		return -54;
-	case 256:
-		return -58;
-	case 257:
-		return -62;
-	case 258:
-		return -66;
-
-	case 304:
-		return -70;
-
-	default:
-		return -50;
-	}
+	int height = sprite_config_chr_height(csprite);
+	return height ? height : -50; /* Default: -50 */
 }
 
 // charno to scale / colors

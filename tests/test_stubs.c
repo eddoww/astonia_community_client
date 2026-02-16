@@ -1,6 +1,6 @@
 /*
  * Test Stubs - Minimal implementations of game functions for unit testing
- * 
+ *
  * These stubs allow SDL code to link without the full game engine.
  */
 
@@ -142,4 +142,18 @@ bool SDL_SetTextureBlendMode(
 bool SDL_SetTextureAlphaMod(SDL_Texture *texture __attribute__((unused)), uint8_t alpha __attribute__((unused)))
 {
 	return true;
+}
+
+// ============================================================================
+// Sprite config stubs (sdl_image.c now depends on these)
+// ============================================================================
+
+int sprite_config_do_smoothify(unsigned int sprite __attribute__((unused)))
+{
+	return -1; /* No config: let caller use default */
+}
+
+int sprite_config_drop_alpha(unsigned int sprite __attribute__((unused)))
+{
+	return 0; /* No drop_alpha */
 }

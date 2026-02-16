@@ -1190,7 +1190,7 @@ static int parse_sprite_metadata(cJSON *item, SpriteMetadata *m)
 
 	cJSON *id = cJSON_GetObjectItem(item, "id");
 	if (!id || !cJSON_IsNumber(id)) {
-		warn("sprite_config: Metadata entry missing 'id'");
+		/* Silently skip comment-only entries (no fields besides "comment") */
 		return -1;
 	}
 	m->id = (uint32_t)id->valueint;

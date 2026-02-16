@@ -18,7 +18,9 @@
     {"id": 20086, "id_end": 20118, "smoothify": true, "comment": "Chests, chairs"},
     {"id": 100000, "id_end": 999999, "smoothify": true, "comment": "All character sprites"},
 
-    {"comment": "--- Smoothify exceptions: Exkordon furniture (no_smoothify) ---"},
+    {"comment": "--- Smoothify exceptions: wood floor, Exkordon furniture (no_smoothify) ---"},
+    {"id": 13154, "id_end": 13162, "no_smoothify": true, "comment": "Wood floor: smoothing gives ugly border"},
+
     {"id": 16138, "id_end": 16149, "no_smoothify": true, "comment": "Exkordon furniture: disable smoothing"},
     {"id": 16175, "id_end": 16186, "no_smoothify": true, "comment": "Exkordon furniture: disable smoothing"},
     {"id": 16304, "id_end": 16309, "no_smoothify": true, "comment": "Exkordon furniture: disable smoothing"},

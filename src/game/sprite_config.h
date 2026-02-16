@@ -133,9 +133,17 @@ typedef struct {
  *   - has_cut=1, cut_result>0, cut_offset=0: cut to specific sprite ID
  *   - has_cut=1, cut_result>0, cut_offset=1: cut to id + cut_result
  *   - cut_negative: return value is negated
+ *
+ * Range support:
+ *   - id_end > 0: this entry applies to all sprites from id through id_end
+ *   - stride > 0: only match every Nth sprite in the range (e.g. stride=2 for even-only)
+ *   - Range entries are stored in a separate linear array for O(n) scan
+ *   - Individual entries (id_end == 0) use the hash table for O(1) lookup
  */
 typedef struct {
-	uint32_t id; /* Sprite ID (key) */
+	uint32_t id; /* Sprite ID (key), or range start */
+	uint32_t id_end; /* Range end (0 = single sprite, not a range) */
+	uint16_t stride; /* Step between matched IDs in range (0 = every ID, 2 = every other) */
 
 	/* is_cut_sprite result */
 	int32_t cut_result; /* Offset or specific sprite ID for cut */
@@ -159,12 +167,35 @@ typedef struct {
 
 	/* no_lighting_sprite */
 	uint8_t no_lighting; /* Disable lighting for this sprite? */
+
+	/* Image processing properties */
+	uint8_t smoothify; /* Enable bilinear smoothing when upscaling? */
+	uint8_t no_smoothify; /* Disable smoothing (overrides smoothify)? */
+	uint8_t drop_alpha; /* Drop semi-transparent pixels (alpha < 255 -> 0)? */
+
 } SpriteMetadata;
+
+/*
+ * Character height entry (for get_chr_height).
+ * Stored separately from sprite metadata because character numbers
+ * (csprite 0-360) overlap with sprite IDs in a different namespace.
+ */
+typedef struct {
+	uint16_t csprite; /* Character sprite number */
+	int16_t height; /* Height offset (e.g. -35, -50) */
+} ChrHeightEntry;
+
+#define MAX_CHR_HEIGHTS 64 /* Max character height overrides */
+#define MAX_META_RANGES 256 /* Max number of range-based metadata entries */
 
 typedef struct {
 	SpriteMetadata *entries;
 	size_t capacity;
 	size_t count;
+
+	/* Separate storage for range entries (id_end > 0) */
+	SpriteMetadata ranges[MAX_META_RANGES];
+	size_t range_count;
 } SpriteMetadataTable;
 
 /*
@@ -295,5 +326,23 @@ int sprite_config_is_yadd_sprite(unsigned int sprite);
 int sprite_config_get_lay_sprite(int sprite, int lay);
 int sprite_config_get_offset_sprite(int sprite, int *px, int *py);
 int sprite_config_no_lighting_sprite(unsigned int sprite);
+
+/*
+ * Image processing query functions.
+ * These check both individual entries and range entries.
+ */
+
+/*
+ * Returns: 1 if sprite should be smoothed, 0 if not, -1 if no config found.
+ * Scans all matching entries (hash + ranges). no_smoothify beats smoothify.
+ * drop_alpha sprites are also never smoothed.
+ */
+int sprite_config_do_smoothify(unsigned int sprite);
+
+/* Returns 1 if semi-transparent pixels should be dropped, 0 otherwise */
+int sprite_config_drop_alpha(unsigned int sprite);
+
+/* Returns character height offset, or 0 if no override (caller uses default -50) */
+int sprite_config_chr_height(unsigned int csprite);
 
 #endif /* SPRITE_CONFIG_H */

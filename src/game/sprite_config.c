@@ -1367,7 +1367,9 @@ const SpriteMetadata *sprite_config_lookup_metadata(unsigned int id)
 		}
 	}
 
-	/* Check range entries (O(n) scan, small n) */
+	/* Check range entries — prefer the most specific (smallest span) match */
+	const SpriteMetadata *best = NULL;
+	uint32_t best_span = UINT32_MAX;
 	for (size_t i = 0; i < meta_table.range_count; i++) {
 		if (id >= meta_table.ranges[i].id && id <= meta_table.ranges[i].id_end) {
 			/* If stride is set, only match IDs at the correct step */
@@ -1376,11 +1378,15 @@ const SpriteMetadata *sprite_config_lookup_metadata(unsigned int id)
 					continue;
 				}
 			}
-			return &meta_table.ranges[i];
+			uint32_t span = meta_table.ranges[i].id_end - meta_table.ranges[i].id;
+			if (span < best_span) {
+				best = &meta_table.ranges[i];
+				best_span = span;
+			}
 		}
 	}
 
-	return NULL;
+	return best;
 }
 
 int sprite_config_is_cut_sprite(unsigned int sprite)

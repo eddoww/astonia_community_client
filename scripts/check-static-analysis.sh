@@ -47,7 +47,8 @@ else
         FAILED=1
     else
         echo "Running clang-tidy analysis..."
-        $FIND src -type f -name "*.c" -print0 | \
+        # Exclude third-party libraries (cJSON)
+        $FIND src -type f -name "*.c" -not -path "src/lib/*" -print0 | \
             xargs -0 clang-tidy > "$LOG_DIR/clang-tidy.log" 2>&1 || true
 
         if grep -qE "warning:|error:" "$LOG_DIR/clang-tidy.log"; then
@@ -78,10 +79,12 @@ if ! command -v cppcheck >/dev/null 2>&1; then
     echo "Install with: sudo apt-get install cppcheck"
     echo ""
 else
+    # Exclude third-party libraries (cJSON) from cppcheck
     cppcheck --enable=warning,performance,portability \
         --inline-suppr \
         --suppress=missingIncludeSystem \
         --suppress=unknownMacro \
+        --suppress="*:src/lib/*" \
         -Iinclude \
         -Isrc \
         src/ > "$LOG_DIR/cppcheck.log" 2>&1 || true

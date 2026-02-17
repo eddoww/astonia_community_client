@@ -3,7 +3,7 @@
  *
  * SDL - Image Module
  *
- * PNG loading, image processing, smoothing, premultiplication, and the sdl_make function
+ * PNG loading, image processing, smoothing and the sdl_make function
  * that transforms sprite data into textures with applied effects.
  */
 
@@ -19,6 +19,7 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "game/sprite_config.h"
 
 // Module-local variables
 static int sdlm_sprite = 0;
@@ -91,7 +92,12 @@ void sdl_smoothify(uint32_t *pixel, int xres, int yres, int scale __attribute__(
 				c2 = pixel[x + y * xres + 2]; // top right
 				c3 = pixel[x + y * xres + xres * 2]; // bottom left
 				c4 = pixel[x + y * xres + 2 + xres * 2]; // bottom right
-
+#if 0 // we really only want this for wall tiles
+      // don't interpolate with very transparent pixels
+				if (IGET_A(c1) < 64 || IGET_A(c2) < 64 || IGET_A(c3) < 64 || IGET_A(c4) < 64) {
+					continue;
+				}
+#endif
 				pixel[x + y * xres + 1] = mix_argb(c1, c2, 0.5f, 0.5f);
 				pixel[x + y * xres + xres] = mix_argb(c1, c3, 0.5f, 0.5f);
 				pixel[x + y * xres + 1 + xres] =
@@ -106,7 +112,12 @@ void sdl_smoothify(uint32_t *pixel, int xres, int yres, int scale __attribute__(
 				c2 = pixel[x + y * xres + 3]; // top right
 				c3 = pixel[x + y * xres + xres * 3]; // bottom left
 				c4 = pixel[x + y * xres + 3 + xres * 3]; // bottom right
-
+#if 0 // we really only want this for wall tiles
+      // don't interpolate with very transparent pixels
+				if (IGET_A(c1) < 64 || IGET_A(c2) < 64 || IGET_A(c3) < 64 || IGET_A(c4) < 64) {
+					continue;
+				}
+#endif
 				pixel[x + y * xres + 1] = mix_argb(c1, c2, 0.667f, 0.333f);
 				pixel[x + y * xres + 2] = mix_argb(c1, c2, 0.333f, 0.667f);
 
@@ -132,7 +143,12 @@ void sdl_smoothify(uint32_t *pixel, int xres, int yres, int scale __attribute__(
 				c2 = pixel[x + y * xres + 4]; // top right
 				c3 = pixel[x + y * xres + xres * 4]; // bottom left
 				c4 = pixel[x + y * xres + 4 + xres * 4]; // bottom right
-
+#if 0 // we really only want this for wall tiles
+      // don't interpolate with very transparent pixels
+				if (IGET_A(c1) < 64 || IGET_A(c2) < 64 || IGET_A(c3) < 64 || IGET_A(c4) < 64) {
+					continue;
+				}
+#endif
 				pixel[x + y * xres + 1] = mix_argb(c1, c2, 0.75f, 0.25f);
 				pixel[x + y * xres + 2] = mix_argb(c1, c2, 0.5f, 0.5f);
 				pixel[x + y * xres + 3] = mix_argb(c1, c2, 0.25f, 0.75f);
@@ -146,7 +162,7 @@ void sdl_smoothify(uint32_t *pixel, int xres, int yres, int scale __attribute__(
 				pixel[x + y * xres + 1 + xres * 2] =
 				    mix_argb(mix_argb(c1, c2, 0.75f, 0.25f), mix_argb(c3, c4, 0.75f, 0.25f), 0.5f, 0.5f);
 				pixel[x + y * xres + 1 + xres * 3] =
-				    mix_argb(mix_argb(c1, c2, 0.75f, 0.75f), mix_argb(c3, c4, 0.75f, 0.25f), 0.25f, 0.75f);
+				    mix_argb(mix_argb(c1, c2, 0.75f, 0.25f), mix_argb(c3, c4, 0.75f, 0.25f), 0.25f, 0.75f);
 
 				pixel[x + y * xres + 2 + xres * 1] =
 				    mix_argb(mix_argb(c1, c2, 0.5f, 0.5f), mix_argb(c3, c4, 0.5f, 0.5f), 0.75f, 0.25f);
@@ -167,32 +183,6 @@ void sdl_smoothify(uint32_t *pixel, int xres, int yres, int scale __attribute__(
 	default:
 		warn("Unsupported scale %d in sdl_load_image_png()", sdl_scale);
 		break;
-	}
-}
-
-void sdl_premulti(uint32_t *pixel, int xres, int yres, int scale __attribute__((unused)))
-{
-	int n, r, g, b, a;
-	uint32_t c;
-
-	for (n = 0; n < xres * yres; n++) {
-		c = pixel[n];
-
-		a = IGET_A(c);
-		if (!a) {
-			continue;
-		}
-
-		r = IGET_R(c);
-		g = IGET_G(c);
-		b = IGET_B(c);
-
-		r = min(255, r * 255 / a);
-		g = min(255, g * 255 / a);
-		b = min(255, b * 255 / a);
-
-		c = IRGBA(r, g, b, a);
-		pixel[n] = c;
 	}
 }
 
@@ -437,11 +427,7 @@ int sdl_load_image_png_(struct sdl_image *si, char *filename, zip_t *zip)
 				a = 0;
 			}
 
-			if (a) { // pre-multiply rgb channel by alpha
-				r = min(255, r * 255 / a);
-				g = min(255, g * 255 / a);
-				b = min(255, b * 255 / a);
-			} else {
+			if (!a) {
 				r = g = b = 0;
 			}
 
@@ -553,7 +539,7 @@ int sdl_load_image_png(struct sdl_image *si, char *filename, zip_t *zip, int smo
 				a = 0;
 			}
 
-			if (!a) { // don't pre-multiply rgb channel by alpha because that needs to happen after scaling
+			if (!a) {
 				r = g = b = 0;
 			}
 
@@ -612,52 +598,24 @@ int sdl_load_image_png(struct sdl_image *si, char *filename, zip_t *zip, int smo
 
 	if (sdl_scale > 1 && smoothify) {
 		sdl_smoothify(si->pixel, si->xres * sdl_scale, si->yres * sdl_scale, sdl_scale);
-		sdl_premulti(si->pixel, si->xres * sdl_scale, si->yres * sdl_scale, sdl_scale);
-	} else {
-		sdl_premulti(si->pixel, si->xres * sdl_scale, si->yres * sdl_scale, sdl_scale);
 	}
 
 	png_load_helper_exit(&p);
-
 	return 0;
 }
 
 int do_smoothify(int sprite)
 {
-	// TODO: add more to this list
-	if (sprite >= 50 && sprite <= 56) {
+	if (sprite <= 0) {
 		return 0;
 	}
-	if (sprite > 0 && sprite <= 1000) {
-		return 1; // GUI
-	}
-	if (sprite >= 10000 && sprite < 11000) {
-		return 1; // items
-	}
-	if (sprite >= 11000 && sprite < 12000) {
-		return 1; // coffin, berries, farn, ...
-	}
-	if (sprite >= 13000 && sprite < 14000) {
-		return 1; // bones and towers, ...
-	}
-	if (sprite >= 16000 && sprite < 17000) {
-		return 1; // cameron doors, carts, ...
-	}
-	if (sprite >= 20025 && sprite < 20034) {
-		return 1; // torches
-	}
-	if (sprite >= 20042 && sprite < 20082) {
-		return 1; // torches
-	}
-	if (sprite >= 20086 && sprite < 20119) {
-		return 1; // chests, chairs
+
+	int result = sprite_config_do_smoothify((unsigned int)sprite);
+	if (result >= 0) {
+		return result;
 	}
 
-	if (sprite >= 100000) {
-		return 1; // all character sprites
-	}
-
-	return 0;
+	return 0; /* Default: no smoothing */
 }
 
 int sdl_load_image(struct sdl_image *si, int sprite, struct zip_handles *zips)
@@ -823,7 +781,7 @@ retry:
 void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 {
 	SDL_Texture *texture;
-	int x, y, scale, sink;
+	int x, y, scale, sink, dropalpha;
 	double ix, iy, low_x, low_y, high_x, high_y, dbr, dbg, dbb, dba;
 	uint32_t irgb;
 #ifdef DEVELOPER
@@ -836,11 +794,8 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 		scale = st->scale;
 	}
 
-	// hack to adjust the size of mages to old client levels
-	// this was originally done during loading from PAKs.
-	if (st->sprite >= 160000 && st->sprite < 170000) {
-		scale = (uint8_t)(scale * 0.88);
-	}
+	// Check JSON config for drop_alpha
+	dropalpha = sprite_config_drop_alpha((unsigned int)st->sprite);
 
 	if (scale != 100) {
 		st->xres = (uint16_t)ceil((si->xres - 1) * (double)scale / 100.0);
@@ -989,6 +944,12 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 					irgb = sdl_shine_pix(irgb, st->shine);
 				}
 
+				if (dropalpha) {
+					if (IGET_A(irgb) < 255) {
+						irgb = 0;
+					}
+				}
+
 				if (st->ll != st->ml || st->rl != st->ml || st->ul != st->ml || st->dl != st->ml) {
 					int r, g, b, a;
 					int r1 = 0, r2 = 0, r3 = 0, r4 = 0, r5 = 0;
@@ -1040,35 +1001,34 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 					} else {
 						// This is for the lower part (left side and front as seen on the screen)
 						if (x < 10 * sdl_scale) {
-							v2 = (10 * sdl_scale - x) * 2 - 2;
+							v2 = 10 * sdl_scale - x;
 							r2 = IGET_R(sdl_light(st->ll, irgb));
 							g2 = IGET_G(sdl_light(st->ll, irgb));
 							b2 = IGET_B(sdl_light(st->ll, irgb));
 						} else {
 							v2 = 0;
 						}
+
 						if (x > 10 * sdl_scale && x < 20 * sdl_scale) {
-							v3 = (x - 10 * sdl_scale) * 2 - 2;
+							v3 = x - 10 * sdl_scale;
 							r3 = IGET_R(sdl_light(st->rl, irgb));
 							g3 = IGET_G(sdl_light(st->rl, irgb));
 							b3 = IGET_B(sdl_light(st->rl, irgb));
 						} else {
 							v3 = 0;
 						}
-						if (x > 20 * sdl_scale && x < 30 * sdl_scale) {
-							v5 = (10 * sdl_scale - (x - 20 * sdl_scale)) * 2 - 2;
+
+						if (x >= 20 * sdl_scale && x < 30 * sdl_scale) {
+							v5 = 30 * sdl_scale - x;
 							r5 = IGET_R(sdl_light(st->dl, irgb));
 							g5 = IGET_G(sdl_light(st->dl, irgb));
 							b5 = IGET_B(sdl_light(st->dl, irgb));
 						} else {
 							v5 = 0;
 						}
-						if (x > 30 * sdl_scale) {
-							if (x < 40 * sdl_scale) {
-								v4 = (x - 30 * sdl_scale) * 2 - 2;
-							} else {
-								v4 = 0;
-							}
+
+						if (x > 30 * sdl_scale && x < 40 * sdl_scale) {
+							v4 = x - 30 * sdl_scale;
 							r4 = IGET_R(sdl_light(st->ul, irgb));
 							g4 = IGET_G(sdl_light(st->ul, irgb));
 							b4 = IGET_B(sdl_light(st->ul, irgb));
@@ -1076,7 +1036,8 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 							v4 = 0;
 						}
 
-						v1 = 20 * sdl_scale - (v2 + v3 + v4 + v5) / 2;
+						v1 = 20 * sdl_scale - v2 - v3 - v4 - v5;
+
 						r1 = IGET_R(sdl_light(st->ml, irgb));
 						g1 = IGET_G(sdl_light(st->ml, irgb));
 						b1 = IGET_B(sdl_light(st->ml, irgb));

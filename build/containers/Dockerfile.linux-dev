@@ -1,13 +1,17 @@
-FROM cachyos/cachyos:latest
+FROM archlinux:latest
 
 # Linux development environment with clang-tidy and analysis tools
 # Use this for development, debugging, and code analysis
 
-# Upgrade system with auto-resolve enabled
+# Initialize pacman keyring and upgrade system
 # Use --needed to skip already-installed packages and avoid 404 errors on old versions
-RUN pacman -Syyu --noconfirm --needed --ask=4 --overwrite="*"
+RUN pacman-key --init && \
+    pacman-key --populate archlinux && \
+    pacman -Syyu --noconfirm --needed --ask=4 --overwrite="*"
 
 # Install basic dependencies and development tools
+# Note: sdl3 and mimalloc are now available in the official Arch repos
+# Note: libvorbis and libogg are required so SDL3_mixer builds with OGG support
 RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
     curl \
     wget \
@@ -18,6 +22,12 @@ RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
     zlib \
     zig \
     unzip \
+    cmake \
+    ninja \
+    libvorbis \
+    libogg \
+    sdl3 \
+    mimalloc \
     && pacman -Scc --noconfirm
 
 # Install Clang tooling for analysis
@@ -41,28 +51,18 @@ RUN pip install --break-system-packages --no-cache-dir gcovr && \
     pacman -S --noconfirm --needed --ask=4 --overwrite="*" lcov && \
     pacman -Scc --noconfirm
 
-# Install paru AUR helper
-# Create a non-root user for building paru (AUR helpers shouldn't run as root)
-RUN useradd -m -G wheel -s /bin/bash builder && \
-    sed -i 's/^# %wheel ALL=(ALL:ALL) NOPASSWD: ALL/%wheel ALL=(ALL:ALL) NOPASSWD: ALL/' /etc/sudoers
-
-USER builder
-WORKDIR /home/builder
-RUN git clone https://aur.archlinux.org/paru.git && \
-    cd paru && \
-    makepkg -si --noconfirm && \
-    cd .. && \
-    rm -rf paru
-
-# Sync AUR databases with paru
-RUN paru -Syu --noconfirm
-
-# Install AUR packages (sdl3-git, sdl3_mixer-git, mimalloc-git)
-# Note: SDL3_mixer must be installed separately AFTER sdl3-git to avoid conflicts
-USER root
-WORKDIR /
-RUN sudo -u builder paru -S --noconfirm --needed mimalloc-git sdl3-git && \
-    sudo -u builder paru -S --noconfirm --needed sdl3_mixer-git
+# Build SDL3_mixer from source (not yet available in official repos)
+# Using tagged release instead of AUR to avoid sdl3-git conflicts
+ARG SDL3_MIXER_VERSION=prerelease-3.1.2
+RUN cd /tmp && \
+    curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz && \
+    cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DSDL3MIXER_VENDORED=ON && \
+    cmake --build SDL_mixer-build && \
+    cmake --install SDL_mixer-build && \
+    rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable

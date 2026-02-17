@@ -89,9 +89,12 @@ void sdl_dump(FILE *fp)
 
 // #define GO_DEFAULTS (GO_CONTEXT|GO_ACTION|GO_BIGBAR|GO_PREDICT|GO_SHORT|GO_MAPSAVE|GO_NOMAP)
 
-int sdl_init(int width, int height, char *title)
+int sdl_init(int width, int height, char *title, int monitor)
 {
 	int i;
+	int num_displays;
+	SDL_DisplayID *displays;
+	SDL_DisplayID display_id;
 
 	if (!SDL_Init(SDL_INIT_VIDEO | ((game_options & GO_SOUND) ? SDL_INIT_AUDIO : 0))) {
 		fail("SDL_Init Error: %s", SDL_GetError());
@@ -100,7 +103,24 @@ int sdl_init(int width, int height, char *title)
 
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
-	SDL_DisplayID display_id = SDL_GetPrimaryDisplay();
+	// Get all available displays
+	displays = SDL_GetDisplays(&num_displays);
+	if (!displays || num_displays == 0) {
+		fail("SDL_GetDisplays Error: %s", SDL_GetError());
+		SDL_Quit();
+		return 0;
+	}
+
+	// Validate monitor number and select display
+	if (monitor < 0 || monitor >= num_displays) {
+		note("Invalid monitor %d, using default (0). Available monitors: %d", monitor, num_displays);
+		monitor = 0;
+	} else if (monitor > 0) {
+		note("Using monitor %d of %d available monitors", monitor, num_displays);
+	}
+	display_id = displays[monitor];
+	SDL_free(displays);
+
 	const SDL_DisplayMode *DM = SDL_GetCurrentDisplayMode(display_id);
 
 	if (!DM) {
@@ -114,7 +134,17 @@ int sdl_init(int width, int height, char *title)
 		height = DM->h;
 	}
 
+	// Create window and position on selected monitor
 	sdlwnd = SDL_CreateWindow(title, width, height, 0);
+	if (sdlwnd && monitor > 0) {
+		// Position window on the selected monitor
+		SDL_Rect display_bounds;
+		if (SDL_GetDisplayBounds(display_id, &display_bounds)) {
+			int x_pos = display_bounds.x + (DM->w - width) / 2;
+			int y_pos = display_bounds.y + (DM->h - height) / 2;
+			SDL_SetWindowPosition(sdlwnd, x_pos, y_pos);
+		}
+	}
 	if (!sdlwnd) {
 		fail("SDL_Init Error: %s", SDL_GetError());
 		SDL_Quit();
@@ -240,6 +270,7 @@ int sdl_init(int width, int height, char *title)
 	if (width != XRES || height != YRES) {
 		int tmp_scale = 1, off = 0;
 
+		// Check 4:3 aspect ratio (YRES0=600)
 		if (width / XRES >= 4 && height / YRES0 >= 4) {
 			sdl_scale = 4;
 		} else if (width / XRES >= 3 && height / YRES0 >= 3) {
@@ -248,6 +279,7 @@ int sdl_init(int width, int height, char *title)
 			sdl_scale = 2;
 		}
 
+		// Check 16:10 aspect ratio (YRES2=500)
 		if (width / XRES >= 4 && height / YRES2 >= 4) {
 			tmp_scale = 4;
 		} else if (width / XRES >= 3 && height / YRES2 >= 3) {
@@ -257,6 +289,21 @@ int sdl_init(int width, int height, char *title)
 		}
 
 		if (tmp_scale > sdl_scale || height < YRES0) {
+			sdl_scale = tmp_scale;
+			YRES = height / sdl_scale;
+		}
+
+		// Check 16:9 widescreen aspect ratio (YRES3=450) - most permissive
+		tmp_scale = 1;
+		if (width / XRES >= 4 && height / YRES3 >= 4) {
+			tmp_scale = 4;
+		} else if (width / XRES >= 3 && height / YRES3 >= 3) {
+			tmp_scale = 3;
+		} else if (width / XRES >= 2 && height / YRES3 >= 2) {
+			tmp_scale = 2;
+		}
+
+		if (tmp_scale > sdl_scale) {
 			sdl_scale = tmp_scale;
 			YRES = height / sdl_scale;
 		}

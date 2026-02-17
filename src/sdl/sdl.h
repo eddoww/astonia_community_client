@@ -51,6 +51,32 @@ int init_sound(void);
 void sound_exit(void);
 void play_sound(unsigned int nr, int vol, int p);
 
+// Mod sound API
+// Sounds loaded from: sx_mod.zip > sx_patch.zip > sx.zip
+
+/* Sound loading - path is relative within zip (e.g., "weather/rain.ogg") */
+DLL_EXPORT int sound_load(const char *path);
+DLL_EXPORT void sound_unload(int handle);
+
+/* Playback */
+DLL_EXPORT int sound_play(int handle, float volume);
+DLL_EXPORT int sound_play_loop(int handle, float volume);
+DLL_EXPORT void sound_stop(int channel);
+DLL_EXPORT void sound_stop_all(void);
+
+/* Volume control */
+DLL_EXPORT void sound_set_volume(int channel, float volume);
+DLL_EXPORT void sound_fade(int channel, float target, int duration);
+DLL_EXPORT float sound_get_master_volume(void);
+
+/* Query */
+DLL_EXPORT int sound_is_playing(int channel);
+DLL_EXPORT int sound_is_enabled(void);
+
+/* Internal - called by game tick */
+void sound_fade_tick(void);
+void sound_cleanup_mod_sounds(void);
+
 void sdl_bargraph_add(int dx, unsigned char *data, int val);
 void sdl_bargraph(int sx, int sy, int dx, unsigned char *data, int x_offset, int y_offset);
 bool sdl_has_focus(void);
@@ -60,7 +86,7 @@ void sdl_capture_mouse(int flag);
 int sdl_tx_load(unsigned int sprite, signed char sink, unsigned char freeze, unsigned char scale, char cr, char cg,
     char cb, char light, char sat, int c1, int c2, int c3, int shine, char ml, char ll, char rl, char ul, char dl,
     const char *text, int text_color, int text_flags, void *text_font, int checkonly, int preload);
-int sdl_init(int width, int height, char *title);
+int sdl_init(int width, int height, char *title, int monitor);
 void sdl_exit(void);
 void sdl_loop(void);
 int sdl_clear(void);
@@ -75,6 +101,8 @@ int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char
     int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset);
 // Basic drawing primitives
 void sdl_pixel(int x, int y, unsigned short color, int x_offset, int y_offset);
+void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_offset);
+void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offset);
 void sdl_pixel_alpha(int x, int y, unsigned short color, unsigned char alpha, int x_offset, int y_offset);
 void sdl_line(int fx, int fy, int tx, int ty, unsigned short color, int clipsx, int clipsy, int clipex, int clipey,
     int x_offset, int y_offset);

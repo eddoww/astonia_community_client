@@ -9,24 +9,22 @@
 #
 # The AppImage will be created in your current directory.
 
-FROM cachyos/cachyos:latest
+FROM archlinux:latest
 
 ARG ZEN4=0
 
-# If ZEN4=1, configure for Zen4 optimization
+# If ZEN4=1, configure makepkg for Zen4 optimization
 RUN if [ "$ZEN4" = "1" ]; then \
-      echo ">>> Enabling CachyOS Zen4 repos"; \
-      printf "\n[cachyos-znver4]\nInclude = /etc/pacman.d/cachyos-v4-mirrorlist\n" >> /etc/pacman.conf; \
-      printf "\n[cachyos-core-znver4]\nInclude = /etc/pacman.d/cachyos-v4-mirrorlist\n" >> /etc/pacman.conf; \
-      printf "\n[cachyos-extra-znver4]\nInclude = /etc/pacman.d/cachyos-v4-mirrorlist\n" >> /etc/pacman.conf; \
       echo ">>> Configuring makepkg.conf for Zen4"; \
       sed -i 's/-march=native/-march=znver4/g' /etc/makepkg.conf; \
       sed -i 's/-march=x86-64/-march=znver4/g' /etc/makepkg.conf; \
     fi
 
-# Upgrade system with auto-resolve enabled
+# Initialize pacman keyring and upgrade system
 # Use --needed to skip already-installed packages and avoid 404 errors on old versions
-RUN pacman -Syyu --noconfirm --needed --ask=4 --overwrite="*"
+RUN pacman-key --init && \
+    pacman-key --populate archlinux && \
+    pacman -Syyu --noconfirm --needed --ask=4 --overwrite="*"
 
 # Add -march=znver4 only if ZEN4=1
 ENV EXTRA_ARCH_FLAGS=""
@@ -41,6 +39,8 @@ ENV EXTRA_ARCH_FLAGS="$(cat /extra_arch)"
 
 # Install build dependencies
 # Use --needed to avoid trying to reinstall packages at exact versions that may no longer exist
+# Note: sdl3 and mimalloc are now available in the official Arch repos
+# Note: libvorbis and libogg are required so SDL3_mixer builds with OGG support
 RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
       base-devel \
       clang \
@@ -59,33 +59,28 @@ RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
       unzip \
       cmake \
       ninja \
+      libvorbis \
+      libogg \
+      sdl3 \
+      mimalloc \
     && pacman -Scc --noconfirm
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install paru AUR helper
-# Create a non-root user for building paru (AUR helpers shouldn't run as root)
-RUN useradd -m -G wheel -s /bin/bash builder && \
-    sed -i 's/^# %wheel ALL=(ALL:ALL) NOPASSWD: ALL/%wheel ALL=(ALL:ALL) NOPASSWD: ALL/' /etc/sudoers
-
-USER builder
-WORKDIR /home/builder
-RUN git clone https://aur.archlinux.org/paru.git && \
-    cd paru && \
-    makepkg -si --noconfirm && \
-    cd .. && \
-    rm -rf paru
-
-# Sync AUR databases with paru
-RUN paru -Syu --noconfirm
-
-# Install AUR packages (SDL3_mixer must be installed separately to avoid conflicts)
-USER root
-WORKDIR /
-RUN sudo -u builder paru -S --noconfirm --needed mimalloc-git sdl3-git && \
-    sudo -u builder paru -S --noconfirm --needed sdl3_mixer-git
+# Build SDL3_mixer from source (not yet available in official repos)
+# Using tagged release instead of AUR to avoid sdl3-git conflicts
+ARG SDL3_MIXER_VERSION=prerelease-3.1.2
+RUN cd /tmp && \
+    curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz && \
+    cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DSDL3MIXER_VENDORED=ON && \
+    cmake --build SDL_mixer-build && \
+    cmake --install SDL_mixer-build && \
+    rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
 
 # Set working directory
 WORKDIR /build

@@ -196,6 +196,9 @@ void dl_play(void)
 				render_draw_bless(
 				    dlsort[d]->call_x1, dlsort[d]->call_y1, dlsort[d]->call_x2, dlsort[d]->call_y2, dlsort[d]->call_x3);
 				break;
+			case DLC_HEAL:
+				render_draw_heal(dlsort[d]->call_x1, dlsort[d]->call_y1, dlsort[d]->call_x2, dlsort[d]->call_x3);
+				break;
 			case DLC_POTION:
 				render_draw_potion(
 				    dlsort[d]->call_x1, dlsort[d]->call_y1, dlsort[d]->call_x2, dlsort[d]->call_y2, dlsort[d]->call_x3);
@@ -352,7 +355,7 @@ void make_quick(int game, int mcx, int mcy)
 	unsigned int dist = DIST;
 
 	if (game) {
-		set_mapoff(mcx, mcy, MAPDX, MAPDY);
+		set_mapoff(mcx, mcy, (int)MAPDX, (int)MAPDY);
 		set_mapadd(0, 0);
 	}
 

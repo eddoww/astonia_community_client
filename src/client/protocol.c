@@ -21,6 +21,8 @@
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
 
+struct otext otext[MAXOTEXT];
+
 static size_t sv_map01(unsigned char *buf, int *last, struct map *cmap)
 {
 	size_t p;
@@ -277,8 +279,8 @@ static void sv_setval(unsigned char *buf, int nr)
 		return;
 	}
 
-	if (nr != 0 || n != V_PROFESSION) {
-		value[nr][n] = load_u16(buf + 2);
+	if (nr != 0 || n != sv_val(V_PROFESSION)) {
+		value[nr][n] = load_i16(buf + 2);
 	}
 
 	update_skltab = 1;
@@ -314,7 +316,7 @@ static void sv_setitem(unsigned char *buf)
 	int n;
 
 	n = buf[1];
-	if (n < 0 || n >= INVENTORYSIZE) {
+	if (n < 0 || n >= _inventorysize) {
 		return;
 	}
 
@@ -349,9 +351,6 @@ static void sv_speedmode(unsigned char *buf)
 {
 	pspeed = buf[1];
 }
-
-// unused in vanilla server
-static void sv_fightmode(unsigned char *buf __attribute__((unused))) {}
 
 static void sv_setcitem(unsigned char *buf)
 {
@@ -402,6 +401,14 @@ static size_t sv_text(unsigned char *buf)
 				strcpy(pent_str[5], line + 2);
 			} else if (line[1] == '9') {
 				strcpy(pent_str[6], line + 2);
+			} else if (line[1] == '0') {
+				if (otext[MAXOTEXT - 1].text) {
+					xfree(otext[MAXOTEXT - 1].text);
+				}
+				memmove(otext + 1, otext, sizeof(otext) - sizeof(otext[0]));
+				otext[0].text = xstrdup(line + 3, MEM_GUI);
+				otext[0].time = tick;
+				otext[0].type = line[2] - '0';
 			}
 		} else {
 			if (!hover_capture_text(line)) {
@@ -792,7 +799,7 @@ static void sv_container(unsigned char *buf)
 	uint8_t nr;
 
 	nr = buf[1];
-	if (nr >= CONTAINERSIZE) {
+	if (nr >= _containersize) {
 		fail("illegal nr %d in sv_container!", nr);
 		exit(-1);
 	}
@@ -806,7 +813,7 @@ static void sv_price(unsigned char *buf)
 	uint8_t nr;
 
 	nr = buf[1];
-	if (nr >= CONTAINERSIZE) {
+	if (nr >= _containersize) {
 		fail("illegal nr %d in sv_price!", nr);
 		exit(-1);
 	}
@@ -819,7 +826,7 @@ static void sv_itemprice(unsigned char *buf)
 	uint8_t nr;
 
 	nr = buf[1];
-	if (nr >= CONTAINERSIZE) {
+	if (nr >= _containersize) {
 		fail("illegal nr %d in sv_itemprice!", nr);
 		exit(-1);
 	}
@@ -842,7 +849,7 @@ static void sv_concnt(unsigned char *buf)
 	uint8_t nr;
 
 	nr = buf[1];
-	if (nr > CONTAINERSIZE) {
+	if (nr > _containersize) {
 		fail("illegal nr %d in sv_contcnt!", nr);
 		exit(-1);
 	}
@@ -872,15 +879,6 @@ static void sv_mil_exp(unsigned char *buf)
 	mil_exp = load_ulong(buf + 1);
 }
 
-static void sv_cycles(unsigned char *buf)
-{
-	uint32_t c;
-
-	c = load_ulong(buf + 1);
-
-	server_cycles = server_cycles * 0.99 + (double)c * 0.01;
-}
-
 static void sv_lookinv(unsigned char *buf)
 {
 	int n;
@@ -893,6 +891,17 @@ static void sv_lookinv(unsigned char *buf)
 		lookinv[n] = load_u32(buf + 17 + n * 4);
 	}
 	show_look = 1;
+}
+
+static void sv_areainfo(unsigned char *buf)
+{
+	int cmd, opt1, opt2;
+
+	cmd = load_u16(buf + 1);
+	opt1 = load_u16(buf + 3);
+	opt2 = load_u16(buf + 5);
+
+	minimap_areainfo(cmd, opt1, opt2);
 }
 
 static void sv_server(unsigned char *buf)
@@ -936,9 +945,15 @@ static void sv_special(unsigned char *buf)
 
 static void sv_teleport(unsigned char *buf)
 {
-	int n, i, b;
+	int n, i, b, len;
 
-	for (n = 0; n < 64 + 32; n++) {
+	if (sv_ver == 35) {
+		len = 64;
+	} else {
+		len = 64 + 32;
+	}
+
+	for (n = 0; n < len; n++) {
 		i = n / 8;
 		b = 1 << (n & 7);
 		if (buf[i + 1] & b) {
@@ -953,13 +968,19 @@ static void sv_teleport(unsigned char *buf)
 
 static void sv_prof(unsigned char *buf)
 {
-	int n;
-	uint16_t cnt = 0;
+	int n, pmax;
+	int16_t cnt = 0;
 
-	for (n = 0; n < P_MAX; n++) {
+	if (sv_ver == 35) {
+		pmax = P35_MAX;
+	} else {
+		pmax = P3_MAX;
+	}
+
+	for (n = 0; n < pmax; n++) {
 		cnt += (value[1][n + V_PROFBASE] = buf[n + 1]);
 	}
-	value[0][V_PROFESSION] = cnt;
+	value[0][sv_val(V_PROFESSION)] = cnt;
 
 	update_skltab = 1;
 }
@@ -987,10 +1008,31 @@ static void sv_unique(unsigned char *buf)
 	}
 }
 
+void init_game(int mcx, int mcy);
+void exit_game(void);
+
 void sv_protocol(unsigned char *buf)
 {
+	int reset = 0;
+
 	protocol_version = buf[1];
-	// note("Astonia Protocol Version %d established!",protocol_version);
+
+	if (protocol_version >= 3) {
+		if (_client_dist != 40) {
+			_client_dist = 40;
+			reset = 1;
+		}
+	} else {
+		if (_client_dist != 25) {
+			_client_dist = 25;
+			reset = 1;
+		}
+	}
+	if (reset) {
+		exit_game();
+		init_game(dotx(DOT_MCT), doty(DOT_MCT));
+		note("Astonia Protocol Version %d established, engine reset.", protocol_version);
+	}
 }
 
 void process(unsigned char *buf, int size)
@@ -1154,9 +1196,9 @@ void process(unsigned char *buf, int size)
 				sv_lookinv(buf);
 				len = 17 + 12 * 4;
 				break;
-			case SV_CYCLES:
-				sv_cycles(buf);
-				len = 5;
+			case SV_AREAINFO:
+				sv_areainfo(buf);
+				len = 7;
 				break;
 			case SV_CEFFECT:
 				len = sv_ceffect(buf);
@@ -1180,10 +1222,6 @@ void process(unsigned char *buf, int size)
 				sv_speedmode(buf);
 				len = 2;
 				break;
-			case SV_FIGHTMODE:
-				sv_fightmode(buf);
-				len = 2;
-				break;
 			case SV_LOGINDONE:
 				sv_logindone();
 				len = 1;
@@ -1194,7 +1232,11 @@ void process(unsigned char *buf, int size)
 				break;
 			case SV_TELEPORT:
 				sv_teleport(buf);
-				len = 13;
+				if (sv_ver == 35) {
+					len = 9;
+				} else {
+					len = 13;
+				}
 				break;
 
 			case SV_MIRROR:
@@ -1203,7 +1245,11 @@ void process(unsigned char *buf, int size)
 				break;
 			case SV_PROF:
 				sv_prof(buf);
-				len = 21;
+				if (sv_ver == 35) {
+					len = P35_MAX + 1;
+				} else {
+					len = P3_MAX + 1;
+				}
 				break;
 			case SV_PING:
 				len = sv_ping(buf);
@@ -1217,7 +1263,6 @@ void process(unsigned char *buf, int size)
 				len = 101 + sizeof(struct shrine_ppd);
 				break;
 			case SV_PROTOCOL:
-				sv_protocol(buf);
 				len = 2;
 				break;
 
@@ -1393,8 +1438,8 @@ uint32_t prefetch(unsigned char *buf, int size)
 			case SV_LOOKINV:
 				len = 17 + 12 * 4;
 				break;
-			case SV_CYCLES:
-				len = 5;
+			case SV_AREAINFO:
+				len = 7;
 				break;
 			case SV_CEFFECT:
 				len = svl_ceffect(buf);
@@ -1412,9 +1457,6 @@ uint32_t prefetch(unsigned char *buf, int size)
 			case SV_SPEEDMODE:
 				len = 2;
 				break;
-			case SV_FIGHTMODE:
-				len = 2;
-				break;
 			case SV_LOGINDONE:
 				bzero(map2, sizeof(map2));
 				len = 1;
@@ -1423,10 +1465,18 @@ uint32_t prefetch(unsigned char *buf, int size)
 				len = 13;
 				break;
 			case SV_TELEPORT:
-				len = 13;
+				if (sv_ver == 35) {
+					len = 9;
+				} else {
+					len = 13;
+				}
 				break;
 			case SV_PROF:
-				len = 21;
+				if (sv_ver == 35) {
+					len = P35_MAX + 1;
+				} else {
+					len = P3_MAX + 1;
+				}
 				break;
 			case SV_PING:
 				len = svl_ping(buf);
@@ -1438,6 +1488,7 @@ uint32_t prefetch(unsigned char *buf, int size)
 				len = 101 + sizeof(struct shrine_ppd);
 				break;
 			case SV_PROTOCOL:
+				sv_protocol(buf);
 				len = 2;
 				break;
 
@@ -1623,9 +1674,16 @@ void cmd_speed(int mode)
 void cmd_teleport(int nr)
 {
 	unsigned char buf[64];
+	int off;
 
-	if (nr > 100) { // ouch
-		newmirror = (uint32_t)(nr - 100);
+	if (sv_ver == 35) {
+		off = 200;
+	} else {
+		off = 100;
+	}
+
+	if (nr > off) { // ouch
+		newmirror = (uint32_t)(nr - off);
 		return;
 	}
 

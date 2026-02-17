@@ -25,6 +25,8 @@
 #include "modder/modder.h"
 #include "protocol.h"
 
+#define CLIENT_PROTOCOL_VERSION 3
+
 unsigned int display_gfx = 0;
 uint32_t display_time = 0;
 static int rec_bytes = 0;
@@ -52,11 +54,11 @@ DLL_EXPORT int protocol_version = 0;
 uint32_t newmirror = 0;
 int lasttick; // ticks in inbuf
 static size_t lastticksize; // size inbuf must reach to get the last tick complete in the queue
+uint64_t last_tick_received_time = 0; // SDL_GetTicks() when last server tick batch was received
+uint64_t tick_receive_interval = 0; // Time between server tick batch arrivals (ms)
 
 static struct queue queue[Q_SIZE];
 int q_in, q_out, q_size;
-
-double server_cycles;
 
 static size_t ticksize;
 static size_t inused;
@@ -76,12 +78,12 @@ DLL_EXPORT unsigned int csprite; // and sprite
 
 DLL_EXPORT uint16_t originx;
 DLL_EXPORT uint16_t originy;
-DLL_EXPORT struct map map[MAPDX * MAPDY];
-DLL_EXPORT struct map map2[MAPDX * MAPDY];
+DLL_EXPORT struct map map[(DISTMAX * 2 + 1) * (DISTMAX * 2 + 1)];
+DLL_EXPORT struct map map2[(DISTMAX * 2 + 1) * (DISTMAX * 2 + 1)];
 
-DLL_EXPORT uint16_t value[2][V_MAX];
-DLL_EXPORT uint32_t item[INVENTORYSIZE];
-DLL_EXPORT uint32_t item_flags[INVENTORYSIZE];
+DLL_EXPORT int16_t value[2][V_MAX];
+DLL_EXPORT uint32_t item[MAX_INVENTORYSIZE];
+DLL_EXPORT uint32_t item_flags[MAX_INVENTORYSIZE];
 DLL_EXPORT stat_t hp;
 DLL_EXPORT stat_t mana;
 DLL_EXPORT stat_t rage;
@@ -100,9 +102,9 @@ DLL_EXPORT unsigned char ueffect[MAXEF];
 DLL_EXPORT int con_type;
 DLL_EXPORT char con_name[80];
 DLL_EXPORT int con_cnt;
-DLL_EXPORT uint32_t container[CONTAINERSIZE];
-DLL_EXPORT uint32_t price[CONTAINERSIZE];
-DLL_EXPORT uint32_t itemprice[CONTAINERSIZE];
+DLL_EXPORT uint32_t container[MAX_CONTAINERSIZE];
+DLL_EXPORT uint32_t price[MAX_CONTAINERSIZE];
+DLL_EXPORT uint32_t itemprice[MAX_CONTAINERSIZE];
 DLL_EXPORT uint32_t cprice;
 
 DLL_EXPORT uint32_t lookinv[12];
@@ -117,6 +119,10 @@ DLL_EXPORT int pspeed = 0; // 0=normal   1=fast      2=stealth     - like the se
 int may_teleport[64 + 32];
 
 DLL_EXPORT int frames_per_second = TICKS;
+
+DLL_EXPORT int _inventorysize = V3_INVENTORYSIZE;
+DLL_EXPORT int _containersize = V3_CONTAINERSIZE;
+DLL_EXPORT unsigned int _client_dist = 25;
 
 // Unaligned load/store helpers
 DLL_EXPORT void client_send(void *buf, size_t len)
@@ -137,8 +143,6 @@ void bzero_client(int part)
 
 		bzero(queue, sizeof(queue));
 		q_in = q_out = q_size = 0;
-
-		server_cycles = 0;
 
 		zsinit = 0;
 		bzero(&zs, sizeof(zs));
@@ -196,6 +200,7 @@ void bzero_client(int part)
 		    pent_str[6][0] = 0;
 
 		bzero(may_teleport, sizeof(may_teleport));
+		bzero(otext, sizeof(otext));
 
 		amod_areachange();
 		minimap_clear();
@@ -364,7 +369,7 @@ int poll_network(void)
 		decrypt(username, tmp);
 		astonia_net_send(sock, tmp, 16);
 
-		store_u32(tmp, 0x8fd46100 | 0x01); // magic code + version 1
+		store_u32(tmp, 0x8fd46100 | CLIENT_PROTOCOL_VERSION); // magic code + version
 		astonia_net_send(sock, tmp, 4);
 		send_info(sock);
 
@@ -433,9 +438,18 @@ int poll_network(void)
 	inused += (size_t)n;
 	rec_bytes += n;
 
-	// count ticks
+	int ticks_this_poll = 0;
 	while (1) {
-		if (inused >= lastticksize + 1 && *(inbuf + lastticksize) & 0x40) {
+		if (inused >= lastticksize + 2 && *(inbuf + lastticksize) == 0xFF && *(inbuf + lastticksize + 1) == 0xFF) {
+			if (inused < lastticksize + 4) {
+				break; // we have the magic key, but not the length
+			}
+			lastticksize += 4 + net_read16(inbuf + lastticksize + 2);
+		} else if (inused == lastticksize + 1 && *(inbuf + lastticksize) == 0xFF) {
+			// if, for some reason, we only get the starting 0xff but nothing more, we need to wait for the next byte
+			// so we break here, until we have it.
+			break;
+		} else if (inused >= lastticksize + 1 && *(inbuf + lastticksize) & 0x40) {
 			lastticksize += 1 + (*(inbuf + lastticksize) & 0x3F);
 		} else if (inused >= lastticksize + 2) {
 			lastticksize += 2 + (net_read16(inbuf + lastticksize) & 0x3FFF);
@@ -444,6 +458,16 @@ int poll_network(void)
 		}
 
 		lasttick++;
+		ticks_this_poll++;
+	}
+
+	// Update tick timing once per poll that received ticks (not per individual tick)
+	if (ticks_this_poll > 0) {
+		uint64_t now = SDL_GetTicks();
+		if (last_tick_received_time > 0) {
+			tick_receive_interval = now - last_tick_received_time;
+		}
+		last_tick_received_time = now;
 	}
 
 	return 0;
@@ -474,7 +498,7 @@ static void auto_tick(struct map *cmap)
 tick_t next_tick(void)
 {
 	size_t tick_sz;
-	int size, ret;
+	int size, ret, compress = 0;
 	tick_t attick;
 
 	// no room for next tick, leave it in in-queue
@@ -483,24 +507,43 @@ tick_t next_tick(void)
 	}
 
 	// do we have a new tick
-	if (inused >= 1 && (*(inbuf) & 0x40)) {
+	if (inused >= 2 && (*(inbuf) == 0xFF) &&
+	    (*(inbuf + 1) == 0xFF)) { // new big tick: starts with 255,255,len1,len2,content...
+		if (inused < 4) {
+			return 0; // we have the 255,255 but not the length
+		}
+		tick_sz = 4 + (net_read16(inbuf + 2));
+		if (inused < tick_sz) { // we have key and length but not the content
+			return 0;
+		}
+		indone = 4;
+	} else if (inused >= 1 && (*(inbuf) == 0xFF) &&
+	           inused < 2) { // this migth be a big tick, but we won't know until we have two bytes at least
+		return 0; // so try again later
+	} else if (inused >= 1 && (*(inbuf) & 0x40)) { // bit 14 set signifies a small (<64 bytes) tick
 		tick_sz = 1 + (*(inbuf) & 0x3F);
 		if (inused < tick_sz) {
 			return 0;
 		}
 		indone = 1;
-	} else if (inused >= 2 && !(*(inbuf) & 0x40)) {
+		if (*inbuf & 0x80) {
+			compress = 1;
+		}
+	} else if (inused >= 2 && !(*(inbuf) & 0x40)) { // "normal" tick, up to 16382 bytes
 		tick_sz = 2 + (net_read16(inbuf) & 0x3FFF);
 		if (inused < tick_sz) {
 			return 0;
 		}
 		indone = 2;
+		if (*inbuf & 0x80) {
+			compress = 1;
+		}
 	} else {
 		return 0;
 	}
 
 	// decompress
-	if (*inbuf & 0x80) {
+	if (compress) {
 		zs.next_in = inbuf + indone;
 		zs.avail_in = (unsigned int)(tick_sz - indone);
 
@@ -515,7 +558,8 @@ tick_t next_tick(void)
 		}
 
 		if (zs.avail_in) {
-			warn("HELP (%d)\n", zs.avail_in);
+			warn("Decompress has left over input. This isn't supposed to happen (%d)!\n", zs.avail_in);
+			quit = 1;
 			return 0;
 		}
 
@@ -524,6 +568,8 @@ tick_t next_tick(void)
 		size = (int)(tick_sz - indone);
 		memcpy(queue[q_in].buf, inbuf + indone, (size_t)size);
 	}
+
+
 	queue[q_in].size = size;
 
 	auto_tick(map2);
@@ -556,6 +602,7 @@ int do_tick(void)
 		q_out = (q_out + 1) % Q_SIZE;
 		q_size--;
 		hover_capture_tick();
+		sound_fade_tick();
 
 		// increase tick
 		tick++;
@@ -600,4 +647,10 @@ DLL_EXPORT map_index_t mapmn(unsigned int x, unsigned int y)
 		return MAXMN;
 	}
 	return x + y * MAPDX;
+}
+
+void set_v35_inventory(void)
+{
+	_inventorysize = V35_INVENTORYSIZE;
+	_containersize = V35_CONTAINERSIZE;
 }

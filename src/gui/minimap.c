@@ -17,20 +17,37 @@
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
+#include "lib/cjson/cJSON.h"
 
 #define MINIMAP           40
 #define MAXMAP            256
 #define IRGBA(r, g, b, a) (((uint32_t)(a) << 24) | ((uint32_t)(r) << 16) | ((uint32_t)(g) << 8) | ((uint32_t)(b) << 0))
 
+#define MAPPIX_UNKNOWN 0
+#define MAPPIX_BLOCK   1
+#define MAPPIX_FSPRITE 2
+#define MAPPIX_CHAR    3
+#define MAPPIX_EMPTY   4
+#define MAPPIX_USE     5
+
 static int sx, sy, visible, mx, my, update1, update2, update3, orx, ory, rewrite_cnt;
 
 static unsigned char _mmap[MAXMAP * MAXMAP];
+static unsigned short map_poi_idx[MAXMAP * MAXMAP];
 
 static uint32_t mapix1[MAXMAP * MAXMAP];
 static uint32_t mapix2[MINIMAP * MINIMAP * 4];
 
 #define MAXSAVEMAP 100
 static int mapnr = -1;
+
+static int map_managed = 0; // map managed 0 = we're guessing. map managed 1 = the server will send us area changes.
+static int map_area = 0;
+static int map_server = 0;
+
+static int map_poi_load(void);
+static void map_update_poi(void);
+static uint32_t map_poi_col(int x, int y);
 
 SDL_Texture *maptex1 = NULL, *maptex2 = NULL;
 
@@ -52,8 +69,12 @@ void minimap_init(void)
 
 	maptex1 = sdl_create_texture(MAXMAP, MAXMAP);
 	maptex2 = sdl_create_texture(MINIMAP * 2, MINIMAP * 2);
+
 	SDL_SetTextureBlendMode(maptex1, SDL_BLENDMODE_BLEND);
 	SDL_SetTextureBlendMode(maptex2, SDL_BLENDMODE_BLEND);
+
+	SDL_SetTextureScaleMode(maptex1, SDL_SCALEMODE_NEAREST);
+	SDL_SetTextureScaleMode(maptex2, SDL_SCALEMODE_NEAREST);
 }
 
 static void set_pix(int x, int y, unsigned char val)
@@ -63,7 +84,8 @@ static void set_pix(int x, int y, unsigned char val)
 	if ((val2 = _mmap[x + y * MAXMAP]) != val) {
 		// count how much of the map has changed permanently (not counting characters
 		// and formerly unknown tiles or swapping between sightblocks and fsprites)
-		if (val2 != 0 && val2 != 3 && val != 3 && !((val == 1 && val2 == 2) || (val == 2 && val2 == 1))) {
+		if (val2 != MAPPIX_UNKNOWN && val2 != MAPPIX_CHAR && val != MAPPIX_CHAR &&
+		    !((val == MAPPIX_BLOCK && val2 == MAPPIX_FSPRITE) || (val == MAPPIX_FSPRITE && val2 == MAPPIX_BLOCK))) {
 			// note("changed: %d to %d (%d,%d)",_mmap[x+y*MAXMAP],val,x,y);
 			rewrite_cnt++;
 		}
@@ -116,30 +138,29 @@ void minimap_update(void)
 				continue;
 			}
 
-
 			if (map[mn].mmf & MMF_SIGHTBLOCK) {
 				if (map[mn].flags & CMF_USE) {
-					set_pix(ox + x, oy + y, 5);
+					set_pix(ox + x, oy + y, MAPPIX_USE);
 				} else {
-					set_pix(ox + x, oy + y, 1);
+					set_pix(ox + x, oy + y, MAPPIX_BLOCK);
 				}
 			} else if (map[mn].fsprite) {
-				set_pix(ox + x, oy + y, 2);
+				set_pix(ox + x, oy + y, MAPPIX_FSPRITE);
 			} else if (map[mn].csprite && mn != (unsigned int)plrmn) {
-				set_pix(ox + x, oy + y, 3);
+				set_pix(ox + x, oy + y, MAPPIX_CHAR);
 			} else {
-				set_pix(ox + x, oy + y, 4);
+				set_pix(ox + x, oy + y, MAPPIX_EMPTY);
 			}
 		}
 	}
-	if (rewrite_cnt > 4) {
+	if (rewrite_cnt > 8 && !map_managed) {
 		memset(_mmap, 0, sizeof(_mmap));
 		update1 = update2 = 1;
 		note("MAP CHANGED: %d", rewrite_cnt);
 	}
 	if (mapnr == -1 && update3) {
 		update3 = 0;
-		if (game_options & GO_MAPSAVE) {
+		if (!map_managed && (game_options & GO_MAPSAVE)) {
 			mapnr = map_load();
 		}
 	}
@@ -147,19 +168,27 @@ void minimap_update(void)
 
 static uint32_t pix_col(int x, int y)
 {
+	uint32_t c;
+
 	switch (_mmap[x + y * MAXMAP]) {
-	case 1:
+	case MAPPIX_BLOCK:
 		return IRGBA(180, 180, 180, 255);
-	case 2:
+	case MAPPIX_FSPRITE:
 		return IRGBA(140, 140, 220, 255);
-	case 3:
+	case MAPPIX_CHAR:
 		return IRGBA(60, 220, 60, 255);
-	case 4:
+	case MAPPIX_EMPTY:
+		if ((c = map_poi_col(x, y))) {
+			return c;
+		}
 		return IRGBA(60, 60, 60, 255);
-	case 5:
+	case MAPPIX_USE:
 		return IRGBA(120, 80, 80, 255);
-	case 0:
+	case MAPPIX_UNKNOWN:
 	default:
+		if ((c = map_poi_col(x, y))) {
+			return c;
+		}
 		return IRGBA(25, 25, 25, 255);
 	}
 }
@@ -304,13 +333,30 @@ void display_minimap(void)
 	}
 }
 
+static void minimap_clearonly(void)
+{
+	memset(_mmap, 0, sizeof(_mmap));
+	update1 = update2 = update3 = 1;
+}
+
 void minimap_clear(void)
 {
 	if (game_options & GO_MAPSAVE) {
 		map_save();
 	}
 	mapnr = -1;
+	map_area = 0;
 	memset(_mmap, 0, sizeof(_mmap));
+	update1 = update2 = update3 = 1;
+}
+
+static void minimap_reveal(int x, int y)
+{
+	if (x < 0 || x >= MAXMAP || y < 0 || y >= MAXMAP) {
+		return;
+	}
+
+	_mmap[x + y * MAXMAP] = MAPPIX_EMPTY;
 	update1 = update2 = update3 = 1;
 }
 
@@ -330,16 +376,24 @@ static char *mapname(int i)
 {
 	static char filename[MAX_PATH];
 
-	if (localdata) {
-		sprintf(filename, "%smap%03d.dat", localdata, i);
+	if (map_managed) {
+		if (localdata) {
+			sprintf(filename, "%smMap%d_%d.dat", localdata, map_server, map_area);
+		} else {
+			sprintf(filename, "bin/data/mMap%d_%d.dat", map_server, map_area);
+		}
 	} else {
-		sprintf(filename, "bin/data/map%03d.dat", i);
+		if (localdata) {
+			sprintf(filename, "%smap%03d.dat", localdata, i);
+		} else {
+			sprintf(filename, "bin/data/map%03d.dat", i);
+		}
 	}
 
 	return filename;
 }
 
-static void map_save(void)
+static void map_save_unmanaged(void)
 {
 	FILE *fp;
 	int i, cnt;
@@ -381,6 +435,33 @@ static void map_save(void)
 	if (fp) {
 		fwrite(_mmap, sizeof(_mmap), 1, fp);
 		fclose(fp);
+	}
+}
+
+static void map_save_managed(void)
+{
+	FILE *fp;
+	char *filename;
+
+	if (!map_area) {
+		return;
+	}
+
+	filename = mapname(42);
+	note("saving area map to %s", filename);
+	fp = fopen(filename, "wb");
+	if (fp) {
+		fwrite(_mmap, sizeof(_mmap), 1, fp);
+		fclose(fp);
+	}
+}
+
+static void map_save(void)
+{
+	if (map_managed) {
+		map_save_managed();
+	} else {
+		map_save_unmanaged();
 	}
 }
 
@@ -432,7 +513,7 @@ static void map_merge(unsigned char *xmap, const unsigned char *tmap)
 	}
 }
 
-static int map_load(void)
+static int map_load_unmanaged(void)
 {
 	FILE *fp;
 	int i, hit, besti = -1, besthit = 0;
@@ -475,6 +556,37 @@ static int map_load(void)
 	return -1;
 }
 
+static int map_load_managed(void)
+{
+	FILE *fp;
+	char *filename;
+
+	if (!map_area) {
+		return 0;
+	}
+
+	filename = mapname(42);
+	note("loading area map from %s", filename);
+
+	fp = fopen(filename, "rb");
+	if (!fp) {
+		return 1;
+	}
+	fread(_mmap, sizeof(_mmap), 1, fp);
+	fclose(fp);
+
+	return 1;
+}
+
+static int map_load(void)
+{
+	if (map_managed) {
+		return map_load_managed();
+	} else {
+		return map_load_unmanaged();
+	}
+}
+
 void minimap_compact(void)
 {
 	FILE *fp;
@@ -507,7 +619,7 @@ void minimap_compact(void)
 			if (map_compare(tmap, xmap)) {
 				map_merge(tmap, xmap);
 				filename = mapname(i);
-				fp = fopen(filename, "rb");
+				fp = fopen(filename, "wb");
 				if (!fp) {
 					continue;
 				}
@@ -518,6 +630,292 @@ void minimap_compact(void)
 				remove(filename);
 				note("merged map %d into map %d", j, i);
 			}
+		}
+	}
+}
+
+#define AIC_SETID  0
+#define AIC_CLEAR  1
+#define AIC_REVEAL 2
+
+void minimap_areainfo(int cmd, int opt1, int opt2)
+{
+	int cnt;
+
+	map_managed = 1;
+
+	switch (cmd) {
+	case AIC_SETID:
+		if (map_area) {
+			map_save();
+		}
+
+		map_area = opt1;
+		map_server = opt2;
+
+		map_load();
+		cnt = map_poi_load();
+		bzero(map_poi_idx, sizeof(map_poi_idx));
+		if (cnt) {
+			map_update_poi();
+		}
+		break;
+	case AIC_CLEAR:
+		minimap_clearonly();
+		break;
+	case AIC_REVEAL:
+		minimap_reveal(opt1, opt2);
+		break;
+	}
+}
+
+typedef struct {
+	int x, y;
+	int type;
+	char *desc;
+} MAP_POI;
+
+MAP_POI *map_poi = NULL;
+int map_poi_cnt = 0, map_poi_max = 0;
+
+static int map_poi_parse(const char *json_str, const char *source_name)
+{
+	cJSON *root = cJSON_Parse(json_str);
+	if (!root) {
+		warn("map_poi: Failed to parse %s: %s", source_name, cJSON_GetErrorPtr());
+		return -1;
+	}
+
+	cJSON *coords_arr = cJSON_GetObjectItem(root, "coords");
+	if (!coords_arr || !cJSON_IsArray(coords_arr)) {
+		warn("map_poi: Missing coords array in %s", source_name);
+		cJSON_Delete(root);
+		return -1;
+	}
+
+	int count = cJSON_GetArraySize(coords_arr);
+	int i;
+	for (i = 0; i < count; i++) {
+		cJSON *item = cJSON_GetArrayItem(coords_arr, i);
+		if (!item || !cJSON_IsObject(item)) {
+			continue;
+		}
+
+		cJSON *x = cJSON_GetObjectItem(item, "x");
+		cJSON *y = cJSON_GetObjectItem(item, "y");
+		cJSON *type = cJSON_GetObjectItem(item, "type");
+		cJSON *desc = cJSON_GetObjectItem(item, "desc");
+		if (!x || !y || !type || !desc || !cJSON_IsNumber(x) || !cJSON_IsNumber(y) || !cJSON_IsNumber(type) ||
+		    !cJSON_IsString(desc)) {
+			continue;
+		}
+
+		if (map_poi_cnt >= map_poi_max) {
+			map_poi_max += 16;
+			map_poi = xrealloc(map_poi, sizeof(MAP_POI) * (size_t)map_poi_max, MEM_GUI);
+			if (!map_poi) {
+				return -1;
+			}
+		}
+
+		map_poi[map_poi_cnt].x = max(0, min(255, x->valueint));
+		map_poi[map_poi_cnt].y = max(0, min(255, y->valueint));
+		map_poi[map_poi_cnt].type = type->valueint;
+		map_poi[map_poi_cnt].desc = xstrdup(desc->valuestring, MEM_GUI);
+		map_poi_cnt++;
+
+		if (map_poi_cnt > 60000) {
+			break; // yeah. no one's gonna do that. right? right??
+		}
+	}
+
+	cJSON_Delete(root);
+	return map_poi_cnt;
+}
+
+static char *poimapname(void)
+{
+	static char filename[MAX_PATH];
+
+	sprintf(filename, "res/config/map_poi%d_%d.json", map_server, map_area);
+
+	return filename;
+}
+
+static int map_poi_load(void)
+{
+	char *path = poimapname();
+	int loaded;
+
+	for (int i = 1; i < map_poi_cnt; i++) {
+		xfree(map_poi[i].desc);
+	}
+	map_poi_cnt = 1;
+
+	if (!map_managed) {
+		return 0;
+	}
+
+	char *json = load_ascii_file(path, MEM_TEMP);
+	if (!json) {
+		return 0;
+	}
+
+	loaded = map_poi_parse(json, "map_poi.json");
+	note("loaded %d map POIs", loaded);
+
+	return loaded;
+}
+
+static void map_update_poi(void)
+{
+	int i;
+	int x, y, xoff, yoff;
+
+	for (i = 1; i < map_poi_cnt; i++) {
+		for (yoff = -2; yoff < 3; yoff++) {
+			y = yoff + map_poi[i].y;
+			if (y < 0 || y >= MAXMAP) {
+				continue;
+			}
+
+			for (xoff = -2; xoff < 3; xoff++) {
+				if (xoff == -2 && yoff == -2) {
+					continue;
+				}
+				if (xoff == 2 && yoff == 2) {
+					continue;
+				}
+				if (xoff == 2 && yoff == -2) {
+					continue;
+				}
+				if (xoff == -2 && yoff == 2) {
+					continue;
+				}
+
+				x = xoff + map_poi[i].x;
+				if (x < 0 || x >= MAXMAP) {
+					continue;
+				}
+
+				map_poi_idx[x + y * MAXMAP] = (unsigned short)i;
+			}
+		}
+	}
+}
+
+static uint32_t map_poi_col(int x, int y)
+{
+	int i;
+
+	if (x < 0 || y < 0 || x >= MAXMAP || y >= MAXMAP) {
+		return 0;
+	}
+
+	if (!(i = map_poi_idx[x + y * MAXMAP])) {
+		return 0;
+	}
+
+	if (map_poi[i].type == 2) {
+		if (_mmap[map_poi[i].x + map_poi[i].y * MAXMAP] == MAPPIX_UNKNOWN) {
+			return 0;
+		}
+	}
+
+	if (_mmap[x + y * MAXMAP] != MAPPIX_UNKNOWN) {
+		return IRGBA(64, 192, 64, 255);
+	} else {
+		return IRGBA(64, 128, 64, 255);
+	}
+}
+
+void minimap_display_hover(int hx, int hy)
+{
+	int x, y, i;
+
+	if (visible == 1) { // small, round map
+		double sq = 0.70710678118654752440, dist;
+		int tmp;
+
+		x = hx - (mx + MINIMAP);
+		y = hy - (my + MINIMAP);
+
+		dist = sqrt((double)(x * x + y * y));
+		if (dist > MINIMAP) {
+			return;
+		}
+
+		// Apply clockwise rotation matrix
+		tmp = (int)(round(x * sq + y * sq));
+		y = (int)(round(-x * sq + y * sq));
+		x = tmp;
+
+		x += originx;
+		y += originy;
+	} else if (visible == 2) { // big scaled up map
+		int ox, oy;
+
+		ox = originx - MAXMAP / 6;
+		oy = originy - MAXMAP / 6;
+		if (ox < 0) {
+			ox = 0;
+		}
+		if (ox > MAXMAP - MAXMAP / 3) {
+			ox = MAXMAP - MAXMAP / 3;
+		}
+		if (oy < 0) {
+			oy = 0;
+		}
+		if (oy > MAXMAP - MAXMAP / 3) {
+			oy = MAXMAP - MAXMAP / 3;
+		}
+
+		x = hx - sx;
+		y = hy - sy;
+
+		x = x / 3 + ox;
+		y = y / 3 + oy;
+
+	} else if (visible == 3) { // big full map
+		x = hx - sx;
+		y = hy - sy;
+	} else {
+		return;
+	}
+
+	if (x < 0 || x >= MAXMAP) {
+		return;
+	}
+	if (y < 0 || y >= MAXMAP) {
+		return;
+	}
+
+	for (i = 1; i < map_poi_cnt; i++) {
+		if (abs(map_poi[i].x - x) < 5 && abs(map_poi[i].y - y) < 5) {
+			if (map_poi[i].type == 2) {
+				if (_mmap[map_poi[i].x + map_poi[i].y * MAXMAP] == MAPPIX_UNKNOWN) {
+					continue;
+				}
+			}
+			int width = 100;
+			int height;
+
+			width = render_text_length(0, map_poi[i].desc);
+			if (width > 100) {
+				width = 100;
+				height = render_text_break_length(0, 0, width, 0xffff, 0, map_poi[i].desc) + 8;
+			} else {
+				height = 18;
+			}
+
+			if (hx + width >= dotx(DOT_BR) - 4) {
+				hx = dotx(DOT_BR) - width - 4;
+				hy += 8;
+			}
+
+			render_shaded_rect(hx, hy, hx + width + 8, hy + height, 0x0000, 150);
+			render_text_break(hx + 4, hy + 4, hx + width + 4, 0xffff, 0, map_poi[i].desc);
+			break;
 		}
 	}
 }

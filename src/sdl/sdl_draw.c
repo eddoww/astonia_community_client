@@ -394,6 +394,291 @@ void sdl_pixel(int x, int y, unsigned short color, int x_offset, int y_offset)
 	SDL_RenderPoints(sdlren, pt, i);
 }
 
+void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_offset)
+{
+	int r, g, b;
+	float px, py;
+	SDL_FPoint pt[16];
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	px = (float)((x + x_offset) * sdl_scale);
+	py = (float)((y + y_offset) * sdl_scale);
+
+	switch (sdl_scale) {
+	case 1:
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)255);
+		SDL_RenderPoint(sdlren, px, py);
+		break;
+	case 2:
+		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
+		SDL_RenderPoint(sdlren, px, py);
+
+		pt[0].x = px + 1.0f;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py + 1.0f;
+
+		pt[2].x = px - 1.0f;
+		pt[2].y = py;
+
+		pt[3].x = px;
+		pt[3].y = py - 1.0f;
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)128);
+		SDL_RenderPoints(sdlren, pt, 4);
+
+		pt[0].x = px + 2.0f;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py + 2.0f;
+
+		pt[2].x = px - 2.0f;
+		pt[2].y = py;
+
+		pt[3].x = px;
+		pt[3].y = py - 2.0f;
+
+		pt[4].x = px + 1.0f;
+		pt[4].y = py + 1.0f;
+
+		pt[5].x = px + 1.0f;
+		pt[5].y = py - 1.0f;
+
+		pt[6].x = px - 1.0f;
+		pt[6].y = py + 1.0f;
+
+		pt[7].x = px - 1.0f;
+		pt[7].y = py - 1.0f;
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)64);
+		SDL_RenderPoints(sdlren, pt, 8);
+		break;
+	case 3:
+	case 4:
+		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
+		SDL_RenderPoint(sdlren, px, py);
+
+		pt[0].x = px + 1.0f;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py + 1.0f;
+
+		pt[2].x = px - 1.0f;
+		pt[2].y = py;
+
+		pt[3].x = px;
+		pt[3].y = py - 1.0f;
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 32, 255), (Uint8)min(g + 32, 255), (Uint8)min(b + 32, 255),
+		    sdl_scale == 4 ? 192 : 128);
+		SDL_RenderPoints(sdlren, pt, 4);
+
+		pt[0].x = px + 2.0f;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py + 2.0f;
+
+		pt[2].x = px - 2.0f;
+		pt[2].y = py;
+
+		pt[3].x = px;
+		pt[3].y = py - 2.0f;
+
+		pt[4].x = px + 1.0f;
+		pt[4].y = py + 1.0f;
+
+		pt[5].x = px + 1.0f;
+		pt[5].y = py - 1.0f;
+
+		pt[6].x = px - 1.0f;
+		pt[6].y = py + 1.0f;
+
+		pt[7].x = px - 1.0f;
+		pt[7].y = py - 1.0f;
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 128 : 64);
+		SDL_RenderPoints(sdlren, pt, 8);
+
+		pt[0].x = px + 3.0f;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py + 3.0f;
+
+		pt[2].x = px - 3.0f;
+		pt[2].y = py;
+
+		pt[3].x = px;
+		pt[3].y = py - 3.0f;
+
+		pt[4].x = px + 2.0f;
+		pt[4].y = py + 1.0f;
+
+		pt[5].x = px + 2.0f;
+		pt[5].y = py - 1.0f;
+
+		pt[6].x = px - 2.0f;
+		pt[6].y = py + 1.0f;
+
+		pt[7].x = px - 2.0f;
+		pt[7].y = py - 1.0f;
+
+		pt[8].x = px + 1.0f;
+		pt[8].y = py + 2.0f;
+
+		pt[9].x = px + 1.0f;
+		pt[9].y = py - 2.0f;
+
+		pt[10].x = px - 1.0f;
+		pt[10].y = py + 2.0f;
+
+		pt[11].x = px - 1.0f;
+		pt[11].y = py - 2.0f;
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 64 : 32);
+		SDL_RenderPoints(sdlren, pt, 12);
+		break;
+	default:
+		warn("unsupported scale %d in sdl_pixel()", sdl_scale);
+		return;
+	}
+}
+
+void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offset)
+{
+	int r, g, b;
+	float px, py;
+	SDL_FPoint pt[16];
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
+	px = (float)((x + x_offset) * sdl_scale);
+	py = (float)((y + y_offset) * sdl_scale);
+
+	switch (sdl_scale) {
+	case 1:
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)255);
+		SDL_RenderPoint(sdlren, px, py);
+		break;
+	case 2:
+		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
+		SDL_RenderPoint(sdlren, px, py);
+		SDL_RenderPoint(sdlren, px, py - 1.0f);
+
+		pt[0].x = px + 1.0f;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py + 1.0f;
+
+		pt[2].x = px - 1.0f;
+		pt[2].y = py;
+
+		pt[3].x = px;
+		pt[3].y = py - 2.0f;
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)128);
+		SDL_RenderPoints(sdlren, pt, 4);
+
+		pt[0].x = px + 1.0f;
+		pt[0].y = py - 1.0f;
+
+		pt[1].x = px - 1.0f;
+		pt[1].y = py - 1.0f;
+
+		pt[2].x = px - 1.0f;
+		pt[2].y = py - 2.0f;
+
+		pt[3].x = px + 1.0f;
+		pt[3].y = py - 2.0f;
+
+		pt[4].x = px;
+		pt[4].y = py - 3.0f;
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)64);
+		SDL_RenderPoints(sdlren, pt, 5);
+		break;
+	case 3:
+	case 4:
+		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
+		SDL_RenderPoint(sdlren, px, py);
+		SDL_RenderPoint(sdlren, px, py - 1.0f);
+
+		pt[0].x = px + 1.0f;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py + 1.0f;
+
+		pt[2].x = px - 1.0f;
+		pt[2].y = py;
+
+		pt[3].x = px;
+		pt[3].y = py - 2.0f;
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 32, 255), (Uint8)min(g + 32, 255), (Uint8)min(b + 32, 255),
+		    sdl_scale == 4 ? 192 : 128);
+		SDL_RenderPoints(sdlren, pt, 4);
+
+		pt[0].x = px + 1.0f;
+		pt[0].y = py - 1.0f;
+
+		pt[1].x = px - 1.0f;
+		pt[1].y = py - 1.0f;
+
+		pt[2].x = px - 1.0f;
+		pt[2].y = py - 2.0f;
+
+		pt[3].x = px + 1.0f;
+		pt[3].y = py - 2.0f;
+
+		pt[4].x = px;
+		pt[4].y = py - 3.0f;
+
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 128 : 64);
+		SDL_RenderPoints(sdlren, pt, 5);
+		pt[0].x = px + 2.0f;
+		pt[0].y = py - 1.0f;
+
+		pt[1].x = px - 2.0f;
+		pt[1].y = py - 1.0f;
+
+		pt[2].x = px + 2.0f;
+		pt[2].y = py - 2.0f;
+
+		pt[3].x = px - 2.0f;
+		pt[3].y = py - 2.0f;
+
+		pt[4].x = px + 1.0f;
+		pt[4].y = py - 3.0f;
+
+		pt[5].x = px - 1.0f;
+		pt[5].y = py - 3.0f;
+
+		pt[6].x = px + 2.0f;
+		pt[6].y = py - 3.0f;
+
+		pt[7].x = px - 2.0f;
+		pt[7].y = py - 3.0f;
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 64 : 32);
+		SDL_RenderPoints(sdlren, pt, 8);
+
+		break;
+	default:
+		warn("unsupported scale %d in sdl_pixel()", sdl_scale);
+		return;
+	}
+}
+
 void sdl_line(int fx, int fy, int tx, int ty, unsigned short color, int clipsx, int clipsy, int clipex, int clipey,
     int x_offset, int y_offset)
 {
@@ -1328,15 +1613,15 @@ void sdl_circle_alpha(int cx, int cy, int radius, unsigned short color, unsigned
 void sdl_circle_filled_alpha(
     int cx, int cy, int radius, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
 {
-	int r, g, b;
-
 	if (radius <= 0) {
 		return;
 	}
 
-	r = R16TO32(color);
-	g = G16TO32(color);
-	b = B16TO32(color);
+	// SDL3 SDL_Vertex uses SDL_FColor with float values 0.0-1.0
+	float fr = (float)R16TO32(color) / 255.0f;
+	float fg = (float)G16TO32(color) / 255.0f;
+	float fb = (float)B16TO32(color) / 255.0f;
+	float fa = (float)alpha / 255.0f;
 
 	float fcx = (float)((cx + x_offset) * sdl_scale);
 	float fcy = (float)((cy + y_offset) * sdl_scale);
@@ -1349,13 +1634,12 @@ void sdl_circle_filled_alpha(
 	int indices[CIRCLE_SEGMENTS * 3];
 
 	// Center vertex
-	vertices[0] = (SDL_Vertex){{fcx, fcy}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}};
+	vertices[0] = (SDL_Vertex){{fcx, fcy}, {fr, fg, fb, fa}, {0, 0}};
 
 	// Perimeter vertices
 	for (int i = 0; i <= CIRCLE_SEGMENTS; i++) {
 		float angle = (float)i * (2.0f * (float)M_PI / (float)CIRCLE_SEGMENTS);
-		vertices[i + 1] = (SDL_Vertex){
-		    {fcx + fsr * cosf(angle), fcy + fsr * sinf(angle)}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}};
+		vertices[i + 1] = (SDL_Vertex){{fcx + fsr * cosf(angle), fcy + fsr * sinf(angle)}, {fr, fg, fb, fa}, {0, 0}};
 	}
 
 	// Triangle fan indices (center to each adjacent pair of perimeter vertices)
@@ -1465,15 +1749,15 @@ void sdl_ellipse_alpha(
 void sdl_ellipse_filled_alpha(
     int cx, int cy, int rx, int ry, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
 {
-	int r, g, b;
-
 	if (rx <= 0 || ry <= 0) {
 		return;
 	}
 
-	r = R16TO32(color);
-	g = G16TO32(color);
-	b = B16TO32(color);
+	// SDL3 SDL_Vertex uses SDL_FColor with float values 0.0-1.0
+	float fr = (float)R16TO32(color) / 255.0f;
+	float fg = (float)G16TO32(color) / 255.0f;
+	float fb = (float)B16TO32(color) / 255.0f;
+	float fa = (float)alpha / 255.0f;
 
 	float fcx = (float)((cx + x_offset) * sdl_scale);
 	float fcy = (float)((cy + y_offset) * sdl_scale);
@@ -1486,13 +1770,12 @@ void sdl_ellipse_filled_alpha(
 	int indices[ELLIPSE_SEGMENTS * 3];
 
 	// Center vertex
-	vertices[0] = (SDL_Vertex){{fcx, fcy}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}};
+	vertices[0] = (SDL_Vertex){{fcx, fcy}, {fr, fg, fb, fa}, {0, 0}};
 
 	// Perimeter vertices (ellipse uses different x and y radii)
 	for (int i = 0; i <= ELLIPSE_SEGMENTS; i++) {
 		float angle = (float)i * (2.0f * (float)M_PI / (float)ELLIPSE_SEGMENTS);
-		vertices[i + 1] = (SDL_Vertex){
-		    {fcx + frx * cosf(angle), fcy + fry * sinf(angle)}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}};
+		vertices[i + 1] = (SDL_Vertex){{fcx + frx * cosf(angle), fcy + fry * sinf(angle)}, {fr, fg, fb, fa}, {0, 0}};
 	}
 
 	// Triangle fan indices
@@ -1845,8 +2128,6 @@ void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, u
 void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigned short color, unsigned char alpha,
     int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
-	int r, g, b;
-
 	if (thickness <= 0) {
 		thickness = 1;
 	}
@@ -1857,9 +2138,11 @@ void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigne
 		return;
 	}
 
-	r = R16TO32(color);
-	g = G16TO32(color);
-	b = B16TO32(color);
+	// SDL3 SDL_Vertex uses SDL_FColor with float values 0.0-1.0
+	float fr = (float)R16TO32(color) / 255.0f;
+	float fg = (float)G16TO32(color) / 255.0f;
+	float fb = (float)B16TO32(color) / 255.0f;
+	float fa = (float)alpha / 255.0f;
 
 	// Apply offset and scale
 	float ffx = (float)((fx + x_offset) * sdl_scale);
@@ -1883,10 +2166,10 @@ void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigne
 	// Use SDL_RenderGeometry for GPU-accelerated thick line (single draw call)
 	// Construct a quad from 4 corner points
 	SDL_Vertex vertices[4] = {
-	    {{ffx + nx, ffy + ny}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}}, // Start + perpendicular
-	    {{ffx - nx, ffy - ny}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}}, // Start - perpendicular
-	    {{ftx - nx, fty - ny}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}}, // End - perpendicular
-	    {{ftx + nx, fty + ny}, {(Uint8)r, (Uint8)g, (Uint8)b, alpha}, {0, 0}} // End + perpendicular
+	    {{ffx + nx, ffy + ny}, {fr, fg, fb, fa}, {0, 0}}, // Start + perpendicular
+	    {{ffx - nx, ffy - ny}, {fr, fg, fb, fa}, {0, 0}}, // Start - perpendicular
+	    {{ftx - nx, fty - ny}, {fr, fg, fb, fa}, {0, 0}}, // End - perpendicular
+	    {{ftx + nx, fty + ny}, {fr, fg, fb, fa}, {0, 0}} // End + perpendicular
 	};
 
 	// Two triangles to form the quad
@@ -1970,8 +2253,12 @@ void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, 
 
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
-	Uint8 r1 = (Uint8)R16TO32(color1), g1 = (Uint8)G16TO32(color1), b1 = (Uint8)B16TO32(color1);
-	Uint8 r2 = (Uint8)R16TO32(color2), g2 = (Uint8)G16TO32(color2), b2 = (Uint8)B16TO32(color2);
+	// SDL3 SDL_Vertex uses SDL_FColor with float values 0.0-1.0
+	float fr1 = (float)R16TO32(color1) / 255.0f, fg1 = (float)G16TO32(color1) / 255.0f,
+	      fb1 = (float)B16TO32(color1) / 255.0f;
+	float fr2 = (float)R16TO32(color2) / 255.0f, fg2 = (float)G16TO32(color2) / 255.0f,
+	      fb2 = (float)B16TO32(color2) / 255.0f;
+	float fa = (float)alpha / 255.0f;
 
 	// Apply offset and scale
 	float fsx = (float)((sx + x_offset) * sdl_scale);
@@ -1982,10 +2269,10 @@ void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, 
 	// Use SDL_RenderGeometry for GPU-accelerated gradient (single draw call)
 	// Horizontal gradient: left side = color1, right side = color2
 	SDL_Vertex vertices[4] = {
-	    {{fsx, fsy}, {r1, g1, b1, alpha}, {0, 0}}, // Top-left
-	    {{fex, fsy}, {r2, g2, b2, alpha}, {0, 0}}, // Top-right
-	    {{fex, fey}, {r2, g2, b2, alpha}, {0, 0}}, // Bottom-right
-	    {{fsx, fey}, {r1, g1, b1, alpha}, {0, 0}} // Bottom-left
+	    {{fsx, fsy}, {fr1, fg1, fb1, fa}, {0, 0}}, // Top-left
+	    {{fex, fsy}, {fr2, fg2, fb2, fa}, {0, 0}}, // Top-right
+	    {{fex, fey}, {fr2, fg2, fb2, fa}, {0, 0}}, // Bottom-right
+	    {{fsx, fey}, {fr1, fg1, fb1, fa}, {0, 0}} // Bottom-left
 	};
 
 	int indices[6] = {0, 1, 2, 0, 2, 3};
@@ -2016,8 +2303,12 @@ void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, 
 
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
-	Uint8 r1 = (Uint8)R16TO32(color1), g1 = (Uint8)G16TO32(color1), b1 = (Uint8)B16TO32(color1);
-	Uint8 r2 = (Uint8)R16TO32(color2), g2 = (Uint8)G16TO32(color2), b2 = (Uint8)B16TO32(color2);
+	// SDL3 SDL_Vertex uses SDL_FColor with float values 0.0-1.0
+	float fr1 = (float)R16TO32(color1) / 255.0f, fg1 = (float)G16TO32(color1) / 255.0f,
+	      fb1 = (float)B16TO32(color1) / 255.0f;
+	float fr2 = (float)R16TO32(color2) / 255.0f, fg2 = (float)G16TO32(color2) / 255.0f,
+	      fb2 = (float)B16TO32(color2) / 255.0f;
+	float fa = (float)alpha / 255.0f;
 
 	// Apply offset and scale
 	float fsx = (float)((sx + x_offset) * sdl_scale);
@@ -2028,10 +2319,10 @@ void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, 
 	// Use SDL_RenderGeometry for GPU-accelerated gradient (single draw call)
 	// Vertical gradient: top = color1, bottom = color2
 	SDL_Vertex vertices[4] = {
-	    {{fsx, fsy}, {r1, g1, b1, alpha}, {0, 0}}, // Top-left
-	    {{fex, fsy}, {r1, g1, b1, alpha}, {0, 0}}, // Top-right
-	    {{fex, fey}, {r2, g2, b2, alpha}, {0, 0}}, // Bottom-right
-	    {{fsx, fey}, {r2, g2, b2, alpha}, {0, 0}} // Bottom-left
+	    {{fsx, fsy}, {fr1, fg1, fb1, fa}, {0, 0}}, // Top-left
+	    {{fex, fsy}, {fr1, fg1, fb1, fa}, {0, 0}}, // Top-right
+	    {{fex, fey}, {fr2, fg2, fb2, fa}, {0, 0}}, // Bottom-right
+	    {{fsx, fey}, {fr2, fg2, fb2, fa}, {0, 0}} // Bottom-left
 	};
 
 	int indices[6] = {0, 1, 2, 0, 2, 3};

@@ -17,7 +17,6 @@
 #include "sdl/sdl.h"
 #include "modder/modder.h"
 
-#define MAXHELP   24
 #define MAXQUEST2 10
 
 // Forward declarations for functions used by exec_cmd
@@ -245,6 +244,7 @@ static void set_cmd_cursor(int cmd)
 	case CMD_HELP_NEXT:
 	case CMD_HELP_PREV:
 	case CMD_HELP_CLOSE:
+	case CMD_HELP_INDEX:
 		cursor = SDL_CUR_c_use;
 		break;
 
@@ -328,15 +328,35 @@ static void detect_hover_target(void)
 		if (mousex >= dotx(DOT_HLP) && mousex <= dotx(DOT_HL2) && mousey >= doty(DOT_HLP) && mousey <= doty(DOT_HL2)) {
 			butsel = BUT_HELP_MISC;
 
-			if (display_help == 1 && mousex >= dotx(DOT_HLP) + 7 && mousex <= dotx(DOT_HLP) + 136 &&
-			    mousey >= 198 + doty(DOT_HLP) && mousey <= 198 + doty(DOT_HLP) + 12 * 10) {
-				helpsel = (mousey - (198 + doty(DOT_HLP))) / 10 + 2;
-				if (mousex > dotx(DOT_HLP) + 110) {
-					helpsel += 12;
-				}
+			if (display_help == 2) {
+				if (help_index_count > 0) {
+					int start_x = dotx(DOT_HLP) + 10;
+					int start_y = doty(DOT_HLP) + HELP_PAGE_MARGIN_TOP;
+					int content_bottom = doty(DOT_HL2) - HELP_PAGE_MARGIN_BOTTOM;
+					int rows;
+					int columns = 2;
+					int max_entries;
+					int visible;
+					int title_height = render_text_break_length(0, 0, HELP_TEXT_WIDTH, whitecolor, 0, "Help Index");
 
-				if (helpsel < 2 || helpsel > MAXHELP) {
-					helpsel = -1;
+					start_y += title_height + HELP_INDEX_TITLE_SPACING;
+					rows = (content_bottom - start_y) / HELP_INDEX_ROW_HEIGHT;
+					if (rows < 1) {
+						rows = 1;
+					}
+					max_entries = rows * columns;
+					visible = min(help_index_count, max_entries);
+
+					if (mousex >= start_x && mousex < start_x + HELP_INDEX_COL_WIDTH * columns && mousey >= start_y &&
+					    mousey < start_y + rows * HELP_INDEX_ROW_HEIGHT) {
+						int col = (mousex - start_x) / HELP_INDEX_COL_WIDTH;
+						int row = (mousey - start_y) / HELP_INDEX_ROW_HEIGHT;
+						int entry = row + col * rows;
+
+						if (entry >= 0 && entry < visible) {
+							helpsel = help_index_page_for_entry(entry);
+						}
+					}
 				}
 			}
 
@@ -354,13 +374,28 @@ static void detect_hover_target(void)
 				}
 			}
 		}
-		if (mousex >= dotx(DOT_HLP) + 177 && mousex <= dotx(DOT_HLP) + 196 && mousey >= doty(DOT_HL2) - 20 &&
-		    mousey <= doty(DOT_HL2) - 10) {
-			butsel = BUT_HELP_PREV;
-		}
-		if (mousex >= dotx(DOT_HLP) + 200 && mousex <= dotx(DOT_HLP) + 219 && mousey >= doty(DOT_HL2) - 20 &&
-		    mousey <= doty(DOT_HL2) - 10) {
-			butsel = BUT_HELP_NEXT;
+		if (display_help) {
+			if (mousex >= dotx(DOT_HLP) + 135 && mousex <= dotx(DOT_HLP) + 156 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_PREV;
+			}
+			if (mousex >= dotx(DOT_HLP) + 159 && mousex <= dotx(DOT_HLP) + 194 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_INDEX;
+			}
+			if (mousex >= dotx(DOT_HLP) + 197 && mousex <= dotx(DOT_HLP) + 218 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_NEXT;
+			}
+		} else {
+			if (mousex >= dotx(DOT_HLP) + 177 && mousex <= dotx(DOT_HLP) + 196 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_PREV;
+			}
+			if (mousex >= dotx(DOT_HLP) + 200 && mousex <= dotx(DOT_HLP) + 219 && mousey >= doty(DOT_HL2) - 18 &&
+			    mousey <= doty(DOT_HL2) - 7) {
+				butsel = BUT_HELP_NEXT;
+			}
 		}
 		if (mousex >= dotx(DOT_HLP) + 211 && mousex <= dotx(DOT_HLP) + 224 && mousey >= doty(DOT_HLP) + 2 &&
 		    mousey <= doty(DOT_HLP) + 12) {
@@ -427,25 +462,64 @@ static void detect_hover_target(void)
 	// hit map
 	if (!hitsel[0] && butsel == -1 && mousex >= dotx(DOT_MTL) && mousey >= doty(DOT_MTL) && doty(DOT_MBR) &&
 	    mousey < doty(DOT_MBR)) {
-		if (action_ovr == 13) {
-			itmsel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, 3);
-			if (itmsel == MAXMN) {
-				chrsel = get_near_char(mousex, mousey, 3);
-			}
-			if (itmsel == MAXMN && chrsel == MAXMN) {
+		if (action_ovr == ACTION_LOOK) {
+			map_index_t tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR, 5);
+			if (tmp != MAXMN) {
+				if (map[tmp].csprite) {
+					chrsel = tmp;
+				} else {
+					itmsel = tmp;
+				}
+			} else {
 				mapsel = get_near_ground(mousex, mousey);
 			}
 		} else {
-			if (vk_char || (action_ovr != -1 && (action_ovr != 11 || csprite) && action_ovr != 2)) {
-				chrsel = get_near_char(mousex, mousey, vk_char ? MAPDX : 3);
+			// old style interface (shift/ctrl) first
+			if (vk_char) {
+				chrsel = get_near_char(mousex, mousey, MAPDX);
 			}
-			if (chrsel == MAXMN && (vk_item || action_ovr == 11)) {
-				itmsel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, csprite ? 0 : MAPDX);
+			if (chrsel == MAXMN && vk_item) {
+				if (csprite) {
+					itmsel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, 0);
+				} else {
+					itmsel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, MAPDX);
+				}
 			}
+
+			// then active action bar slots and ground
+			if (chrsel == MAXMN && itmsel == MAXMN) {
+				unsigned int flags = 0;
+
+				if (action_ovr != ACTION_NONE && (action_ovr != ACTION_TAKEGIVE || csprite) &&
+				    action_ovr !=
+				        ACTION_LBALL) { // We exclude l'ball because it is usually aimed at the ground, not a character
+					flags |= NEAR_CHAR;
+					if (action_ovr == ACTION_ATTACK) {
+						flags |= NEAR_NOTSELF;
+					}
+				}
+
+				if (action_ovr == ACTION_TAKEGIVE) {
+					flags |= NEAR_ITEM;
+				}
+				map_index_t tmp;
+				if (csprite) {
+					tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | flags | NEAR_NOTSELF, 2);
+				} else {
+					tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | flags, 5);
+				}
+				if (tmp != MAXMN) {
+					if (map[tmp].csprite) {
+						chrsel = tmp;
+					} else {
+						itmsel = tmp;
+					}
+				}
+			}
+
 			if (chrsel == MAXMN && itmsel == MAXMN && !vk_char && (!vk_item || csprite)) {
 				mapsel = get_near_ground(mousex, mousey);
 			}
-
 			if (mapsel != MAXMN || itmsel != MAXMN || chrsel != MAXMN) {
 				butsel = BUT_MAP;
 			}
@@ -483,7 +557,9 @@ static void detect_hover_target(void)
 
 void exec_cmd(int cmd, int a)
 {
-	action_ovr = -1;
+	int offset = 100, clan_bound = 16;
+
+	action_ovr = ACTION_NONE;
 	context_key_reset();
 
 	switch (cmd) {
@@ -591,7 +667,7 @@ void exec_cmd(int cmd, int a)
 		return;
 	case CMD_CON_LOOK:
 		cmd_look_con(consel);
-		last_right_click_invsel = INVENTORYSIZE + consel;
+		last_right_click_invsel = _inventorysize + consel;
 		return;
 
 	case CMD_MAP_CAST_L:
@@ -698,10 +774,18 @@ void exec_cmd(int cmd, int a)
 		return;
 
 	case CMD_TELEPORT:
+		if (sv_ver == 35) {
+			offset = 200;
+			clan_bound = 48;
+		}
+
 		if (telsel == 1042) {
-			clan_offset = 16 - clan_offset;
+			clan_offset += 16;
+			if (clan_offset > clan_bound) {
+				clan_offset = 0;
+			}
 		} else {
-			if (telsel >= 64 && telsel <= 100) {
+			if (telsel >= 64 && telsel <= offset) {
 				cmd_teleport(telsel + clan_offset);
 			} else {
 				cmd_teleport(telsel);
@@ -718,7 +802,7 @@ void exec_cmd(int cmd, int a)
 	case CMD_HELP_NEXT:
 		if (display_help) {
 			display_help++;
-			if (display_help > MAXHELP) {
+			if (display_help > help_page_count) {
 				display_help = 1;
 			}
 		}
@@ -729,11 +813,16 @@ void exec_cmd(int cmd, int a)
 			}
 		}
 		return;
+	case CMD_HELP_INDEX:
+		if (display_help) {
+			display_help = 2;
+		}
+		return;
 	case CMD_HELP_PREV:
 		if (display_help) {
 			display_help--;
 			if (display_help < 1) {
-				display_help = MAXHELP;
+				display_help = help_page_count;
 			}
 		}
 		if (display_quest) {
@@ -748,7 +837,7 @@ void exec_cmd(int cmd, int a)
 		display_quest = 0;
 		return;
 	case CMD_HELP_MISC:
-		if (helpsel > 0 && helpsel <= MAXHELP && display_help) {
+		if (helpsel > 0 && helpsel <= help_page_count && display_help) {
 			display_help = helpsel;
 		}
 		if (questsel != -1) {
@@ -848,39 +937,39 @@ void cmd_action(void)
 	}
 
 	switch (actsel) {
-	case 0:
-	case 1:
-	case 2:
-	case 11:
-	case 13:
+	case ACTION_ATTACK:
+	case ACTION_FIREBALL:
+	case ACTION_LBALL:
+	case ACTION_TAKEGIVE:
+	case ACTION_LOOK:
 		action_ovr = actsel;
 		break;
 
-	case 3:
+	case ACTION_FLASH:
 		cmd_some_spell(CL_FLASH, 0, 0, map[plrmn].cn);
 		break;
-	case 4:
+	case ACTION_FREEZE:
 		cmd_some_spell(CL_FREEZE, 0, 0, map[plrmn].cn);
 		break;
-	case 5:
+	case ACTION_SHIELD:
 		cmd_some_spell(CL_MAGICSHIELD, 0, 0, map[plrmn].cn);
 		break;
-	case 6:
+	case ACTION_BLESS:
 		cmd_some_spell(CL_BLESS, 0, 0, map[plrmn].cn);
 		break;
-	case 7:
+	case ACTION_HEAL:
 		cmd_some_spell(CL_HEAL, 0, 0, map[plrmn].cn);
 		break;
-	case 8:
+	case ACTION_WARCRY:
 		cmd_some_spell(CL_WARCRY, 0, 0, map[plrmn].cn);
 		break;
-	case 9:
+	case ACTION_PULSE:
 		cmd_some_spell(CL_PULSE, 0, 0, map[plrmn].cn);
 		break;
-	case 10:
+	case ACTION_FIRERING:
 		cmd_some_spell(CL_FIREBALL, 0, 0, map[plrmn].cn);
 		break;
-	case 12:
+	case ACTION_MAP:
 		minimap_toggle();
 		break;
 	}
@@ -928,7 +1017,7 @@ static void update_fkeyitems(void)
 {
 	int i, c;
 	fkeyitem[0] = fkeyitem[1] = fkeyitem[2] = fkeyitem[3] = 0;
-	for (i = 30; i < INVENTORYSIZE; i++) {
+	for (i = 30; i < _inventorysize; i++) {
 		c = (i - 2) % 4;
 		if (fkeyitem[c] == 0 && (is_fkey_use_item(i))) {
 			fkeyitem[c] = i;
@@ -959,14 +1048,14 @@ void calculate_lcmd_logic(void)
 		return;
 	}
 
-	if (action_ovr != -1) {
+	if (action_ovr != ACTION_NONE) {
 		if (action_ovr == 0 && chrsel != MAXMN) {
 			lcmd = CMD_CHR_ATTACK;
-		} else if (action_ovr == 1 && chrsel != MAXMN) {
+		} else if (action_ovr == ACTION_FIREBALL && chrsel != MAXMN) {
 			lcmd = CMD_CHR_CAST_L;
-		} else if (action_ovr == 2) {
+		} else if (action_ovr == ACTION_LBALL) {
 			lcmd = CMD_MAP_CAST_R;
-		} else if (action_ovr == 11) {
+		} else if (action_ovr == ACTION_TAKEGIVE) {
 			if (itmsel != MAXMN) {
 				if (map[itmsel].flags & CMF_TAKE) { // take needs to come first as dropped items can be usable
 					lcmd = CMD_ITM_TAKE;
@@ -982,7 +1071,7 @@ void calculate_lcmd_logic(void)
 			} else if (mapsel != MAXMN && csprite) {
 				lcmd = CMD_MAP_DROP;
 			}
-		} else if (action_ovr == 13) {
+		} else if (action_ovr == ACTION_LOOK) {
 			if (itmsel != MAXMN) {
 				lcmd = CMD_ITM_LOOK;
 			} else if (chrsel != MAXMN) {
@@ -1084,6 +1173,9 @@ void handle_special_buttons_logic(void)
 		if (butsel == BUT_HELP_PREV) {
 			lcmd = CMD_HELP_PREV;
 		}
+		if (butsel == BUT_HELP_INDEX) {
+			lcmd = CMD_HELP_INDEX;
+		}
 		if (butsel == BUT_HELP_NEXT) {
 			lcmd = CMD_HELP_NEXT;
 		}
@@ -1121,7 +1213,7 @@ void handle_special_buttons_logic(void)
 void calculate_rcmd_logic(void)
 {
 	rcmd = CMD_NONE;
-	if (action_ovr == -1) {
+	if (action_ovr == ACTION_NONE) {
 		skl_look_sel = get_skl_look(mousex, mousey);
 		if (con_cnt == 0 && skl_look_sel != -1) {
 			rcmd = CMD_SKL_LOOK;

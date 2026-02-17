@@ -21,7 +21,7 @@
 #include "modder/modder.h"
 
 static int c_on = 0, c_x, c_y, d_y, ori_x, ori_y;
-static size_t csel = MAXMN, isel = MAXMN, msel = MAXMN;
+static size_t csel = -1ull, isel = -1ull, msel = -1ull;
 
 #define MAXLINE    20
 #define MAXLEN     120
@@ -150,7 +150,7 @@ static void makemenu(void)
 		}
 
 		if (csel == MAPDX * MAPDY / 2U) {
-			if (value[0][V_FLASH]) {
+			if (value[0][sv_val(V_FLASH)]) {
 				sprintf(menu.line[menu.linecnt], "Cast Flash");
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = 0;
@@ -158,7 +158,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 
-			if (value[0][V_FREEZE]) {
+			if (value[0][sv_val(V_FREEZE)]) {
 				sprintf(menu.line[menu.linecnt], "Cast Freeze");
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = 0;
@@ -166,7 +166,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 
-			if (value[0][V_PULSE]) {
+			if (sv_ver == 30 && value[0][V3_PULSE]) {
 				sprintf(menu.line[menu.linecnt], "Cast Pulse");
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = 0;
@@ -174,7 +174,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 
-			if (value[0][V_WARCRY]) {
+			if (value[0][sv_val(V_WARCRY)]) {
 				sprintf(menu.line[menu.linecnt], "Warcry");
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = 0;
@@ -182,7 +182,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 
-			if (value[0][V_MAGICSHIELD]) {
+			if (value[0][sv_val(V_MAGICSHIELD)]) {
 				sprintf(menu.line[menu.linecnt], "Cast Magic Shield");
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = 0;
@@ -190,7 +190,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 
-			if (value[0][V_HEAL]) {
+			if (value[0][sv_val(V_HEAL)]) {
 				sprintf(menu.line[menu.linecnt], "Cast Heal");
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = (int)map[csel].cn;
@@ -199,7 +199,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 
-			if (value[0][V_BLESS]) {
+			if (value[0][sv_val(V_BLESS)]) {
 				sprintf(menu.line[menu.linecnt], "Cast Bless");
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = (int)map[csel].cn;
@@ -208,7 +208,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 		} else {
-			if (value[0][V_FIREBALL]) {
+			if (value[0][sv_val(V_FIREBALL)]) {
 				sprintf(menu.line[menu.linecnt], "Fireball %s", name);
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = (int)map[csel].cn;
@@ -216,7 +216,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 
-			if (value[0][V_FLASH]) {
+			if (value[0][sv_val(V_FLASH)]) {
 				sprintf(menu.line[menu.linecnt], "L'ball %s", name);
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = (int)map[csel].cn;
@@ -224,7 +224,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 
-			if (value[0][V_HEAL]) {
+			if (value[0][sv_val(V_HEAL)]) {
 				sprintf(menu.line[menu.linecnt], "Heal %s", name);
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = (int)map[csel].cn;
@@ -233,7 +233,7 @@ static void makemenu(void)
 				menu.linecnt++;
 			}
 
-			if (value[0][V_BLESS]) {
+			if (sv_ver == 30 && value[0][V3_BLESS]) {
 				sprintf(menu.line[menu.linecnt], "Bless %s", name);
 				menu.cmd[menu.linecnt] = CMD_CHR_CAST_K;
 				menu.opt1[menu.linecnt] = (int)map[csel].cn;
@@ -459,45 +459,44 @@ void context_keydown(SDL_Keycode key)
 	}
 
 	// ignore key-down while over action bar
-	if (actsel != MAXMN) {
+	if (actsel != -1) {
 		return;
 	}
 
 	switch (action_key2slot(key)) {
-	case 0:
+	case ACTION_ATTACK:
 		lcmd_override = CMD_CHR_ATTACK;
 		break;
-	case 1:
+	case ACTION_FIREBALL:
 		lcmd_override = CMD_CHR_CAST_L;
 		break;
-	case 2:
+	case ACTION_LBALL:
 		lcmd_override = CMD_CHR_CAST_R;
 		break;
-	case 6:
-	case 7:
+	case ACTION_BLESS:
+	case ACTION_HEAL:
 		lcmd_override = CMD_CHR_CAST_K;
 		break;
-	case 11:
+	case ACTION_TAKEGIVE:
 		lcmd_override = CMD_ITM_USE;
 		break;
-	case 13:
+	case ACTION_LOOK:
 		lcmd_override = CMD_ITM_LOOK;
 		break;
-
-	case 101:
+	case 100 + ACTION_FIREBALL:
 		lcmd_override = CMD_MAP_CAST_L;
 		break;
-	case 102:
+	case 100 + ACTION_LBALL:
 		lcmd_override = CMD_MAP_CAST_R;
 		break;
-	case 103:
-	case 104:
-	case 105:
-	case 106:
-	case 107:
-	case 108:
-	case 109:
-	case 110:
+	case 100 + ACTION_FLASH:
+	case 100 + ACTION_FREEZE:
+	case 100 + ACTION_SHIELD:
+	case 100 + ACTION_BLESS:
+	case 100 + ACTION_HEAL:
+	case 100 + ACTION_WARCRY:
+	case 100 + ACTION_PULSE:
+	case 100 + ACTION_FIRERING:
 		lcmd_override = CMD_SLF_CAST_K;
 		break;
 	}
@@ -515,6 +514,8 @@ int context_key_set_cmd(void)
 		return 0;
 	}
 
+	chrsel = itmsel = mapsel = MAXMN;
+
 	switch (lcmd_override) {
 	case CMD_CHR_ATTACK:
 	case CMD_CHR_CAST_L:
@@ -529,41 +530,43 @@ int context_key_set_cmd(void)
 
 	case CMD_ITM_LOOK:
 	case CMD_CHR_LOOK:
-	case CMD_MAP_LOOK:
-		itmsel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, 3);
-		lcmd_override = CMD_ITM_LOOK;
-		if (itmsel == MAXMN) {
-			chrsel = get_near_char(mousex, mousey, 3);
-			lcmd_override = CMD_CHR_LOOK;
-		}
-		if (itmsel == MAXMN && chrsel == MAXMN) {
+	case CMD_MAP_LOOK: {
+		map_index_t tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR, 5);
+		if (tmp != MAXMN) {
+			if (map[tmp].csprite) {
+				chrsel = tmp;
+				lcmd_override = CMD_CHR_LOOK;
+			} else {
+				itmsel = tmp;
+				lcmd_override = CMD_ITM_LOOK;
+			}
+		} else {
 			mapsel = get_near_ground(mousex, mousey);
 			lcmd_override = CMD_MAP_LOOK;
 		}
 		break;
-
+	}
 	case CMD_ITM_USE:
 	case CMD_ITM_USE_WITH:
 	case CMD_ITM_TAKE:
 	case CMD_CHR_GIVE:
 	case CMD_MAP_DROP:
-		chrsel = get_near_char(mousex, mousey, 3);
-		itmsel = get_near_item(mousex, mousey, CMF_TAKE | CMF_USE, csprite ? 0 : 3);
-		mapsel = get_near_ground(mousex, mousey);
-		if (csprite) {
-			if (chrsel != MAXMN) {
-				itmsel = MAXMN;
-				lcmd_override = CMD_CHR_GIVE;
-			} else if (itmsel != MAXMN) {
-				if (map[itmsel].flags & CMF_USE) {
-					lcmd_override = CMD_ITM_USE_WITH;
+		if (csprite) { // give, use with or drop
+			map_index_t tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR | NEAR_NOTSELF, 2);
+			if (tmp != MAXMN) {
+				if (map[tmp].csprite) {
+					chrsel = tmp;
+					lcmd_override = CMD_CHR_GIVE;
 				} else {
-					itmsel = MAXMN;
+					itmsel = tmp;
+					lcmd_override = CMD_ITM_USE_WITH;
 				}
-			} else if (mapsel != MAXMN) {
+			} else {
+				mapsel = get_near_ground(mousex, mousey);
 				lcmd_override = CMD_MAP_DROP;
 			}
-		} else {
+		} else { // take or use
+			itmsel = get_near_item(mousex, mousey, CMF_TAKE | CMF_USE, 5);
 			if (itmsel != MAXMN) {
 				if (map[itmsel].flags & CMF_TAKE) {
 					lcmd_override = CMD_ITM_TAKE;
@@ -573,7 +576,6 @@ int context_key_set_cmd(void)
 					itmsel = MAXMN;
 				}
 			}
-			chrsel = MAXMN;
 		}
 		break;
 	}
@@ -608,46 +610,46 @@ void context_keyup(SDL_Keycode key)
 		return;
 	}
 
-	if (actsel != MAXMN && !act_lck) {
+	if (actsel != (int)MAXMN && !act_lck) {
 		action_set_key(actsel, key);
 		return;
 	}
 
 	if (mousex >= dotx(DOT_MTL) && mousey >= doty(DOT_MTL) && mousex < dotx(DOT_MBR) && mousey < doty(DOT_MBR)) {
-		csel = get_near_char(mousex, mousey, 3);
-		isel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, csprite ? 0 : 3);
-		msel = get_near_ground(mousex, mousey);
+		csel = chrsel;
+		isel = itmsel;
+		msel = mapsel;
 	} else {
 		csel = isel = msel = MAXMN;
 	}
 
 	switch (action_key2slot(key)) {
-	case 0:
+	case ACTION_ATTACK:
 		if (csel != MAXMN) {
 			cmd_kill(map[csel].cn);
 		}
 		break;
-	case 1:
+	case ACTION_FIREBALL:
 		if (csel != MAXMN) {
 			cmd_some_spell(CL_FIREBALL, 0, 0, map[csel].cn);
 		}
 		break;
-	case 2:
+	case ACTION_LBALL:
 		if (csel != MAXMN) {
 			cmd_some_spell(CL_BALL, 0, 0, map[csel].cn);
 		}
 		break;
-	case 6:
+	case ACTION_BLESS:
 		if (csel != MAXMN) {
 			cmd_some_spell(CL_BLESS, 0, 0, map[csel].cn);
 		}
 		break;
-	case 7:
+	case ACTION_HEAL:
 		if (csel != MAXMN) {
 			cmd_some_spell(CL_HEAL, 0, 0, map[csel].cn);
 		}
 		break;
-	case 11:
+	case ACTION_TAKEGIVE:
 		if (csprite) {
 			if (csel != MAXMN) {
 				cmd_give(map[csel].cn);
@@ -668,7 +670,7 @@ void context_keyup(SDL_Keycode key)
 			}
 		}
 		break;
-	case 13:
+	case ACTION_LOOK:
 		if (isel != MAXMN) {
 			cmd_look_item(
 			    originx - (int)(MAPDX / 2U) + (int)(isel % MAPDX), originy - (int)(MAPDY / 2U) + (int)(isel / MAPDX));
@@ -680,43 +682,43 @@ void context_keyup(SDL_Keycode key)
 		}
 		break;
 
-	case 101:
+	case 100 + ACTION_FIREBALL:
 		if (msel != MAXMN) {
 			cmd_some_spell(CL_FIREBALL, originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX),
 			    originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX), 0);
 		}
 		break;
-	case 102:
+	case 100 + ACTION_LBALL:
 		if (msel != MAXMN) {
 			cmd_some_spell(CL_BALL, originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX),
 			    originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX), 0);
 		}
 		break;
-	case 103:
+	case 100 + ACTION_FLASH:
 		cmd_some_spell(CL_FLASH, 0, 0, map[plrmn].cn);
 		break;
-	case 104:
+	case 100 + ACTION_FREEZE:
 		cmd_some_spell(CL_FREEZE, 0, 0, map[plrmn].cn);
 		break;
-	case 105:
+	case 100 + ACTION_SHIELD:
 		cmd_some_spell(CL_MAGICSHIELD, 0, 0, map[plrmn].cn);
 		break;
-	case 106:
+	case 100 + ACTION_BLESS:
 		cmd_some_spell(CL_BLESS, 0, 0, map[plrmn].cn);
 		break;
-	case 107:
+	case 100 + ACTION_HEAL:
 		cmd_some_spell(CL_HEAL, 0, 0, map[plrmn].cn);
 		break;
-	case 108:
+	case 100 + ACTION_WARCRY:
 		cmd_some_spell(CL_WARCRY, 0, 0, map[plrmn].cn);
 		break;
-	case 109:
+	case 100 + ACTION_PULSE:
 		cmd_some_spell(CL_PULSE, 0, 0, map[plrmn].cn);
 		break;
-	case 110:
+	case 100 + ACTION_FIRERING:
 		cmd_some_spell(CL_FIREBALL, 0, 0, map[plrmn].cn);
 		break;
-	case 112:
+	case 100 + ACTION_MAP:
 		minimap_toggle();
 		break;
 	}

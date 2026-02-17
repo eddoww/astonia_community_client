@@ -1178,6 +1178,16 @@ void set_v35_actions(void)
 static int action_flash_slot = -1; // Which slot is flashing (-1 = none)
 static tick_t action_flash_until = 0; // Tick until which to flash
 
+// Trigger a flash for an action icon by its slot index directly
+void action_flash_action(int slot)
+{
+	if (slot < 0 || slot >= MAXACTIONSLOT) {
+		return;
+	}
+	action_flash_slot = slot;
+	action_flash_until = tick + TICKS / 2; // Flash for 0.5 seconds
+}
+
 // Trigger a flash for the action icon corresponding to a spell
 void action_flash_spell(int spell_cl_type)
 {

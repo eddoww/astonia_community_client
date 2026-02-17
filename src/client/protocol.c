@@ -16,6 +16,7 @@
 #include "client/client.h"
 #include "client/client_private.h"
 #include "gui/gui.h"
+#include "gui/gui_private.h"
 #include "modder/modder.h"
 #include "protocol.h"
 #include "sdl/sdl.h"
@@ -1579,6 +1580,9 @@ void cmd_take(int x, int y)
 	ux = (x < 0) ? 0 : (uint16_t)x;
 	uy = (y < 0) ? 0 : (uint16_t)y;
 
+	// Flash the take/give action icon
+	action_flash_action(ACTION_TAKEGIVE);
+
 	buf[0] = CL_TAKE;
 	store_u16(buf + 1, ux);
 	store_u16(buf + 3, uy);
@@ -1592,6 +1596,9 @@ void cmd_look_map(int x, int y)
 
 	ux = (x < 0) ? 0 : (uint16_t)x;
 	uy = (y < 0) ? 0 : (uint16_t)y;
+
+	// Flash the look action icon
+	action_flash_action(ACTION_LOOK);
 
 	buf[0] = CL_LOOK_MAP;
 	store_u16(buf + 1, ux);
@@ -1607,6 +1614,9 @@ void cmd_look_item(int x, int y)
 	ux = (x < 0) ? 0 : (uint16_t)x;
 	uy = (y < 0) ? 0 : (uint16_t)y;
 
+	// Flash the look action icon
+	action_flash_action(ACTION_LOOK);
+
 	buf[0] = CL_LOOK_ITEM;
 	store_u16(buf + 1, ux);
 	store_u16(buf + 3, uy);
@@ -1616,6 +1626,9 @@ void cmd_look_item(int x, int y)
 void cmd_look_inv(int pos)
 {
 	unsigned char buf[16];
+
+	// Flash the look action icon
+	action_flash_action(ACTION_LOOK);
 
 	buf[0] = CL_LOOK_INV;
 	buf[1] = (pos < 0) ? 0 : (unsigned char)pos;
@@ -1628,6 +1641,9 @@ void cmd_look_char(unsigned int cn)
 	uint16_t ucn;
 
 	ucn = (cn > UINT16_MAX) ? UINT16_MAX : (uint16_t)cn;
+
+	// Flash the look action icon
+	action_flash_action(ACTION_LOOK);
 
 	buf[0] = CL_LOOK_CHAR;
 	store_u16(buf + 1, ucn);
@@ -1642,6 +1658,9 @@ void cmd_use(int x, int y)
 	ux = (x < 0) ? 0 : (uint16_t)x;
 	uy = (y < 0) ? 0 : (uint16_t)y;
 
+	// Flash the take/give action icon
+	action_flash_action(ACTION_TAKEGIVE);
+
 	buf[0] = CL_USE;
 	store_u16(buf + 1, ux);
 	store_u16(buf + 3, uy);
@@ -1655,6 +1674,9 @@ void cmd_drop(int x, int y)
 
 	ux = (x < 0) ? 0 : (uint16_t)x;
 	uy = (y < 0) ? 0 : (uint16_t)y;
+
+	// Flash the take/give action icon
+	action_flash_action(ACTION_TAKEGIVE);
 
 	buf[0] = CL_DROP;
 	store_u16(buf + 1, ux);
@@ -1719,6 +1741,9 @@ void cmd_give(unsigned int cn)
 	uint16_t ucn;
 
 	ucn = (cn > UINT16_MAX) ? UINT16_MAX : (uint16_t)cn;
+
+	// Flash the take/give action icon
+	action_flash_action(ACTION_TAKEGIVE);
 
 	buf[0] = CL_GIVE;
 	store_u16(buf + 1, ucn);
@@ -1791,6 +1816,9 @@ void cmd_raise(int vn)
 void cmd_take_gold(uint32_t vn)
 {
 	unsigned char buf[16];
+
+	// Flash the take/give action icon
+	action_flash_action(ACTION_TAKEGIVE);
 
 	buf[0] = CL_TAKE_GOLD;
 	store_u32(buf + 1, vn);
@@ -1876,6 +1904,9 @@ void cmd_con_fast(int pos)
 void cmd_look_con(int pos)
 {
 	unsigned char buf[16];
+
+	// Flash the look action icon
+	action_flash_action(ACTION_LOOK);
 
 	buf[0] = CL_LOOK_CONTAINER;
 	buf[1] = (pos < 0) ? 0 : ((pos > 255) ? 255 : (unsigned char)pos);

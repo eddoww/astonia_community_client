@@ -47,8 +47,9 @@ static size_t sv_map01(unsigned char *buf, int *last, struct map *cmap)
 	}
 
 	if (c < 0 || (unsigned int)c > MAPDX * MAPDY) {
-		fail("sv_map01 illegal call with c=%d\n", c);
-		exit(-1);
+		warn("sv_map01 illegal call with c=%d, disconnecting\n", c);
+		sockstate = 0;
+		return 0;
 	}
 
 	if (buf[0] & 1) {
@@ -93,8 +94,9 @@ static size_t sv_map10(unsigned char *buf, int *last, struct map *cmap)
 	}
 
 	if (c < 0 || (unsigned int)c > MAPDX * MAPDY) {
-		fail("sv_map10 illegal call with c=%d\n", c);
-		exit(-1);
+		warn("sv_map10 illegal call with c=%d, disconnecting\n", c);
+		sockstate = 0;
+		return 0;
 	}
 
 	if (buf[0] & 1) {
@@ -157,8 +159,9 @@ static size_t sv_map11(unsigned char *buf, int *last, struct map *cmap)
 	}
 
 	if (c < 0 || (unsigned int)c > MAPDX * MAPDY) {
-		fail("sv_map11 illegal call with c=%d\n", c);
-		exit(-1);
+		warn("sv_map11 illegal call with c=%d, disconnecting\n", c);
+		sockstate = 0;
+		return 0;
 	}
 
 	if (buf[0] & 1) {
@@ -679,8 +682,9 @@ static size_t sv_ceffect(unsigned char *buf)
 	}
 
 	if (nr >= MAXEF) {
-		fail("sv_ceffect: invalid nr %d\n", nr);
-		exit(-1);
+		warn("sv_ceffect: invalid nr %d, disconnecting\n", nr);
+		sockstate = 0;
+		return 0;
 	}
 
 	memcpy(ceffect + nr, buf + 2, len);
@@ -794,8 +798,9 @@ static size_t svl_ceffect(unsigned char *buf)
 	}
 
 	if (nr >= MAXEF) {
-		fail("svl_ceffect: invalid nr %d\n", nr);
-		exit(-1);
+		warn("svl_ceffect: invalid nr %d, disconnecting\n", nr);
+		sockstate = 0;
+		return 0;
 	}
 
 	return len + 2;
@@ -807,8 +812,9 @@ static void sv_container(unsigned char *buf)
 
 	nr = buf[1];
 	if (nr >= _containersize) {
-		fail("illegal nr %d in sv_container!", nr);
-		exit(-1);
+		warn("illegal nr %d in sv_container, disconnecting!", nr);
+		sockstate = 0;
+		return;
 	}
 
 	container[nr] = load_u32(buf + 2);
@@ -821,8 +827,9 @@ static void sv_price(unsigned char *buf)
 
 	nr = buf[1];
 	if (nr >= _containersize) {
-		fail("illegal nr %d in sv_price!", nr);
-		exit(-1);
+		warn("illegal nr %d in sv_price, disconnecting!", nr);
+		sockstate = 0;
+		return;
 	}
 
 	price[nr] = load_u32(buf + 2);
@@ -834,8 +841,9 @@ static void sv_itemprice(unsigned char *buf)
 
 	nr = buf[1];
 	if (nr >= _containersize) {
-		fail("illegal nr %d in sv_itemprice!", nr);
-		exit(-1);
+		warn("illegal nr %d in sv_itemprice, disconnecting!", nr);
+		sockstate = 0;
+		return;
 	}
 
 	itemprice[nr] = load_u32(buf + 2);
@@ -857,8 +865,9 @@ static void sv_concnt(unsigned char *buf)
 
 	nr = buf[1];
 	if (nr > _containersize) {
-		fail("illegal nr %d in sv_contcnt!", nr);
-		exit(-1);
+		warn("illegal nr %d in sv_contcnt, disconnecting!", nr);
+		sockstate = 0;
+		return;
 	}
 
 	con_cnt = nr;
@@ -1277,8 +1286,9 @@ void process(unsigned char *buf, int size)
 			default:
 				len = (size_t)amod_process(buf);
 				if (!len) {
-					fail("got illegal command %d", buf[0]);
-					exit(101);
+					warn("process: unknown command %d (0x%02X), disconnecting", buf[0], buf[0]);
+					sockstate = 0;
+					return;
 				}
 				break;
 			}
@@ -1289,8 +1299,9 @@ void process(unsigned char *buf, int size)
 	}
 
 	if (size) {
-		fail("PANIC! size=%d", size);
-		exit(102);
+		warn("process: %d leftover bytes after parsing, disconnecting", size);
+		sockstate = 0;
+		return;
 	}
 }
 
@@ -1503,8 +1514,9 @@ uint32_t prefetch(unsigned char *buf, int size)
 			default:
 				len = (size_t)amod_prefetch(buf);
 				if (!len) {
-					fail("got illegal command %d", buf[0]);
-					exit(103);
+					warn("process: unknown command %d (0x%02X), disconnecting", buf[0], buf[0]);
+					sockstate = 0;
+					return 0;
 				}
 				break;
 			}
@@ -1515,8 +1527,9 @@ uint32_t prefetch(unsigned char *buf, int size)
 	}
 
 	if (size) {
-		fail("2 PANIC! size=%d", size);
-		exit(104);
+		warn("process: %d leftover bytes after parsing, disconnecting", size);
+		sockstate = 0;
+		return 0;
 	}
 
 	prefetch_tick++;

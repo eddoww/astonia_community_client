@@ -423,7 +423,9 @@ static int texcache_lookup(const struct tex_request *r, int hash, int *out_panic
 			    sdlt[stx].dl, (void *)sdlt[stx].text);
 			sdl_dump_spritecache();
 #endif
-			exit(42);
+			warn("texture cache hash chain corruption (panic=%d), skipping", panic);
+			*out_panic = panic;
+			return STX_NONE;
 		}
 
 		if (tex_entry_matches_request(stx, r)) {
@@ -640,8 +642,8 @@ static int texcache_acquire_slot(void)
 
 		if (ptx == STX_NONE) {
 			if (sdlt_cache[hash2] != cache_index) {
-				fail("sdli[sprite].cache_index!=cache_index\n");
-				exit(42);
+				warn("texture cache hash chain mismatch during eviction, skipping\n");
+				return STX_NONE;
 			}
 			sdlt_cache[hash2] = ntx;
 		} else {

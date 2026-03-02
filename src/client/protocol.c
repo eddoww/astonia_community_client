@@ -387,27 +387,27 @@ static size_t sv_text(unsigned char *buf)
 		line[len] = 0;
 		if (line[0] == '#') {
 			if (!isdigit(line[1])) {
-				strcpy(tutor_text, line + 1);
+				snprintf(tutor_text, sizeof(tutor_text), "%s", line + 1);
 				show_tutor = 1;
 			} else if (line[1] == '1') {
-				strcpy(look_name, line + 2);
+				snprintf(look_name, sizeof(look_name), "%s", line + 2);
 			} else if (line[1] == '2') {
-				strcpy(look_desc, line + 2);
+				snprintf(look_desc, sizeof(look_desc), "%s", line + 2);
 			} else if (line[1] == '3') {
-				strcpy(pent_str[0], line + 2);
+				snprintf(pent_str[0], sizeof(pent_str[0]), "%s", line + 2);
 				pent_str[1][0] = pent_str[2][0] = pent_str[3][0] = pent_str[4][0] = pent_str[5][0] = pent_str[6][0] = 0;
 			} else if (line[1] == '4') {
-				strcpy(pent_str[1], line + 2);
+				snprintf(pent_str[1], sizeof(pent_str[1]), "%s", line + 2);
 			} else if (line[1] == '5') {
-				strcpy(pent_str[2], line + 2);
+				snprintf(pent_str[2], sizeof(pent_str[2]), "%s", line + 2);
 			} else if (line[1] == '6') {
-				strcpy(pent_str[3], line + 2);
+				snprintf(pent_str[3], sizeof(pent_str[3]), "%s", line + 2);
 			} else if (line[1] == '7') {
-				strcpy(pent_str[4], line + 2);
+				snprintf(pent_str[4], sizeof(pent_str[4]), "%s", line + 2);
 			} else if (line[1] == '8') {
-				strcpy(pent_str[5], line + 2);
+				snprintf(pent_str[5], sizeof(pent_str[5]), "%s", line + 2);
 			} else if (line[1] == '9') {
-				strcpy(pent_str[6], line + 2);
+				snprintf(pent_str[6], sizeof(pent_str[6]), "%s", line + 2);
 			} else if (line[1] == '0') {
 				if (otext[MAXOTEXT - 1].text) {
 					xfree(otext[MAXOTEXT - 1].text);

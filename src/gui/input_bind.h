@@ -1,0 +1,149 @@
+/*
+ * Part of Astonia Client (c) Daniel Brockhaus. Please read license.txt.
+ *
+ * Unified Input Binding System
+ *
+ * Every keyboard shortcut in the game is an InputBinding: a key + modifiers
+ * mapped to a callback function. The registry holds all bindings, handles
+ * lookup, persistence (JSON), and rebinding with conflict detection.
+ */
+
+#ifndef INPUT_BIND_H
+#define INPUT_BIND_H
+
+#include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_stdinc.h>
+#include "../dll.h"
+
+/* Modifier flags — combinable with bitwise OR */
+#define INPUT_MOD_NONE  0
+#define INPUT_MOD_SHIFT (1 << 0)
+#define INPUT_MOD_CTRL  (1 << 1)
+#define INPUT_MOD_ALT   (1 << 2)
+
+/* Categories — used to group bindings in the UI */
+typedef enum {
+	INPUT_CAT_SYSTEM, /* ESC, quit — not rebindable              */
+	INPUT_CAT_UI, /* panel toggles, minimap, overlay          */
+	INPUT_CAT_COMBAT, /* attack, targeted spells (action bar r0)  */
+	INPUT_CAT_SPELLS, /* self/map-cast spells (action bar r1)     */
+	INPUT_CAT_MOVEMENT, /* speed modes, action mode toggle          */
+	INPUT_CAT_HOTBAR, /* hotbar item slots (drag-and-drop + keys)  */
+	INPUT_CAT_COUNT
+} InputCategory;
+
+/* Game version mask — which server version(s) a binding applies to */
+#define INPUT_V3   (1 << 0)
+#define INPUT_V35  (1 << 1)
+#define INPUT_VALL (INPUT_V3 | INPUT_V35)
+
+/*
+ * InputBinding — one keyboard shortcut.
+ *
+ * Every binding has a unique string id (e.g. "combat.attack"), a key+modifiers
+ * pair, and a callback that fires when the key is pressed. The callback
+ * receives the binding itself so it can read .param / .action_slot / etc.
+ */
+typedef struct InputBinding {
+	/* identity */
+	const char *id; /* unique, e.g. "combat.attack" — points to static string */
+	const char *display_name; /* human-readable, e.g. "Attack" — points to static string */
+	InputCategory category;
+
+	/* key assignment */
+	SDL_Keycode key;
+	Uint8 modifiers;
+	SDL_Keycode default_key;
+	Uint8 default_modifiers;
+
+	/* what happens when pressed */
+	void (*on_press)(struct InputBinding *self);
+
+	/* generic payload — interpreted by on_press callback */
+	int param; /* spell id, speed mode, fkey slot, CMD_* constant, etc. */
+	int action_slot; /* ACTION_* index for action-bar bindings, -1 otherwise */
+
+	/* requirements */
+	int required_skill; /* skill index that must be nonzero; -1=always, -2=disabled */
+	int version_mask; /* INPUT_V3 / INPUT_V35 / INPUT_VALL */
+
+	/* runtime */
+	Uint64 last_used;
+	int rebindable; /* 0 = locked, 1 = user can change */
+} InputBinding;
+
+#define INPUT_MAX_BINDINGS 128
+
+/* ── Public API ────────────────────────────────────────────────────────── */
+
+/* lifecycle */
+void input_init(int sv_ver);
+void input_shutdown(void);
+
+/* lookup & dispatch */
+InputBinding *input_find(SDL_Keycode key, Uint8 modifiers);
+void input_execute(InputBinding *b);
+
+/* rebinding */
+DLL_EXPORT int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers);
+int input_unbind(const char *id);
+void input_reset_one(const char *id);
+void input_reset_all(void);
+
+/* conflict detection — returns conflicting binding, or NULL */
+InputBinding *input_find_conflict(SDL_Keycode key, Uint8 modifiers, const char *exclude_id);
+
+/* queries */
+DLL_EXPORT InputBinding *input_find_by_id(const char *id);
+DLL_EXPORT SDL_Keycode input_get_key(const char *id);
+int input_binding_count(void);
+InputBinding *input_binding_at(int index);
+const char *input_category_name(InputCategory cat);
+
+/* action-bar compatibility */
+SDL_Keycode input_action_slot_key(int slot, int row);
+int input_key_to_action_slot(SDL_Keycode key);
+int input_action_slot_available(int slot);
+
+/* ── Hotbar ─────────────────────────────────────────────────────────────
+ *
+ * The hotbar is a row of slots that each hold an inventory item. Players
+ * drag items from inventory onto a hotbar slot, and press the slot's
+ * bound key to use the item (sends cmd_use_inv to the server).
+ *
+ * Each slot tracks both the inventory position AND the item type (sprite
+ * ID). When an item gets consumed, the hotbar automatically scans the
+ * inventory for the next item of the same type and re-points the slot.
+ * This lets you spam a key to use all potions of a kind in sequence.
+ *
+ * Each slot has:
+ *   - an inventory index (0 = empty, >0 = item at that inventory position)
+ *   - the item type that was there when assigned (for auto-refill)
+ *   - a keybinding in INPUT_CAT_HOTBAR (id "hotbar.0" through "hotbar.9")
+ *
+ * The hotbar contents are persisted in keybinds.json alongside key overrides.
+ */
+
+#define HOTBAR_SLOTS 10
+
+void hotbar_assign(int slot, int inventory_index);
+void hotbar_clear(int slot);
+int hotbar_get(int slot);
+void hotbar_clear_all(void);
+
+/* Call when an inventory slot changes (from sv_setitem). Scans all hotbar
+ * slots that pointed at this inventory index; if the item type changed,
+ * finds the next matching item in inventory and re-points the slot. */
+void hotbar_on_item_changed(int inventory_index);
+
+/* config persistence */
+int input_load_config(const char *path);
+int input_save_config(const char *path);
+int input_migrate_binary_config(const char *path);
+
+/* utilities */
+Uint8 input_current_modifiers(void);
+const char *input_key_to_string(SDL_Keycode key, Uint8 modifiers);
+int input_string_to_key(const char *str, SDL_Keycode *out_key, Uint8 *out_modifiers);
+
+#endif /* INPUT_BIND_H */

@@ -6,8 +6,6 @@
  */
 
 #include <inttypes.h>
-#include <time.h>
-#include <ctype.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_stdinc.h>
@@ -15,100 +13,21 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
 #include "modder/modder.h"
 
-void gui_sdl_keyproc(SDL_Keycode wparam)
+void gui_sdl_keyproc(SDL_Keycode key)
 {
-	int i;
-
-	if (wparam != SDLK_ESCAPE && wparam != SDLK_F12 && amod_keydown(wparam)) {
+	/* let mods intercept first (except ESC and F12 which are non-rebindable) */
+	if (key != SDLK_ESCAPE && key != SDLK_F12 && amod_keydown(key)) {
 		return;
 	}
 
-	switch (wparam) {
-	case SDLK_ESCAPE:
-		cmd_stop();
-		context_stop();
-		show_look = 0;
-		display_gfx = 0;
-		teleporter = 0;
-		show_tutor = 0;
-		display_help = 0;
-		display_quest = 0;
-		show_color = 0;
-		context_key_reset();
-		action_ovr = ACTION_NONE;
-		minimap_hide();
-		if (context_key_enabled()) {
-			cmd_reset();
-		}
-		context_key_set(0);
-		return;
-	case SDLK_F1:
-		if (fkeyitem[0]) {
-			exec_cmd(CMD_USE_FKEYITEM, 0);
-		}
-		return;
-	case SDLK_F2:
-		if (fkeyitem[1]) {
-			exec_cmd(CMD_USE_FKEYITEM, 1);
-		}
-		return;
-	case SDLK_F3:
-		if (fkeyitem[2]) {
-			exec_cmd(CMD_USE_FKEYITEM, 2);
-		}
-		return;
-	case SDLK_F4:
-		if (fkeyitem[3]) {
-			exec_cmd(CMD_USE_FKEYITEM, 3);
-		}
-		return;
-
-	case SDLK_F5:
-		cmd_speed(1);
-		return;
-	case SDLK_F6:
-		cmd_speed(0);
-		return;
-	case SDLK_F7:
-		cmd_speed(2);
-		return;
-
-	case SDLK_F8:
-		nocut ^= 1;
-		return;
-
-	case SDLK_F9:
-		if (display_quest) {
-			display_quest = 0;
-		} else {
-			display_help = 0;
-			display_quest = 1;
-		}
-		return;
-
-	case SDLK_F10:
-		display_vc ^= 1;
-		list_mem();
-		render_list_text();
-		return;
-
-	case SDLK_F11:
-		if (display_help) {
-			display_help = 0;
-		} else {
-			display_quest = 0;
-			display_help = 1;
-		}
-		return;
-	case SDLK_F12:
-		quit = 1;
-		return;
-
+	/* text editing keys — always go to the command line, never through bindings */
+	switch (key) {
 	case SDLK_RETURN:
 	case SDLK_KP_ENTER:
 		cmd_proc(CMD_RETURN);
@@ -140,151 +59,28 @@ void gui_sdl_keyproc(SDL_Keycode wparam)
 	case SDLK_TAB:
 		cmd_proc(9);
 		return;
-
-	case SDLK_KP_0:
-		wparam = '0';
-		goto spellbindkey;
-	case SDLK_KP_1:
-		wparam = '1';
-		goto spellbindkey;
-	case SDLK_KP_2:
-		wparam = '2';
-		goto spellbindkey;
-	case SDLK_KP_3:
-		wparam = '3';
-		goto spellbindkey;
-	case SDLK_KP_4:
-		wparam = '4';
-		goto spellbindkey;
-	case SDLK_KP_5:
-		wparam = '5';
-		goto spellbindkey;
-	case SDLK_KP_6:
-		wparam = '6';
-		goto spellbindkey;
-	case SDLK_KP_7:
-		wparam = '7';
-		goto spellbindkey;
-	case SDLK_KP_8:
-		wparam = '8';
-		goto spellbindkey;
-	case SDLK_KP_9:
-		wparam = '9';
-		goto spellbindkey;
-
-	case 'm':
-		if (vk_shift && vk_control && !context_key_enabled()) {
-			minimap_toggle();
-		} else {
-			goto spellbindkey;
-		}
-		return;
-
-	case '0':
-	case '1':
-	case '2':
-	case '3':
-	case '4':
-	case '5':
-	case '6':
-	case '7':
-	case '8':
-	case '9':
-	case 'a':
-	case 'b':
-	case 'c':
-	case 'd':
-	case 'e':
-	case 'f':
-	case 'g':
-	case 'h':
-	case 'i':
-	case 'j':
-	case 'k':
-	case 'l':
-	case 'n':
-	case 'o':
-	case 'p':
-	case 'q':
-	case 'r':
-	case 's':
-	case 't':
-	case 'u':
-	case 'v':
-	case 'w':
-	case 'x':
-	case 'y':
-	case 'z':
-	spellbindkey:
-		if (!vk_item && !vk_char && !vk_spell) {
-			context_keydown(wparam);
-			return;
-		}
-
-		// This rules out numbers, we already got here so a-z garaunteed.
-		// toupper for unsigned (aka SDL_Keycode)
-		if (wparam >= 97) {
-			wparam -= 32;
-		}
-
-		for (i = 0; i < max_keytab; i++) {
-			if (keytab[i].keycode != wparam && keytab[i].userdef != wparam) {
-				continue;
-			}
-
-			if ((keytab[i].vk_item && !vk_item) || (!keytab[i].vk_item && vk_item)) {
-				continue;
-			}
-			if ((keytab[i].vk_char && !vk_char) || (!keytab[i].vk_char && vk_char)) {
-				continue;
-			}
-			if ((keytab[i].vk_spell && !vk_spell) || (!keytab[i].vk_spell && vk_spell)) {
-				continue;
-			}
-
-			if (keytab[i].cl_spell) {
-				if (keytab[i].tgt == TGT_MAP) {
-					exec_cmd(CMD_MAP_CAST_K, keytab[i].cl_spell);
-				} else if (keytab[i].tgt == TGT_CHR) {
-					exec_cmd(CMD_CHR_CAST_K, keytab[i].cl_spell);
-				} else if (keytab[i].tgt == TGT_SLF) {
-					exec_cmd(CMD_SLF_CAST_K, keytab[i].cl_spell);
-				} else {
-					return; // hu ?
-				}
-				keytab[i].usetime = now;
-				return;
-			}
-			return;
-		}
-		return;
-
-	case SDLK_PAGEUP:
-		render_text_pageup();
-		break;
-	case SDLK_PAGEDOWN:
-		render_text_pagedown();
-		break;
-
-	case '+':
-	case '=':
-		if (!context_key_isset()) {
-			context_action_enable(1);
-		}
-		break;
-	case '-':
-		if (!context_key_isset()) {
-			context_action_enable(0);
-		}
-		break;
-
-		// case '<':               render_sceweup(); break;
-
 	case SDLK_INSERT:
 		if (vk_shift && !vk_control && !vk_alt) {
 			gui_insert();
 		}
+		return;
+	default:
 		break;
+	}
+
+	/* build modifier mask for binding lookup */
+	Uint8 mods = input_current_modifiers();
+
+	/* try the unified binding system */
+	InputBinding *b = input_find(key, mods);
+	if (b) {
+		input_execute(b);
+		return;
+	}
+
+	/* no modifiers held: letter/number keys go to the action bar context system */
+	if (!vk_item && !vk_char && !vk_spell) {
+		context_keydown(key);
 	}
 }
 

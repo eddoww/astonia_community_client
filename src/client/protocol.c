@@ -16,6 +16,7 @@
 #include "client/client.h"
 #include "client/client_private.h"
 #include "gui/gui.h"
+#include "gui/input_bind.h"
 #include "modder/modder.h"
 #include "protocol.h"
 #include "sdl/sdl.h"
@@ -324,6 +325,7 @@ static void sv_setitem(unsigned char *buf)
 	item_flags[n] = load_u32(buf + 6);
 
 	hover_invalidate_inv(n);
+	hotbar_on_item_changed(n);
 }
 
 static void sv_setorigin(unsigned char *buf)

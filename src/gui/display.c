@@ -14,6 +14,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
 #include "game/game.h"
 #include "client/client.h"
 #include "modder/modder.h"
@@ -1205,55 +1206,31 @@ void actions_loaded(void)
 
 int16_t has_action_skill(int i)
 {
-	if (action_skill[i] == -1) {
-		return 1;
-	}
-	if (action_skill[i] == -2) {
-		return 0;
-	}
-	return value[0][action_skill[i]];
+	return (int16_t)input_action_slot_available(i);
 }
 
 int action_key2slot(SDL_Keycode key)
 {
-	int i;
-
-	for (i = 0; i < MAXACTIONSLOT; i++) {
-		if (!has_action_skill(i)) {
-			continue;
-		}
-		if ((SDL_Keycode)action_row[0][i] == key) {
-			return i;
-		}
-		if ((SDL_Keycode)action_row[1][i] == key) {
-			return i + 100;
-		}
-	}
-	return -1;
+	return input_key_to_action_slot(key);
 }
 
 SDL_Keycode action_slot2key(int slot)
 {
-	if (slot > 100) {
-		slot -= 100;
-		if (slot < 0 || slot >= MAXACTIONSLOT) {
-			return SDLK_UNKNOWN;
-		}
-		return (SDL_Keycode)action_row[1][slot];
-	}
-	if (slot < 0 || slot >= MAXACTIONSLOT) {
-		return SDLK_UNKNOWN;
-	}
-	return (SDL_Keycode)action_row[0][slot];
+	int row = (slot > 100) ? 1 : 0;
+	int real_slot = (slot > 100) ? slot - 100 : slot;
+	return input_action_slot_key(real_slot, row);
 }
 
 int act_lck = 1;
 
 static int get_action_key_row(int slot)
 {
-	if (action_row[0][slot] == ' ') {
+	SDL_Keycode k0 = input_action_slot_key(slot, 0);
+	SDL_Keycode k1 = input_action_slot_key(slot, 1);
+
+	if (k0 == SDLK_UNKNOWN) {
 		return 1;
-	} else if (action_row[1][slot] == ' ') {
+	} else if (k1 == SDLK_UNKNOWN) {
 		return 0;
 	} else if (actsel >= 0 && actsel < MAXACTIONSLOT && butx(BUT_ACT_BEG + actsel) < mousex) {
 		return 1;
@@ -1264,8 +1241,6 @@ static int get_action_key_row(int slot)
 
 void action_set_key(int slot, SDL_Keycode key)
 {
-	int row, i;
-
 	if (slot < 0 || slot >= MAXACTIONSLOT) {
 		return;
 	}
@@ -1273,19 +1248,23 @@ void action_set_key(int slot, SDL_Keycode key)
 		return;
 	}
 
-	row = get_action_key_row(slot);
+	int row = get_action_key_row(slot);
 
-	if (action_row[row][slot] == ' ') {
-		return;
-	}
-
-	for (i = 0; i < MAXACTIONSLOT * 2; i++) {
-		if ((SDL_Keycode) * (action_row[0] + i) == key) {
-			*(action_row[0] + i) = '-';
+	/* find the binding for this slot+row and rebind it */
+	for (int i = 0; i < input_binding_count(); i++) {
+		InputBinding *b = input_binding_at(i);
+		if (!b || b->action_slot != slot) {
+			continue;
 		}
+		if (row == 0 && b->category != INPUT_CAT_COMBAT) {
+			continue;
+		}
+		if (row == 1 && b->category != INPUT_CAT_SPELLS) {
+			continue;
+		}
+		input_rebind(b->id, key, INPUT_MOD_NONE);
+		break;
 	}
-
-	action_row[row][slot] = (char)key;
 
 	save_options();
 }
@@ -1341,35 +1320,43 @@ void display_action(void)
 						    butx(BUT_ACT_BEG + i) + 60, IRGB(31, 31, 31), 0, action_desc[i]);
 					}
 					// display key-bindings
-					if (action_row[0][i] > ' ') {
-						buf[0] = (char)action_slot2key(i);
-						buf[1] = 0;
-						render_text(butx(BUT_ACT_BEG + i) - 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
-						    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
-					}
-					if (action_row[1][i] > ' ') {
-						buf[0] = (char)action_slot2key(i + 100);
-						buf[1] = 0;
-						render_text(butx(BUT_ACT_BEG + i) + 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
-						    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
+					{
+						SDL_Keycode k0 = action_slot2key(i);
+						SDL_Keycode k1 = action_slot2key(i + 100);
+						if (k0 != SDLK_UNKNOWN) {
+							buf[0] = (char)k0;
+							buf[1] = 0;
+							render_text(butx(BUT_ACT_BEG + i) - 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
+							    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
+						}
+						if (k1 != SDLK_UNKNOWN) {
+							buf[0] = (char)k1;
+							buf[1] = 0;
+							render_text(butx(BUT_ACT_BEG + i) + 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
+							    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
+						}
 					}
 				} else { // keybinding mode
 					int row = get_action_key_row(i);
 					// display key-bindings
-					if (row == 0 && action_row[0][i] > ' ') {
-						buf[0] = (char)action_slot2key(i);
-						buf[1] = 0;
-						render_text(butx(BUT_ACT_BEG + i) - 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
-						    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
-					}
-					if (row == 1 && action_row[1][i] > ' ') {
-						buf[0] = (char)action_slot2key(i + 100);
-						buf[1] = 0;
-						render_text(butx(BUT_ACT_BEG + i) + 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
-						    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
+					{
+						SDL_Keycode k0 = action_slot2key(i);
+						SDL_Keycode k1 = action_slot2key(i + 100);
+						if (row == 0 && k0 != SDLK_UNKNOWN) {
+							buf[0] = (char)k0;
+							buf[1] = 0;
+							render_text(butx(BUT_ACT_BEG + i) - 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
+							    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
+						}
+						if (row == 1 && k1 != SDLK_UNKNOWN) {
+							buf[0] = (char)k1;
+							buf[1] = 0;
+							render_text(butx(BUT_ACT_BEG + i) + 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
+							    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
+						}
 					}
 					int y = 30;
-					if (action_row[0][i] > ' ' && action_row[1][i] > ' ') {
+					if (action_slot2key(i) != SDLK_UNKNOWN && action_slot2key(i + 100) != SDLK_UNKNOWN) {
 						if (row == 0) {
 							render_text(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - y, IRGB(31, 31, 31),
 							    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "(Aimed at character version)");

@@ -164,6 +164,12 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		/* hotbar: assign item from cursor on click */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END && csprite) {
+			hotbar_click(butsel - BUT_HOTBAR_BEG);
+			break;
+		}
+
 		if (capbut != -1) {
 			sdl_set_cursor_pos(
 			    (but[capbut].x + render_offset_x()) * sdl_scale, (but[capbut].y + render_offset_y()) * sdl_scale);

@@ -148,6 +148,7 @@ typedef struct {
 
 /* slot management */
 void hotbar_assign_item(int slot, int inventory_index);
+void hotbar_assign_item_by_type(int slot, uint32_t item_type);
 void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_target);
 void hotbar_clear(int slot);
 void hotbar_clear_all(void);

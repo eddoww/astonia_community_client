@@ -184,6 +184,9 @@ static void on_action_mode_off(InputBinding *self)
 	}
 }
 
+/* forward declaration for item scanning */
+static int find_item_in_inventory(uint32_t item_type);
+
 /* ── Hotbar ─────────────────────────────────────────────────────────────
  *
  * Each slot holds either an item or a spell. Item slots auto-refill from
@@ -201,6 +204,17 @@ void hotbar_assign_item(int slot, int inventory_index)
 	hotbar[slot].type = HOTBAR_ITEM;
 	hotbar[slot].inv_index = inventory_index;
 	hotbar[slot].item_type = (inventory_index > 0) ? item[inventory_index] : 0;
+}
+
+void hotbar_assign_item_by_type(int slot, uint32_t item_type)
+{
+	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+		return;
+	}
+	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
+	hotbar[slot].type = HOTBAR_ITEM;
+	hotbar[slot].item_type = item_type;
+	hotbar[slot].inv_index = find_item_in_inventory(item_type);
 }
 
 void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_target)

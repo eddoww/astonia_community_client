@@ -1209,11 +1209,10 @@ void handle_special_buttons_logic(void)
 			lcmd = CMD_WEAR_LOCK;
 		}
 
-		/* hotbar slot clicks — assign item from cursor or use slot */
+		/* hotbar: just prevent other commands when hovering with item on cursor */
 		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
 			if (csprite) {
-				hotbar_click(butsel - BUT_HOTBAR_BEG);
-				lcmd = CMD_NONE; /* consume the click */
+				lcmd = CMD_NONE;
 			}
 		}
 	}

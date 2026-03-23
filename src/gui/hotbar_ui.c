@@ -91,21 +91,13 @@ int hotbar_click(int slot)
 		return 0;
 	}
 
-	/* if player is carrying an item on cursor, assign it to this slot */
+	/* if player is carrying an item on cursor, assign it to this slot.
+	 * the item is on the cursor (csprite), so it may have been removed
+	 * from the item[] array. We assign by type — the auto-refill system
+	 * will resolve it to an actual inventory index when the item is put
+	 * back or another of the same type exists. */
 	if (csprite) {
-		/* find which inventory slot this csprite came from */
-		int found = 0;
-		for (int i = 30; i < _inventorysize; i++) {
-			if (item[i] == csprite) {
-				hotbar_assign_item(slot, i);
-				found = 1;
-				break;
-			}
-		}
-		if (!found) {
-			/* item not found in inventory (maybe in hand only) — assign type without index */
-			hotbar_assign_item(slot, 0);
-		}
+		hotbar_assign_item_by_type(slot, csprite);
 		save_options();
 		return 1;
 	}

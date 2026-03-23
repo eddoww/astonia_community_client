@@ -126,15 +126,43 @@ int input_action_slot_available(int slot);
 
 #define HOTBAR_SLOTS 10
 
-void hotbar_assign(int slot, int inventory_index);
-void hotbar_clear(int slot);
-int hotbar_get(int slot);
-void hotbar_clear_all(void);
+/* what kind of thing is in a hotbar slot */
+typedef enum {
+	HOTBAR_EMPTY,
+	HOTBAR_ITEM, /* inventory item — use via cmd_use_inv */
+	HOTBAR_SPELL, /* spell/action — cast or activate via action bar */
+} HotbarSlotType;
 
-/* Call when an inventory slot changes (from sv_setitem). Scans all hotbar
- * slots that pointed at this inventory index; if the item type changed,
- * finds the next matching item in inventory and re-points the slot. */
+typedef struct {
+	HotbarSlotType type;
+
+	/* HOTBAR_ITEM fields */
+	int inv_index; /* inventory position (0 = none found yet) */
+	uint32_t item_type; /* item[] sprite ID for auto-refill */
+
+	/* HOTBAR_SPELL fields */
+	int action_slot; /* ACTION_* index (0-13) */
+	int spell_cmd; /* CL_* spell command, or 0 for non-spell actions */
+	int spell_target; /* TGT_MAP / TGT_CHR / TGT_SLF */
+} HotbarSlot;
+
+/* slot management */
+void hotbar_assign_item(int slot, int inventory_index);
+void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_target);
+void hotbar_clear(int slot);
+void hotbar_clear_all(void);
+const HotbarSlot *hotbar_get(int slot);
+
+/* returns the sprite to display in a hotbar slot (item sprite or spell icon) */
+uint32_t hotbar_slot_sprite(int slot);
+
+/* call from sv_setitem when an inventory slot changes */
 void hotbar_on_item_changed(int inventory_index);
+
+/* rendering and interaction (implemented in hotbar_ui.c) */
+void hotbar_init_dots(void);
+void hotbar_display(void);
+int hotbar_click(int slot);
 
 /* config persistence */
 int input_load_config(const char *path);

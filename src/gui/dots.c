@@ -15,6 +15,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
 
 extern int __textdisplay_sy;
 
@@ -191,6 +192,9 @@ void init_dots(void)
 	// action bar
 	set_dot(DOT_ACT, XRES - MAXACTIONSLOT * 40 - (XRES - MAXACTIONSLOT * 40) / 2, doty(DOT_BOT) - 12, 0);
 
+	// hotbar — centered row of 10 slots above the bottom panel
+	set_dot(DOT_HOTBAR, (XRES - HOTBAR_SLOTS * FDX) / 2, doty(DOT_BOT) - 42, 0);
+
 	// tutor window
 	dots_update();
 
@@ -242,4 +246,8 @@ void init_dots(void)
 	set_but(BUT_MOD_WALK1, dot[DOT_MOD].x + 0 * 14, dot[DOT_MOD].y + 0 * 30, 30, 0);
 	set_but(BUT_MOD_WALK2, dot[DOT_MOD].x + 2 * 14, dot[DOT_MOD].y + 0 * 30, 30, 0);
 	set_but(BUT_HELP_DRAG, (dotx(DOT_HLP) + dotx(DOT_HL2)) / 2, doty(DOT_HLP) + 6, 0, BUTF_CAPTURE | BUTF_MOVEEXEC);
+
+	for (i = 0; i < HOTBAR_SLOTS; i++) {
+		set_but(BUT_HOTBAR_BEG + i, dot[DOT_HOTBAR].x + i * FDX, dot[DOT_HOTBAR].y, 18, 0);
+	}
 }

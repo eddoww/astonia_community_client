@@ -186,23 +186,33 @@ static void on_action_mode_off(InputBinding *self)
 
 /* ── Hotbar ─────────────────────────────────────────────────────────────
  *
- * Each slot stores an inventory index AND the item type (sprite ID) that
- * was there when assigned. When an item gets consumed/removed, the slot
- * auto-scans inventory for the next item of the same type.
+ * Each slot holds either an item or a spell. Item slots auto-refill from
+ * inventory when consumed. Spell slots activate the action bar system.
  */
 
-static struct {
-	int inv_index; /* inventory position, 0 = empty */
-	uint32_t item_type; /* item[] sprite ID at time of assignment */
-} hotbar[HOTBAR_SLOTS];
+static HotbarSlot hotbar[HOTBAR_SLOTS];
 
-void hotbar_assign(int slot, int inventory_index)
+void hotbar_assign_item(int slot, int inventory_index)
 {
 	if (slot < 0 || slot >= HOTBAR_SLOTS) {
 		return;
 	}
+	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
+	hotbar[slot].type = HOTBAR_ITEM;
 	hotbar[slot].inv_index = inventory_index;
 	hotbar[slot].item_type = (inventory_index > 0) ? item[inventory_index] : 0;
+}
+
+void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_target)
+{
+	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+		return;
+	}
+	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
+	hotbar[slot].type = HOTBAR_SPELL;
+	hotbar[slot].action_slot = action_slot;
+	hotbar[slot].spell_cmd = spell_cmd;
+	hotbar[slot].spell_target = spell_target;
 }
 
 void hotbar_clear(int slot)
@@ -210,16 +220,7 @@ void hotbar_clear(int slot)
 	if (slot < 0 || slot >= HOTBAR_SLOTS) {
 		return;
 	}
-	hotbar[slot].inv_index = 0;
-	hotbar[slot].item_type = 0;
-}
-
-int hotbar_get(int slot)
-{
-	if (slot < 0 || slot >= HOTBAR_SLOTS) {
-		return 0;
-	}
-	return hotbar[slot].inv_index;
+	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
 }
 
 void hotbar_clear_all(void)
@@ -227,8 +228,34 @@ void hotbar_clear_all(void)
 	memset(hotbar, 0, sizeof(hotbar));
 }
 
-/* Find the next inventory slot holding the same item type, starting from
- * slot 30 (skip equipment). Returns 0 if none found. */
+const HotbarSlot *hotbar_get(int slot)
+{
+	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+		return NULL;
+	}
+	return &hotbar[slot];
+}
+
+uint32_t hotbar_slot_sprite(int slot)
+{
+	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+		return 0;
+	}
+
+	switch (hotbar[slot].type) {
+	case HOTBAR_ITEM:
+		if (hotbar[slot].inv_index > 0) {
+			return item[hotbar[slot].inv_index];
+		}
+		return hotbar[slot].item_type; /* show greyed-out icon if out of stock */
+	case HOTBAR_SPELL:
+		return (uint32_t)(800 + hotbar[slot].action_slot); /* spell icon sprites */
+	default:
+		return 0;
+	}
+}
+
+/* find the next inventory slot holding the same item type (skip equipment) */
 static int find_item_in_inventory(uint32_t item_type)
 {
 	if (item_type == 0) {
@@ -245,6 +272,9 @@ static int find_item_in_inventory(uint32_t item_type)
 void hotbar_on_item_changed(int inventory_index)
 {
 	for (int s = 0; s < HOTBAR_SLOTS; s++) {
+		if (hotbar[s].type != HOTBAR_ITEM) {
+			continue;
+		}
 		if (hotbar[s].inv_index != inventory_index) {
 			continue;
 		}
@@ -252,28 +282,54 @@ void hotbar_on_item_changed(int inventory_index)
 			continue;
 		}
 
-		/* the item in our slot changed — is it still the same type? */
+		/* still the same item type? nothing to do */
 		if (item[inventory_index] == hotbar[s].item_type) {
 			continue;
 		}
 
 		/* item was consumed/removed — find the next one of the same type */
-		int next = find_item_in_inventory(hotbar[s].item_type);
-		hotbar[s].inv_index = next;
-		/* item_type stays the same — we still want this kind of item */
+		hotbar[s].inv_index = find_item_in_inventory(hotbar[s].item_type);
 	}
 }
 
-static void on_use_hotbar_item(InputBinding *self)
+static void on_hotbar_press(InputBinding *self)
 {
 	int slot = self->param;
 	if (slot < 0 || slot >= HOTBAR_SLOTS) {
 		return;
 	}
 
-	int inv_idx = hotbar[slot].inv_index;
-	if (inv_idx > 0 && item[inv_idx]) {
-		cmd_use_inv(inv_idx);
+	switch (hotbar[slot].type) {
+	case HOTBAR_ITEM: {
+		int inv_idx = hotbar[slot].inv_index;
+		if (inv_idx > 0 && item[inv_idx]) {
+			cmd_use_inv(inv_idx);
+		}
+		break;
+	}
+	case HOTBAR_SPELL:
+		/* spells with a command cast directly; actions activate the action bar */
+		if (hotbar[slot].spell_cmd > 0) {
+			switch (hotbar[slot].spell_target) {
+			case TGT_MAP:
+				exec_cmd(CMD_MAP_CAST_K, hotbar[slot].spell_cmd);
+				break;
+			case TGT_CHR:
+				exec_cmd(CMD_CHR_CAST_K, hotbar[slot].spell_cmd);
+				break;
+			case TGT_SLF:
+				exec_cmd(CMD_SLF_CAST_K, hotbar[slot].spell_cmd);
+				break;
+			default:
+				break;
+			}
+		} else {
+			/* non-spell action (attack, look, take/give) — activate via context */
+			context_keydown(self->key);
+		}
+		break;
+	default:
+		break;
 	}
 }
 
@@ -384,7 +440,7 @@ static void register_all(int sv_ver)
 
 	for (int i = 0; i < HOTBAR_SLOTS; i++) {
 		b = reg(hotbar_defaults[i].id, hotbar_defaults[i].name, INPUT_CAT_HOTBAR, hotbar_defaults[i].key, 0,
-		    on_use_hotbar_item);
+		    on_hotbar_press);
 		if (b) {
 			b->param = i;
 		}
@@ -956,8 +1012,8 @@ int input_load_config(const char *path)
 		}
 	}
 
-	/* load hotbar: each entry is {"item_type": N} — the actual inventory
-	 * index is resolved at runtime by scanning for that item type. */
+	/* load hotbar: each entry is an object {"type":"item","item_type":N}
+	 * or {"type":"spell","action_slot":N,"spell_cmd":N,"spell_target":N} */
 	cJSON *jhotbar = cJSON_GetObjectItem(root, "hotbar");
 	if (jhotbar && cJSON_IsArray(jhotbar)) {
 		int slot = 0;
@@ -967,9 +1023,33 @@ int input_load_config(const char *path)
 			if (slot >= HOTBAR_SLOTS) {
 				break;
 			}
-			uint32_t itype = cJSON_IsNumber(jslot) ? (uint32_t)jslot->valueint : 0;
-			hotbar[slot].item_type = itype;
-			hotbar[slot].inv_index = find_item_in_inventory(itype);
+			memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
+
+			if (cJSON_IsObject(jslot)) {
+				cJSON *jtype = cJSON_GetObjectItem(jslot, "type");
+				const char *tstr = (jtype && cJSON_IsString(jtype)) ? jtype->valuestring : "";
+
+				if (strcmp(tstr, "item") == 0) {
+					cJSON *jit = cJSON_GetObjectItem(jslot, "item_type");
+					uint32_t itype = (jit && cJSON_IsNumber(jit)) ? (uint32_t)jit->valueint : 0;
+					hotbar[slot].type = HOTBAR_ITEM;
+					hotbar[slot].item_type = itype;
+					hotbar[slot].inv_index = find_item_in_inventory(itype);
+				} else if (strcmp(tstr, "spell") == 0) {
+					cJSON *jas = cJSON_GetObjectItem(jslot, "action_slot");
+					cJSON *jsc = cJSON_GetObjectItem(jslot, "spell_cmd");
+					cJSON *jst = cJSON_GetObjectItem(jslot, "spell_target");
+					hotbar[slot].type = HOTBAR_SPELL;
+					hotbar[slot].action_slot = (jas && cJSON_IsNumber(jas)) ? jas->valueint : 0;
+					hotbar[slot].spell_cmd = (jsc && cJSON_IsNumber(jsc)) ? jsc->valueint : 0;
+					hotbar[slot].spell_target = (jst && cJSON_IsNumber(jst)) ? jst->valueint : 0;
+				}
+			} else if (cJSON_IsNumber(jslot) && jslot->valueint > 0) {
+				/* backward compat: bare number = item_type */
+				hotbar[slot].type = HOTBAR_ITEM;
+				hotbar[slot].item_type = (uint32_t)jslot->valueint;
+				hotbar[slot].inv_index = find_item_in_inventory(hotbar[slot].item_type);
+			}
 			slot++;
 		}
 	}
@@ -1010,10 +1090,26 @@ int input_save_config(const char *path)
 	cJSON_AddBoolToObject(jsettings, "gear_lock", gear_lock);
 	cJSON_AddItemToObject(root, "settings", jsettings);
 
-	/* save hotbar: persist the item_type so it survives inventory reshuffles */
+	/* save hotbar slots */
 	cJSON *jhotbar = cJSON_CreateArray();
 	for (int i = 0; i < HOTBAR_SLOTS; i++) {
-		cJSON_AddItemToArray(jhotbar, cJSON_CreateNumber((double)hotbar[i].item_type));
+		cJSON *jslot = cJSON_CreateObject();
+		switch (hotbar[i].type) {
+		case HOTBAR_ITEM:
+			cJSON_AddStringToObject(jslot, "type", "item");
+			cJSON_AddNumberToObject(jslot, "item_type", (double)hotbar[i].item_type);
+			break;
+		case HOTBAR_SPELL:
+			cJSON_AddStringToObject(jslot, "type", "spell");
+			cJSON_AddNumberToObject(jslot, "action_slot", hotbar[i].action_slot);
+			cJSON_AddNumberToObject(jslot, "spell_cmd", hotbar[i].spell_cmd);
+			cJSON_AddNumberToObject(jslot, "spell_target", hotbar[i].spell_target);
+			break;
+		default:
+			cJSON_AddStringToObject(jslot, "type", "empty");
+			break;
+		}
+		cJSON_AddItemToArray(jhotbar, jslot);
 	}
 	cJSON_AddItemToObject(root, "hotbar", jhotbar);
 

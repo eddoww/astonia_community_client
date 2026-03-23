@@ -12,6 +12,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -1206,6 +1207,14 @@ void handle_special_buttons_logic(void)
 		}
 		if (butsel == BUT_WEA_LCK) {
 			lcmd = CMD_WEAR_LOCK;
+		}
+
+		/* hotbar slot clicks — assign item from cursor or use slot */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			if (csprite) {
+				hotbar_click(butsel - BUT_HOTBAR_BEG);
+				lcmd = CMD_NONE; /* consume the click */
+			}
 		}
 	}
 }

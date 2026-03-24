@@ -373,14 +373,15 @@ void hotbar_setup_defaults(void)
 	    't',
 	};
 
-	for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {
+	int num_defaults = (int)(sizeof(spell_defaults) / sizeof(spell_defaults[0]));
+	for (int i = 0; i < num_defaults; i++) {
 		if (spell_defaults[i].action_slot < 0) {
 			continue; /* leave slot empty */
 		}
 		hotbar_assign_spell(i, spell_defaults[i].action_slot, 0, 0);
 
 		/* add shift+key quick cast extra bind for dual-target spells */
-		if (spell_defaults[i].has_quick) {
+		if (spell_defaults[i].has_quick && i < (int)(sizeof(slot_keys) / sizeof(slot_keys[0]))) {
 			hotbar_add_bind(i, slot_keys[i], INPUT_MOD_SHIFT, HOTBAR_CAST_QUICK, HOTBAR_TGT_DEFAULT);
 		}
 	}

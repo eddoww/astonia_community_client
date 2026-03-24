@@ -435,21 +435,232 @@ int context_key(int key)
 }
 
 static int lcmd_override = CMD_NONE;
+static int hotbar_targeting; /* 1 = targeting was started from hotbar click, not key-hold */
 
 void context_key_reset(void)
 {
 	lcmd_override = CMD_NONE;
+	hotbar_targeting = 0;
 }
 
 int context_key_click(void)
 {
-	if (lcmd_override != CMD_NONE) {
-		return CMD_MAP_MOVE;
+	if (lcmd_override == CMD_NONE) {
+		return CMD_NONE;
 	}
-	return CMD_NONE;
+
+	if (hotbar_targeting) {
+		/* hotbar-initiated targeting: execute the actual command (lcmd was
+		 * set by context_key_set_cmd), then clear the override */
+		hotbar_targeting = 0;
+		lcmd_override = CMD_NONE;
+		return CMD_NONE; /* fall through to exec_cmd(lcmd) in caller */
+	}
+
+	/* key-hold targeting: return CMD_MAP_MOVE so player walks to target,
+	 * actual spell execution happens on keyup */
+	return CMD_MAP_MOVE;
 }
 
-void context_keydown(SDL_Keycode key)
+/* execute an action immediately using whatever is under the cursor.
+ * For self-cast spells, executes right away. For targeted spells,
+ * uses chrsel/itmsel/mapsel from the current frame.
+ * Returns 1 if something was executed, 0 if it needs a target (sets lcmd_override). */
+int context_execute_action(int action_slot)
+{
+	size_t csel, isel, msel;
+
+	if (!(game_options & GO_ACTION)) {
+		return 0;
+	}
+
+	if (mousex >= dotx(DOT_MTL) && mousey >= doty(DOT_MTL) && mousex < dotx(DOT_MBR) && mousey < doty(DOT_MBR)) {
+		csel = chrsel;
+		isel = itmsel;
+		msel = mapsel;
+	} else {
+		csel = isel = msel = MAXMN;
+	}
+
+	switch (action_slot) {
+	/* self-cast spells — execute immediately, no target needed */
+	case 100 + ACTION_FLASH:
+		cmd_some_spell(CL_FLASH, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_FREEZE:
+		cmd_some_spell(CL_FREEZE, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_SHIELD:
+		cmd_some_spell(CL_MAGICSHIELD, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_BLESS:
+		cmd_some_spell(CL_BLESS, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_HEAL:
+		cmd_some_spell(CL_HEAL, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_WARCRY:
+		cmd_some_spell(CL_WARCRY, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_PULSE:
+		cmd_some_spell(CL_PULSE, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_FIRERING:
+		cmd_some_spell(CL_FIREBALL, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_MAP:
+		minimap_toggle();
+		return 1;
+
+	/* targeted spells — try to execute if a valid target is under cursor */
+	case ACTION_ATTACK:
+		if (csel != MAXMN) {
+			cmd_kill(map[csel].cn);
+			return 1;
+		}
+		break;
+	case ACTION_FIREBALL:
+		if (csel != MAXMN) {
+			cmd_some_spell(CL_FIREBALL, 0, 0, map[csel].cn);
+			return 1;
+		}
+		break;
+	case ACTION_LBALL:
+		if (csel != MAXMN) {
+			cmd_some_spell(CL_BALL, 0, 0, map[csel].cn);
+			return 1;
+		}
+		break;
+	case ACTION_BLESS:
+		if (csel != MAXMN) {
+			cmd_some_spell(CL_BLESS, 0, 0, map[csel].cn);
+			return 1;
+		}
+		break;
+	case ACTION_HEAL:
+		if (csel != MAXMN) {
+			cmd_some_spell(CL_HEAL, 0, 0, map[csel].cn);
+			return 1;
+		}
+		break;
+	case 100 + ACTION_FIREBALL:
+		if (msel != MAXMN) {
+			cmd_some_spell(CL_FIREBALL, originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX),
+			    originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX), 0);
+			return 1;
+		}
+		break;
+	case 100 + ACTION_LBALL:
+		if (msel != MAXMN) {
+			cmd_some_spell(CL_BALL, originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX),
+			    originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX), 0);
+			return 1;
+		}
+		break;
+	case ACTION_TAKEGIVE:
+		if (csprite) {
+			if (csel != MAXMN) {
+				cmd_give(map[csel].cn);
+				return 1;
+			}
+			if (isel != MAXMN && (map[isel].flags & CMF_USE)) {
+				cmd_use(originx - (int)(MAPDX / 2U) + (int)(isel % MAPDX),
+				    originy - (int)(MAPDY / 2U) + (int)(isel / MAPDX));
+				return 1;
+			}
+			if (msel != MAXMN) {
+				cmd_drop(originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX),
+				    originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX));
+				return 1;
+			}
+		} else if (isel != MAXMN) {
+			if (map[(int)isel].flags & CMF_TAKE) {
+				cmd_take(originx - (int)(MAPDX / 2U) + (int)(isel % MAPDX),
+				    originy - (int)(MAPDY / 2U) + (int)(isel / MAPDX));
+				return 1;
+			}
+			if (map[isel].flags & CMF_USE) {
+				cmd_use(originx - (int)(MAPDX / 2U) + (int)(isel % MAPDX),
+				    originy - (int)(MAPDY / 2U) + (int)(isel / MAPDX));
+				return 1;
+			}
+		}
+		break;
+	case ACTION_LOOK:
+		if (isel != MAXMN) {
+			cmd_look_item(
+			    originx - (int)(MAPDX / 2U) + (int)(isel % MAPDX), originy - (int)(MAPDY / 2U) + (int)(isel / MAPDX));
+			return 1;
+		}
+		if (csel != MAXMN) {
+			cmd_look_char(map[csel].cn);
+			return 1;
+		}
+		if (msel != MAXMN) {
+			cmd_look_map(
+			    originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX), originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX));
+			return 1;
+		}
+		break;
+	}
+
+	/* no valid target under cursor — fall back to setting lcmd_override
+	 * so the cursor changes and the next click on a valid target executes */
+	context_activate_action(action_slot);
+	hotbar_targeting = 1;
+	return 0;
+}
+
+/* normal cast: self-cast spells execute immediately, targeted spells
+ * always enter targeting mode (cursor indicator) regardless of what's
+ * under the cursor. The player must click to confirm the target. */
+int context_execute_action_normal(int action_slot)
+{
+	if (!(game_options & GO_ACTION)) {
+		return 0;
+	}
+
+	/* self-cast spells always execute immediately — no target to pick */
+	switch (action_slot) {
+	case 100 + ACTION_FLASH:
+		cmd_some_spell(CL_FLASH, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_FREEZE:
+		cmd_some_spell(CL_FREEZE, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_SHIELD:
+		cmd_some_spell(CL_MAGICSHIELD, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_BLESS:
+		cmd_some_spell(CL_BLESS, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_HEAL:
+		cmd_some_spell(CL_HEAL, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_WARCRY:
+		cmd_some_spell(CL_WARCRY, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_PULSE:
+		cmd_some_spell(CL_PULSE, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_FIRERING:
+		cmd_some_spell(CL_FIREBALL, 0, 0, map[plrmn].cn);
+		return 1;
+	case 100 + ACTION_MAP:
+		minimap_toggle();
+		return 1;
+	default:
+		break;
+	}
+
+	/* targeted spells: enter targeting mode, don't execute yet */
+	context_activate_action(action_slot);
+	hotbar_targeting = 1;
+	return 0;
+}
+
+/* activate an action by slot index (0-13 = combat/target, 100+ = self/map cast) */
+void context_activate_action(int action_slot)
 {
 	if (!(game_options & GO_ACTION)) {
 		return;
@@ -458,12 +669,7 @@ void context_keydown(SDL_Keycode key)
 		return;
 	}
 
-	// ignore key-down while over action bar
-	if (actsel != -1) {
-		return;
-	}
-
-	switch (action_key2slot(key)) {
+	switch (action_slot) {
 	case ACTION_ATTACK:
 		lcmd_override = CMD_CHR_ATTACK;
 		break;
@@ -502,6 +708,15 @@ void context_keydown(SDL_Keycode key)
 	}
 }
 
+void context_keydown(SDL_Keycode key)
+{
+	// ignore key-down while over action bar
+	if (actsel != -1) {
+		return;
+	}
+	context_activate_action(action_key2slot(key));
+}
+
 int context_key_set_cmd(void)
 {
 	if (!(game_options & GO_ACTION)) {
@@ -518,10 +733,17 @@ int context_key_set_cmd(void)
 
 	switch (lcmd_override) {
 	case CMD_CHR_ATTACK:
-	case CMD_CHR_CAST_L:
-	case CMD_CHR_CAST_R:
 	case CMD_CHR_CAST_K:
 		chrsel = get_near_char(mousex, mousey, 3);
+		break;
+	case CMD_CHR_CAST_L:
+	case CMD_CHR_CAST_R:
+		/* for fireball/lball: try character first, fall back to map */
+		chrsel = get_near_char(mousex, mousey, 3);
+		if (chrsel == MAXMN) {
+			mapsel = get_near_ground(mousex, mousey);
+			lcmd_override = (lcmd_override == CMD_CHR_CAST_L) ? CMD_MAP_CAST_L : CMD_MAP_CAST_R;
+		}
 		break;
 	case CMD_MAP_CAST_L:
 	case CMD_MAP_CAST_R:
@@ -588,7 +810,11 @@ void context_keyup(SDL_Keycode key)
 {
 	size_t csel, isel, msel;
 
-	lcmd_override = CMD_NONE;
+	/* don't clear targeting mode if it was initiated from the hotbar —
+	 * the player pressed a hotkey, released it, and will click to cast */
+	if (!hotbar_targeting) {
+		lcmd_override = CMD_NONE;
+	}
 
 	if (amod_keyup(key)) {
 		return;

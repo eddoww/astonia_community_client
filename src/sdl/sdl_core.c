@@ -22,6 +22,7 @@
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
 #include "gui/gui.h"
+#include "gui/input_bind.h"
 
 // SDL window and renderer
 SDL_Window *sdlwnd = NULL;
@@ -681,6 +682,7 @@ void sdl_loop(void)
 			gui_sdl_keyproc(event.key.key);
 			break;
 		case SDL_EVENT_KEY_UP:
+			input_keyup(event.key.key);
 			context_keyup(event.key.key);
 			break;
 		case SDL_EVENT_TEXT_INPUT:

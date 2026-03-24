@@ -151,6 +151,25 @@ typedef struct {
 int hotbar_visible_slots(void);
 void hotbar_set_visible_slots(int count);
 
+/* casting modes for targeted spells (self-cast always fires immediately) */
+enum {
+	CAST_NORMAL, /* press key → cursor changes → click target → casts */
+	CAST_QUICK, /* press key → instantly casts at cursor position */
+	CAST_QUICK_INDICATOR, /* hold key → cursor changes → release key → casts */
+};
+
+int hotbar_cast_mode(void);
+void hotbar_set_cast_mode(int mode);
+
+/* key release handler for Quick Cast w/ Indicator mode */
+void hotbar_hotkey_release(int slot);
+
+/* cancel a Quick Cast w/ Indicator hold (right-click to cancel) */
+void hotbar_cancel_held(void);
+
+/* call on any key release — handles Quick Cast w/ Indicator */
+void input_keyup(SDL_Keycode key);
+
 /* slot management */
 void hotbar_assign_item(int slot, int inventory_index);
 void hotbar_assign_item_by_type(int slot, uint32_t item_type);
@@ -161,6 +180,9 @@ const HotbarSlot *hotbar_get(int slot);
 
 /* returns the sprite to display in a hotbar slot (item sprite or spell icon) */
 uint32_t hotbar_slot_sprite(int slot);
+
+/* activate a hotbar slot (use item or cast spell) — used by both click and hotkey */
+void hotbar_activate(int slot);
 
 /* call from sv_setitem when an inventory slot changes */
 void hotbar_on_item_changed(int inventory_index);

@@ -195,6 +195,7 @@ static int find_item_in_inventory(uint32_t item_type);
 
 static HotbarSlot hotbar[HOTBAR_MAX_SLOTS];
 static int visible_slots = HOTBAR_DEFAULT_SLOTS;
+static int cast_mode = CAST_NORMAL; /* how targeted spells are cast from hotkeys */
 
 int hotbar_visible_slots(void)
 {
@@ -210,6 +211,18 @@ void hotbar_set_visible_slots(int count)
 		count = HOTBAR_MAX_SLOTS;
 	}
 	visible_slots = count;
+}
+
+int hotbar_cast_mode(void)
+{
+	return cast_mode;
+}
+
+void hotbar_set_cast_mode(int mode)
+{
+	if (mode >= CAST_NORMAL && mode <= CAST_QUICK_INDICATOR) {
+		cast_mode = mode;
+	}
 }
 
 void hotbar_assign_item(int slot, int inventory_index)
@@ -303,13 +316,19 @@ static int find_item_in_inventory(uint32_t item_type)
 void hotbar_on_item_changed(int inventory_index)
 {
 	for (int s = 0; s < HOTBAR_MAX_SLOTS; s++) {
-		if (hotbar[s].type != HOTBAR_ITEM) {
+		if (hotbar[s].type != HOTBAR_ITEM || hotbar[s].item_type == 0) {
 			continue;
 		}
+
+		/* slot has no inventory index yet (e.g. after loading config) —
+		 * try to resolve it now that an inventory slot was updated */
+		if (hotbar[s].inv_index <= 0) {
+			hotbar[s].inv_index = find_item_in_inventory(hotbar[s].item_type);
+			continue;
+		}
+
+		/* only care about the slot that actually changed */
 		if (hotbar[s].inv_index != inventory_index) {
-			continue;
-		}
-		if (hotbar[s].item_type == 0) {
 			continue;
 		}
 
@@ -323,9 +342,52 @@ void hotbar_on_item_changed(int inventory_index)
 	}
 }
 
-static void on_hotbar_press(InputBinding *self)
+/*
+ * Resolve which context action_slot to use for a spell.
+ *
+ * The old action bar had two rows:
+ *   Row 0 (slot 0-13):    target character / interact
+ *   Row 1 (slot 100-113): self-cast or map-cast
+ *
+ * Spells fall into three categories:
+ *   Self-only  (Flash, Freeze, Shield, Warcry, Pulse, Firering)
+ *     → always 100+slot, no modifier needed
+ *   Dual-mode  (Fireball, LBall: char vs map; Bless, Heal: char vs self)
+ *     → default = slot (target character), Shift = 100+slot (self/map)
+ *   Action-only (Attack, TakeGive, Look)
+ *     → always slot, no alternative
+ */
+static int resolve_spell_action(int action_slot)
 {
-	int slot = self->param;
+	int shift = vk_shift || vk_item; /* shift held */
+
+	switch (action_slot) {
+	/* self-only spells — always use the 100+ variant */
+	case ACTION_FLASH:
+	case ACTION_FREEZE:
+	case ACTION_SHIELD:
+	case ACTION_WARCRY:
+	case ACTION_PULSE:
+	case ACTION_FIRERING:
+		return 100 + action_slot;
+
+	/* dual-mode spells — shift toggles to alternative */
+	case ACTION_FIREBALL:
+	case ACTION_LBALL:
+	case ACTION_BLESS:
+	case ACTION_HEAL:
+		return shift ? (100 + action_slot) : action_slot;
+
+	/* everything else (attack, take/give, look, map) — no alternative */
+	default:
+		return action_slot;
+	}
+}
+
+/* activate a hotbar slot from a mouse click — always uses normal cast
+ * (enter targeting mode for targeted spells, immediate for self-cast) */
+void hotbar_activate(int slot)
+{
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
 	}
@@ -339,28 +401,105 @@ static void on_hotbar_press(InputBinding *self)
 		break;
 	}
 	case HOTBAR_SPELL:
-		/* spells with a command cast directly; actions activate the action bar */
-		if (hotbar[slot].spell_cmd > 0) {
-			switch (hotbar[slot].spell_target) {
-			case TGT_MAP:
-				exec_cmd(CMD_MAP_CAST_K, hotbar[slot].spell_cmd);
-				break;
-			case TGT_CHR:
-				exec_cmd(CMD_CHR_CAST_K, hotbar[slot].spell_cmd);
-				break;
-			case TGT_SLF:
-				exec_cmd(CMD_SLF_CAST_K, hotbar[slot].spell_cmd);
-				break;
-			default:
-				break;
-			}
-		} else {
-			/* non-spell action (attack, look, take/give) — activate via context */
-			context_keydown(self->key);
-		}
+		/* clicks always use normal cast */
+		context_execute_action_normal(resolve_spell_action(hotbar[slot].action_slot));
 		break;
 	default:
 		break;
+	}
+}
+
+/* track which slot is being held for Quick Cast w/ Indicator */
+static int held_hotbar_slot = -1;
+static int held_action_resolved = -1;
+
+/* activate a hotbar slot from a hotkey press — respects cast_mode */
+static void hotbar_activate_hotkey(int slot)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return;
+	}
+
+	switch (hotbar[slot].type) {
+	case HOTBAR_ITEM: {
+		int inv_idx = hotbar[slot].inv_index;
+		if (inv_idx > 0 && item[inv_idx]) {
+			cmd_use_inv(inv_idx);
+		}
+		break;
+	}
+	case HOTBAR_SPELL: {
+		int resolved = resolve_spell_action(hotbar[slot].action_slot);
+		switch (cast_mode) {
+		case CAST_QUICK:
+			/* instant: cast at whatever is under cursor right now */
+			context_execute_action(resolved);
+			break;
+		case CAST_QUICK_INDICATOR:
+			/* hold key: enter targeting mode, will cast on key release */
+			context_activate_action(resolved);
+			held_hotbar_slot = slot;
+			held_action_resolved = resolved;
+			break;
+		case CAST_NORMAL:
+		default:
+			/* normal: enter targeting mode, cast on next click */
+			context_execute_action_normal(resolved);
+			break;
+		}
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+/* called on hotkey release — for Quick Cast w/ Indicator mode */
+void hotbar_hotkey_release(int slot)
+{
+	if (cast_mode != CAST_QUICK_INDICATOR) {
+		return;
+	}
+	if (held_hotbar_slot != slot || held_action_resolved < 0) {
+		return;
+	}
+
+	/* execute the held spell at the current cursor position */
+	context_execute_action(held_action_resolved);
+	context_key_reset();
+	held_hotbar_slot = -1;
+	held_action_resolved = -1;
+}
+
+/* cancel a Quick Cast w/ Indicator hold (e.g. on right-click) */
+void hotbar_cancel_held(void)
+{
+	if (held_hotbar_slot >= 0) {
+		context_key_reset();
+		held_hotbar_slot = -1;
+		held_action_resolved = -1;
+	}
+}
+
+static void on_hotbar_press(InputBinding *self)
+{
+	hotbar_activate_hotkey(self->param);
+}
+
+/* called on any key release — checks if it matches a held hotbar binding */
+void input_keyup(SDL_Keycode key)
+{
+	if (held_hotbar_slot < 0) {
+		return;
+	}
+
+	/* find the binding for the held slot */
+	for (int i = 0; i < binding_count; i++) {
+		InputBinding *b = &bindings[i];
+		if (b->category == INPUT_CAT_HOTBAR && b->param == held_hotbar_slot && b->key == key) {
+			hotbar_hotkey_release(held_hotbar_slot);
+			return;
+		}
 	}
 }
 
@@ -1046,6 +1185,10 @@ int input_load_config(const char *path)
 		if (v && cJSON_IsBool(v)) {
 			gear_lock = cJSON_IsTrue(v) ? 1 : 0;
 		}
+		v = cJSON_GetObjectItem(jsettings, "cast_mode");
+		if (v && cJSON_IsNumber(v)) {
+			hotbar_set_cast_mode((int)cJSON_GetNumberValue(v));
+		}
 	}
 
 	/* load hotbar: each entry is an object {"type":"item","item_type":N}
@@ -1124,6 +1267,7 @@ int input_save_config(const char *path)
 	cJSON *jsettings = cJSON_CreateObject();
 	cJSON_AddBoolToObject(jsettings, "action_enabled", action_enabled);
 	cJSON_AddBoolToObject(jsettings, "gear_lock", gear_lock);
+	cJSON_AddNumberToObject(jsettings, "cast_mode", cast_mode);
 	cJSON_AddItemToObject(root, "settings", jsettings);
 
 	/* save hotbar slots */

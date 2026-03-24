@@ -137,6 +137,13 @@ int hotbar_click(int slot)
 		return 1;
 	}
 
+	/* nothing on cursor — activate the slot (use item / cast spell) */
+	const HotbarSlot *hs = hotbar_get(slot);
+	if (hs && hs->type != HOTBAR_EMPTY) {
+		hotbar_activate(slot);
+		return 1;
+	}
+
 	return 0;
 }
 

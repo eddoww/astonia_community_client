@@ -52,7 +52,7 @@ static void sb_layout(int *ox, int *oy, int *cols_out, int *rows_out)
 
 	int panel_w = cols * SB_CELL + SB_PAD * 2;
 	*ox = hotbar_cx - panel_w / 2;
-	*oy = buty(BUT_HOTBAR_BEG) - SB_PAD * 2 - rows * SB_CELL;
+	*oy = buty(BUT_HOTBAR_BEG) - 22 - SB_PAD * 2 - rows * SB_CELL;
 
 	if (cols_out) {
 		*cols_out = cols;

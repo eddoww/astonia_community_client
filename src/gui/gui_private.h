@@ -528,6 +528,10 @@ int context_key_set_cmd(void);
 void context_key_reset(void);
 int context_key_click(void);
 
+/* hover.c accessors for hotbar */
+const char *hover_get_item_name(int inv_slot);
+int hover_render_for_slot(int inv_slot, int anchor_x, int anchor_y);
+
 DLL_EXPORT extern char hover_bless_text[];
 DLL_EXPORT extern char hover_freeze_text[];
 DLL_EXPORT extern char hover_heal_text[];

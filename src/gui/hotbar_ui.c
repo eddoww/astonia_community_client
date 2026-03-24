@@ -15,6 +15,11 @@
 #include "client/client.h"
 #include "game/game.h"
 
+/* ── Hover tooltip state ──────────────────────────────────────────────── */
+
+static int hb_hover_slot = -1;
+static tick_t hb_hover_start;
+
 /* ── Hotbar rendering ──────────────────────────────────────────────────── */
 
 void hotbar_display(void)
@@ -62,24 +67,71 @@ void hotbar_display(void)
 			render_sprite_fx(&fx, x, y);
 		}
 
-		/* key label — show bound key in corner */
-		InputBinding *b = NULL;
-		for (int bi = 0; bi < input_binding_count(); bi++) {
-			InputBinding *candidate = input_binding_at(bi);
-			if (candidate && candidate->category == INPUT_CAT_HOTBAR && candidate->param == i) {
-				b = candidate;
-				break;
+		/* key label — show bound key in corner (toggle-able) */
+		if (hotbar_show_hotkeys()) {
+			InputBinding *b = NULL;
+			for (int bi = 0; bi < input_binding_count(); bi++) {
+				InputBinding *candidate = input_binding_at(bi);
+				if (candidate && candidate->category == INPUT_CAT_HOTBAR && candidate->param == i) {
+					b = candidate;
+					break;
+				}
+			}
+			if (b && b->key != SDLK_UNKNOWN) {
+				char label[16];
+				const char *kname = SDL_GetKeyName(b->key);
+				if (kname && kname[0]) {
+					snprintf(label, sizeof(label), "%s", kname);
+				} else {
+					snprintf(label, sizeof(label), "?");
+				}
+				render_text(x - 12, y - 14, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
 			}
 		}
-		if (b && b->key != SDLK_UNKNOWN) {
-			char label[16];
-			const char *kname = SDL_GetKeyName(b->key);
-			if (kname && kname[0]) {
-				snprintf(label, sizeof(label), "%s", kname);
-			} else {
-				snprintf(label, sizeof(label), "?");
+
+		/* slot name label below the slot (toggle-able) */
+		if (hotbar_show_names()) {
+			const char *name = hotbar_slot_name(i);
+			if (name) {
+				render_text(x, y + 16, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, name);
 			}
-			render_text(x - 12, y - 14, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
+		}
+	}
+
+	/* ── Hover tooltip ─────────────────────────────────────────────── */
+
+	if (hsel != hb_hover_slot) {
+		hb_hover_slot = hsel;
+		hb_hover_start = tick + HOVER_DELAY;
+	}
+
+	if (hb_hover_slot >= 0 && tick > hb_hover_start) {
+		const HotbarSlot *hs = hotbar_get(hb_hover_slot);
+		int tx = butx(BUT_HOTBAR_BEG + hb_hover_slot);
+		int ty = buty(BUT_HOTBAR_BEG + hb_hover_slot);
+
+		if (hs && hs->type == HOTBAR_SPELL) {
+			const char *name = get_action_text(hs->action_slot);
+			const char *desc = get_action_desc(hs->action_slot);
+			if (name || desc) {
+				int text_h = 15;
+				if (desc) {
+					text_h += render_text_break_length(0, 0, 120, IRGB(31, 31, 31), 0, desc);
+				}
+				int sy = ty - text_h - 8;
+				render_shaded_rect(tx - 64, sy, tx + 64, ty - 18, 0, 150);
+				int text_y = sy + 4;
+				if (name) {
+					render_text(
+					    tx, text_y, IRGB(31, 31, 31), RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, name);
+					text_y += 15;
+				}
+				if (desc) {
+					render_text_break(tx - 60, text_y, tx + 60, IRGB(31, 31, 31), 0, desc);
+				}
+			}
+		} else if (hs && hs->type == HOTBAR_ITEM && hs->inv_index > 0) {
+			hover_render_for_slot(hs->inv_index, tx, ty - 18);
 		}
 	}
 

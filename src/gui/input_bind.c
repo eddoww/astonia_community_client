@@ -149,6 +149,25 @@ static void on_toggle_minimap(InputBinding *self)
 	minimap_toggle();
 }
 
+/* hotbar display settings — defined here so toggle callbacks can access them */
+static int show_hotkeys = 1;
+static int show_names;
+
+static void on_toggle_hotbar_names(InputBinding *self)
+{
+	(void)self;
+	show_names ^= 1;
+	init_dots();
+	save_options();
+}
+
+static void on_toggle_hotbar_keys(InputBinding *self)
+{
+	(void)self;
+	show_hotkeys ^= 1;
+	save_options();
+}
+
 static void on_chat_pageup(InputBinding *self)
 {
 	(void)self;
@@ -225,6 +244,26 @@ void hotbar_set_cast_mode(int mode)
 	}
 }
 
+int hotbar_show_hotkeys(void)
+{
+	return show_hotkeys;
+}
+
+void hotbar_set_show_hotkeys(int on)
+{
+	show_hotkeys = on ? 1 : 0;
+}
+
+int hotbar_show_names(void)
+{
+	return show_names;
+}
+
+void hotbar_set_show_names(int on)
+{
+	show_names = on ? 1 : 0;
+}
+
 void hotbar_assign_item(int slot, int inventory_index)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
@@ -296,6 +335,24 @@ uint32_t hotbar_slot_sprite(int slot)
 		return (uint32_t)(800 + hotbar[slot].action_slot); /* spell icon sprites */
 	default:
 		return 0;
+	}
+}
+
+const char *hotbar_slot_name(int slot)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return NULL;
+	}
+	switch (hotbar[slot].type) {
+	case HOTBAR_SPELL:
+		return get_action_text(hotbar[slot].action_slot);
+	case HOTBAR_ITEM:
+		if (hotbar[slot].inv_index > 0) {
+			return hover_get_item_name(hotbar[slot].inv_index);
+		}
+		return NULL;
+	default:
+		return NULL;
 	}
 }
 
@@ -567,6 +624,8 @@ static void register_all(int sv_ver)
 	reg("ui.toggle_debug", "Toggle Debug Info", INPUT_CAT_UI, SDLK_F10, 0, on_toggle_debug);
 	reg("ui.toggle_help", "Toggle Help", INPUT_CAT_UI, SDLK_F11, 0, on_toggle_help);
 	reg("ui.toggle_minimap", "Toggle Minimap", INPUT_CAT_UI, 'm', INPUT_MOD_SHIFT | INPUT_MOD_CTRL, on_toggle_minimap);
+	reg("ui.toggle_hotbar_names", "Toggle Hotbar Names", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_names);
+	reg("ui.toggle_hotbar_keys", "Toggle Hotbar Key Labels", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_keys);
 	reg("ui.chat_pageup", "Chat Page Up", INPUT_CAT_UI, SDLK_PAGEUP, 0, on_chat_pageup);
 	reg("ui.chat_pagedown", "Chat Page Down", INPUT_CAT_UI, SDLK_PAGEDOWN, 0, on_chat_pagedown);
 
@@ -1189,6 +1248,14 @@ int input_load_config(const char *path)
 		if (v && cJSON_IsNumber(v)) {
 			hotbar_set_cast_mode((int)cJSON_GetNumberValue(v));
 		}
+		v = cJSON_GetObjectItem(jsettings, "show_hotkeys");
+		if (v && cJSON_IsBool(v)) {
+			show_hotkeys = cJSON_IsTrue(v) ? 1 : 0;
+		}
+		v = cJSON_GetObjectItem(jsettings, "show_names");
+		if (v && cJSON_IsBool(v)) {
+			show_names = cJSON_IsTrue(v) ? 1 : 0;
+		}
 	}
 
 	/* load hotbar: each entry is an object {"type":"item","item_type":N}
@@ -1268,6 +1335,8 @@ int input_save_config(const char *path)
 	cJSON_AddBoolToObject(jsettings, "action_enabled", action_enabled);
 	cJSON_AddBoolToObject(jsettings, "gear_lock", gear_lock);
 	cJSON_AddNumberToObject(jsettings, "cast_mode", cast_mode);
+	cJSON_AddBoolToObject(jsettings, "show_hotkeys", show_hotkeys);
+	cJSON_AddBoolToObject(jsettings, "show_names", show_names);
 	cJSON_AddItemToObject(root, "settings", jsettings);
 
 	/* save hotbar slots */

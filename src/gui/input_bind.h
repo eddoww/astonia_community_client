@@ -170,6 +170,12 @@ void hotbar_cancel_held(void);
 /* call on any key release — handles Quick Cast w/ Indicator */
 void input_keyup(SDL_Keycode key);
 
+/* toggle-able UI elements */
+int hotbar_show_hotkeys(void);
+void hotbar_set_show_hotkeys(int on);
+int hotbar_show_names(void);
+void hotbar_set_show_names(int on);
+
 /* slot management */
 void hotbar_assign_item(int slot, int inventory_index);
 void hotbar_assign_item_by_type(int slot, uint32_t item_type);
@@ -180,6 +186,9 @@ const HotbarSlot *hotbar_get(int slot);
 
 /* returns the sprite to display in a hotbar slot (item sprite or spell icon) */
 uint32_t hotbar_slot_sprite(int slot);
+
+/* returns the display name for a hotbar slot (spell name or cached item name) */
+const char *hotbar_slot_name(int slot);
 
 /* activate a hotbar slot (use item or cast spell) — used by both click and hotkey */
 void hotbar_activate(int slot);

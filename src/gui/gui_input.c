@@ -202,6 +202,12 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
+		/* right-click hotbar slot to clear it */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			hotbar_clear(butsel - BUT_HOTBAR_BEG);
+			save_options();
+			break;
+		}
 		if (rcmd == CMD_MAP_LOOK && context_open(mousex, mousey)) {
 			break;
 		}

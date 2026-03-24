@@ -442,7 +442,11 @@ static void detect_hover_target(void)
 
 	if (butsel == -1 && context_key_enabled()) {
 		butsel = get_near_button(mousex, mousey);
-		if (context_action_enabled()) {
+
+		/* hotbar buttons are always valid targets */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			; /* keep butsel */
+		} else if (context_action_enabled()) {
 			if (butsel >= BUT_ACT_BEG && butsel <= BUT_ACT_END && has_action_skill(butsel - BUT_ACT_BEG)) {
 				actsel = butsel - BUT_ACT_BEG;
 			}
@@ -603,6 +607,7 @@ void exec_cmd(int cmd, int a)
 		cmd_use_inv(invsel);
 		return;
 	case CMD_INV_TAKE:
+		csprite_origin = invsel;
 		cmd_swap(invsel);
 		return;
 	case CMD_INV_SWAP:

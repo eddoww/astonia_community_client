@@ -489,6 +489,7 @@ extern uint64_t tick_receive_interval; // Time between server tick batch arrival
 
 DLL_EXPORT extern unsigned int cflags; // current item (item under mouse cursor) flags
 DLL_EXPORT extern unsigned int csprite; // and sprite
+DLL_EXPORT extern int csprite_origin; // inventory slot the cursor item was picked up from (-1 = unknown)
 
 DLL_EXPORT extern int con_cnt;
 DLL_EXPORT extern int con_type;

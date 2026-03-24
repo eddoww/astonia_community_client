@@ -99,13 +99,22 @@ int hotbar_click(int slot)
 	if (csprite) {
 		hotbar_assign_item_by_type(slot, csprite);
 		save_options();
-		return 1;
-	}
 
-	/* right-click to clear */
-	if (vk_rbut) {
-		hotbar_clear(slot);
-		save_options();
+		/* put the item back — prefer its original slot, fallback to first empty */
+		int dest = -1;
+		if (csprite_origin >= 30 && csprite_origin < _inventorysize && !item[csprite_origin]) {
+			dest = csprite_origin;
+		} else {
+			for (int i = 30; i < _inventorysize; i++) {
+				if (!item[i]) {
+					dest = i;
+					break;
+				}
+			}
+		}
+		if (dest >= 0) {
+			cmd_swap(dest);
+		}
 		return 1;
 	}
 

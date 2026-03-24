@@ -358,6 +358,9 @@ static void sv_setcitem(unsigned char *buf)
 {
 	csprite = load_u32(buf + 1);
 	cflags = load_u32(buf + 5);
+	if (!csprite) {
+		csprite_origin = -1;
+	}
 }
 
 static void sv_act(unsigned char *buf)

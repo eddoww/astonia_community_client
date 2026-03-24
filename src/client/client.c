@@ -75,6 +75,7 @@ DLL_EXPORT uint16_t acty;
 
 DLL_EXPORT unsigned int cflags; // current item flags
 DLL_EXPORT unsigned int csprite; // and sprite
+DLL_EXPORT int csprite_origin = -1; // inventory slot the cursor item was picked up from
 
 DLL_EXPORT uint16_t originx;
 DLL_EXPORT uint16_t originy;

@@ -538,6 +538,144 @@ void hotbar_cancel_held(void)
 	}
 }
 
+/* ── Multi-bind: extra keybindings per hotbar slot ────────────────────── */
+
+int hotbar_add_bind(int slot, SDL_Keycode key, Uint8 mods, HotbarCastOverride cast, HotbarTargetOverride target)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return -1;
+	}
+	if (hotbar[slot].extra_bind_count >= HOTBAR_MAX_BINDS) {
+		return -1;
+	}
+
+	int idx = hotbar[slot].extra_bind_count++;
+	hotbar[slot].extra_binds[idx].key = key;
+	hotbar[slot].extra_binds[idx].modifiers = mods;
+	hotbar[slot].extra_binds[idx].cast_override = cast;
+	hotbar[slot].extra_binds[idx].target_override = target;
+	return idx;
+}
+
+int hotbar_remove_bind(int slot, int bind_index)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return -1;
+	}
+	if (bind_index < 0 || bind_index >= hotbar[slot].extra_bind_count) {
+		return -1;
+	}
+
+	/* shift remaining entries down */
+	for (int i = bind_index; i < hotbar[slot].extra_bind_count - 1; i++) {
+		hotbar[slot].extra_binds[i] = hotbar[slot].extra_binds[i + 1];
+	}
+	hotbar[slot].extra_bind_count--;
+	memset(&hotbar[slot].extra_binds[hotbar[slot].extra_bind_count], 0, sizeof(HotbarBind));
+	return 0;
+}
+
+void hotbar_clear_binds(int slot)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return;
+	}
+	memset(hotbar[slot].extra_binds, 0, sizeof(hotbar[slot].extra_binds));
+	hotbar[slot].extra_bind_count = 0;
+}
+
+int hotbar_find_extra_bind(SDL_Keycode key, Uint8 mods)
+{
+	int count = hotbar_visible_slots();
+	for (int s = 0; s < count; s++) {
+		for (int b = 0; b < hotbar[s].extra_bind_count; b++) {
+			if (hotbar[s].extra_binds[b].key == key && hotbar[s].extra_binds[b].modifiers == mods) {
+				return s;
+			}
+		}
+	}
+	return -1;
+}
+
+void hotbar_activate_extra(int slot, SDL_Keycode key, Uint8 mods)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return;
+	}
+
+	/* find the matching extra bind */
+	const HotbarBind *bind = NULL;
+	for (int i = 0; i < hotbar[slot].extra_bind_count; i++) {
+		if (hotbar[slot].extra_binds[i].key == key && hotbar[slot].extra_binds[i].modifiers == mods) {
+			bind = &hotbar[slot].extra_binds[i];
+			break;
+		}
+	}
+	if (!bind) {
+		return;
+	}
+
+	/* items don't have cast mode / target override */
+	if (hotbar[slot].type == HOTBAR_ITEM) {
+		int inv_idx = hotbar[slot].inv_index;
+		if (inv_idx > 0 && item[inv_idx]) {
+			cmd_use_inv(inv_idx);
+		}
+		return;
+	}
+
+	if (hotbar[slot].type != HOTBAR_SPELL) {
+		return;
+	}
+
+	/* resolve action slot from target override */
+	int resolved;
+	switch (bind->target_override) {
+	case HOTBAR_TGT_MAP:
+	case HOTBAR_TGT_SELF:
+		resolved = 100 + hotbar[slot].action_slot;
+		break;
+	case HOTBAR_TGT_CHR:
+		resolved = hotbar[slot].action_slot;
+		break;
+	default:
+		resolved = resolve_spell_action(hotbar[slot].action_slot);
+		break;
+	}
+
+	/* resolve cast mode from override */
+	int effective_mode;
+	switch (bind->cast_override) {
+	case HOTBAR_CAST_NORMAL:
+		effective_mode = CAST_NORMAL;
+		break;
+	case HOTBAR_CAST_QUICK:
+		effective_mode = CAST_QUICK;
+		break;
+	case HOTBAR_CAST_INDICATOR:
+		effective_mode = CAST_QUICK_INDICATOR;
+		break;
+	default:
+		effective_mode = cast_mode;
+		break;
+	}
+
+	switch (effective_mode) {
+	case CAST_QUICK:
+		context_execute_action(resolved);
+		break;
+	case CAST_QUICK_INDICATOR:
+		context_activate_action(resolved);
+		held_hotbar_slot = slot;
+		held_action_resolved = resolved;
+		break;
+	case CAST_NORMAL:
+	default:
+		context_execute_action_normal(resolved);
+		break;
+	}
+}
+
 static void on_hotbar_press(InputBinding *self)
 {
 	hotbar_activate_hotkey(self->param);
@@ -550,10 +688,18 @@ void input_keyup(SDL_Keycode key)
 		return;
 	}
 
-	/* find the binding for the held slot */
+	/* check primary binding for the held slot */
 	for (int i = 0; i < binding_count; i++) {
 		InputBinding *b = &bindings[i];
 		if (b->category == INPUT_CAT_HOTBAR && b->param == held_hotbar_slot && b->key == key) {
+			hotbar_hotkey_release(held_hotbar_slot);
+			return;
+		}
+	}
+
+	/* check extra binds for the held slot */
+	for (int i = 0; i < hotbar[held_hotbar_slot].extra_bind_count; i++) {
+		if (hotbar[held_hotbar_slot].extra_binds[i].key == key) {
 			hotbar_hotkey_release(held_hotbar_slot);
 			return;
 		}
@@ -1290,6 +1436,63 @@ int input_load_config(const char *path)
 					hotbar[slot].spell_cmd = (jsc && cJSON_IsNumber(jsc)) ? jsc->valueint : 0;
 					hotbar[slot].spell_target = (jst && cJSON_IsNumber(jst)) ? jst->valueint : 0;
 				}
+			}
+			/* load extra binds (optional, backward-compatible) */
+			if (cJSON_IsObject(jslot)) {
+				cJSON *jbinds_arr = cJSON_GetObjectItem(jslot, "binds");
+				if (jbinds_arr && cJSON_IsArray(jbinds_arr)) {
+					int bi = 0;
+					cJSON *jb;
+					cJSON_ArrayForEach(jb, jbinds_arr)
+					{
+						if (bi >= HOTBAR_MAX_BINDS) {
+							break;
+						}
+						cJSON *jk = cJSON_GetObjectItem(jb, "key");
+						cJSON *jc = cJSON_GetObjectItem(jb, "cast");
+						cJSON *jt = cJSON_GetObjectItem(jb, "target");
+						if (!jk || !cJSON_IsString(jk)) {
+							continue;
+						}
+
+						SDL_Keycode bkey;
+						Uint8 bmods;
+						if (input_string_to_key(cJSON_GetStringValue(jk), &bkey, &bmods) != 0) {
+							continue;
+						}
+
+						HotbarCastOverride co = HOTBAR_CAST_DEFAULT;
+						if (jc && cJSON_IsString(jc)) {
+							const char *cs = cJSON_GetStringValue(jc);
+							if (strcmp(cs, "normal") == 0) {
+								co = HOTBAR_CAST_NORMAL;
+							} else if (strcmp(cs, "quick") == 0) {
+								co = HOTBAR_CAST_QUICK;
+							} else if (strcmp(cs, "indicator") == 0) {
+								co = HOTBAR_CAST_INDICATOR;
+							}
+						}
+
+						HotbarTargetOverride to = HOTBAR_TGT_DEFAULT;
+						if (jt && cJSON_IsString(jt)) {
+							const char *ts = cJSON_GetStringValue(jt);
+							if (strcmp(ts, "map") == 0) {
+								to = HOTBAR_TGT_MAP;
+							} else if (strcmp(ts, "chr") == 0) {
+								to = HOTBAR_TGT_CHR;
+							} else if (strcmp(ts, "self") == 0) {
+								to = HOTBAR_TGT_SELF;
+							}
+						}
+
+						hotbar[slot].extra_binds[bi].key = bkey;
+						hotbar[slot].extra_binds[bi].modifiers = bmods;
+						hotbar[slot].extra_binds[bi].cast_override = co;
+						hotbar[slot].extra_binds[bi].target_override = to;
+						bi++;
+					}
+					hotbar[slot].extra_bind_count = bi;
+				}
 			} else if (cJSON_IsNumber(jslot) && jslot->valueint > 0) {
 				/* backward compat: bare number = item_type */
 				hotbar[slot].type = HOTBAR_ITEM;
@@ -1357,6 +1560,21 @@ int input_save_config(const char *path)
 		default:
 			cJSON_AddStringToObject(jslot, "type", "empty");
 			break;
+		}
+		/* save extra binds if any */
+		if (hotbar[i].extra_bind_count > 0) {
+			static const char *cast_names[] = {"default", "normal", "quick", "indicator"};
+			static const char *tgt_names[] = {"default", "map", "chr", "self"};
+			cJSON *jbinds_arr = cJSON_CreateArray();
+			for (int b = 0; b < hotbar[i].extra_bind_count; b++) {
+				const HotbarBind *hb = &hotbar[i].extra_binds[b];
+				cJSON *jb = cJSON_CreateObject();
+				cJSON_AddStringToObject(jb, "key", input_key_to_string(hb->key, hb->modifiers));
+				cJSON_AddStringToObject(jb, "cast", cast_names[hb->cast_override]);
+				cJSON_AddStringToObject(jb, "target", tgt_names[hb->target_override]);
+				cJSON_AddItemToArray(jbinds_arr, jb);
+			}
+			cJSON_AddItemToObject(jslot, "binds", jbinds_arr);
 		}
 		cJSON_AddItemToArray(jhotbar, jslot);
 	}

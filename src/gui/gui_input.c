@@ -72,6 +72,15 @@ void gui_sdl_keyproc(SDL_Keycode key)
 	/* build modifier mask for binding lookup */
 	Uint8 mods = input_current_modifiers();
 
+	/* check hotbar extra binds first (modifier combos take priority) */
+	{
+		int hb_slot = hotbar_find_extra_bind(key, mods);
+		if (hb_slot >= 0) {
+			hotbar_activate_extra(hb_slot, key, mods);
+			return;
+		}
+	}
+
 	/* try the unified binding system */
 	InputBinding *b = input_find(key, mods);
 	if (b) {

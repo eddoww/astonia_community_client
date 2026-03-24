@@ -134,6 +134,31 @@ typedef enum {
 	HOTBAR_SPELL, /* spell/action — cast or activate via action bar */
 } HotbarSlotType;
 
+/* ── Multi-bind: per-binding overrides for cast mode and target ─────── */
+
+#define HOTBAR_MAX_BINDS 4
+
+typedef enum {
+	HOTBAR_CAST_DEFAULT, /* use global cast_mode setting */
+	HOTBAR_CAST_NORMAL,
+	HOTBAR_CAST_QUICK,
+	HOTBAR_CAST_INDICATOR,
+} HotbarCastOverride;
+
+typedef enum {
+	HOTBAR_TGT_DEFAULT, /* use resolve_spell_action() (shift for alt) */
+	HOTBAR_TGT_MAP,
+	HOTBAR_TGT_CHR,
+	HOTBAR_TGT_SELF,
+} HotbarTargetOverride;
+
+typedef struct {
+	SDL_Keycode key;
+	Uint8 modifiers;
+	HotbarCastOverride cast_override;
+	HotbarTargetOverride target_override;
+} HotbarBind;
+
 typedef struct {
 	HotbarSlotType type;
 
@@ -145,6 +170,10 @@ typedef struct {
 	int action_slot; /* ACTION_* index (0-13) */
 	int spell_cmd; /* CL_* spell command, or 0 for non-spell actions */
 	int spell_target; /* TGT_MAP / TGT_CHR / TGT_SLF */
+
+	/* additional keybindings with per-bind cast/target overrides */
+	HotbarBind extra_binds[HOTBAR_MAX_BINDS];
+	int extra_bind_count;
 } HotbarSlot;
 
 /* how many hotbar slots are currently visible (configurable, <= HOTBAR_MAX_SLOTS) */
@@ -183,6 +212,13 @@ void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_tar
 void hotbar_clear(int slot);
 void hotbar_clear_all(void);
 const HotbarSlot *hotbar_get(int slot);
+
+/* extra keybindings per slot */
+int hotbar_add_bind(int slot, SDL_Keycode key, Uint8 mods, HotbarCastOverride cast, HotbarTargetOverride target);
+int hotbar_remove_bind(int slot, int bind_index);
+void hotbar_clear_binds(int slot);
+int hotbar_find_extra_bind(SDL_Keycode key, Uint8 mods);
+void hotbar_activate_extra(int slot, SDL_Keycode key, Uint8 mods);
 
 /* returns the sprite to display in a hotbar slot (item sprite or spell icon) */
 uint32_t hotbar_slot_sprite(int slot);

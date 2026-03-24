@@ -176,6 +176,9 @@ typedef struct {
 	/* additional keybindings with per-bind cast/target overrides */
 	HotbarBind extra_binds[HOTBAR_MAX_BINDS];
 	int extra_bind_count;
+
+	/* activation flash timestamp (for visual feedback) */
+	uint32_t activated_at;
 } HotbarSlot;
 
 /* how many hotbar slots are visible per row */

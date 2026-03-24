@@ -583,45 +583,8 @@ void display_skill(void)
 
 void display_keys(void)
 {
-	int i, x, u;
-	char buf[256];
-	unsigned short int col;
-
-	for (u = i = 0; i < max_keytab; i++) {
-		if ((keytab[i].vk_item && !vk_item) || (!keytab[i].vk_item && vk_item)) {
-			continue;
-		}
-		if ((keytab[i].vk_char && !vk_char) || (!keytab[i].vk_char && vk_char)) {
-			continue;
-		}
-		if ((keytab[i].vk_spell && !vk_spell) || (!keytab[i].vk_spell && vk_spell)) {
-			continue;
-		}
-
-		if (keytab[i].usetime > now - 300) {
-			col = bluecolor;
-		} else {
-			col = textcolor;
-		}
-
-		x = 10 + u++ * ((XRES - 20) / 10);
-
-		if (keytab[i].skill == -1) {
-			continue;
-		}
-		if (!value[0][keytab[i].skill]) {
-			continue;
-		}
-
-		if (keytab[i].userdef) {
-			sprintf(buf, "%c/%c %s", keytab[i].keycode, keytab[i].userdef, keytab[i].name);
-		} else {
-			sprintf(buf, "%c %s", keytab[i].keycode, keytab[i].name);
-		}
-
-		render_text(
-		    dotx(DOT_BOT) + x, doty(DOT_BOT) - 6, col, RENDER_TEXT_LEFT | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, buf);
-	}
+	/* Legacy keytab display disabled - hotbar system replaces this */
+	(void)0;
 }
 
 void display_tutor(void)

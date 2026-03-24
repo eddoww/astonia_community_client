@@ -517,6 +517,14 @@ static int resolve_spell_action(int action_slot)
 	}
 }
 
+/* mark a slot as activated for visual feedback */
+static void hotbar_flash(int slot)
+{
+	if (slot >= 0 && slot < HOTBAR_MAX_SLOTS) {
+		hotbar[slot].activated_at = tick;
+	}
+}
+
 /* activate a hotbar slot from a mouse click — always uses normal cast
  * (enter targeting mode for targeted spells, immediate for self-cast) */
 void hotbar_activate(int slot)
@@ -529,11 +537,13 @@ void hotbar_activate(int slot)
 	case HOTBAR_ITEM: {
 		int inv_idx = hotbar[slot].inv_index;
 		if (inv_idx > 0 && item[inv_idx]) {
+			hotbar_flash(slot);
 			cmd_use_inv(inv_idx);
 		}
 		break;
 	}
 	case HOTBAR_SPELL:
+		hotbar_flash(slot);
 		/* clicks always use normal cast */
 		context_execute_action_normal(resolve_spell_action(hotbar[slot].action_slot));
 		break;
@@ -557,11 +567,13 @@ static void hotbar_activate_hotkey(int slot)
 	case HOTBAR_ITEM: {
 		int inv_idx = hotbar[slot].inv_index;
 		if (inv_idx > 0 && item[inv_idx]) {
+			hotbar_flash(slot);
 			cmd_use_inv(inv_idx);
 		}
 		break;
 	}
 	case HOTBAR_SPELL: {
+		hotbar_flash(slot);
 		int resolved = resolve_spell_action(hotbar[slot].action_slot);
 		switch (cast_mode) {
 		case CAST_QUICK:
@@ -695,6 +707,7 @@ void hotbar_activate_extra(int slot, SDL_Keycode key, Uint8 mods)
 	if (hotbar[slot].type == HOTBAR_ITEM) {
 		int inv_idx = hotbar[slot].inv_index;
 		if (inv_idx > 0 && item[inv_idx]) {
+			hotbar_flash(slot);
 			cmd_use_inv(inv_idx);
 		}
 		return;
@@ -703,6 +716,8 @@ void hotbar_activate_extra(int slot, SDL_Keycode key, Uint8 mods)
 	if (hotbar[slot].type != HOTBAR_SPELL) {
 		return;
 	}
+
+	hotbar_flash(slot);
 
 	/* resolve action slot from target override */
 	int resolved;
@@ -923,14 +938,14 @@ static void register_all(int sv_ver)
 		}                                                                                                              \
 	} while (0)
 
-	COMBAT("action.attack", "Attack", 'a', ACTION_ATTACK, V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
-	COMBAT("action.fireball", "Fireball", 's', ACTION_FIREBALL, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	COMBAT("action.lball", "Lightning Ball", 'd', ACTION_LBALL, V3_OR_V35(V3_FLASH, V35_FLASH));
-	COMBAT("action.bless", "Bless", sv_ver == 35 ? SDLK_UNKNOWN : 'f', ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
-	COMBAT("action.heal", "Heal", sv_ver == 35 ? 'b' : 'g', ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
-	COMBAT("action.takegive", "Take/Use/Give/Drop", sv_ver == 35 ? 'g' : 'h', ACTION_TAKEGIVE,
-	    V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
-	COMBAT("action.look", "Look", 'l', ACTION_LOOK, -1);
+	/* Legacy action bar bindings — disabled by default, use hotbar instead */
+	COMBAT("action.attack", "Attack", SDLK_UNKNOWN, ACTION_ATTACK, V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
+	COMBAT("action.fireball", "Fireball", SDLK_UNKNOWN, ACTION_FIREBALL, V3_OR_V35(V3_FIREBALL, V35_FIRE));
+	COMBAT("action.lball", "Lightning Ball", SDLK_UNKNOWN, ACTION_LBALL, V3_OR_V35(V3_FLASH, V35_FLASH));
+	COMBAT("action.bless", "Bless", SDLK_UNKNOWN, ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
+	COMBAT("action.heal", "Heal", SDLK_UNKNOWN, ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
+	COMBAT("action.takegive", "Take/Use/Give/Drop", SDLK_UNKNOWN, ACTION_TAKEGIVE, V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
+	COMBAT("action.look", "Look", SDLK_UNKNOWN, ACTION_LOOK, -1);
 
 #undef COMBAT
 
@@ -945,16 +960,17 @@ static void register_all(int sv_ver)
 		}                                                                                                              \
 	} while (0)
 
-	SPELL("spell.fireball", "Fireball (Map)", 'q', ACTION_FIREBALL, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	SPELL("spell.lball", "Lightning Ball (Map)", 'w', ACTION_LBALL, V3_OR_V35(V3_FLASH, V35_FLASH));
-	SPELL("spell.flash", "Flash", 'e', ACTION_FLASH, V3_OR_V35(V3_FLASH, V35_FLASH));
-	SPELL("spell.freeze", "Freeze", 'r', ACTION_FREEZE, V3_OR_V35(V3_FREEZE, V35_FREEZE));
-	SPELL("spell.shield", "Magic Shield", 't', ACTION_SHIELD, V3_OR_V35(V3_MAGICSHIELD, V35_MAGICSHIELD));
-	SPELL("spell.bless", "Bless (Self)", 'z', ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
-	SPELL("spell.heal", "Heal (Self)", 'u', ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
-	SPELL("spell.warcry", "Warcry", 'i', ACTION_WARCRY, V3_OR_V35(V3_WARCRY, V35_WARCRY));
+	/* Legacy spell bindings — disabled by default, use hotbar instead */
+	SPELL("spell.fireball", "Fireball (Map)", SDLK_UNKNOWN, ACTION_FIREBALL, V3_OR_V35(V3_FIREBALL, V35_FIRE));
+	SPELL("spell.lball", "Lightning Ball (Map)", SDLK_UNKNOWN, ACTION_LBALL, V3_OR_V35(V3_FLASH, V35_FLASH));
+	SPELL("spell.flash", "Flash", SDLK_UNKNOWN, ACTION_FLASH, V3_OR_V35(V3_FLASH, V35_FLASH));
+	SPELL("spell.freeze", "Freeze", SDLK_UNKNOWN, ACTION_FREEZE, V3_OR_V35(V3_FREEZE, V35_FREEZE));
+	SPELL("spell.shield", "Magic Shield", SDLK_UNKNOWN, ACTION_SHIELD, V3_OR_V35(V3_MAGICSHIELD, V35_MAGICSHIELD));
+	SPELL("spell.bless", "Bless (Self)", SDLK_UNKNOWN, ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
+	SPELL("spell.heal", "Heal (Self)", SDLK_UNKNOWN, ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
+	SPELL("spell.warcry", "Warcry", SDLK_UNKNOWN, ACTION_WARCRY, V3_OR_V35(V3_WARCRY, V35_WARCRY));
 
-	b = reg("spell.pulse", "Pulse", INPUT_CAT_SPELLS, 'o', 0, on_action_key);
+	b = reg("spell.pulse", "Pulse", INPUT_CAT_SPELLS, SDLK_UNKNOWN, 0, on_action_key);
 	if (b) {
 		b->action_slot = ACTION_PULSE;
 		b->required_skill = sv_ver == 35 ? -2 : (int)V3_PULSE; /* disabled on v35 */
@@ -963,8 +979,8 @@ static void register_all(int sv_ver)
 		}
 	}
 
-	SPELL("spell.firering", "Firering", 'p', ACTION_FIRERING, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	SPELL("spell.map", "Toggle Map", 'm', ACTION_MAP, -1);
+	SPELL("spell.firering", "Firering", SDLK_UNKNOWN, ACTION_FIRERING, V3_OR_V35(V3_FIREBALL, V35_FIRE));
+	SPELL("spell.map", "Toggle Map", SDLK_UNKNOWN, ACTION_MAP, -1);
 
 #undef SPELL
 
@@ -980,41 +996,37 @@ static void register_all(int sv_ver)
 		}                                                                                                              \
 	} while (0)
 
-	/* Ctrl+1..9 — cast on character */
-	KEYTAB(
-	    "keytab.1_chr", "Fireball (Char)", '1', INPUT_MOD_CTRL, CL_FIREBALL, TGT_CHR, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	KEYTAB(
-	    "keytab.2_chr", "Lightning Ball (Char)", '2', INPUT_MOD_CTRL, CL_BALL, TGT_CHR, V3_OR_V35(V3_FLASH, V35_FLASH));
-	KEYTAB("keytab.3_chr", "Flash", '3', INPUT_MOD_CTRL, CL_FLASH, TGT_SLF, V3_OR_V35(V3_FLASH, V35_FLASH));
-	KEYTAB("keytab.4_chr", "Freeze", '4', INPUT_MOD_CTRL, CL_FREEZE, TGT_SLF, V3_OR_V35(V3_FREEZE, V35_FREEZE));
-	KEYTAB("keytab.5_chr", "Magic Shield", '5', INPUT_MOD_CTRL, CL_MAGICSHIELD, TGT_SLF,
+	/* Legacy keytab spells — disabled by default, use hotbar instead.
+	 * These can be re-enabled by users via keybinds.json if desired. */
+	KEYTAB("keytab.1_chr", "Fireball (Char)", SDLK_UNKNOWN, 0, CL_FIREBALL, TGT_CHR, V3_OR_V35(V3_FIREBALL, V35_FIRE));
+	KEYTAB("keytab.2_chr", "Lightning Ball (Char)", SDLK_UNKNOWN, 0, CL_BALL, TGT_CHR, V3_OR_V35(V3_FLASH, V35_FLASH));
+	KEYTAB("keytab.3_chr", "Flash", SDLK_UNKNOWN, 0, CL_FLASH, TGT_SLF, V3_OR_V35(V3_FLASH, V35_FLASH));
+	KEYTAB("keytab.4_chr", "Freeze", SDLK_UNKNOWN, 0, CL_FREEZE, TGT_SLF, V3_OR_V35(V3_FREEZE, V35_FREEZE));
+	KEYTAB("keytab.5_chr", "Magic Shield", SDLK_UNKNOWN, 0, CL_MAGICSHIELD, TGT_SLF,
 	    V3_OR_V35(V3_MAGICSHIELD, V35_MAGICSHIELD));
-	KEYTAB("keytab.6_chr", "Bless", '6', INPUT_MOD_CTRL, CL_BLESS, sv_ver == 35 ? TGT_SLF : TGT_CHR,
+	KEYTAB("keytab.6_chr", "Bless", SDLK_UNKNOWN, 0, CL_BLESS, sv_ver == 35 ? TGT_SLF : TGT_CHR,
 	    V3_OR_V35(V3_BLESS, V35_BLESS));
-	KEYTAB("keytab.7_chr", "Heal", '7', INPUT_MOD_CTRL, CL_HEAL, TGT_CHR, V3_OR_V35(V3_HEAL, V35_HEAL));
-	KEYTAB("keytab.8_chr", "Warcry", '8', INPUT_MOD_CTRL, CL_WARCRY, TGT_SLF, V3_OR_V35(V3_WARCRY, V35_WARCRY));
-	KEYTAB("keytab.9_chr", sv_ver == 35 ? "Firering" : "Pulse", '9', INPUT_MOD_CTRL,
-	    sv_ver == 35 ? CL_FIREBALL : CL_PULSE, TGT_SLF, V3_OR_V35(V3_PULSE, V35_FIRE));
+	KEYTAB("keytab.7_chr", "Heal", SDLK_UNKNOWN, 0, CL_HEAL, TGT_CHR, V3_OR_V35(V3_HEAL, V35_HEAL));
+	KEYTAB("keytab.8_chr", "Warcry", SDLK_UNKNOWN, 0, CL_WARCRY, TGT_SLF, V3_OR_V35(V3_WARCRY, V35_WARCRY));
+	KEYTAB("keytab.9_chr", sv_ver == 35 ? "Firering" : "Pulse", SDLK_UNKNOWN, 0, sv_ver == 35 ? CL_FIREBALL : CL_PULSE,
+	    TGT_SLF, V3_OR_V35(V3_PULSE, V35_FIRE));
 	if (sv_ver != 35) {
-		KEYTAB("keytab.0_chr", "Firering", '0', INPUT_MOD_CTRL, CL_FIREBALL, TGT_SLF, (int)V3_FIREBALL);
+		KEYTAB("keytab.0_chr", "Firering", SDLK_UNKNOWN, 0, CL_FIREBALL, TGT_SLF, (int)V3_FIREBALL);
 	}
 
-	/* Alt+1..9 — cast on map */
-	KEYTAB(
-	    "keytab.1_map", "Fireball (Map)", '1', INPUT_MOD_ALT, CL_FIREBALL, TGT_MAP, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	KEYTAB(
-	    "keytab.2_map", "Lightning Ball (Map)", '2', INPUT_MOD_ALT, CL_BALL, TGT_MAP, V3_OR_V35(V3_FLASH, V35_FLASH));
-	KEYTAB("keytab.3_map", "Flash (Self)", '3', INPUT_MOD_ALT, CL_FLASH, TGT_SLF, V3_OR_V35(V3_FLASH, V35_FLASH));
-	KEYTAB("keytab.4_map", "Freeze (Self)", '4', INPUT_MOD_ALT, CL_FREEZE, TGT_SLF, V3_OR_V35(V3_FREEZE, V35_FREEZE));
-	KEYTAB("keytab.5_map", "Magic Shield (Self)", '5', INPUT_MOD_ALT, CL_MAGICSHIELD, TGT_SLF,
+	KEYTAB("keytab.1_map", "Fireball (Map)", SDLK_UNKNOWN, 0, CL_FIREBALL, TGT_MAP, V3_OR_V35(V3_FIREBALL, V35_FIRE));
+	KEYTAB("keytab.2_map", "Lightning Ball (Map)", SDLK_UNKNOWN, 0, CL_BALL, TGT_MAP, V3_OR_V35(V3_FLASH, V35_FLASH));
+	KEYTAB("keytab.3_map", "Flash (Self)", SDLK_UNKNOWN, 0, CL_FLASH, TGT_SLF, V3_OR_V35(V3_FLASH, V35_FLASH));
+	KEYTAB("keytab.4_map", "Freeze (Self)", SDLK_UNKNOWN, 0, CL_FREEZE, TGT_SLF, V3_OR_V35(V3_FREEZE, V35_FREEZE));
+	KEYTAB("keytab.5_map", "Magic Shield (Self)", SDLK_UNKNOWN, 0, CL_MAGICSHIELD, TGT_SLF,
 	    V3_OR_V35(V3_MAGICSHIELD, V35_MAGICSHIELD));
-	KEYTAB("keytab.6_map", "Bless Self", '6', INPUT_MOD_ALT, CL_BLESS, TGT_SLF, V3_OR_V35(V3_BLESS, V35_BLESS));
-	KEYTAB("keytab.7_map", "Heal Self", '7', INPUT_MOD_ALT, CL_HEAL, TGT_SLF, V3_OR_V35(V3_HEAL, V35_HEAL));
-	KEYTAB("keytab.8_map", "Warcry (Self)", '8', INPUT_MOD_ALT, CL_WARCRY, TGT_SLF, V3_OR_V35(V3_WARCRY, V35_WARCRY));
-	KEYTAB("keytab.9_map", sv_ver == 35 ? "Firering (Self)" : "Pulse (Self)", '9', INPUT_MOD_ALT,
+	KEYTAB("keytab.6_map", "Bless Self", SDLK_UNKNOWN, 0, CL_BLESS, TGT_SLF, V3_OR_V35(V3_BLESS, V35_BLESS));
+	KEYTAB("keytab.7_map", "Heal Self", SDLK_UNKNOWN, 0, CL_HEAL, TGT_SLF, V3_OR_V35(V3_HEAL, V35_HEAL));
+	KEYTAB("keytab.8_map", "Warcry (Self)", SDLK_UNKNOWN, 0, CL_WARCRY, TGT_SLF, V3_OR_V35(V3_WARCRY, V35_WARCRY));
+	KEYTAB("keytab.9_map", sv_ver == 35 ? "Firering (Self)" : "Pulse (Self)", SDLK_UNKNOWN, 0,
 	    sv_ver == 35 ? CL_FIREBALL : CL_PULSE, TGT_SLF, V3_OR_V35(V3_PULSE, V35_FIRE));
 	if (sv_ver != 35) {
-		KEYTAB("keytab.0_map", "Firering (Self)", '0', INPUT_MOD_ALT, CL_FIREBALL, TGT_SLF, (int)V3_FIREBALL);
+		KEYTAB("keytab.0_map", "Firering (Self)", SDLK_UNKNOWN, 0, CL_FIREBALL, TGT_SLF, (int)V3_FIREBALL);
 	}
 
 #undef KEYTAB

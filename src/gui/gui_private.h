@@ -497,6 +497,7 @@ int get_color(int x, int y);
 void cmd_color(int nr);
 void cmd_reset(void);
 void cmd_proc(int key);
+int cmd_is_active(void);
 
 /* hotbar_ui.c */
 int hotbar_toggle_hit(int mx, int my);

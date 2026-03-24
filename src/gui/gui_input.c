@@ -69,6 +69,11 @@ void gui_sdl_keyproc(SDL_Keycode key)
 		break;
 	}
 
+	/* if chat is active, all keys go to chat - no hotkeys fire */
+	if (cmd_is_active()) {
+		return;
+	}
+
 	/* build modifier mask for binding lookup */
 	Uint8 mods = input_current_modifiers();
 
@@ -77,6 +82,7 @@ void gui_sdl_keyproc(SDL_Keycode key)
 		int hb_slot = hotbar_find_extra_bind(key, mods);
 		if (hb_slot >= 0) {
 			hotbar_activate_extra(hb_slot, key, mods);
+			sdl_flush_textinput();
 			return;
 		}
 	}
@@ -85,6 +91,7 @@ void gui_sdl_keyproc(SDL_Keycode key)
 	InputBinding *b = input_find(key, mods);
 	if (b) {
 		input_execute(b);
+		sdl_flush_textinput();
 		return;
 	}
 

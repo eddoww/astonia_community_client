@@ -63,8 +63,14 @@ void hotbar_display(void)
 			fx.sprite = sprite;
 			fx.light = (i == hsel) ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT;
 			fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = fx.light;
-			fx.align = RENDER_ALIGN_CENTER;
 			fx.scale = 80; /* slightly smaller than full size to fit in slot */
+
+			/* spell icons use built-in offsets (like action bar), items use center align */
+			if (slot && slot->type == HOTBAR_SPELL) {
+				fx.align = 0; /* RENDER_ALIGN_OFFSET - use sprite's built-in offsets */
+			} else {
+				fx.align = RENDER_ALIGN_CENTER;
+			}
 
 			/* grey out item slots that are empty (out of stock) */
 			if (slot && slot->type == HOTBAR_ITEM && slot->inv_index <= 0) {
@@ -74,6 +80,16 @@ void hotbar_display(void)
 			}
 
 			render_sprite_fx(&fx, x, y);
+
+			/* activation flash — bright overlay that fades out quickly */
+			if (slot && slot->activated_at > 0) {
+				uint32_t elapsed = tick - slot->activated_at;
+				if (elapsed < 3) {
+					/* fade from 200 alpha to 0 over 3 ticks (~125ms) */
+					unsigned char alpha = (unsigned char)(200 - (elapsed * 200 / 3));
+					render_rect_alpha(x - 16, y - 16, x + 16, y + 16, IRGB(31, 31, 31), alpha);
+				}
+			}
 		}
 
 		/* key label — show bound key in corner (toggle-able) */

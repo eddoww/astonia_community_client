@@ -522,7 +522,7 @@ static void detect_hover_target(void)
 				}
 			}
 
-			if (chrsel == MAXMN && itmsel == MAXMN && !vk_char && (!vk_item || csprite)) {
+			if (chrsel == MAXMN && itmsel == MAXMN) {
 				mapsel = get_near_ground(mousex, mousey);
 			}
 			if (mapsel != MAXMN || itmsel != MAXMN || chrsel != MAXMN) {
@@ -992,6 +992,9 @@ static void set_cmd_key_states(void)
 	vk_control = (km & SDL_KEYM_CTRL) || control_override;
 	vk_alt = (km & SDL_KEYM_ALT) != 0;
 
+	/* Mouse modifier behaviors — these affect what happens on mouse click.
+	 * Note: mapsel is now always computed regardless of modifiers, so
+	 * keybinds using shift+key for map-cast spells work correctly. */
 	vk_char = vk_control;
 	vk_item = vk_shift;
 	vk_spell = vk_alt;

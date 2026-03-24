@@ -34,9 +34,17 @@ void hotbar_display(void)
 		hsel = butsel - BUT_HOTBAR_BEG;
 	}
 
+	if (count > HOTBAR_MAX_SLOTS) {
+		count = HOTBAR_MAX_SLOTS;
+	}
+
 	for (int i = 0; i < count; i++) {
-		int x = butx(BUT_HOTBAR_BEG + i);
-		int y = buty(BUT_HOTBAR_BEG + i);
+		int bi = BUT_HOTBAR_BEG + i;
+		if (bi > BUT_HOTBAR_END) {
+			break;
+		}
+		int x = butx(bi);
+		int y = buty(bi);
 
 		/* slot background (same as inventory slots) */
 		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
@@ -106,7 +114,7 @@ void hotbar_display(void)
 		hb_hover_start = tick + HOVER_DELAY;
 	}
 
-	if (hb_hover_slot >= 0 && tick > hb_hover_start) {
+	if (hb_hover_slot >= 0 && hb_hover_slot < HOTBAR_MAX_SLOTS && tick > hb_hover_start) {
 		const HotbarSlot *hs = hotbar_get(hb_hover_slot);
 		int tx = butx(BUT_HOTBAR_BEG + hb_hover_slot);
 		int ty = buty(BUT_HOTBAR_BEG + hb_hover_slot);

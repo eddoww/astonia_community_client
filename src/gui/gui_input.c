@@ -14,6 +14,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/spellbook_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -164,8 +165,18 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
-		/* hotbar: assign item from cursor on click */
-		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END && csprite) {
+		/* spellbook toggle button */
+		if (hotbar_toggle_hit(mousex, mousey)) {
+			break;
+		}
+
+		/* spellbook panel clicks (pick up spell) */
+		if (spellbook_click(mousex, mousey)) {
+			break;
+		}
+
+		/* hotbar: assign item or spell from cursor on click */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END && (csprite || spellbook_is_dragging())) {
 			hotbar_click(butsel - BUT_HOTBAR_BEG);
 			break;
 		}
@@ -200,6 +211,10 @@ void gui_sdl_mouseproc(float x, float y, int what)
 	case SDL_MOUM_RUP:
 		vk_rbut = 0;
 		if (amod_mouse_click(mousex, mousey, what)) {
+			break;
+		}
+		/* right-click cancels spellbook drag */
+		if (spellbook_rclick(mousex, mousey)) {
 			break;
 		}
 		/* right-click hotbar slot to clear it */

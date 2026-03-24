@@ -14,6 +14,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/spellbook_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -204,6 +205,7 @@ void display(void)
 	display_wear();
 	display_inventory();
 	hotbar_display();
+	spellbook_display();
 	if (con_cnt) {
 		display_container();
 	} else {

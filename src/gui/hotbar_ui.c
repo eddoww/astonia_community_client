@@ -11,6 +11,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/spellbook_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 
@@ -81,6 +82,17 @@ void hotbar_display(void)
 			render_text(x - 12, y - 14, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
 		}
 	}
+
+	/* spellbook toggle button on the right side of the hotbar */
+	{
+		int rx = butx(BUT_HOTBAR_BEG + count - 1) + FDX + 8;
+		int ry = buty(BUT_HOTBAR_BEG);
+		bzero(&fx, sizeof(fx));
+		fx.sprite = spellbook_is_open() ? 853U : 852U;
+		fx.scale = 80;
+		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = RENDERFX_NORMAL_LIGHT;
+		render_sprite_fx(&fx, rx, ry);
+	}
 }
 
 /* ── Hotbar click handling ─────────────────────────────────────────────── */
@@ -91,11 +103,18 @@ int hotbar_click(int slot)
 		return 0;
 	}
 
-	/* if player is carrying an item on cursor, assign it to this slot.
-	 * the item is on the cursor (csprite), so it may have been removed
-	 * from the item[] array. We assign by type — the auto-refill system
-	 * will resolve it to an actual inventory index when the item is put
-	 * back or another of the same type exists. */
+	/* dropping a spell from the spellbook onto this hotbar slot */
+	if (spellbook_is_dragging()) {
+		int action_slot = spellbook_dragging_slot();
+		if (action_slot >= 0) {
+			hotbar_assign_spell(slot, action_slot, 0, 0);
+			save_options();
+		}
+		spellbook_cancel_drag();
+		return 1;
+	}
+
+	/* if player is carrying an item on cursor, assign it to this slot */
 	if (csprite) {
 		hotbar_assign_item_by_type(slot, csprite);
 		save_options();
@@ -118,5 +137,20 @@ int hotbar_click(int slot)
 		return 1;
 	}
 
+	return 0;
+}
+
+/* spellbook toggle button hit test — called from gui_input on left-click */
+int hotbar_toggle_hit(int mx, int my)
+{
+	int count = hotbar_visible_slots();
+	int rx = butx(BUT_HOTBAR_BEG + count - 1) + FDX + 8;
+	int ry = buty(BUT_HOTBAR_BEG);
+	int dx = mx - rx;
+	int dy = my - ry;
+	if (dx >= -18 && dx <= 18 && dy >= -18 && dy <= 18) {
+		spellbook_toggle();
+		return 1;
+	}
 	return 0;
 }

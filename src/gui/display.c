@@ -1414,6 +1414,24 @@ void display_action(void)
 	}
 }
 
+/* ── Accessors for spellbook ─────────────────────────────────────────── */
+
+const char *get_action_text(int slot)
+{
+	if (slot < 0 || slot >= MAXACTIONSLOT || !action_text) {
+		return NULL;
+	}
+	return action_text[slot];
+}
+
+const char *get_action_desc(int slot)
+{
+	if (slot < 0 || slot >= MAXACTIONSLOT || !action_desc) {
+		return NULL;
+	}
+	return action_desc[slot];
+}
+
 void display_action_lock(void)
 {
 	act_lck ^= 1;

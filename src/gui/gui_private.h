@@ -486,6 +486,9 @@ int do_display_questlog(int nr);
 void display_action(void);
 void display_selfbars(void);
 
+const char *get_action_text(int slot);
+const char *get_action_desc(int slot);
+
 void display_teleport(void);
 int get_teleport(int x, int y);
 
@@ -494,6 +497,9 @@ int get_color(int x, int y);
 void cmd_color(int nr);
 void cmd_reset(void);
 void cmd_proc(int key);
+
+/* hotbar_ui.c */
+int hotbar_toggle_hit(int mx, int my);
 
 #define NEAR_ITEM    1024
 #define NEAR_CHAR    2048

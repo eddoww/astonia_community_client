@@ -192,8 +192,8 @@ void init_dots(void)
 	// action bar (kept for BUT_ACT_* hit testing, but no longer rendered)
 	set_dot(DOT_ACT, XRES - MAXACTIONSLOT * 40 - (XRES - MAXACTIONSLOT * 40) / 2, doty(DOT_BOT) - 12, 0);
 
-	// hotbar — centered where the action bar was
-	set_dot(DOT_HOTBAR, (XRES - hotbar_visible_slots() * FDX) / 2, doty(DOT_BOT) - 12, 0);
+	// hotbar — centered above the bottom panel
+	set_dot(DOT_HOTBAR, (XRES - hotbar_visible_slots() * FDX) / 2, doty(DOT_BOT) - 15, 0);
 
 	// tutor window
 	dots_update();

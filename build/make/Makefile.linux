@@ -71,7 +71,7 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 			src/sdl/sdl_core.o src/sdl/sdl_texture.o src/sdl/sdl_image.o src/sdl/sdl_effects.o src/sdl/sdl_draw.o src/sdl/sound.o\
 			src/helper/helper.o\
 			src/gui/dots.o src/gui/display.o src/gui/teleport.o src/gui/color.o src/gui/cmd.o\
-			src/gui/questlog.o src/gui/context.o src/gui/hover.o src/gui/minimap.o src/gui/input_bind.o src/gui/hotbar_ui.o\
+			src/gui/questlog.o src/gui/context.o src/gui/hover.o src/gui/minimap.o src/gui/input_bind.o src/gui/hotbar_ui.o src/gui/spellbook_ui.o\
 			src/game/memory_linux.o src/game/version.o\
 			src/lib/cjson/cJSON.o
 
@@ -123,7 +123,8 @@ src/gui/minimap.o:	src/gui/minimap.c src/astonia.h src/gui/gui.h src/gui/gui_pri
 src/gui/teleport.o:	src/gui/teleport.c src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h
 src/gui/questlog.o:	src/gui/questlog.c src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h
 src/gui/input_bind.o:	src/gui/input_bind.c src/gui/input_bind.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h src/lib/cjson/cJSON.h
-src/gui/hotbar_ui.o:	src/gui/hotbar_ui.c src/gui/input_bind.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h
+src/gui/hotbar_ui.o:	src/gui/hotbar_ui.c src/gui/input_bind.h src/gui/spellbook_ui.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h
+src/gui/spellbook_ui.o:	src/gui/spellbook_ui.c src/gui/spellbook_ui.h src/gui/input_bind.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h
 
 # Refactored GUI modules
 src/gui/gui_core.o:	src/gui/gui_core.c src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h src/sdl/sdl.h src/modder/modder.h

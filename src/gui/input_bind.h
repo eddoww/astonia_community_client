@@ -124,7 +124,8 @@ int input_action_slot_available(int slot);
  * The hotbar contents are persisted in keybinds.json alongside key overrides.
  */
 
-#define HOTBAR_SLOTS 10
+#define HOTBAR_MAX_SLOTS     15 /* absolute maximum (array size, button range) */
+#define HOTBAR_DEFAULT_SLOTS 15 /* default visible count */
 
 /* what kind of thing is in a hotbar slot */
 typedef enum {
@@ -145,6 +146,10 @@ typedef struct {
 	int spell_cmd; /* CL_* spell command, or 0 for non-spell actions */
 	int spell_target; /* TGT_MAP / TGT_CHR / TGT_SLF */
 } HotbarSlot;
+
+/* how many hotbar slots are currently visible (configurable, <= HOTBAR_MAX_SLOTS) */
+int hotbar_visible_slots(void);
+void hotbar_set_visible_slots(int count);
 
 /* slot management */
 void hotbar_assign_item(int slot, int inventory_index);

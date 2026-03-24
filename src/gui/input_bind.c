@@ -193,11 +193,28 @@ static int find_item_in_inventory(uint32_t item_type);
  * inventory when consumed. Spell slots activate the action bar system.
  */
 
-static HotbarSlot hotbar[HOTBAR_SLOTS];
+static HotbarSlot hotbar[HOTBAR_MAX_SLOTS];
+static int visible_slots = HOTBAR_DEFAULT_SLOTS;
+
+int hotbar_visible_slots(void)
+{
+	return visible_slots;
+}
+
+void hotbar_set_visible_slots(int count)
+{
+	if (count < 1) {
+		count = 1;
+	}
+	if (count > HOTBAR_MAX_SLOTS) {
+		count = HOTBAR_MAX_SLOTS;
+	}
+	visible_slots = count;
+}
 
 void hotbar_assign_item(int slot, int inventory_index)
 {
-	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
 	}
 	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
@@ -208,7 +225,7 @@ void hotbar_assign_item(int slot, int inventory_index)
 
 void hotbar_assign_item_by_type(int slot, uint32_t item_type)
 {
-	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
 	}
 	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
@@ -219,7 +236,7 @@ void hotbar_assign_item_by_type(int slot, uint32_t item_type)
 
 void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_target)
 {
-	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
 	}
 	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
@@ -231,7 +248,7 @@ void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_tar
 
 void hotbar_clear(int slot)
 {
-	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
 	}
 	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
@@ -244,7 +261,7 @@ void hotbar_clear_all(void)
 
 const HotbarSlot *hotbar_get(int slot)
 {
-	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return NULL;
 	}
 	return &hotbar[slot];
@@ -252,7 +269,7 @@ const HotbarSlot *hotbar_get(int slot)
 
 uint32_t hotbar_slot_sprite(int slot)
 {
-	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return 0;
 	}
 
@@ -285,7 +302,7 @@ static int find_item_in_inventory(uint32_t item_type)
 
 void hotbar_on_item_changed(int inventory_index)
 {
-	for (int s = 0; s < HOTBAR_SLOTS; s++) {
+	for (int s = 0; s < HOTBAR_MAX_SLOTS; s++) {
 		if (hotbar[s].type != HOTBAR_ITEM) {
 			continue;
 		}
@@ -309,7 +326,7 @@ void hotbar_on_item_changed(int inventory_index)
 static void on_hotbar_press(InputBinding *self)
 {
 	int slot = self->param;
-	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
 	}
 
@@ -439,20 +456,25 @@ static void register_all(int sv_ver)
 		const char *id;
 		const char *name;
 		SDL_Keycode key;
-	} hotbar_defaults[HOTBAR_SLOTS] = {
+	} hotbar_defaults[HOTBAR_MAX_SLOTS] = {
 	    {"hotbar.0", "Hotbar Slot 1", SDLK_F1},
 	    {"hotbar.1", "Hotbar Slot 2", SDLK_F2},
 	    {"hotbar.2", "Hotbar Slot 3", SDLK_F3},
 	    {"hotbar.3", "Hotbar Slot 4", SDLK_F4},
-	    {"hotbar.4", "Hotbar Slot 5", SDLK_UNKNOWN},
-	    {"hotbar.5", "Hotbar Slot 6", SDLK_UNKNOWN},
-	    {"hotbar.6", "Hotbar Slot 7", SDLK_UNKNOWN},
-	    {"hotbar.7", "Hotbar Slot 8", SDLK_UNKNOWN},
-	    {"hotbar.8", "Hotbar Slot 9", SDLK_UNKNOWN},
-	    {"hotbar.9", "Hotbar Slot 10", SDLK_UNKNOWN},
+	    {"hotbar.4", "Hotbar Slot 5", SDLK_F5},
+	    {"hotbar.5", "Hotbar Slot 6", SDLK_F6},
+	    {"hotbar.6", "Hotbar Slot 7", SDLK_F7},
+	    {"hotbar.7", "Hotbar Slot 8", SDLK_F8},
+	    {"hotbar.8", "Hotbar Slot 9", SDLK_F9},
+	    {"hotbar.9", "Hotbar Slot 10", SDLK_F10},
+	    {"hotbar.10", "Hotbar Slot 11", SDLK_UNKNOWN},
+	    {"hotbar.11", "Hotbar Slot 12", SDLK_UNKNOWN},
+	    {"hotbar.12", "Hotbar Slot 13", SDLK_UNKNOWN},
+	    {"hotbar.13", "Hotbar Slot 14", SDLK_UNKNOWN},
+	    {"hotbar.14", "Hotbar Slot 15", SDLK_UNKNOWN},
 	};
 
-	for (int i = 0; i < HOTBAR_SLOTS; i++) {
+	for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {
 		b = reg(hotbar_defaults[i].id, hotbar_defaults[i].name, INPUT_CAT_HOTBAR, hotbar_defaults[i].key, 0,
 		    on_hotbar_press);
 		if (b) {
@@ -1034,7 +1056,7 @@ int input_load_config(const char *path)
 		cJSON *jslot;
 		cJSON_ArrayForEach(jslot, jhotbar)
 		{
-			if (slot >= HOTBAR_SLOTS) {
+			if (slot >= HOTBAR_MAX_SLOTS) {
 				break;
 			}
 			memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
@@ -1106,7 +1128,7 @@ int input_save_config(const char *path)
 
 	/* save hotbar slots */
 	cJSON *jhotbar = cJSON_CreateArray();
-	for (int i = 0; i < HOTBAR_SLOTS; i++) {
+	for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {
 		cJSON *jslot = cJSON_CreateObject();
 		switch (hotbar[i].type) {
 		case HOTBAR_ITEM:

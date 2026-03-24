@@ -203,7 +203,6 @@ void display(void)
 	}
 	display_wear();
 	display_inventory();
-	display_action();
 	hotbar_display();
 	if (con_cnt) {
 		display_container();

@@ -1,11 +1,10 @@
 /*
  * Part of Astonia Client (c) Daniel Brockhaus. Please read license.txt.
  *
- * Hotbar UI — renders the 10-slot hotbar and handles drag-and-drop from
+ * Hotbar UI — renders the hotbar slots and handles drag-and-drop from
  * inventory (items) and spell book (spells) onto hotbar slots.
  */
 
-#include <stdio.h>
 #include <SDL3/SDL.h>
 
 #include "astonia.h"
@@ -21,13 +20,14 @@ void hotbar_display(void)
 {
 	RenderFX fx;
 	int hsel = -1; /* which hotbar slot is hovered */
+	int count = hotbar_visible_slots();
 
 	/* detect hover */
 	if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
 		hsel = butsel - BUT_HOTBAR_BEG;
 	}
 
-	for (int i = 0; i < HOTBAR_SLOTS; i++) {
+	for (int i = 0; i < count; i++) {
 		int x = butx(BUT_HOTBAR_BEG + i);
 		int y = buty(BUT_HOTBAR_BEG + i);
 
@@ -62,13 +62,13 @@ void hotbar_display(void)
 		}
 
 		/* key label — show bound key in corner */
-		InputBinding *b = input_binding_at(0); /* find by iterating */
+		InputBinding *b = NULL;
 		for (int bi = 0; bi < input_binding_count(); bi++) {
-			b = input_binding_at(bi);
-			if (b && b->category == INPUT_CAT_HOTBAR && b->param == i) {
+			InputBinding *candidate = input_binding_at(bi);
+			if (candidate && candidate->category == INPUT_CAT_HOTBAR && candidate->param == i) {
+				b = candidate;
 				break;
 			}
-			b = NULL;
 		}
 		if (b && b->key != SDLK_UNKNOWN) {
 			char label[16];
@@ -87,7 +87,7 @@ void hotbar_display(void)
 
 int hotbar_click(int slot)
 {
-	if (slot < 0 || slot >= HOTBAR_SLOTS) {
+	if (slot < 0 || slot >= hotbar_visible_slots()) {
 		return 0;
 	}
 

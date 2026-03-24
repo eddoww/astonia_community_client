@@ -67,7 +67,7 @@ DLL_EXPORT struct skill game_skill[MOD_V_MAX] = {
     {"Ancient Knowledge", V_WIS, V_INT, V_STR, 1, 1}, // 38
 
     {"Duration", V_WIS, V_INT, V_STR, 1, 1}, // 39
-    {"Rage", V_WIS, V_INT, V_STR, 1, 1}, // 40
+    {"Rage", V_INT, V_STR, V_STR, 1, 1}, // 40
     {"Resist Cold", -1, -1, -1, 0, 1}, // 41
     {"Profession", -1, -1, -1, 3, 1}, // 42
 

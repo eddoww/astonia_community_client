@@ -80,7 +80,7 @@ struct skill v3_game_skill[V_MAX] = {
     {"Ancient Knowledge", V3_WIS, V3_INT, V3_STR, 1, 1}, // 38
 
     {"Duration", V3_WIS, V3_INT, V3_STR, 1, 1}, // 39
-    {"Rage", V3_WIS, V3_INT, V3_STR, 1, 1}, // 40
+    {"Rage", V3_INT, V3_STR, V3_STR, 1, 1}, // 40
     {"Resist Cold", -1, -1, -1, 0, 1}, // 41
     {"Profession", -1, -1, -1, 3, 1}, // 42
 

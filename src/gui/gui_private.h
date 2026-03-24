@@ -65,9 +65,9 @@
 // BUT_HELP_INDEX is 102
 
 #define BUT_HOTBAR_BEG 103
-#define BUT_HOTBAR_END 117 /* 15 slots: 103..117 */
+#define BUT_HOTBAR_END 147 /* 45 slots (3×15): 103..147 */
 
-#define MAX_BUT 118
+#define MAX_BUT 148
 
 #define BUTF_NOHIT    (1 << 1) // button is ignored int hit processing
 #define BUTF_CAPTURE  (1 << 2) // button captures mouse on lclick

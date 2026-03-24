@@ -26,7 +26,8 @@ void hotbar_display(void)
 {
 	RenderFX fx;
 	int hsel = -1; /* which hotbar slot is hovered */
-	int count = hotbar_visible_slots();
+	int cols = hotbar_visible_slots();
+	int count = cols * hotbar_rows();
 
 	/* detect hover */
 	if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
@@ -137,7 +138,7 @@ void hotbar_display(void)
 
 	/* spellbook toggle button on the right side of the hotbar */
 	{
-		int rx = butx(BUT_HOTBAR_BEG + count - 1) + FDX + 8;
+		int rx = butx(BUT_HOTBAR_BEG + cols - 1) + FDX + 8;
 		int ry = buty(BUT_HOTBAR_BEG);
 		bzero(&fx, sizeof(fx));
 		fx.sprite = spellbook_is_open() ? 853U : 852U;
@@ -151,7 +152,7 @@ void hotbar_display(void)
 
 int hotbar_click(int slot)
 {
-	if (slot < 0 || slot >= hotbar_visible_slots()) {
+	if (slot < 0 || slot >= hotbar_visible_slots() * hotbar_rows()) {
 		return 0;
 	}
 
@@ -202,8 +203,8 @@ int hotbar_click(int slot)
 /* spellbook toggle button hit test — called from gui_input on left-click */
 int hotbar_toggle_hit(int mx, int my)
 {
-	int count = hotbar_visible_slots();
-	int rx = butx(BUT_HOTBAR_BEG + count - 1) + FDX + 8;
+	int cols = hotbar_visible_slots();
+	int rx = butx(BUT_HOTBAR_BEG + cols - 1) + FDX + 8;
 	int ry = buty(BUT_HOTBAR_BEG);
 	int dx = mx - rx;
 	int dy = my - ry;

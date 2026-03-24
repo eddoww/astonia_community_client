@@ -124,8 +124,10 @@ int input_action_slot_available(int slot);
  * The hotbar contents are persisted in keybinds.json alongside key overrides.
  */
 
-#define HOTBAR_MAX_SLOTS     15 /* absolute maximum (array size, button range) */
-#define HOTBAR_DEFAULT_SLOTS 15 /* default visible count */
+#define HOTBAR_SLOTS_PER_ROW 15
+#define HOTBAR_MAX_ROWS      3
+#define HOTBAR_MAX_SLOTS     (HOTBAR_SLOTS_PER_ROW * HOTBAR_MAX_ROWS) /* 45 */
+#define HOTBAR_DEFAULT_SLOTS HOTBAR_SLOTS_PER_ROW /* visible per row */
 
 /* what kind of thing is in a hotbar slot */
 typedef enum {
@@ -176,8 +178,12 @@ typedef struct {
 	int extra_bind_count;
 } HotbarSlot;
 
-/* how many hotbar slots are currently visible (configurable, <= HOTBAR_MAX_SLOTS) */
+/* how many hotbar slots are visible per row */
 int hotbar_visible_slots(void);
+
+/* how many hotbar rows are active (1-3) */
+int hotbar_rows(void);
+void hotbar_set_rows(int count);
 void hotbar_set_visible_slots(int count);
 
 /* casting modes for targeted spells (self-cast always fires immediately) */

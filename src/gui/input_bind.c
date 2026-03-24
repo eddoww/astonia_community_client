@@ -214,11 +214,28 @@ static int find_item_in_inventory(uint32_t item_type);
 
 static HotbarSlot hotbar[HOTBAR_MAX_SLOTS];
 static int visible_slots = HOTBAR_DEFAULT_SLOTS;
+static int active_rows = 1; /* how many hotbar rows are visible (1-3) */
 static int cast_mode = CAST_NORMAL; /* how targeted spells are cast from hotkeys */
 
 int hotbar_visible_slots(void)
 {
 	return visible_slots;
+}
+
+int hotbar_rows(void)
+{
+	return active_rows;
+}
+
+void hotbar_set_rows(int count)
+{
+	if (count < 1) {
+		count = 1;
+	}
+	if (count > HOTBAR_MAX_ROWS) {
+		count = HOTBAR_MAX_ROWS;
+	}
+	active_rows = count;
 }
 
 void hotbar_set_visible_slots(int count)
@@ -644,7 +661,7 @@ void hotbar_clear_binds(int slot)
 
 int hotbar_find_extra_bind(SDL_Keycode key, Uint8 mods)
 {
-	int count = hotbar_visible_slots();
+	int count = hotbar_visible_slots() * hotbar_rows();
 	for (int s = 0; s < count; s++) {
 		for (int b = 0; b < hotbar[s].extra_bind_count; b++) {
 			if (hotbar[s].extra_binds[b].key == key && hotbar[s].extra_binds[b].modifiers == mods) {
@@ -852,29 +869,39 @@ static void register_all(int sv_ver)
 	reg("move.action_on_alt", "Enable Action Mode (Alt)", INPUT_CAT_MOVEMENT, '=', 0, on_action_mode_on);
 	reg("move.action_off", "Disable Action Mode", INPUT_CAT_MOVEMENT, '-', 0, on_action_mode_off);
 
-	/* ── Hotbar (10 drag-and-drop item slots) ─────────────────────── */
+	/* ── Hotbar (3 rows × 15 slots) ──────────────────────────────── */
 
-	static const struct {
-		const char *id;
-		const char *name;
+	/* generate hotbar binding entries: row 1 has keys, rows 2-3 unbound */
+	static struct {
+		char id[16];
+		char name[24];
 		SDL_Keycode key;
-	} hotbar_defaults[HOTBAR_MAX_SLOTS] = {
-	    {"hotbar.0", "Hotbar Slot 1", SDLK_1},
-	    {"hotbar.1", "Hotbar Slot 2", SDLK_2},
-	    {"hotbar.2", "Hotbar Slot 3", SDLK_3},
-	    {"hotbar.3", "Hotbar Slot 4", SDLK_4},
-	    {"hotbar.4", "Hotbar Slot 5", SDLK_5},
-	    {"hotbar.5", "Hotbar Slot 6", SDLK_6},
-	    {"hotbar.6", "Hotbar Slot 7", SDLK_7},
-	    {"hotbar.7", "Hotbar Slot 8", SDLK_8},
-	    {"hotbar.8", "Hotbar Slot 9", SDLK_9},
-	    {"hotbar.9", "Hotbar Slot 10", SDLK_0},
-	    {"hotbar.10", "Hotbar Slot 11", 'q'},
-	    {"hotbar.11", "Hotbar Slot 12", 'w'},
-	    {"hotbar.12", "Hotbar Slot 13", 'e'},
-	    {"hotbar.13", "Hotbar Slot 14", 'r'},
-	    {"hotbar.14", "Hotbar Slot 15", 't'},
-	};
+	} hotbar_defaults[HOTBAR_MAX_SLOTS];
+
+	{
+		static const SDL_Keycode row1_keys[HOTBAR_SLOTS_PER_ROW] = {
+		    SDLK_1,
+		    SDLK_2,
+		    SDLK_3,
+		    SDLK_4,
+		    SDLK_5,
+		    SDLK_6,
+		    SDLK_7,
+		    SDLK_8,
+		    SDLK_9,
+		    SDLK_0,
+		    'q',
+		    'w',
+		    'e',
+		    'r',
+		    't',
+		};
+		for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {
+			snprintf(hotbar_defaults[i].id, sizeof(hotbar_defaults[i].id), "hotbar.%d", i);
+			snprintf(hotbar_defaults[i].name, sizeof(hotbar_defaults[i].name), "Hotbar Slot %d", i + 1);
+			hotbar_defaults[i].key = (i < HOTBAR_SLOTS_PER_ROW) ? row1_keys[i] : SDLK_UNKNOWN;
+		}
+	}
 
 	for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {
 		b = reg(hotbar_defaults[i].id, hotbar_defaults[i].name, INPUT_CAT_HOTBAR, hotbar_defaults[i].key, 0,
@@ -1460,6 +1487,10 @@ int input_load_config(const char *path)
 		if (v && cJSON_IsBool(v)) {
 			show_names = cJSON_IsTrue(v) ? 1 : 0;
 		}
+		v = cJSON_GetObjectItem(jsettings, "hotbar_rows");
+		if (v && cJSON_IsNumber(v)) {
+			hotbar_set_rows((int)cJSON_GetNumberValue(v));
+		}
 	}
 
 	/* load hotbar: each entry is an object {"type":"item","item_type":N}
@@ -1598,6 +1629,7 @@ int input_save_config(const char *path)
 	cJSON_AddNumberToObject(jsettings, "cast_mode", cast_mode);
 	cJSON_AddBoolToObject(jsettings, "show_hotkeys", show_hotkeys);
 	cJSON_AddBoolToObject(jsettings, "show_names", show_names);
+	cJSON_AddNumberToObject(jsettings, "hotbar_rows", active_rows);
 	cJSON_AddItemToObject(root, "settings", jsettings);
 
 	/* save hotbar slots */

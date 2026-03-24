@@ -97,7 +97,7 @@ void display_mouseover(void)
 }
 
 #define MAXVALID (TICKS * 60 * 2)
-#define MAXDESC  20
+#define MAXDESC  40
 
 struct hover_item {
 	uint32_t valid_till;
@@ -178,6 +178,9 @@ int hover_capture_text(char *line)
 	}
 
 	if (capture) {
+		if (last_line >= MAXDESC) {
+			return capture; /* too many lines, skip */
+		}
 		int len = textlength(line);
 		hi[last_invsel].valid_till = tick + MAXVALID;
 		hi[last_invsel].desc[last_line++] = xstrdup(line, MEM_TEMP11);

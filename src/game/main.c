@@ -459,7 +459,7 @@ static void get_config_path(char *buf, size_t bufsize)
 	if (localdata) {
 		snprintf(buf, bufsize, "%skeybinds.json", localdata);
 	} else {
-		snprintf(buf, bufsize, "bin/data/keybinds.json");
+		snprintf(buf, bufsize, "res/config/keybinds.json");
 	}
 }
 
@@ -499,7 +499,11 @@ void load_options(void)
 		char json_path[MAX_PATH];
 		get_config_path(json_path, sizeof(json_path));
 		input_save_config(json_path);
+		return;
 	}
+
+	/* no config at all — set up defaults for new players */
+	hotbar_setup_defaults();
 }
 
 void init_logging(void)

@@ -311,6 +311,64 @@ void hotbar_clear_all(void)
 	memset(hotbar, 0, sizeof(hotbar));
 }
 
+/* set up default hotbar contents for first-time users (no saved config) */
+void hotbar_setup_defaults(void)
+{
+	/* spell layout: covers both mage and warrior spells.
+	 * spells the player doesn't have will be inactive but visible. */
+	static const struct {
+		int action_slot;
+		int has_quick; /* 1 = add shift+key extra bind for quick cast */
+	} spell_defaults[] = {
+	    {ACTION_ATTACK, 0}, /* slot 1 */
+	    {ACTION_FIREBALL, 1}, /* slot 2 — shift+2 = quick cast */
+	    {ACTION_LBALL, 1}, /* slot 3 — shift+3 = quick cast */
+	    {ACTION_FLASH, 0}, /* slot 4 — self-cast (always instant) */
+	    {ACTION_FREEZE, 0}, /* slot 5 — self-cast */
+	    {ACTION_BLESS, 1}, /* slot 6 — shift+6 = quick cast */
+	    {ACTION_SHIELD, 0}, /* slot 7 — self-cast */
+	    {ACTION_HEAL, 1}, /* slot 8 — shift+8 = quick cast */
+	    {ACTION_WARCRY, 0}, /* slot 9 — self-cast */
+	    {ACTION_PULSE, 0}, /* slot 0 — self-cast */
+	    {ACTION_FIRERING, 0}, /* slot Q — self-cast */
+	    {-1, 0}, /* slot W — empty (potions) */
+	    {ACTION_TAKEGIVE, 0}, /* slot E */
+	    {ACTION_MAP, 0}, /* slot R */
+	    {ACTION_LOOK, 0}, /* slot T */
+	};
+
+	/* keys matching hotbar_defaults in register_all */
+	static const SDL_Keycode slot_keys[] = {
+	    SDLK_1,
+	    SDLK_2,
+	    SDLK_3,
+	    SDLK_4,
+	    SDLK_5,
+	    SDLK_6,
+	    SDLK_7,
+	    SDLK_8,
+	    SDLK_9,
+	    SDLK_0,
+	    'q',
+	    'w',
+	    'e',
+	    'r',
+	    't',
+	};
+
+	for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {
+		if (spell_defaults[i].action_slot < 0) {
+			continue; /* leave slot empty */
+		}
+		hotbar_assign_spell(i, spell_defaults[i].action_slot, 0, 0);
+
+		/* add shift+key quick cast extra bind for dual-target spells */
+		if (spell_defaults[i].has_quick) {
+			hotbar_add_bind(i, slot_keys[i], INPUT_MOD_SHIFT, HOTBAR_CAST_QUICK, HOTBAR_TGT_DEFAULT);
+		}
+	}
+}
+
 const HotbarSlot *hotbar_get(int slot)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
@@ -801,21 +859,21 @@ static void register_all(int sv_ver)
 		const char *name;
 		SDL_Keycode key;
 	} hotbar_defaults[HOTBAR_MAX_SLOTS] = {
-	    {"hotbar.0", "Hotbar Slot 1", SDLK_F1},
-	    {"hotbar.1", "Hotbar Slot 2", SDLK_F2},
-	    {"hotbar.2", "Hotbar Slot 3", SDLK_F3},
-	    {"hotbar.3", "Hotbar Slot 4", SDLK_F4},
-	    {"hotbar.4", "Hotbar Slot 5", SDLK_F5},
-	    {"hotbar.5", "Hotbar Slot 6", SDLK_F6},
-	    {"hotbar.6", "Hotbar Slot 7", SDLK_F7},
-	    {"hotbar.7", "Hotbar Slot 8", SDLK_F8},
-	    {"hotbar.8", "Hotbar Slot 9", SDLK_F9},
-	    {"hotbar.9", "Hotbar Slot 10", SDLK_F10},
-	    {"hotbar.10", "Hotbar Slot 11", SDLK_UNKNOWN},
-	    {"hotbar.11", "Hotbar Slot 12", SDLK_UNKNOWN},
-	    {"hotbar.12", "Hotbar Slot 13", SDLK_UNKNOWN},
-	    {"hotbar.13", "Hotbar Slot 14", SDLK_UNKNOWN},
-	    {"hotbar.14", "Hotbar Slot 15", SDLK_UNKNOWN},
+	    {"hotbar.0", "Hotbar Slot 1", SDLK_1},
+	    {"hotbar.1", "Hotbar Slot 2", SDLK_2},
+	    {"hotbar.2", "Hotbar Slot 3", SDLK_3},
+	    {"hotbar.3", "Hotbar Slot 4", SDLK_4},
+	    {"hotbar.4", "Hotbar Slot 5", SDLK_5},
+	    {"hotbar.5", "Hotbar Slot 6", SDLK_6},
+	    {"hotbar.6", "Hotbar Slot 7", SDLK_7},
+	    {"hotbar.7", "Hotbar Slot 8", SDLK_8},
+	    {"hotbar.8", "Hotbar Slot 9", SDLK_9},
+	    {"hotbar.9", "Hotbar Slot 10", SDLK_0},
+	    {"hotbar.10", "Hotbar Slot 11", 'q'},
+	    {"hotbar.11", "Hotbar Slot 12", 'w'},
+	    {"hotbar.12", "Hotbar Slot 13", 'e'},
+	    {"hotbar.13", "Hotbar Slot 14", 'r'},
+	    {"hotbar.14", "Hotbar Slot 15", 't'},
 	};
 
 	for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {

@@ -87,27 +87,31 @@ void init_dots(void)
 {
 	int i, x, y, xc, yc;
 
+	// UI offset to center the 800-pixel UI within the expanded XRES
+	// When XRES > XRES0 (800), this shifts UI elements to the center
+	int ui_off = (XRES - XRES0) / 2;
+
 	// top left, bottom right of screen
 	set_dot(DOT_TL, 0, 0, 0);
 	set_dot(DOT_BR, XRES, YRES, 0);
 
 	// top and bottom window
-	set_dot(DOT_TOP, 0, 0, !stop ? 0 : DOTF_TOPOFF);
+	set_dot(DOT_TOP, ui_off, 0, !stop ? 0 : DOTF_TOPOFF);
 	if (!sbot) {
-		set_dot(DOT_BOT, 0, YRES - 170, 0);
+		set_dot(DOT_BOT, ui_off, YRES - 170, 0);
 	} else {
-		set_dot(DOT_BOT, 0, YRES - 130, 0);
+		set_dot(DOT_BOT, ui_off, YRES - 130, 0);
 	}
-	set_dot(DOT_BO2, XRES, YRES, 0);
+	set_dot(DOT_BO2, XRES - ui_off, YRES, 0);
 
 	// equipment, inventory, container. center of first displayed item.
-	set_dot(DOT_WEA, 180, 20, !stop ? 0 : DOTF_TOPOFF);
-	set_dot(DOT_INV, 660, doty(DOT_BOT) + 27, 0);
-	set_dot(DOT_CON, 20, doty(DOT_BOT) + 27, 0);
+	set_dot(DOT_WEA, ui_off + 180, 20, !stop ? 0 : DOTF_TOPOFF);
+	set_dot(DOT_INV, ui_off + 660, doty(DOT_BOT) + 27, 0);
+	set_dot(DOT_CON, ui_off + 20, doty(DOT_BOT) + 27, 0);
 
 	// inventory top left and bottom right
-	set_dot(DOT_IN1, 645, doty(DOT_BOT) + 2, 0);
-	set_dot(DOT_IN2, 795, doty(DOT_BO2) - 2, 0);
+	set_dot(DOT_IN1, ui_off + 645, doty(DOT_BOT) + 2, 0);
+	set_dot(DOT_IN2, ui_off + 795, doty(DOT_BO2) - 2, 0);
 	if (!sbot) {
 		__invdy = 4;
 	} else {
@@ -115,8 +119,8 @@ void init_dots(void)
 	}
 
 	// scroll bars
-	set_dot(DOT_SCL, 160 + 5, 0, 0);
-	set_dot(DOT_SCR, XRES - 160 - 5, 0, 0);
+	set_dot(DOT_SCL, ui_off + 160 + 5, 0, 0);
+	set_dot(DOT_SCR, XRES - ui_off - 160 - 5, 0, 0);
 	set_dot(DOT_SCU, 0, doty(DOT_BOT) + 15, 0);
 	if (!sbot) {
 		set_dot(DOT_SCD, 0, doty(DOT_BOT) + 160, 0);
@@ -132,18 +136,18 @@ void init_dots(void)
 	}
 
 	// chat text
-	set_dot(DOT_TXT, 230, doty(DOT_BOT) + 8, 0);
+	set_dot(DOT_TXT, ui_off + 230, doty(DOT_BOT) + 8, 0);
 	if (!sbot) {
-		set_dot(DOT_TX2, 624, doty(DOT_BOT) + 158, 0);
+		set_dot(DOT_TX2, ui_off + 624, doty(DOT_BOT) + 158, 0);
 		__textdisplay_sy = 150;
 	} else {
-		set_dot(DOT_TX2, 624, doty(DOT_BOT) + 118, 0);
+		set_dot(DOT_TX2, ui_off + 624, doty(DOT_BOT) + 118, 0);
 		__textdisplay_sy = 110;
 	}
 
 	// skill list
-	set_dot(DOT_SKL, 8, doty(DOT_BOT) + 12, 0);
-	set_dot(DOT_SK2, 156, doty(DOT_BO2) - 2, 0);
+	set_dot(DOT_SKL, ui_off + 8, doty(DOT_BOT) + 12, 0);
+	set_dot(DOT_SK2, ui_off + 156, doty(DOT_BO2) - 2, 0);
 	if (!sbot) {
 		__skldy = 16;
 	} else {
@@ -151,15 +155,16 @@ void init_dots(void)
 	}
 
 	// gold
-	set_dot(DOT_GLD, 195, doty(DOT_BO2) - 22, 0);
+	set_dot(DOT_GLD, ui_off + 195, doty(DOT_BO2) - 22, 0);
 
 	// trashcan
-	set_dot(DOT_JNK, 610, doty(DOT_BO2) - 22, 0);
+	set_dot(DOT_JNK, ui_off + 610, doty(DOT_BO2) - 22, 0);
 
 	// speed options: stealth/normal/fast
-	set_dot(DOT_MOD, 181, doty(DOT_BOT) + 24, 0);
+	set_dot(DOT_MOD, ui_off + 181, doty(DOT_BOT) + 24, 0);
 
 	// map top left, bottom right, center
+	// Map uses full screen width for expanded game world view
 	set_dot(DOT_MTL, 0, 40, !stop ? 0 : DOTF_TOPOFF);
 	set_dot(DOT_MBR, XRES, min(doty(DOT_MTL) + 450 - (!stop ? 0 : 40), doty(DOT_BOT) + 4), 0);
 	x = dotx(DOT_MBR) - dotx(DOT_MTL);
@@ -177,20 +182,20 @@ void init_dots(void)
 	// (%d,%d)",x,y,dotx(DOT_MCT),doty(DOT_MCT),dotx(DOT_MTL),doty(DOT_MTL),dotx(DOT_MBR),doty(DOT_MBR));
 
 	// help and quest window
-	set_dot(DOT_HLP, 0, !stop ? 40 : 0, 0);
-	set_dot(DOT_HL2, 222, (!stop ? 40 : 0) + 394, 0);
+	set_dot(DOT_HLP, ui_off, !stop ? 40 : 0, 0);
+	set_dot(DOT_HL2, ui_off + 222, (!stop ? 40 : 0) + 394, 0);
 
-	// teleporter window
+	// teleporter window (centered on screen)
 	set_dot(DOT_TEL, (XRES - 520) / 2, (doty(DOT_MBR) - doty(DOT_MTL) - 320 - (!stop ? 0 : 40)) / 2 + doty(DOT_MTL), 0);
 
 	// look at window
-	set_dot(DOT_LOK, 150, 50, 0);
+	set_dot(DOT_LOK, ui_off + 150, 50, 0);
 
-	// color picker window
-	set_dot(DOT_COL, 340, 210, 0);
+	// color picker window (centered on screen)
+	set_dot(DOT_COL, (XRES - 120) / 2, 210, 0);
 
-	// action bar (kept for BUT_ACT_* hit testing, but no longer rendered)
-	set_dot(DOT_ACT, XRES - MAXACTIONSLOT * 40 - (XRES - MAXACTIONSLOT * 40) / 2, doty(DOT_BOT) - 12, 0);
+	// action bar (kept for BUT_ACT_* hit testing, but no longer rendered) - centered
+	set_dot(DOT_ACT, (XRES - MAXACTIONSLOT * 40) / 2, doty(DOT_BOT) - 12, 0);
 
 	// hotbar — centered above the bottom panel
 	// DOT_HOTBAR marks the BOTTOM row (row 0). Additional rows stack upward.

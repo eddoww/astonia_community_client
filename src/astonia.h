@@ -51,7 +51,8 @@ extern DLL_EXPORT unsigned int _client_dist;
 #define FDX     40 // width of a map tile
 #define FDY     20 // height of a map tile
 
-#define XRES  800
+#define XRES  (__xres)
+#define XRES0 800 // Base game width
 #define YRES  (__yres)
 #define YRES0 600 // 4:3 aspect ratio
 #define YRES1 650 // Tall
@@ -140,6 +141,7 @@ extern DLL_EXPORT unsigned int _client_dist;
 #define MAX_PATH 260
 #endif
 
+DLL_EXPORT extern int __xres;
 DLL_EXPORT extern int __yres;
 extern int quit;
 DLL_EXPORT extern int frames_per_second;

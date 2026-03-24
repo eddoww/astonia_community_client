@@ -302,6 +302,7 @@ DLL_IMPORT uint32_t realtime;
 DLL_IMPORT int frames_per_second;
 
 // --- Display Settings ---
+DLL_IMPORT extern int __xres;
 DLL_IMPORT extern int __yres;
 DLL_IMPORT int want_width;
 DLL_IMPORT int want_height;

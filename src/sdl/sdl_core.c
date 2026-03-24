@@ -52,6 +52,7 @@ DLL_EXPORT int sdl_scale = 1;
 DLL_EXPORT int sdl_frames = 0;
 DLL_EXPORT int sdl_multi = 4;
 DLL_EXPORT int sdl_cache_size = 8000;
+DLL_EXPORT int __xres = XRES0;
 DLL_EXPORT int __yres = YRES0;
 
 // Worker thread management
@@ -267,48 +268,25 @@ int sdl_init(int width, int height, char *title, int monitor)
 	}
 #endif
 
-	// decide on screen format
+	// decide on screen format - dynamic resolution to fill full screen
 	if (width != XRES || height != YRES) {
-		int tmp_scale = 1, off = 0;
+		int off = 0;
 
-		// Check 4:3 aspect ratio (YRES0=600)
-		if (width / XRES >= 4 && height / YRES0 >= 4) {
+		// Determine scale based on height (vertical space is the constraint)
+		// Check progressively from 4x down to find the best scale
+		if (height / YRES3 >= 4 && width / XRES0 >= 4) {
 			sdl_scale = 4;
-		} else if (width / XRES >= 3 && height / YRES0 >= 3) {
+		} else if (height / YRES3 >= 3 && width / XRES0 >= 3) {
 			sdl_scale = 3;
-		} else if (width / XRES >= 2 && height / YRES0 >= 2) {
+		} else if (height / YRES3 >= 2 && width / XRES0 >= 2) {
 			sdl_scale = 2;
+		} else {
+			sdl_scale = 1;
 		}
 
-		// Check 16:10 aspect ratio (YRES2=500)
-		if (width / XRES >= 4 && height / YRES2 >= 4) {
-			tmp_scale = 4;
-		} else if (width / XRES >= 3 && height / YRES2 >= 3) {
-			tmp_scale = 3;
-		} else if (width / XRES >= 2 && height / YRES2 >= 2) {
-			tmp_scale = 2;
-		}
-
-		if (tmp_scale > sdl_scale || height < YRES0) {
-			sdl_scale = tmp_scale;
-			YRES = height / sdl_scale;
-		}
-
-		// Check 16:9 widescreen aspect ratio (YRES3=450) - most permissive
-		tmp_scale = 1;
-		if (width / XRES >= 4 && height / YRES3 >= 4) {
-			tmp_scale = 4;
-		} else if (width / XRES >= 3 && height / YRES3 >= 3) {
-			tmp_scale = 3;
-		} else if (width / XRES >= 2 && height / YRES3 >= 2) {
-			tmp_scale = 2;
-		}
-
-		if (tmp_scale > sdl_scale) {
-			sdl_scale = tmp_scale;
-			YRES = height / sdl_scale;
-		}
-
+		// Set both XRES and YRES to use the full screen at the chosen scale
+		// This eliminates black bars by making the game render at true screen resolution
+		XRES = width / sdl_scale;
 		YRES = height / sdl_scale;
 
 		if (game_options & GO_SMALLTOP) {
@@ -318,11 +296,13 @@ int sdl_init(int width, int height, char *title, int monitor)
 			off += 40;
 		}
 
+		// Cap YRES at maximum supported height
 		if (YRES > YRES1 - off) {
 			YRES = YRES1 - off;
 		}
 
-		render_set_offset((width / sdl_scale - XRES) / 2, (height / sdl_scale - YRES) / 2);
+		// No horizontal offset - use full width. Vertical offset only if YRES was capped.
+		render_set_offset(0, (height / sdl_scale - YRES) / 2);
 	}
 	if (game_options & GO_NOTSET) {
 		if (YRES >= 620) {

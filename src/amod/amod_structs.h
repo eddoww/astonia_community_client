@@ -182,8 +182,9 @@
 #define RENDERFX_NORMAL_LIGHT 15
 #define RENDERFX_BRIGHT       0
 
-#define XRES 800
-#define YRES (__yres)
+#define XRES  (__xres)
+#define XRES0 800
+#define YRES  (__yres)
 
 struct ddfx {
 	unsigned int sprite; // sprite_fx:           primary sprite number - should be the first entry cause dl_qcmp sorts

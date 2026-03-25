@@ -181,6 +181,7 @@ typedef struct {
 
 	/* HOTBAR_SPELL fields */
 	int action_slot; /* ACTION_* index (0-13) */
+	HotbarTargetOverride primary_target; /* target override for the primary key */
 
 	/* additional keybindings with per-bind cast/target overrides */
 	HotbarBind extra_binds[HOTBAR_MAX_BINDS];
@@ -231,6 +232,9 @@ void hotbar_clear(int slot);
 void hotbar_clear_all(void);
 void hotbar_setup_defaults(void);
 const HotbarSlot *hotbar_get(int slot);
+
+/* primary target override */
+void hotbar_set_primary_target(int slot, HotbarTargetOverride tgt);
 
 /* extra keybindings per slot */
 int hotbar_add_bind(int slot, SDL_Keycode key, Uint8 mods, HotbarCastOverride cast, HotbarTargetOverride target);

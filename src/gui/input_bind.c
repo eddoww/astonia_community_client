@@ -203,8 +203,9 @@ static void on_action_mode_off(InputBinding *self)
 	}
 }
 
-/* forward declaration for item scanning */
+/* forward declarations */
 static int find_item_in_inventory(uint32_t item_type);
+static int resolve_target_override(int action_slot, HotbarTargetOverride tgt);
 
 /* default key assignments for hotbar row 1 — shared between
  * register_all (binding registration) and hotbar_setup_defaults */
@@ -346,42 +347,61 @@ void hotbar_clear_all(void)
 	memset(hotbar, 0, sizeof(hotbar));
 }
 
-/* set up default hotbar contents for first-time users (no saved config) */
+/* set up default hotbar contents for first-time users (no saved config).
+ *
+ * Default modifier scheme:
+ *   no modifier  = normal cast (primary target)
+ *   shift + key  = quick cast (same target as primary)
+ *   ctrl + key   = indicator cast, character target
+ */
 void hotbar_setup_defaults(void)
 {
-	/* spell layout: covers both mage and warrior spells.
-	 * spells the player doesn't have will be inactive but visible. */
 	static const struct {
 		int action_slot;
-		int has_quick; /* 1 = add shift+key extra bind for quick cast */
+		HotbarTargetOverride primary_target; /* DEFAULT = use resolve_spell_action */
 	} spell_defaults[] = {
-	    {ACTION_ATTACK, 0}, /* slot 1 */
-	    {ACTION_FIREBALL, 1}, /* slot 2 — shift+2 = quick cast */
-	    {ACTION_LBALL, 1}, /* slot 3 — shift+3 = quick cast */
-	    {ACTION_FLASH, 0}, /* slot 4 — self-cast (always instant) */
-	    {ACTION_FREEZE, 0}, /* slot 5 — self-cast */
-	    {ACTION_BLESS, 1}, /* slot 6 — shift+6 = quick cast */
-	    {ACTION_SHIELD, 0}, /* slot 7 — self-cast */
-	    {ACTION_HEAL, 1}, /* slot 8 — shift+8 = quick cast */
-	    {ACTION_WARCRY, 0}, /* slot 9 — self-cast */
-	    {ACTION_PULSE, 0}, /* slot 0 — self-cast */
-	    {ACTION_FIRERING, 0}, /* slot Q — self-cast */
-	    {-1, 0}, /* slot W — empty (potions) */
-	    {ACTION_TAKEGIVE, 0}, /* slot E */
-	    {ACTION_MAP, 0}, /* slot R */
-	    {ACTION_LOOK, 0}, /* slot T */
+	    {ACTION_ATTACK, HOTBAR_TGT_DEFAULT}, /* 1 — chr only */
+	    {ACTION_FIREBALL, HOTBAR_TGT_MAP}, /* 2 — default to map cast */
+	    {ACTION_LBALL, HOTBAR_TGT_MAP}, /* 3 — default to map cast */
+	    {ACTION_FLASH, HOTBAR_TGT_DEFAULT}, /* 4 — self-only */
+	    {ACTION_FREEZE, HOTBAR_TGT_DEFAULT}, /* 5 — self-only */
+	    {ACTION_BLESS, HOTBAR_TGT_SELF}, /* 6 — default to self */
+	    {ACTION_SHIELD, HOTBAR_TGT_DEFAULT}, /* 7 — self-only */
+	    {ACTION_HEAL, HOTBAR_TGT_SELF}, /* 8 — default to self */
+	    {ACTION_WARCRY, HOTBAR_TGT_DEFAULT}, /* 9 — self-only */
+	    {ACTION_PULSE, HOTBAR_TGT_DEFAULT}, /* 0 — self-only */
+	    {ACTION_FIRERING, HOTBAR_TGT_DEFAULT}, /* Q — self-only */
+	    {-1, HOTBAR_TGT_DEFAULT}, /* W — empty (potions) */
+	    {ACTION_TAKEGIVE, HOTBAR_TGT_DEFAULT}, /* E */
+	    {ACTION_MAP, HOTBAR_TGT_DEFAULT}, /* R */
+	    {ACTION_LOOK, HOTBAR_TGT_DEFAULT}, /* T */
 	};
 
 	int num_defaults = (int)(sizeof(spell_defaults) / sizeof(spell_defaults[0]));
 	for (int i = 0; i < num_defaults; i++) {
 		if (spell_defaults[i].action_slot < 0) {
-			continue; /* leave slot empty */
+			continue;
 		}
-		hotbar_assign_spell(i, spell_defaults[i].action_slot);
+		int action = spell_defaults[i].action_slot;
+		hotbar_assign_spell(i, action);
+		hotbar[i].primary_target = spell_defaults[i].primary_target;
 
-		/* add shift+key quick cast extra bind for dual-target spells */
-		if (spell_defaults[i].has_quick && i < HOTBAR_SLOTS_PER_ROW) {
-			hotbar_add_bind(i, row1_keys[i], INPUT_MOD_SHIFT, HOTBAR_CAST_QUICK, HOTBAR_TGT_DEFAULT);
+		if (i >= HOTBAR_SLOTS_PER_ROW) {
+			continue;
+		}
+
+		int vtgt = hotbar_spell_valid_targets(action);
+		int has_cast = hotbar_spell_has_cast_modes(action);
+		if (!has_cast) {
+			continue; /* self-only spells: no extra binds needed */
+		}
+
+		/* shift + key = quick cast (same target as primary) */
+		hotbar_add_bind(i, row1_keys[i], INPUT_MOD_SHIFT, HOTBAR_CAST_QUICK, HOTBAR_TGT_DEFAULT);
+
+		/* ctrl + key = indicator cast, character target (only if chr is valid) */
+		if (vtgt & HOTBAR_VTGT_CHR) {
+			hotbar_add_bind(i, row1_keys[i], INPUT_MOD_CTRL, HOTBAR_CAST_INDICATOR, HOTBAR_TGT_CHR);
 		}
 	}
 }
@@ -392,6 +412,14 @@ const HotbarSlot *hotbar_get(int slot)
 		return NULL;
 	}
 	return &hotbar[slot];
+}
+
+void hotbar_set_primary_target(int slot, HotbarTargetOverride tgt)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return;
+	}
+	hotbar[slot].primary_target = tgt;
 }
 
 uint32_t hotbar_slot_sprite(int slot)
@@ -644,9 +672,16 @@ static void hotbar_activate_with_mode(int slot, int mode)
 	case HOTBAR_ITEM:
 		hotbar_try_use_item(slot);
 		break;
-	case HOTBAR_SPELL:
-		hotbar_cast_spell(slot, resolve_spell_action(hotbar[slot].action_slot), mode);
+	case HOTBAR_SPELL: {
+		int resolved;
+		if (hotbar[slot].primary_target != HOTBAR_TGT_DEFAULT) {
+			resolved = resolve_target_override(hotbar[slot].action_slot, hotbar[slot].primary_target);
+		} else {
+			resolved = resolve_spell_action(hotbar[slot].action_slot);
+		}
+		hotbar_cast_spell(slot, resolved, mode);
 		break;
+	}
 	default:
 		break;
 	}
@@ -1383,6 +1418,18 @@ int input_load_config(const char *path)
 					cJSON *jsp = cJSON_GetObjectItem(jslot, "spell");
 					hotbar[slot].type = HOTBAR_SPELL;
 					hotbar[slot].action_slot = (jsp && cJSON_IsNumber(jsp)) ? jsp->valueint : 0;
+
+					cJSON *jpt = cJSON_GetObjectItem(jslot, "target");
+					if (jpt && cJSON_IsString(jpt)) {
+						const char *ts = cJSON_GetStringValue(jpt);
+						if (strcmp(ts, "map") == 0) {
+							hotbar[slot].primary_target = HOTBAR_TGT_MAP;
+						} else if (strcmp(ts, "chr") == 0) {
+							hotbar[slot].primary_target = HOTBAR_TGT_CHR;
+						} else if (strcmp(ts, "self") == 0) {
+							hotbar[slot].primary_target = HOTBAR_TGT_SELF;
+						}
+					}
 				}
 
 				/* extra binds (optional) */
@@ -1499,10 +1546,15 @@ int input_save_config(const char *path)
 			cJSON_AddStringToObject(jslot, "type", "item");
 			cJSON_AddNumberToObject(jslot, "item_type", (double)hotbar[i].item_type);
 			break;
-		case HOTBAR_SPELL:
+		case HOTBAR_SPELL: {
+			static const char *tgt_names[] = {"default", "map", "chr", "self"};
 			cJSON_AddStringToObject(jslot, "type", "spell");
 			cJSON_AddNumberToObject(jslot, "spell", hotbar[i].action_slot);
+			if (hotbar[i].primary_target != HOTBAR_TGT_DEFAULT) {
+				cJSON_AddStringToObject(jslot, "target", tgt_names[hotbar[i].primary_target]);
+			}
 			break;
+		}
 		default:
 			cJSON_AddStringToObject(jslot, "type", "empty");
 			break;

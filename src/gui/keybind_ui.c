@@ -95,6 +95,7 @@ static int pw, ph; /* panel size */
 /* row y-positions (computed by kb_layout, -1 = hidden) */
 static int y_title;
 static int y_primary;
+static int y_primary_tgt; /* target override for primary key, -1 if hidden */
 static int y_extra_header;
 static int y_extra[HOTBAR_MAX_BINDS];
 static int y_add;
@@ -132,7 +133,17 @@ static void kb_layout(void)
 	y += KB_ROW + KB_SEP;
 
 	y_primary = y;
-	y += KB_ROW + KB_SEP;
+	y += KB_ROW;
+
+	/* primary target override — only for spells with multiple valid targets */
+	if (kb_valid_tgts && (kb_valid_tgts & (kb_valid_tgts - 1)) != 0) {
+		y_primary_tgt = y;
+		y += KB_ROW;
+	} else {
+		y_primary_tgt = -1;
+	}
+
+	y += KB_SEP;
 
 	if (kb_has_extras) {
 		y_extra_header = y;
@@ -241,6 +252,14 @@ void keybind_panel_display(void)
 		}
 
 		render_text(rx - 42, py + y_primary, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Rebind]");
+	}
+
+	/* ── Primary target override ──────────────────────────────────── */
+	if (y_primary_tgt >= 0 && hs && hs->type == HOTBAR_SPELL) {
+		render_text(lx, py + y_primary_tgt, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Target:");
+		char tbuf[32];
+		snprintf(tbuf, sizeof(tbuf), "< %s >", target_labels[hs->primary_target]);
+		render_text(lx + 56, py + y_primary_tgt, COL_CYCLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, tbuf);
 	}
 
 	/* ── Extra bindings (only for targeted spells) ────────────────── */
@@ -408,6 +427,15 @@ int keybind_panel_click(int mx, int my)
 		return 1;
 	}
 
+	/* ── Primary target override cycle (left-click = forward) ──── */
+	if (y_primary_tgt >= 0 && hs && hs->type == HOTBAR_SPELL &&
+	    in_rect(mx, my, lx + 56, py + y_primary_tgt, 120, KB_BTN_H)) {
+		HotbarTargetOverride next = next_valid_target(hs->primary_target, kb_valid_tgts, 1);
+		hotbar_set_primary_target(kb_slot, next);
+		save_options();
+		return 1;
+	}
+
 	/* ── Extra bindings section (only if shown) ────────────────── */
 	if (kb_has_extras && hs) {
 		int show_tgt = (kb_valid_tgts & (kb_valid_tgts - 1)) != 0;
@@ -494,6 +522,15 @@ int keybind_panel_rclick(int mx, int my)
 
 	const HotbarSlot *hs = hotbar_get(kb_slot);
 	int lx = px + KB_PAD;
+
+	/* ── Primary target override cycle (right-click = backward) ── */
+	if (y_primary_tgt >= 0 && hs && hs->type == HOTBAR_SPELL &&
+	    in_rect(mx, my, lx + 56, py + y_primary_tgt, 120, KB_BTN_H)) {
+		HotbarTargetOverride prev = next_valid_target(hs->primary_target, kb_valid_tgts, 0);
+		hotbar_set_primary_target(kb_slot, prev);
+		save_options();
+		return 1;
+	}
 
 	if (kb_has_extras && hs) {
 		int show_tgt = (kb_valid_tgts & (kb_valid_tgts - 1)) != 0;

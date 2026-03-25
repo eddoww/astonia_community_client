@@ -154,6 +154,17 @@ typedef enum {
 	HOTBAR_TGT_SELF,
 } HotbarTargetOverride;
 
+/* valid target flags for a given action slot (bitmask) */
+#define HOTBAR_VTGT_CHR  (1 << 0)
+#define HOTBAR_VTGT_MAP  (1 << 1)
+#define HOTBAR_VTGT_SELF (1 << 2)
+
+/* returns bitmask of valid targets for an action slot, 0 = self-only/instant */
+int hotbar_spell_valid_targets(int action_slot);
+
+/* returns 1 if the action slot supports cast mode selection */
+int hotbar_spell_has_cast_modes(int action_slot);
+
 typedef struct {
 	SDL_Keycode key;
 	Uint8 modifiers;
@@ -227,6 +238,11 @@ int hotbar_remove_bind(int slot, int bind_index);
 void hotbar_clear_binds(int slot);
 int hotbar_find_extra_bind(SDL_Keycode key, Uint8 mods);
 void hotbar_activate_extra(int slot, SDL_Keycode key, Uint8 mods);
+
+/* in-place modification of extra bindings */
+int hotbar_set_bind_key(int slot, int bind_index, SDL_Keycode key, Uint8 mods);
+int hotbar_set_bind_cast(int slot, int bind_index, HotbarCastOverride cast);
+int hotbar_set_bind_target(int slot, int bind_index, HotbarTargetOverride target);
 
 /* returns the sprite to display in a hotbar slot (item sprite or spell icon) */
 uint32_t hotbar_slot_sprite(int slot);

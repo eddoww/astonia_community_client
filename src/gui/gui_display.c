@@ -15,6 +15,7 @@
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/spellbook_ui.h"
+#include "gui/keybind_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -206,6 +207,7 @@ void display(void)
 	display_inventory();
 	hotbar_display();
 	spellbook_display();
+	keybind_panel_display();
 	if (con_cnt) {
 		display_container();
 	} else {

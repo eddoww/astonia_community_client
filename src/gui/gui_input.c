@@ -15,6 +15,7 @@
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/spellbook_ui.h"
+#include "gui/keybind_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -22,6 +23,22 @@
 
 void gui_sdl_keyproc(SDL_Keycode key)
 {
+	/* keybind panel key capture — intercept before anything else.
+	 * ignore modifier-only keys so Shift+E doesn't bind to "Shift". */
+	if (keybind_panel_capturing()) {
+		if (key == SDLK_ESCAPE) {
+			keybind_panel_cancel_capture();
+			return;
+		}
+		if (key == SDLK_LSHIFT || key == SDLK_RSHIFT || key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LALT ||
+		    key == SDLK_RALT) {
+			return; /* wait for a real key */
+		}
+		keybind_panel_accept_key(key, input_current_modifiers());
+		sdl_flush_textinput();
+		return;
+	}
+
 	/* let mods intercept first (except ESC and F12 which are non-rebindable) */
 	if (key != SDLK_ESCAPE && key != SDLK_F12 && amod_keydown(key)) {
 		return;
@@ -181,6 +198,14 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		/* keybind panel — consume clicks inside, close on click outside */
+		if (keybind_panel_is_open()) {
+			if (keybind_panel_click(mousex, mousey)) {
+				break;
+			}
+			keybind_panel_close();
+		}
+
 		/* spellbook toggle button */
 		if (hotbar_toggle_hit(mousex, mousey)) {
 			break;
@@ -235,10 +260,17 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		if (spellbook_rclick(mousex, mousey)) {
 			break;
 		}
-		/* right-click hotbar slot to clear it */
+		/* keybind panel right-click (cycle backward on cast/target) */
+		if (keybind_panel_is_open()) {
+			if (keybind_panel_rclick(mousex, mousey)) {
+				break;
+			}
+			keybind_panel_close();
+			break;
+		}
+		/* right-click hotbar slot opens keybind config panel */
 		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
-			hotbar_clear(butsel - BUT_HOTBAR_BEG);
-			save_options();
+			keybind_panel_open(butsel - BUT_HOTBAR_BEG);
 			break;
 		}
 		if (rcmd == CMD_MAP_LOOK && context_open(mousex, mousey)) {

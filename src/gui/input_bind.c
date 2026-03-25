@@ -474,6 +474,68 @@ void hotbar_on_item_changed(int inventory_index)
 	}
 }
 
+/* ── Per-spell capability queries ───────────────────────────────────── */
+
+int hotbar_spell_valid_targets(int action_slot)
+{
+	switch (action_slot) {
+	/* self-only — no target choice, always fires on self */
+	case ACTION_FLASH:
+	case ACTION_FREEZE:
+	case ACTION_SHIELD:
+	case ACTION_WARCRY:
+	case ACTION_PULSE:
+	case ACTION_FIRERING:
+		return HOTBAR_VTGT_SELF;
+
+	/* character or self */
+	case ACTION_BLESS:
+	case ACTION_HEAL:
+		return HOTBAR_VTGT_CHR | HOTBAR_VTGT_SELF;
+
+	/* character or map */
+	case ACTION_FIREBALL:
+	case ACTION_LBALL:
+		return HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP;
+
+	/* character only */
+	case ACTION_ATTACK:
+		return HOTBAR_VTGT_CHR;
+
+	/* context-dependent (take/give/use/drop) */
+	case ACTION_TAKEGIVE:
+		return HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP;
+
+	/* look at anything */
+	case ACTION_LOOK:
+		return HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP;
+
+	/* toggle (map) — no targeting */
+	case ACTION_MAP:
+		return 0;
+
+	default:
+		return 0;
+	}
+}
+
+int hotbar_spell_has_cast_modes(int action_slot)
+{
+	switch (action_slot) {
+	/* self-only spells — always instant, no mode choice */
+	case ACTION_FLASH:
+	case ACTION_FREEZE:
+	case ACTION_SHIELD:
+	case ACTION_WARCRY:
+	case ACTION_PULSE:
+	case ACTION_FIRERING:
+	case ACTION_MAP:
+		return 0;
+	default:
+		return 1;
+	}
+}
+
 /*
  * Resolve which context action_slot to use for a spell.
  *
@@ -666,6 +728,43 @@ void hotbar_clear_binds(int slot)
 	}
 	memset(hotbar[slot].extra_binds, 0, sizeof(hotbar[slot].extra_binds));
 	hotbar[slot].extra_bind_count = 0;
+}
+
+int hotbar_set_bind_key(int slot, int bind_index, SDL_Keycode key, Uint8 mods)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return -1;
+	}
+	if (bind_index < 0 || bind_index >= hotbar[slot].extra_bind_count) {
+		return -1;
+	}
+	hotbar[slot].extra_binds[bind_index].key = key;
+	hotbar[slot].extra_binds[bind_index].modifiers = mods;
+	return 0;
+}
+
+int hotbar_set_bind_cast(int slot, int bind_index, HotbarCastOverride cast)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return -1;
+	}
+	if (bind_index < 0 || bind_index >= hotbar[slot].extra_bind_count) {
+		return -1;
+	}
+	hotbar[slot].extra_binds[bind_index].cast_override = cast;
+	return 0;
+}
+
+int hotbar_set_bind_target(int slot, int bind_index, HotbarTargetOverride target)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return -1;
+	}
+	if (bind_index < 0 || bind_index >= hotbar[slot].extra_bind_count) {
+		return -1;
+	}
+	hotbar[slot].extra_binds[bind_index].target_override = target;
+	return 0;
 }
 
 int hotbar_find_extra_bind(SDL_Keycode key, Uint8 mods)
@@ -1258,7 +1357,7 @@ int input_load_config(const char *path)
 	}
 
 	/* load hotbar: each entry is an object {"type":"item","item_type":N}
-	 * or {"type":"spell","spell":N} */
+	 * or {"type":"spell","action_slot":N,"spell_cmd":N,"spell_target":N} */
 	cJSON *jhotbar = cJSON_GetObjectItem(root, "hotbar");
 	if (jhotbar && cJSON_IsArray(jhotbar)) {
 		int slot = 0;

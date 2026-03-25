@@ -57,6 +57,7 @@ pub fn build(b: *std.Build) void {
         "src/gui/input_bind.c",
         "src/gui/hotbar_ui.c",
         "src/gui/spellbook_ui.c",
+        "src/gui/keybind_ui.c",
 
         // CLIENT
         "src/client/client.c",

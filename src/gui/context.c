@@ -349,6 +349,59 @@ void context_display(int mx __attribute__((unused)), int my __attribute__((unuse
 			y += 10;
 		}
 	}
+
+	/* ── Targeting arrow (Normal / Indicator cast modes) ──────────
+	 *
+	 * Draws a semi-transparent isometric arrow from the player toward
+	 * the mouse cursor when a spell targeting mode is active. */
+	if (lcmd_override != CMD_NONE) {
+		int px = dotx(DOT_MCT);
+		int py = doty(DOT_MCT);
+
+		double dx = (double)(mousex - px);
+		double dy = (double)(mousey - py);
+		double len = sqrt(dx * dx + dy * dy);
+
+		/* only draw if cursor is far enough from player */
+		if (len > 20.0) {
+			/* normalize direction */
+			double nx = dx / len;
+			double ny = dy / len;
+
+			/* perpendicular for arrowhead wings */
+			double perp_x = -ny;
+			double perp_y = nx;
+
+			/* shaft: start 16px from player, end 12px before cursor */
+			double shaft_start = 16.0;
+			double shaft_end = len - 12.0;
+			if (shaft_end < shaft_start + 10.0) {
+				shaft_end = shaft_start + 10.0;
+			}
+
+			int sx = px + (int)(nx * shaft_start);
+			int sy = py + (int)(ny * shaft_start);
+			int ex = px + (int)(nx * shaft_end);
+			int ey = py + (int)(ny * shaft_end);
+
+			unsigned short arrow_col = IRGB(28, 28, 31);
+			unsigned char arrow_alpha = 35;
+
+			/* shaft line */
+			render_thick_line_alpha(sx, sy, ex, ey, 2, arrow_col, arrow_alpha);
+
+			/* arrowhead — filled triangle */
+			double head_size = 8.0;
+			int tip_x = px + (int)(nx * (shaft_end + head_size));
+			int tip_y = py + (int)(ny * (shaft_end + head_size));
+			int wing1_x = ex + (int)(perp_x * head_size * 0.6);
+			int wing1_y = ey + (int)(perp_y * head_size * 0.6);
+			int wing2_x = ex - (int)(perp_x * head_size * 0.6);
+			int wing2_y = ey - (int)(perp_y * head_size * 0.6);
+
+			render_triangle_filled_alpha(tip_x, tip_y, wing1_x, wing1_y, wing2_x, wing2_y, arrow_col, arrow_alpha);
+		}
+	}
 }
 
 int context_click(int mx, int my)

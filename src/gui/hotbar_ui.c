@@ -133,7 +133,7 @@ void hotbar_display(void)
 	if (hb_hover_slot >= 0 && hb_hover_slot < HOTBAR_MAX_SLOTS && tick > hb_hover_start) {
 		const HotbarSlot *hs = hotbar_get(hb_hover_slot);
 		int tx = butx(BUT_HOTBAR_BEG + hb_hover_slot);
-		int ty = buty(BUT_HOTBAR_BEG + hb_hover_slot);
+		int ty = buty(BUT_HOTBAR_BEG + hb_hover_slot) - 20;
 
 		if (hs && hs->type == HOTBAR_SPELL) {
 			const char *name = get_action_text(hs->action_slot);

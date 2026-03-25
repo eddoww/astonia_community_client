@@ -502,8 +502,9 @@ void load_options(void)
 		return;
 	}
 
-	/* no config at all — set up defaults for new players */
+	/* no config at all — set up defaults for new players and save */
 	hotbar_setup_defaults();
+	save_options();
 }
 
 void init_logging(void)

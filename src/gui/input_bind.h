@@ -170,8 +170,6 @@ typedef struct {
 
 	/* HOTBAR_SPELL fields */
 	int action_slot; /* ACTION_* index (0-13) */
-	int spell_cmd; /* CL_* spell command, or 0 for non-spell actions */
-	int spell_target; /* TGT_MAP / TGT_CHR / TGT_SLF */
 
 	/* additional keybindings with per-bind cast/target overrides */
 	HotbarBind extra_binds[HOTBAR_MAX_BINDS];
@@ -217,7 +215,7 @@ void hotbar_set_show_names(int on);
 /* slot management */
 void hotbar_assign_item(int slot, int inventory_index);
 void hotbar_assign_item_by_type(int slot, uint32_t item_type);
-void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_target);
+void hotbar_assign_spell(int slot, int action_slot);
 void hotbar_clear(int slot);
 void hotbar_clear_all(void);
 void hotbar_setup_defaults(void);

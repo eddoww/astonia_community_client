@@ -1128,7 +1128,7 @@ static int v35_action_skill[MAXACTIONSLOT] = {V35_PERCEPT, V35_FIRE, V35_FLASH, 
 char (*action_row)[MAXACTIONSLOT] = v3_action_row;
 static char **action_text = v3_action_text;
 static char **action_desc = v3_action_desc;
-static int *action_skill = v3_action_skill;
+int *action_skill = v3_action_skill;
 
 void set_v35_actions(void)
 {

@@ -184,7 +184,7 @@ int hotbar_click(int slot)
 	if (spellbook_is_dragging()) {
 		int action_slot = spellbook_dragging_slot();
 		if (action_slot >= 0) {
-			hotbar_assign_spell(slot, action_slot, 0, 0);
+			hotbar_assign_spell(slot, action_slot);
 			save_options();
 		}
 		spellbook_cancel_drag();

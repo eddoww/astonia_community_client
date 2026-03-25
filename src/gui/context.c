@@ -706,11 +706,8 @@ void context_activate_action(int action_slot)
 
 void context_keydown(SDL_Keycode key)
 {
-	// ignore key-down while over action bar
-	if (actsel != -1) {
-		return;
-	}
-	context_activate_action(action_key2slot(key));
+	(void)key;
+	/* legacy action bar key dispatch removed — hotbar handles all keys now */
 }
 
 int context_key_set_cmd(void)
@@ -810,39 +807,7 @@ void context_keyup(SDL_Keycode key)
 		lcmd_override = CMD_NONE;
 	}
 
-	if (amod_keyup(key)) {
-		return;
-	}
-
-	if (!(game_options & GO_ACTION)) {
-		return;
-	}
-	if (keymode) {
-		return;
-	}
-	if (keyupblock) {
-		return;
-	}
-	if (key == '-') {
-		return;
-	}
-	if ((unsigned int)key & 0xffffff00U) {
-		return;
-	}
-
-	if (actsel != (int)MAXMN && !act_lck) {
-		action_set_key(actsel, key);
-		return;
-	}
-
-	int slot = action_key2slot(key);
-	if (try_self_cast(slot)) {
-		return;
-	}
-
-	size_t csel, isel, msel;
-	resolve_cursor_targets(&csel, &isel, &msel);
-	try_targeted_action(slot, csel, isel, msel);
+	amod_keyup(key);
 }
 
 int context_key_set(int onoff)

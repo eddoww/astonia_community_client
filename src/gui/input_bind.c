@@ -323,7 +323,7 @@ void hotbar_assign_item_by_type(int slot, uint32_t item_type)
 	hotbar[slot].inv_index = find_item_in_inventory(item_type);
 }
 
-void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_target)
+void hotbar_assign_spell(int slot, int action_slot)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
@@ -331,8 +331,6 @@ void hotbar_assign_spell(int slot, int action_slot, int spell_cmd, int spell_tar
 	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
 	hotbar[slot].type = HOTBAR_SPELL;
 	hotbar[slot].action_slot = action_slot;
-	hotbar[slot].spell_cmd = spell_cmd;
-	hotbar[slot].spell_target = spell_target;
 }
 
 void hotbar_clear(int slot)
@@ -379,7 +377,7 @@ void hotbar_setup_defaults(void)
 		if (spell_defaults[i].action_slot < 0) {
 			continue; /* leave slot empty */
 		}
-		hotbar_assign_spell(i, spell_defaults[i].action_slot, 0, 0);
+		hotbar_assign_spell(i, spell_defaults[i].action_slot);
 
 		/* add shift+key quick cast extra bind for dual-target spells */
 		if (spell_defaults[i].has_quick && i < HOTBAR_SLOTS_PER_ROW) {
@@ -770,48 +768,9 @@ void input_keyup(SDL_Keycode key)
 	}
 }
 
-/* action bar (combat + spells) — delegates to existing context system */
+/* ── Default bindings ──────────────────────────────────────────────────── */
 
-static void on_action_key(InputBinding *self)
-{
-	context_keydown(self->key);
-}
-
-/* keytab spells (modifier + number key) */
-
-static void on_cast_spell(InputBinding *self)
-{
-	int spell = self->action_slot;
-	if (spell <= 0) {
-		return;
-	}
-
-	switch (self->param) { /* param holds target type */
-	case TGT_MAP:
-		exec_cmd(CMD_MAP_CAST_K, spell);
-		break;
-	case TGT_CHR:
-		exec_cmd(CMD_CHR_CAST_K, spell);
-		break;
-	case TGT_SLF:
-		exec_cmd(CMD_SLF_CAST_K, spell);
-		break;
-	default:
-		break;
-	}
-	self->last_used = now;
-}
-
-/* ── Default bindings ──────────────────────────────────────────────────
- *
- * Skill constants differ between v3 and v35. We pick the right one at
- * registration time with a simple ternary. The (int) casts avoid
- * -Wenum-compare-conditional between v3_t and v35_t.
- */
-
-#define V3_OR_V35(v3_skill, v35_skill) (sv_ver == 35 ? (int)(v35_skill) : (int)(v3_skill))
-
-static void register_all(int sv_ver)
+static void register_all(void)
 {
 	InputBinding *b;
 
@@ -880,108 +839,7 @@ static void register_all(int sv_ver)
 			b->param = i;
 		}
 	}
-
-	/* ── Action bar (combat + spells) ─────────────────────────────── */
-
-#define ACTION(id, name, cat, key, slot, skill)                                                                        \
-	do {                                                                                                               \
-		b = reg(id, name, cat, key, 0, on_action_key);                                                                 \
-		if (b) {                                                                                                       \
-			b->action_slot = (slot);                                                                                   \
-			b->required_skill = (skill);                                                                               \
-		}                                                                                                              \
-	} while (0)
-
-	/* Legacy action bar bindings — disabled by default, use hotbar instead */
-	ACTION(
-	    "action.attack", "Attack", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_ATTACK, V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
-	ACTION("action.fireball", "Fireball", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_FIREBALL,
-	    V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	ACTION(
-	    "action.lball", "Lightning Ball", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_LBALL, V3_OR_V35(V3_FLASH, V35_FLASH));
-	ACTION("action.bless", "Bless", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
-	ACTION("action.heal", "Heal", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
-	ACTION("action.takegive", "Take/Use/Give/Drop", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_TAKEGIVE,
-	    V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
-	ACTION("action.look", "Look", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_LOOK, -1);
-
-	/* Legacy spell bindings — disabled by default, use hotbar instead */
-	ACTION("spell.fireball", "Fireball (Map)", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_FIREBALL,
-	    V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	ACTION("spell.lball", "Lightning Ball (Map)", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_LBALL,
-	    V3_OR_V35(V3_FLASH, V35_FLASH));
-	ACTION("spell.flash", "Flash", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_FLASH, V3_OR_V35(V3_FLASH, V35_FLASH));
-	ACTION("spell.freeze", "Freeze", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_FREEZE, V3_OR_V35(V3_FREEZE, V35_FREEZE));
-	ACTION("spell.shield", "Magic Shield", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_SHIELD,
-	    V3_OR_V35(V3_MAGICSHIELD, V35_MAGICSHIELD));
-	ACTION("spell.bless", "Bless (Self)", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
-	ACTION("spell.heal", "Heal (Self)", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
-	ACTION("spell.warcry", "Warcry", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_WARCRY, V3_OR_V35(V3_WARCRY, V35_WARCRY));
-
-	b = reg("spell.pulse", "Pulse", INPUT_CAT_SPELLS, SDLK_UNKNOWN, 0, on_action_key);
-	if (b) {
-		b->action_slot = ACTION_PULSE;
-		b->required_skill = sv_ver == 35 ? -2 : (int)V3_PULSE; /* disabled on v35 */
-		if (sv_ver == 35) {
-			b->version_mask = INPUT_V3;
-		}
-	}
-
-	ACTION("spell.firering", "Firering", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_FIRERING,
-	    V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	ACTION("spell.map", "Toggle Map", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_MAP, -1);
-
-#undef ACTION
-
-	/* ── Keytab spells (Ctrl+N = target char, Alt+N = target map) ── */
-
-#define KEYTAB(id, name, key, mods, cl_spell, target, skill)                                                           \
-	do {                                                                                                               \
-		b = reg(id, name, INPUT_CAT_SPELLS, key, mods, on_cast_spell);                                                 \
-		if (b) {                                                                                                       \
-			b->action_slot = (cl_spell);                                                                               \
-			b->param = (target);                                                                                       \
-			b->required_skill = (skill);                                                                               \
-		}                                                                                                              \
-	} while (0)
-
-	/* Legacy keytab spells — disabled by default, use hotbar instead.
-	 * These can be re-enabled by users via keybinds.json if desired. */
-	KEYTAB("keytab.1_chr", "Fireball (Char)", SDLK_UNKNOWN, 0, CL_FIREBALL, TGT_CHR, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	KEYTAB("keytab.2_chr", "Lightning Ball (Char)", SDLK_UNKNOWN, 0, CL_BALL, TGT_CHR, V3_OR_V35(V3_FLASH, V35_FLASH));
-	KEYTAB("keytab.3_chr", "Flash", SDLK_UNKNOWN, 0, CL_FLASH, TGT_SLF, V3_OR_V35(V3_FLASH, V35_FLASH));
-	KEYTAB("keytab.4_chr", "Freeze", SDLK_UNKNOWN, 0, CL_FREEZE, TGT_SLF, V3_OR_V35(V3_FREEZE, V35_FREEZE));
-	KEYTAB("keytab.5_chr", "Magic Shield", SDLK_UNKNOWN, 0, CL_MAGICSHIELD, TGT_SLF,
-	    V3_OR_V35(V3_MAGICSHIELD, V35_MAGICSHIELD));
-	KEYTAB("keytab.6_chr", "Bless", SDLK_UNKNOWN, 0, CL_BLESS, sv_ver == 35 ? TGT_SLF : TGT_CHR,
-	    V3_OR_V35(V3_BLESS, V35_BLESS));
-	KEYTAB("keytab.7_chr", "Heal", SDLK_UNKNOWN, 0, CL_HEAL, TGT_CHR, V3_OR_V35(V3_HEAL, V35_HEAL));
-	KEYTAB("keytab.8_chr", "Warcry", SDLK_UNKNOWN, 0, CL_WARCRY, TGT_SLF, V3_OR_V35(V3_WARCRY, V35_WARCRY));
-	KEYTAB("keytab.9_chr", sv_ver == 35 ? "Firering" : "Pulse", SDLK_UNKNOWN, 0, sv_ver == 35 ? CL_FIREBALL : CL_PULSE,
-	    TGT_SLF, V3_OR_V35(V3_PULSE, V35_FIRE));
-	if (sv_ver != 35) {
-		KEYTAB("keytab.0_chr", "Firering", SDLK_UNKNOWN, 0, CL_FIREBALL, TGT_SLF, (int)V3_FIREBALL);
-	}
-
-	KEYTAB("keytab.1_map", "Fireball (Map)", SDLK_UNKNOWN, 0, CL_FIREBALL, TGT_MAP, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	KEYTAB("keytab.2_map", "Lightning Ball (Map)", SDLK_UNKNOWN, 0, CL_BALL, TGT_MAP, V3_OR_V35(V3_FLASH, V35_FLASH));
-	KEYTAB("keytab.3_map", "Flash (Self)", SDLK_UNKNOWN, 0, CL_FLASH, TGT_SLF, V3_OR_V35(V3_FLASH, V35_FLASH));
-	KEYTAB("keytab.4_map", "Freeze (Self)", SDLK_UNKNOWN, 0, CL_FREEZE, TGT_SLF, V3_OR_V35(V3_FREEZE, V35_FREEZE));
-	KEYTAB("keytab.5_map", "Magic Shield (Self)", SDLK_UNKNOWN, 0, CL_MAGICSHIELD, TGT_SLF,
-	    V3_OR_V35(V3_MAGICSHIELD, V35_MAGICSHIELD));
-	KEYTAB("keytab.6_map", "Bless Self", SDLK_UNKNOWN, 0, CL_BLESS, TGT_SLF, V3_OR_V35(V3_BLESS, V35_BLESS));
-	KEYTAB("keytab.7_map", "Heal Self", SDLK_UNKNOWN, 0, CL_HEAL, TGT_SLF, V3_OR_V35(V3_HEAL, V35_HEAL));
-	KEYTAB("keytab.8_map", "Warcry (Self)", SDLK_UNKNOWN, 0, CL_WARCRY, TGT_SLF, V3_OR_V35(V3_WARCRY, V35_WARCRY));
-	KEYTAB("keytab.9_map", sv_ver == 35 ? "Firering (Self)" : "Pulse (Self)", SDLK_UNKNOWN, 0,
-	    sv_ver == 35 ? CL_FIREBALL : CL_PULSE, TGT_SLF, V3_OR_V35(V3_PULSE, V35_FIRE));
-	if (sv_ver != 35) {
-		KEYTAB("keytab.0_map", "Firering (Self)", SDLK_UNKNOWN, 0, CL_FIREBALL, TGT_SLF, (int)V3_FIREBALL);
-	}
-
-#undef KEYTAB
 }
-
-#undef V3_OR_V35
 
 /* ── Init / Shutdown ───────────────────────────────────────────────────── */
 
@@ -991,7 +849,7 @@ void input_init(int sv_ver)
 	binding_count = 0;
 	version_mask = (sv_ver == 35) ? INPUT_V35 : INPUT_V3;
 
-	register_all(sv_ver);
+	register_all();
 }
 
 void input_shutdown(void)
@@ -1175,91 +1033,35 @@ void input_reset_all(void)
 	}
 }
 
-/* ── Action-bar compatibility ──────────────────────────────────────────── */
+/* ── Action-bar compatibility (stubs — legacy action bar removed) ──── */
 
 SDL_Keycode input_action_slot_key(int slot, int row)
 {
-	/* row 0 = INPUT_CAT_COMBAT (on_action_key with action_slot==slot)
-	 * row 1 = INPUT_CAT_SPELLS */
-	InputCategory cat = (row == 0) ? INPUT_CAT_COMBAT : INPUT_CAT_SPELLS;
-
-	for (int i = 0; i < binding_count; i++) {
-		InputBinding *b = &bindings[i];
-		if (b->category != cat) {
-			continue;
-		}
-		if (b->action_slot != slot) {
-			continue;
-		}
-		if (!(b->version_mask & version_mask)) {
-			continue;
-		}
-		return b->key;
-	}
+	(void)slot;
+	(void)row;
 	return SDLK_UNKNOWN;
 }
 
 int input_key_to_action_slot(SDL_Keycode key)
 {
-	if (key == SDLK_UNKNOWN) {
-		return -1;
-	}
-
-	for (int i = 0; i < binding_count; i++) {
-		InputBinding *b = &bindings[i];
-		if (b->key != key) {
-			continue;
-		}
-		if (b->modifiers != INPUT_MOD_NONE) {
-			continue;
-		}
-		if (b->action_slot < 0) {
-			continue;
-		}
-		if (b->on_press != on_action_key) {
-			continue;
-		}
-		if (!(b->version_mask & version_mask)) {
-			continue;
-		}
-
-		/* check skill requirement */
-		if (b->required_skill == -2) {
-			continue;
-		}
-		if (b->required_skill >= 0 && !value[0][b->required_skill]) {
-			continue;
-		}
-
-		/* row 0 returns slot, row 1 returns slot + 100 */
-		return (b->category == INPUT_CAT_SPELLS) ? b->action_slot + 100 : b->action_slot;
-	}
+	(void)key;
 	return -1;
 }
 
 int input_action_slot_available(int slot)
 {
-	for (int i = 0; i < binding_count; i++) {
-		InputBinding *b = &bindings[i];
-		if (b->action_slot != slot) {
-			continue;
-		}
-		if (b->on_press != on_action_key) {
-			continue;
-		}
-		if (!(b->version_mask & version_mask)) {
-			continue;
-		}
-
-		if (b->required_skill == -1) {
-			return 1;
-		}
-		if (b->required_skill == -2) {
-			return 0;
-		}
-		return value[0][b->required_skill] != 0;
+	extern int *action_skill;
+	if (slot < 0 || slot >= MAXACTIONSLOT) {
+		return 0;
 	}
-	return 0;
+	int skill = action_skill[slot];
+	if (skill == -1) {
+		return 1; /* always available (look, map) */
+	}
+	if (skill == -2) {
+		return 0; /* disabled for this server version */
+	}
+	return value[0][skill] != 0;
 }
 
 /* ── Key name utilities ────────────────────────────────────────────────── */
@@ -1453,7 +1255,7 @@ int input_load_config(const char *path)
 	}
 
 	/* load hotbar: each entry is an object {"type":"item","item_type":N}
-	 * or {"type":"spell","action_slot":N,"spell_cmd":N,"spell_target":N} */
+	 * or {"type":"spell","spell":N} */
 	cJSON *jhotbar = cJSON_GetObjectItem(root, "hotbar");
 	if (jhotbar && cJSON_IsArray(jhotbar)) {
 		int slot = 0;
@@ -1476,13 +1278,9 @@ int input_load_config(const char *path)
 					hotbar[slot].item_type = itype;
 					hotbar[slot].inv_index = find_item_in_inventory(itype);
 				} else if (strcmp(tstr, "spell") == 0) {
-					cJSON *jas = cJSON_GetObjectItem(jslot, "action_slot");
-					cJSON *jsc = cJSON_GetObjectItem(jslot, "spell_cmd");
-					cJSON *jst = cJSON_GetObjectItem(jslot, "spell_target");
+					cJSON *jsp = cJSON_GetObjectItem(jslot, "spell");
 					hotbar[slot].type = HOTBAR_SPELL;
-					hotbar[slot].action_slot = (jas && cJSON_IsNumber(jas)) ? jas->valueint : 0;
-					hotbar[slot].spell_cmd = (jsc && cJSON_IsNumber(jsc)) ? jsc->valueint : 0;
-					hotbar[slot].spell_target = (jst && cJSON_IsNumber(jst)) ? jst->valueint : 0;
+					hotbar[slot].action_slot = (jsp && cJSON_IsNumber(jsp)) ? jsp->valueint : 0;
 				}
 
 				/* extra binds (optional) */
@@ -1601,9 +1399,7 @@ int input_save_config(const char *path)
 			break;
 		case HOTBAR_SPELL:
 			cJSON_AddStringToObject(jslot, "type", "spell");
-			cJSON_AddNumberToObject(jslot, "action_slot", hotbar[i].action_slot);
-			cJSON_AddNumberToObject(jslot, "spell_cmd", hotbar[i].spell_cmd);
-			cJSON_AddNumberToObject(jslot, "spell_target", hotbar[i].spell_target);
+			cJSON_AddNumberToObject(jslot, "spell", hotbar[i].action_slot);
 			break;
 		default:
 			cJSON_AddStringToObject(jslot, "type", "empty");

@@ -8,6 +8,7 @@
  *
  */
 
+#include <math.h>
 #include <time.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_keycode.h>
@@ -22,6 +23,8 @@
 
 static int c_on = 0, c_x, c_y, d_y, ori_x, ori_y;
 static size_t csel = -1ull, isel = -1ull, msel = -1ull;
+static int lcmd_override = CMD_NONE;
+static int hotbar_targeting; /* 1 = targeting was started from hotbar click, not key-hold */
 
 #define MAXLINE    20
 #define MAXLEN     120
@@ -434,9 +437,6 @@ int context_key(int key)
 	return 1;
 }
 
-static int lcmd_override = CMD_NONE;
-static int hotbar_targeting; /* 1 = targeting was started from hotbar click, not key-hold */
-
 void context_key_reset(void)
 {
 	lcmd_override = CMD_NONE;
@@ -462,57 +462,47 @@ int context_key_click(void)
 	return CMD_MAP_MOVE;
 }
 
-/* execute an action immediately using whatever is under the cursor.
- * For self-cast spells, executes right away. For targeted spells,
- * uses chrsel/itmsel/mapsel from the current frame.
- * Returns 1 if something was executed, 0 if it needs a target (sets lcmd_override). */
-int context_execute_action(int action_slot)
+/* ── Self-cast dispatch table ──────────────────────────────────────────
+ *
+ * Maps ACTION_* indices to CL_* spell IDs for self/map-cast (the 100+
+ * row). Used by both execute_action and execute_action_normal to avoid
+ * duplicating the same switch block.  Returns 1 if handled, 0 if not.
+ */
+static int try_self_cast(int action_slot)
 {
-	size_t csel, isel, msel;
+	static const struct {
+		int action;
+		int cl_spell;
+	} self_spells[] = {
+	    {ACTION_FLASH, CL_FLASH},
+	    {ACTION_FREEZE, CL_FREEZE},
+	    {ACTION_SHIELD, CL_MAGICSHIELD},
+	    {ACTION_BLESS, CL_BLESS},
+	    {ACTION_HEAL, CL_HEAL},
+	    {ACTION_WARCRY, CL_WARCRY},
+	    {ACTION_PULSE, CL_PULSE},
+	    {ACTION_FIRERING, CL_FIREBALL},
+	};
 
-	if (!(game_options & GO_ACTION)) {
-		return 0;
-	}
-
-	if (mousex >= dotx(DOT_MTL) && mousey >= doty(DOT_MTL) && mousex < dotx(DOT_MBR) && mousey < doty(DOT_MBR)) {
-		csel = chrsel;
-		isel = itmsel;
-		msel = mapsel;
-	} else {
-		csel = isel = msel = MAXMN;
-	}
-
-	switch (action_slot) {
-	/* self-cast spells — execute immediately, no target needed */
-	case 100 + ACTION_FLASH:
-		cmd_some_spell(CL_FLASH, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_FREEZE:
-		cmd_some_spell(CL_FREEZE, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_SHIELD:
-		cmd_some_spell(CL_MAGICSHIELD, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_BLESS:
-		cmd_some_spell(CL_BLESS, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_HEAL:
-		cmd_some_spell(CL_HEAL, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_WARCRY:
-		cmd_some_spell(CL_WARCRY, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_PULSE:
-		cmd_some_spell(CL_PULSE, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_FIRERING:
-		cmd_some_spell(CL_FIREBALL, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_MAP:
+	if (action_slot == 100 + ACTION_MAP) {
 		minimap_toggle();
 		return 1;
+	}
 
-	/* targeted spells — try to execute if a valid target is under cursor */
+	for (int i = 0; i < (int)(sizeof(self_spells) / sizeof(self_spells[0])); i++) {
+		if (action_slot == 100 + self_spells[i].action) {
+			cmd_some_spell(self_spells[i].cl_spell, 0, 0, map[plrmn].cn);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* try to execute a targeted action at whatever is under the cursor.
+ * Returns 1 if a valid target was found and the action executed. */
+static int try_targeted_action(int action_slot, size_t csel, size_t isel, size_t msel)
+{
+	switch (action_slot) {
 	case ACTION_ATTACK:
 		if (csel != MAXMN) {
 			cmd_kill(map[csel].cn);
@@ -603,6 +593,41 @@ int context_execute_action(int action_slot)
 		}
 		break;
 	}
+	return 0;
+}
+
+/* resolve cursor targets from the current frame's pre-computed selections. */
+static void resolve_cursor_targets(size_t *out_csel, size_t *out_isel, size_t *out_msel)
+{
+	if (mousex >= dotx(DOT_MTL) && mousey >= doty(DOT_MTL) && mousex < dotx(DOT_MBR) && mousey < doty(DOT_MBR)) {
+		*out_csel = chrsel;
+		*out_isel = itmsel;
+		*out_msel = mapsel;
+	} else {
+		*out_csel = *out_isel = *out_msel = MAXMN;
+	}
+}
+
+/* execute an action immediately using whatever is under the cursor.
+ * For self-cast spells, executes right away. For targeted spells,
+ * uses chrsel/itmsel/mapsel from the current frame.
+ * Returns 1 if something was executed, 0 if it needs a target (sets lcmd_override). */
+int context_execute_action(int action_slot)
+{
+	if (!(game_options & GO_ACTION)) {
+		return 0;
+	}
+
+	if (try_self_cast(action_slot)) {
+		return 1;
+	}
+
+	size_t csel, isel, msel;
+	resolve_cursor_targets(&csel, &isel, &msel);
+
+	if (try_targeted_action(action_slot, csel, isel, msel)) {
+		return 1;
+	}
 
 	/* no valid target under cursor — fall back to setting lcmd_override
 	 * so the cursor changes and the next click on a valid target executes */
@@ -620,37 +645,8 @@ int context_execute_action_normal(int action_slot)
 		return 0;
 	}
 
-	/* self-cast spells always execute immediately — no target to pick */
-	switch (action_slot) {
-	case 100 + ACTION_FLASH:
-		cmd_some_spell(CL_FLASH, 0, 0, map[plrmn].cn);
+	if (try_self_cast(action_slot)) {
 		return 1;
-	case 100 + ACTION_FREEZE:
-		cmd_some_spell(CL_FREEZE, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_SHIELD:
-		cmd_some_spell(CL_MAGICSHIELD, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_BLESS:
-		cmd_some_spell(CL_BLESS, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_HEAL:
-		cmd_some_spell(CL_HEAL, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_WARCRY:
-		cmd_some_spell(CL_WARCRY, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_PULSE:
-		cmd_some_spell(CL_PULSE, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_FIRERING:
-		cmd_some_spell(CL_FIREBALL, 0, 0, map[plrmn].cn);
-		return 1;
-	case 100 + ACTION_MAP:
-		minimap_toggle();
-		return 1;
-	default:
-		break;
 	}
 
 	/* targeted spells: enter targeting mode, don't execute yet */
@@ -808,8 +804,6 @@ int context_key_set_cmd(void)
 
 void context_keyup(SDL_Keycode key)
 {
-	size_t csel, isel, msel;
-
 	/* don't clear targeting mode if it was initiated from the hotbar —
 	 * the player pressed a hotkey, released it, and will click to cast */
 	if (!hotbar_targeting) {
@@ -841,113 +835,14 @@ void context_keyup(SDL_Keycode key)
 		return;
 	}
 
-	if (mousex >= dotx(DOT_MTL) && mousey >= doty(DOT_MTL) && mousex < dotx(DOT_MBR) && mousey < doty(DOT_MBR)) {
-		csel = chrsel;
-		isel = itmsel;
-		msel = mapsel;
-	} else {
-		csel = isel = msel = MAXMN;
+	int slot = action_key2slot(key);
+	if (try_self_cast(slot)) {
+		return;
 	}
 
-	switch (action_key2slot(key)) {
-	case ACTION_ATTACK:
-		if (csel != MAXMN) {
-			cmd_kill(map[csel].cn);
-		}
-		break;
-	case ACTION_FIREBALL:
-		if (csel != MAXMN) {
-			cmd_some_spell(CL_FIREBALL, 0, 0, map[csel].cn);
-		}
-		break;
-	case ACTION_LBALL:
-		if (csel != MAXMN) {
-			cmd_some_spell(CL_BALL, 0, 0, map[csel].cn);
-		}
-		break;
-	case ACTION_BLESS:
-		if (csel != MAXMN) {
-			cmd_some_spell(CL_BLESS, 0, 0, map[csel].cn);
-		}
-		break;
-	case ACTION_HEAL:
-		if (csel != MAXMN) {
-			cmd_some_spell(CL_HEAL, 0, 0, map[csel].cn);
-		}
-		break;
-	case ACTION_TAKEGIVE:
-		if (csprite) {
-			if (csel != MAXMN) {
-				cmd_give(map[csel].cn);
-			} else if (isel != MAXMN && (map[isel].flags & CMF_USE)) {
-				cmd_use(originx - (int)(MAPDX / 2U) + (int)(isel % MAPDX),
-				    originy - (int)(MAPDY / 2U) + (int)(isel / MAPDX));
-			} else if (msel != MAXMN) {
-				cmd_drop(originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX),
-				    originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX));
-			}
-		} else if (isel != MAXMN) {
-			if (map[(int)isel].flags & CMF_TAKE) {
-				cmd_take(originx - (int)(MAPDX / 2U) + (int)(isel % MAPDX),
-				    originy - (int)(MAPDY / 2U) + (int)(isel / MAPDX));
-			} else if (map[isel].flags & CMF_USE) {
-				cmd_use(originx - (int)(MAPDX / 2U) + (int)(isel % MAPDX),
-				    originy - (int)(MAPDY / 2U) + (int)(isel / MAPDX));
-			}
-		}
-		break;
-	case ACTION_LOOK:
-		if (isel != MAXMN) {
-			cmd_look_item(
-			    originx - (int)(MAPDX / 2U) + (int)(isel % MAPDX), originy - (int)(MAPDY / 2U) + (int)(isel / MAPDX));
-		} else if (csel != MAXMN) {
-			cmd_look_char(map[csel].cn);
-		} else if (msel != MAXMN) {
-			cmd_look_map(
-			    originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX), originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX));
-		}
-		break;
-
-	case 100 + ACTION_FIREBALL:
-		if (msel != MAXMN) {
-			cmd_some_spell(CL_FIREBALL, originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX),
-			    originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX), 0);
-		}
-		break;
-	case 100 + ACTION_LBALL:
-		if (msel != MAXMN) {
-			cmd_some_spell(CL_BALL, originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX),
-			    originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX), 0);
-		}
-		break;
-	case 100 + ACTION_FLASH:
-		cmd_some_spell(CL_FLASH, 0, 0, map[plrmn].cn);
-		break;
-	case 100 + ACTION_FREEZE:
-		cmd_some_spell(CL_FREEZE, 0, 0, map[plrmn].cn);
-		break;
-	case 100 + ACTION_SHIELD:
-		cmd_some_spell(CL_MAGICSHIELD, 0, 0, map[plrmn].cn);
-		break;
-	case 100 + ACTION_BLESS:
-		cmd_some_spell(CL_BLESS, 0, 0, map[plrmn].cn);
-		break;
-	case 100 + ACTION_HEAL:
-		cmd_some_spell(CL_HEAL, 0, 0, map[plrmn].cn);
-		break;
-	case 100 + ACTION_WARCRY:
-		cmd_some_spell(CL_WARCRY, 0, 0, map[plrmn].cn);
-		break;
-	case 100 + ACTION_PULSE:
-		cmd_some_spell(CL_PULSE, 0, 0, map[plrmn].cn);
-		break;
-	case 100 + ACTION_FIRERING:
-		cmd_some_spell(CL_FIREBALL, 0, 0, map[plrmn].cn);
-		break;
-	case 100 + ACTION_MAP:
-		minimap_toggle();
-		break;
-	}
+	size_t csel, isel, msel;
+	resolve_cursor_targets(&csel, &isel, &msel);
+	try_targeted_action(slot, csel, isel, msel);
 }
 
 int context_key_set(int onoff)

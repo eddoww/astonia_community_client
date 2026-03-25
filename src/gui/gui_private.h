@@ -523,7 +523,6 @@ int context_execute_action_normal(int action_slot);
 void context_keyup(SDL_Keycode key);
 int context_key_set(int onoff);
 int context_key_isset(void);
-int context_key_isset(void);
 int context_key_enabled(void);
 int context_key_set_cmd(void);
 void context_key_reset(void);

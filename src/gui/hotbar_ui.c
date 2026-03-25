@@ -95,8 +95,8 @@ void hotbar_display(void)
 		/* key label — show bound key in corner (toggle-able) */
 		if (hotbar_show_hotkeys()) {
 			InputBinding *b = NULL;
-			for (int bi = 0; bi < input_binding_count(); bi++) {
-				InputBinding *candidate = input_binding_at(bi);
+			for (int k = 0; k < input_binding_count(); k++) {
+				InputBinding *candidate = input_binding_at(k);
 				if (candidate && candidate->category == INPUT_CAT_HOTBAR && candidate->param == i) {
 					b = candidate;
 					break;

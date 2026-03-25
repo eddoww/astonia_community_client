@@ -206,6 +206,26 @@ static void on_action_mode_off(InputBinding *self)
 /* forward declaration for item scanning */
 static int find_item_in_inventory(uint32_t item_type);
 
+/* default key assignments for hotbar row 1 — shared between
+ * register_all (binding registration) and hotbar_setup_defaults */
+static const SDL_Keycode row1_keys[HOTBAR_SLOTS_PER_ROW] = {
+    SDLK_1,
+    SDLK_2,
+    SDLK_3,
+    SDLK_4,
+    SDLK_5,
+    SDLK_6,
+    SDLK_7,
+    SDLK_8,
+    SDLK_9,
+    SDLK_0,
+    'q',
+    'e',
+    'z',
+    'x',
+    'r',
+};
+
 /* ── Hotbar ─────────────────────────────────────────────────────────────
  *
  * Each slot holds either an item or a spell. Item slots auto-refill from
@@ -354,25 +374,6 @@ void hotbar_setup_defaults(void)
 	    {ACTION_LOOK, 0}, /* slot T */
 	};
 
-	/* keys matching hotbar_defaults in register_all */
-	static const SDL_Keycode slot_keys[] = {
-	    SDLK_1,
-	    SDLK_2,
-	    SDLK_3,
-	    SDLK_4,
-	    SDLK_5,
-	    SDLK_6,
-	    SDLK_7,
-	    SDLK_8,
-	    SDLK_9,
-	    SDLK_0,
-	    'q',
-	    'w',
-	    'e',
-	    'r',
-	    't',
-	};
-
 	int num_defaults = (int)(sizeof(spell_defaults) / sizeof(spell_defaults[0]));
 	for (int i = 0; i < num_defaults; i++) {
 		if (spell_defaults[i].action_slot < 0) {
@@ -381,8 +382,8 @@ void hotbar_setup_defaults(void)
 		hotbar_assign_spell(i, spell_defaults[i].action_slot, 0, 0);
 
 		/* add shift+key quick cast extra bind for dual-target spells */
-		if (spell_defaults[i].has_quick && i < (int)(sizeof(slot_keys) / sizeof(slot_keys[0]))) {
-			hotbar_add_bind(i, slot_keys[i], INPUT_MOD_SHIFT, HOTBAR_CAST_QUICK, HOTBAR_TGT_DEFAULT);
+		if (spell_defaults[i].has_quick && i < HOTBAR_SLOTS_PER_ROW) {
+			hotbar_add_bind(i, row1_keys[i], INPUT_MOD_SHIFT, HOTBAR_CAST_QUICK, HOTBAR_TGT_DEFAULT);
 		}
 	}
 }
@@ -525,78 +526,71 @@ static void hotbar_flash(int slot)
 	}
 }
 
-/* activate a hotbar slot from a mouse click — always uses normal cast
- * (enter targeting mode for targeted spells, immediate for self-cast) */
-void hotbar_activate(int slot)
+/* track which slot is being held for Quick Cast w/ Indicator */
+static int held_hotbar_slot = -1;
+static int held_action_resolved = -1;
+
+/* try to use an item from a hotbar slot. returns 1 if used. */
+static int hotbar_try_use_item(int slot)
+{
+	int inv_idx = hotbar[slot].inv_index;
+	if (inv_idx > 0 && item[inv_idx]) {
+		hotbar_flash(slot);
+		cmd_use_inv(inv_idx);
+		return 1;
+	}
+	return 0;
+}
+
+/* cast a spell from a hotbar slot using the given cast mode and resolved action. */
+static void hotbar_cast_spell(int slot, int resolved, int mode)
+{
+	switch (mode) {
+	case CAST_QUICK:
+		/* instant: cast at whatever is under cursor right now */
+		hotbar_flash(slot);
+		context_execute_action(resolved);
+		break;
+	case CAST_QUICK_INDICATOR:
+		/* hold key → show targeting indicator → release key → cast */
+		hotbar_flash(slot);
+		context_activate_action(resolved);
+		held_hotbar_slot = slot;
+		held_action_resolved = resolved;
+		break;
+	case CAST_NORMAL:
+	default:
+		/* normal: enter targeting mode, click to confirm */
+		hotbar_flash(slot);
+		context_execute_action_normal(resolved);
+		break;
+	}
+}
+
+/* activate a hotbar slot with a given cast mode.
+ * clicks pass CAST_NORMAL; hotkey presses pass the global cast_mode. */
+static void hotbar_activate_with_mode(int slot, int mode)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
 	}
 
 	switch (hotbar[slot].type) {
-	case HOTBAR_ITEM: {
-		int inv_idx = hotbar[slot].inv_index;
-		if (inv_idx > 0 && item[inv_idx]) {
-			hotbar_flash(slot);
-			cmd_use_inv(inv_idx);
-		}
+	case HOTBAR_ITEM:
+		hotbar_try_use_item(slot);
 		break;
-	}
 	case HOTBAR_SPELL:
-		hotbar_flash(slot);
-		/* clicks always use normal cast */
-		context_execute_action_normal(resolve_spell_action(hotbar[slot].action_slot));
+		hotbar_cast_spell(slot, resolve_spell_action(hotbar[slot].action_slot), mode);
 		break;
 	default:
 		break;
 	}
 }
 
-/* track which slot is being held for Quick Cast w/ Indicator */
-static int held_hotbar_slot = -1;
-static int held_action_resolved = -1;
-
-/* activate a hotbar slot from a hotkey press — respects cast_mode */
-static void hotbar_activate_hotkey(int slot)
+/* activate a hotbar slot from a mouse click — always uses normal cast */
+void hotbar_activate(int slot)
 {
-	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
-		return;
-	}
-
-	switch (hotbar[slot].type) {
-	case HOTBAR_ITEM: {
-		int inv_idx = hotbar[slot].inv_index;
-		if (inv_idx > 0 && item[inv_idx]) {
-			hotbar_flash(slot);
-			cmd_use_inv(inv_idx);
-		}
-		break;
-	}
-	case HOTBAR_SPELL: {
-		hotbar_flash(slot);
-		int resolved = resolve_spell_action(hotbar[slot].action_slot);
-		switch (cast_mode) {
-		case CAST_QUICK:
-			/* instant: cast at whatever is under cursor right now */
-			context_execute_action(resolved);
-			break;
-		case CAST_QUICK_INDICATOR:
-			/* hold key: enter targeting mode, will cast on key release */
-			context_activate_action(resolved);
-			held_hotbar_slot = slot;
-			held_action_resolved = resolved;
-			break;
-		case CAST_NORMAL:
-		default:
-			/* normal: enter targeting mode, cast on next click */
-			context_execute_action_normal(resolved);
-			break;
-		}
-		break;
-	}
-	default:
-		break;
-	}
+	hotbar_activate_with_mode(slot, CAST_NORMAL);
 }
 
 /* called on hotkey release — for Quick Cast w/ Indicator mode */
@@ -610,6 +604,7 @@ void hotbar_hotkey_release(int slot)
 	}
 
 	/* execute the held spell at the current cursor position */
+	hotbar_flash(held_hotbar_slot);
 	context_execute_action(held_action_resolved);
 	context_key_reset();
 	held_hotbar_slot = -1;
@@ -685,6 +680,35 @@ int hotbar_find_extra_bind(SDL_Keycode key, Uint8 mods)
 	return -1;
 }
 
+/* resolve the effective action slot from target override */
+static int resolve_target_override(int action_slot, HotbarTargetOverride tgt)
+{
+	switch (tgt) {
+	case HOTBAR_TGT_MAP:
+	case HOTBAR_TGT_SELF:
+		return 100 + action_slot;
+	case HOTBAR_TGT_CHR:
+		return action_slot;
+	default:
+		return resolve_spell_action(action_slot);
+	}
+}
+
+/* resolve the effective cast mode from cast override */
+static int resolve_cast_override(HotbarCastOverride co)
+{
+	switch (co) {
+	case HOTBAR_CAST_NORMAL:
+		return CAST_NORMAL;
+	case HOTBAR_CAST_QUICK:
+		return CAST_QUICK;
+	case HOTBAR_CAST_INDICATOR:
+		return CAST_QUICK_INDICATOR;
+	default:
+		return cast_mode;
+	}
+}
+
 void hotbar_activate_extra(int slot, SDL_Keycode key, Uint8 mods)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
@@ -703,73 +727,22 @@ void hotbar_activate_extra(int slot, SDL_Keycode key, Uint8 mods)
 		return;
 	}
 
-	/* items don't have cast mode / target override */
-	if (hotbar[slot].type == HOTBAR_ITEM) {
-		int inv_idx = hotbar[slot].inv_index;
-		if (inv_idx > 0 && item[inv_idx]) {
-			hotbar_flash(slot);
-			cmd_use_inv(inv_idx);
-		}
-		return;
-	}
-
-	if (hotbar[slot].type != HOTBAR_SPELL) {
-		return;
-	}
-
-	hotbar_flash(slot);
-
-	/* resolve action slot from target override */
-	int resolved;
-	switch (bind->target_override) {
-	case HOTBAR_TGT_MAP:
-	case HOTBAR_TGT_SELF:
-		resolved = 100 + hotbar[slot].action_slot;
+	switch (hotbar[slot].type) {
+	case HOTBAR_ITEM:
+		hotbar_try_use_item(slot);
 		break;
-	case HOTBAR_TGT_CHR:
-		resolved = hotbar[slot].action_slot;
+	case HOTBAR_SPELL:
+		hotbar_cast_spell(slot, resolve_target_override(hotbar[slot].action_slot, bind->target_override),
+		    resolve_cast_override(bind->cast_override));
 		break;
 	default:
-		resolved = resolve_spell_action(hotbar[slot].action_slot);
-		break;
-	}
-
-	/* resolve cast mode from override */
-	int effective_mode;
-	switch (bind->cast_override) {
-	case HOTBAR_CAST_NORMAL:
-		effective_mode = CAST_NORMAL;
-		break;
-	case HOTBAR_CAST_QUICK:
-		effective_mode = CAST_QUICK;
-		break;
-	case HOTBAR_CAST_INDICATOR:
-		effective_mode = CAST_QUICK_INDICATOR;
-		break;
-	default:
-		effective_mode = cast_mode;
-		break;
-	}
-
-	switch (effective_mode) {
-	case CAST_QUICK:
-		context_execute_action(resolved);
-		break;
-	case CAST_QUICK_INDICATOR:
-		context_activate_action(resolved);
-		held_hotbar_slot = slot;
-		held_action_resolved = resolved;
-		break;
-	case CAST_NORMAL:
-	default:
-		context_execute_action_normal(resolved);
 		break;
 	}
 }
 
 static void on_hotbar_press(InputBinding *self)
 {
-	hotbar_activate_hotkey(self->param);
+	hotbar_activate_with_mode(self->param, cast_mode);
 }
 
 /* called on any key release — checks if it matches a held hotbar binding */
@@ -808,12 +781,12 @@ static void on_action_key(InputBinding *self)
 
 static void on_cast_spell(InputBinding *self)
 {
-	int spell = self->param;
+	int spell = self->action_slot;
 	if (spell <= 0) {
 		return;
 	}
 
-	switch (self->action_slot) { /* action_slot repurposed as target type */
+	switch (self->param) { /* param holds target type */
 	case TGT_MAP:
 		exec_cmd(CMD_MAP_CAST_K, spell);
 		break;
@@ -894,29 +867,10 @@ static void register_all(int sv_ver)
 		SDL_Keycode key;
 	} hotbar_defaults[HOTBAR_MAX_SLOTS];
 
-	{
-		static const SDL_Keycode row1_keys[HOTBAR_SLOTS_PER_ROW] = {
-		    SDLK_1,
-		    SDLK_2,
-		    SDLK_3,
-		    SDLK_4,
-		    SDLK_5,
-		    SDLK_6,
-		    SDLK_7,
-		    SDLK_8,
-		    SDLK_9,
-		    SDLK_0,
-		    'q',
-		    'w',
-		    'e',
-		    'r',
-		    't',
-		};
-		for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {
-			snprintf(hotbar_defaults[i].id, sizeof(hotbar_defaults[i].id), "hotbar.%d", i);
-			snprintf(hotbar_defaults[i].name, sizeof(hotbar_defaults[i].name), "Hotbar Slot %d", i + 1);
-			hotbar_defaults[i].key = (i < HOTBAR_SLOTS_PER_ROW) ? row1_keys[i] : SDLK_UNKNOWN;
-		}
+	for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {
+		snprintf(hotbar_defaults[i].id, sizeof(hotbar_defaults[i].id), "hotbar.%d", i);
+		snprintf(hotbar_defaults[i].name, sizeof(hotbar_defaults[i].name), "Hotbar Slot %d", i + 1);
+		hotbar_defaults[i].key = (i < HOTBAR_SLOTS_PER_ROW) ? row1_keys[i] : SDLK_UNKNOWN;
 	}
 
 	for (int i = 0; i < HOTBAR_MAX_SLOTS; i++) {
@@ -927,11 +881,11 @@ static void register_all(int sv_ver)
 		}
 	}
 
-	/* ── Combat — action bar row 0 (target mode) ──────────────────── */
+	/* ── Action bar (combat + spells) ─────────────────────────────── */
 
-#define COMBAT(id, name, key, slot, skill)                                                                             \
+#define ACTION(id, name, cat, key, slot, skill)                                                                        \
 	do {                                                                                                               \
-		b = reg(id, name, INPUT_CAT_COMBAT, key, 0, on_action_key);                                                    \
+		b = reg(id, name, cat, key, 0, on_action_key);                                                                 \
 		if (b) {                                                                                                       \
 			b->action_slot = (slot);                                                                                   \
 			b->required_skill = (skill);                                                                               \
@@ -939,36 +893,30 @@ static void register_all(int sv_ver)
 	} while (0)
 
 	/* Legacy action bar bindings — disabled by default, use hotbar instead */
-	COMBAT("action.attack", "Attack", SDLK_UNKNOWN, ACTION_ATTACK, V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
-	COMBAT("action.fireball", "Fireball", SDLK_UNKNOWN, ACTION_FIREBALL, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	COMBAT("action.lball", "Lightning Ball", SDLK_UNKNOWN, ACTION_LBALL, V3_OR_V35(V3_FLASH, V35_FLASH));
-	COMBAT("action.bless", "Bless", SDLK_UNKNOWN, ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
-	COMBAT("action.heal", "Heal", SDLK_UNKNOWN, ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
-	COMBAT("action.takegive", "Take/Use/Give/Drop", SDLK_UNKNOWN, ACTION_TAKEGIVE, V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
-	COMBAT("action.look", "Look", SDLK_UNKNOWN, ACTION_LOOK, -1);
-
-#undef COMBAT
-
-	/* ── Spells — action bar row 1 (self/map cast) ────────────────── */
-
-#define SPELL(id, name, key, slot, skill)                                                                              \
-	do {                                                                                                               \
-		b = reg(id, name, INPUT_CAT_SPELLS, key, 0, on_action_key);                                                    \
-		if (b) {                                                                                                       \
-			b->action_slot = (slot);                                                                                   \
-			b->required_skill = (skill);                                                                               \
-		}                                                                                                              \
-	} while (0)
+	ACTION(
+	    "action.attack", "Attack", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_ATTACK, V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
+	ACTION("action.fireball", "Fireball", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_FIREBALL,
+	    V3_OR_V35(V3_FIREBALL, V35_FIRE));
+	ACTION(
+	    "action.lball", "Lightning Ball", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_LBALL, V3_OR_V35(V3_FLASH, V35_FLASH));
+	ACTION("action.bless", "Bless", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
+	ACTION("action.heal", "Heal", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
+	ACTION("action.takegive", "Take/Use/Give/Drop", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_TAKEGIVE,
+	    V3_OR_V35(V3_PERCEPT, V35_PERCEPT));
+	ACTION("action.look", "Look", INPUT_CAT_COMBAT, SDLK_UNKNOWN, ACTION_LOOK, -1);
 
 	/* Legacy spell bindings — disabled by default, use hotbar instead */
-	SPELL("spell.fireball", "Fireball (Map)", SDLK_UNKNOWN, ACTION_FIREBALL, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	SPELL("spell.lball", "Lightning Ball (Map)", SDLK_UNKNOWN, ACTION_LBALL, V3_OR_V35(V3_FLASH, V35_FLASH));
-	SPELL("spell.flash", "Flash", SDLK_UNKNOWN, ACTION_FLASH, V3_OR_V35(V3_FLASH, V35_FLASH));
-	SPELL("spell.freeze", "Freeze", SDLK_UNKNOWN, ACTION_FREEZE, V3_OR_V35(V3_FREEZE, V35_FREEZE));
-	SPELL("spell.shield", "Magic Shield", SDLK_UNKNOWN, ACTION_SHIELD, V3_OR_V35(V3_MAGICSHIELD, V35_MAGICSHIELD));
-	SPELL("spell.bless", "Bless (Self)", SDLK_UNKNOWN, ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
-	SPELL("spell.heal", "Heal (Self)", SDLK_UNKNOWN, ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
-	SPELL("spell.warcry", "Warcry", SDLK_UNKNOWN, ACTION_WARCRY, V3_OR_V35(V3_WARCRY, V35_WARCRY));
+	ACTION("spell.fireball", "Fireball (Map)", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_FIREBALL,
+	    V3_OR_V35(V3_FIREBALL, V35_FIRE));
+	ACTION("spell.lball", "Lightning Ball (Map)", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_LBALL,
+	    V3_OR_V35(V3_FLASH, V35_FLASH));
+	ACTION("spell.flash", "Flash", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_FLASH, V3_OR_V35(V3_FLASH, V35_FLASH));
+	ACTION("spell.freeze", "Freeze", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_FREEZE, V3_OR_V35(V3_FREEZE, V35_FREEZE));
+	ACTION("spell.shield", "Magic Shield", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_SHIELD,
+	    V3_OR_V35(V3_MAGICSHIELD, V35_MAGICSHIELD));
+	ACTION("spell.bless", "Bless (Self)", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_BLESS, V3_OR_V35(V3_BLESS, V35_BLESS));
+	ACTION("spell.heal", "Heal (Self)", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_HEAL, V3_OR_V35(V3_HEAL, V35_HEAL));
+	ACTION("spell.warcry", "Warcry", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_WARCRY, V3_OR_V35(V3_WARCRY, V35_WARCRY));
 
 	b = reg("spell.pulse", "Pulse", INPUT_CAT_SPELLS, SDLK_UNKNOWN, 0, on_action_key);
 	if (b) {
@@ -979,10 +927,11 @@ static void register_all(int sv_ver)
 		}
 	}
 
-	SPELL("spell.firering", "Firering", SDLK_UNKNOWN, ACTION_FIRERING, V3_OR_V35(V3_FIREBALL, V35_FIRE));
-	SPELL("spell.map", "Toggle Map", SDLK_UNKNOWN, ACTION_MAP, -1);
+	ACTION("spell.firering", "Firering", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_FIRERING,
+	    V3_OR_V35(V3_FIREBALL, V35_FIRE));
+	ACTION("spell.map", "Toggle Map", INPUT_CAT_SPELLS, SDLK_UNKNOWN, ACTION_MAP, -1);
 
-#undef SPELL
+#undef ACTION
 
 	/* ── Keytab spells (Ctrl+N = target char, Alt+N = target map) ── */
 
@@ -990,8 +939,8 @@ static void register_all(int sv_ver)
 	do {                                                                                                               \
 		b = reg(id, name, INPUT_CAT_SPELLS, key, mods, on_cast_spell);                                                 \
 		if (b) {                                                                                                       \
-			b->param = (cl_spell);                                                                                     \
-			b->action_slot = (target);                                                                                 \
+			b->action_slot = (cl_spell);                                                                               \
+			b->param = (target);                                                                                       \
 			b->required_skill = (skill);                                                                               \
 		}                                                                                                              \
 	} while (0)
@@ -1381,28 +1330,25 @@ int input_string_to_key(const char *str, SDL_Keycode *out_key, Uint8 *out_modifi
 		}
 	}
 
-	/* try SDL lookup (case-insensitive) */
+	/* try SDL lookup as-is, then capitalize first letter (e.g. "escape" → "Escape"),
+	 * then all uppercase (e.g. "f1" → "F1"). SDL_GetKeyFromName is case-sensitive. */
 	SDL_Keycode key = SDL_GetKeyFromName(p);
 	if (key != SDLK_UNKNOWN) {
 		*out_key = key;
 		return 0;
 	}
 
-	/* capitalize first letter */
-	char cap[128];
-	snprintf(cap, sizeof(cap), "%s", p);
-	cap[0] = (char)toupper((unsigned char)cap[0]);
-	key = SDL_GetKeyFromName(cap);
+	p[0] = (char)toupper((unsigned char)p[0]);
+	key = SDL_GetKeyFromName(p);
 	if (key != SDLK_UNKNOWN) {
 		*out_key = key;
 		return 0;
 	}
 
-	/* all uppercase (F-keys) */
-	for (int i = 0; cap[i]; i++) {
-		cap[i] = (char)toupper((unsigned char)cap[i]);
+	for (int i = 1; p[i]; i++) {
+		p[i] = (char)toupper((unsigned char)p[i]);
 	}
-	key = SDL_GetKeyFromName(cap);
+	key = SDL_GetKeyFromName(p);
 	if (key != SDLK_UNKNOWN) {
 		*out_key = key;
 		return 0;
@@ -1538,9 +1484,8 @@ int input_load_config(const char *path)
 					hotbar[slot].spell_cmd = (jsc && cJSON_IsNumber(jsc)) ? jsc->valueint : 0;
 					hotbar[slot].spell_target = (jst && cJSON_IsNumber(jst)) ? jst->valueint : 0;
 				}
-			}
-			/* load extra binds (optional, backward-compatible) */
-			if (cJSON_IsObject(jslot)) {
+
+				/* extra binds (optional) */
 				cJSON *jbinds_arr = cJSON_GetObjectItem(jslot, "binds");
 				if (jbinds_arr && cJSON_IsArray(jbinds_arr)) {
 					int bi = 0;

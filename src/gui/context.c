@@ -596,22 +596,27 @@ static int try_targeted_action(int action_slot, size_t csel, size_t isel, size_t
 	return 0;
 }
 
-/* resolve cursor targets from the current frame's pre-computed selections. */
+/* resolve cursor targets from the current mouse position.
+ * does its own near-detection rather than relying on the per-frame
+ * chrsel/itmsel/mapsel, which depend on action_ovr state. */
 static void resolve_cursor_targets(size_t *out_csel, size_t *out_isel, size_t *out_msel)
 {
-	if (mousex >= dotx(DOT_MTL) && mousey >= doty(DOT_MTL) && mousex < dotx(DOT_MBR) && mousey < doty(DOT_MBR)) {
-		*out_csel = chrsel;
-		*out_isel = itmsel;
-		*out_msel = mapsel;
-	} else {
-		*out_csel = *out_isel = *out_msel = MAXMN;
+	*out_csel = *out_isel = *out_msel = MAXMN;
+
+	if (mousex < dotx(DOT_MTL) || mousey < doty(DOT_MTL) || mousex >= dotx(DOT_MBR) || mousey >= doty(DOT_MBR)) {
+		return;
 	}
+
+	*out_csel = get_near_char(mousex, mousey, 3);
+	*out_isel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, 3);
+	*out_msel = get_near_ground(mousex, mousey);
 }
 
-/* execute an action immediately using whatever is under the cursor.
- * For self-cast spells, executes right away. For targeted spells,
- * uses chrsel/itmsel/mapsel from the current frame.
- * Returns 1 if something was executed, 0 if it needs a target (sets lcmd_override). */
+/* try to execute an action immediately at whatever is under the cursor.
+ * Self-cast spells always fire. Targeted spells fire if a valid target
+ * is under the cursor, otherwise nothing happens (no fallback to
+ * targeting mode). Used by Quick cast and Indicator release.
+ * Returns 1 if something was executed, 0 if no valid target. */
 int context_execute_action(int action_slot)
 {
 	if (!(game_options & GO_ACTION)) {
@@ -625,15 +630,7 @@ int context_execute_action(int action_slot)
 	size_t csel, isel, msel;
 	resolve_cursor_targets(&csel, &isel, &msel);
 
-	if (try_targeted_action(action_slot, csel, isel, msel)) {
-		return 1;
-	}
-
-	/* no valid target under cursor — fall back to setting lcmd_override
-	 * so the cursor changes and the next click on a valid target executes */
-	context_activate_action(action_slot);
-	hotbar_targeting = 1;
-	return 0;
+	return try_targeted_action(action_slot, csel, isel, msel);
 }
 
 /* normal cast: self-cast spells execute immediately, targeted spells

@@ -494,13 +494,14 @@ static int resolve_spell_action(int action_slot)
 	int shift = vk_shift || vk_item; /* shift held */
 
 	switch (action_slot) {
-	/* self-only spells — always use the 100+ variant */
+	/* self-only spells and toggles — always use the 100+ variant */
 	case ACTION_FLASH:
 	case ACTION_FREEZE:
 	case ACTION_SHIELD:
 	case ACTION_WARCRY:
 	case ACTION_PULSE:
 	case ACTION_FIRERING:
+	case ACTION_MAP:
 		return 100 + action_slot;
 
 	/* dual-mode spells — shift toggles to alternative */
@@ -550,8 +551,12 @@ static void hotbar_cast_spell(int slot, int resolved, int mode)
 		context_execute_action(resolved);
 		break;
 	case CAST_QUICK_INDICATOR:
-		/* hold key → show targeting indicator → release key → cast */
-		hotbar_flash(slot);
+		/* hold key → show targeting indicator → release key → cast.
+		 * don't flash on press (flash happens on release when the spell fires).
+		 * ignore key repeats if already holding this slot. */
+		if (held_hotbar_slot == slot) {
+			return;
+		}
 		context_activate_action(resolved);
 		held_hotbar_slot = slot;
 		held_action_resolved = resolved;
@@ -591,12 +596,10 @@ void hotbar_activate(int slot)
 	hotbar_activate_with_mode(slot, CAST_NORMAL);
 }
 
-/* called on hotkey release — for Quick Cast w/ Indicator mode */
+/* called on hotkey release — fires held spell for Quick Cast w/ Indicator mode.
+ * only checks held state (not global cast_mode) so per-bind overrides work. */
 void hotbar_hotkey_release(int slot)
 {
-	if (cast_mode != CAST_QUICK_INDICATOR) {
-		return;
-	}
 	if (held_hotbar_slot != slot || held_action_resolved < 0) {
 		return;
 	}

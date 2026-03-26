@@ -41,6 +41,34 @@ To run `bin/moac.exe` outside of the MSYS2 shell, copy the required DLLs into `b
 cp /clang64/bin/{zlib1,libpng16-16,libzip,libbz2-1,liblzma-5,libzstd,dwarfstack,SDL3,SDL3_mixer,libmimalloc,libc++}.dll bin/
 ```
 
+The build requires clang 21 or higher. If pacman installed clang 22, create a symlink so the Makefile can find the runtime directory:
+```bash
+ln -s /clang64/lib/clang/22 /clang64/lib/clang/21
+```
+
+Then build:
+```bash
+make -f build/make/Makefile.windows
+```
+
+#### Runtime DLLs
+
+To run `bin/moac.exe` outside of the MSYS2 shell, copy the following DLLs from `C:/msys64/clang64/bin/` to `bin/`:
+
+```
+zlib1.dll
+libpng16-16.dll
+libzip.dll
+libbz2-1.dll
+liblzma-5.dll
+libzstd.dll
+dwarfstack.dll
+SDL3.dll
+SDL3_mixer.dll
+libmimalloc.dll
+libc++.dll
+```
+
 ### Linux
 
 Install dependencies:

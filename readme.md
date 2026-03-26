@@ -41,20 +41,10 @@ make
 
 #### Runtime DLLs
 
-To run `bin/moac.exe` outside of the MSYS2 shell, copy the following DLLs from `C:/msys64/clang64/bin/` to `bin/`:
+To run `bin/moac.exe` outside of the MSYS2 shell, copy the required DLLs into `bin/`:
 
-```
-zlib1.dll
-libpng16-16.dll
-libzip.dll
-libbz2-1.dll
-liblzma-5.dll
-libzstd.dll
-dwarfstack.dll
-SDL3.dll
-SDL3_mixer.dll
-libmimalloc.dll
-libc++.dll
+```bash
+cp /clang64/bin/{zlib1,libpng16-16,libzip,libbz2-1,liblzma-5,libzstd,dwarfstack,SDL3,SDL3_mixer,libmimalloc,libc++}.dll bin/
 ```
 
 ### Linux

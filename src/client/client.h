@@ -116,6 +116,7 @@ typedef enum {
 #define CL_PING           39
 #define CL_GETQUESTLOG    40
 #define CL_REOPENQUEST    41
+#define CL_WALK_DIR       42
 
 #define PAC_IDLE        0
 #define PAC_MOVE        1
@@ -563,6 +564,7 @@ void cmd_drop(int x, int y);
 void cmd_speed(int mode);
 void cmd_log(char *text);
 void cmd_stop(void);
+void cmd_walk_dir(int dir);
 void cmd_kill(unsigned int cn);
 void cmd_give(unsigned int cn);
 void cmd_some_spell(int spell, int x, int y, unsigned int chr);

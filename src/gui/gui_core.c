@@ -13,6 +13,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -375,6 +376,7 @@ int main_loop(void)
 					cl_ticker();
 				}
 				amod_tick();
+				keyboard_move_tick();
 #ifdef ENABLE_SHAREDMEM
 				sharedmem_update();
 #endif

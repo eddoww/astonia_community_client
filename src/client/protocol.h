@@ -83,6 +83,7 @@ void cmd_drop(int x, int y);
 void cmd_speed(int mode);
 void cmd_teleport(int nr);
 void cmd_stop(void);
+void cmd_walk_dir(int dir);
 void cmd_kill(unsigned int cn);
 void cmd_give(unsigned int cn);
 void cmd_some_spell(int spell, int x, int y, unsigned int chr);

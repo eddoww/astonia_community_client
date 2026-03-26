@@ -22,6 +22,8 @@
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
 
+void load_character_options(void);
+
 struct otext otext[MAXOTEXT];
 
 static size_t sv_map01(unsigned char *buf, int *last, struct map *cmap)
@@ -924,6 +926,7 @@ static void sv_server(unsigned char *buf)
 static void sv_logindone(void)
 {
 	login_done = 1;
+	load_character_options();
 	bzero_client(1);
 }
 
@@ -1704,6 +1707,15 @@ void cmd_stop(void)
 
 	buf[0] = CL_STOP;
 	client_send(buf, 1);
+}
+
+void cmd_walk_dir(int dir)
+{
+	unsigned char buf[16];
+
+	buf[0] = CL_WALK_DIR;
+	buf[1] = (unsigned char)dir;
+	client_send(buf, 2);
 }
 
 void cmd_kill(unsigned int cn)

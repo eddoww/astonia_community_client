@@ -454,7 +454,29 @@ int parse_args(int argc, char *argv[])
 	return 0;
 }
 
+static char active_charname[80];
+
+static const char *get_character_name(void)
+{
+	if (active_charname[0]) {
+		return active_charname;
+	}
+	return NULL;
+}
+
 static void get_config_path(char *buf, size_t bufsize)
+{
+	const char *charname = get_character_name();
+	if (charname && localdata) {
+		snprintf(buf, bufsize, "%skeybinds_%s.json", localdata, charname);
+	} else if (localdata) {
+		snprintf(buf, bufsize, "%skeybinds.json", localdata);
+	} else {
+		snprintf(buf, bufsize, "res/config/keybinds.json");
+	}
+}
+
+static void get_shared_config_path(char *buf, size_t bufsize)
 {
 	if (localdata) {
 		snprintf(buf, bufsize, "%skeybinds.json", localdata);
@@ -483,28 +505,48 @@ void load_options(void)
 {
 	char path[MAX_PATH];
 
-	/* initialize the binding system with version-appropriate defaults */
+	active_charname[0] = '\0';
 	input_init(sv_ver);
 
-	/* try loading JSON config first */
-	get_config_path(path, sizeof(path));
+	get_shared_config_path(path, sizeof(path));
 	if (input_load_config(path) == 0) {
 		return;
 	}
 
-	/* no JSON config — try migrating old binary config */
 	get_legacy_config_path(path, sizeof(path));
 	if (input_migrate_binary_config(path) == 0) {
-		/* save migrated config as JSON immediately */
 		char json_path[MAX_PATH];
-		get_config_path(json_path, sizeof(json_path));
+		get_shared_config_path(json_path, sizeof(json_path));
 		input_save_config(json_path);
 		return;
 	}
 
-	/* no config at all — set up defaults for new players and save */
 	hotbar_setup_defaults();
 	save_options();
+}
+
+void load_character_options(void)
+{
+	int center = (int)(DIST + DIST * MAPDX);
+	unsigned int cn = map[center].cn;
+	if (cn == 0 || cn >= MAXCHARS || player[cn].name[0] == '\0') {
+		return;
+	}
+
+	snprintf(active_charname, sizeof(active_charname), "%s", player[cn].name);
+
+	char path[MAX_PATH];
+	get_config_path(path, sizeof(path));
+
+	char shared[MAX_PATH];
+	get_shared_config_path(shared, sizeof(shared));
+	if (strcmp(path, shared) == 0) {
+		return;
+	}
+
+	if (input_load_config(path) == 0) {
+		addline("Loaded keybinds for %s", active_charname);
+	}
 }
 
 void init_logging(void)

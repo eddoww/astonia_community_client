@@ -240,6 +240,7 @@ DLL_EXPORT int _additional_sprite(unsigned int sprite, int attick);
 extern int (*get_player_sprite)(int nr, int zdir, int action, int step, int duration, int attick);
 DLL_EXPORT int _get_player_sprite(int nr, int zdir, int action, int step, int duration, int attick);
 void save_options(void);
+void load_character_options(void);
 extern unsigned int (*opt_sprite)(unsigned int sprite);
 DLL_EXPORT unsigned int _opt_sprite(unsigned int sprite);
 extern int (*no_lighting_sprite)(unsigned int sprite);

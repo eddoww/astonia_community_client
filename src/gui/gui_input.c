@@ -57,10 +57,18 @@ void gui_sdl_keyproc(SDL_Keycode key)
 		cmd_proc(CMD_BACK);
 		return;
 	case SDLK_LEFT:
-		cmd_proc(CMD_LEFT);
+		if (cmd_is_active()) {
+			cmd_proc(CMD_LEFT);
+			return;
+		}
+		keyboard_move_press(KMOVE_LEFT);
 		return;
 	case SDLK_RIGHT:
-		cmd_proc(CMD_RIGHT);
+		if (cmd_is_active()) {
+			cmd_proc(CMD_RIGHT);
+			return;
+		}
+		keyboard_move_press(KMOVE_RIGHT);
 		return;
 	case SDLK_HOME:
 		cmd_proc(CMD_HOME);
@@ -69,10 +77,18 @@ void gui_sdl_keyproc(SDL_Keycode key)
 		cmd_proc(CMD_END);
 		return;
 	case SDLK_UP:
-		cmd_proc(CMD_UP);
+		if (cmd_is_active()) {
+			cmd_proc(CMD_UP);
+			return;
+		}
+		keyboard_move_press(KMOVE_UP);
 		return;
 	case SDLK_DOWN:
-		cmd_proc(CMD_DOWN);
+		if (cmd_is_active()) {
+			cmd_proc(CMD_DOWN);
+			return;
+		}
+		keyboard_move_press(KMOVE_DOWN);
 		return;
 	case SDLK_TAB:
 		cmd_proc(9);
@@ -110,6 +126,18 @@ void gui_sdl_keyproc(SDL_Keycode key)
 		input_execute(b);
 		sdl_flush_textinput();
 		return;
+	}
+
+	/* Shift+hotbar key → quick-cast: strip Shift and retry.
+	 * Only triggers when Shift is the sole modifier and the underlying
+	 * binding is a hotbar slot — other bindings are not affected. */
+	if ((mods & INPUT_MOD_SHIFT) && !(mods & ~INPUT_MOD_SHIFT)) {
+		b = input_find(key, INPUT_MOD_NONE);
+		if (b && b->category == INPUT_CAT_HOTBAR) {
+			hotbar_activate_with_mode(b->param, CAST_QUICK);
+			sdl_flush_textinput();
+			return;
+		}
 	}
 
 	/* no modifiers held: letter/number keys go to the action bar context system */
@@ -159,6 +187,10 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
+		}
+
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			hotbar_mousedown(butsel - BUT_HOTBAR_BEG);
 		}
 
 		if (butsel != -1 && capbut == -1 && (but[butsel].flags & BUTF_CAPTURE)) {
@@ -218,6 +250,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			}
 		}
 
+		if (hotbar_is_dragging()) {
+			hotbar_cancel_drag();
+			break;
+		}
+
 		/* spellbook panel clicks (pick up spell, or cancel drag) */
 		if (spellbook_click(mousex, mousey)) {
 			break;
@@ -247,7 +284,8 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
-		hotbar_cancel_held(); /* right-click cancels Quick Cast w/ Indicator */
+		hotbar_cancel_held();
+		hotbar_cancel_drag();
 		context_stop();
 		break;
 
@@ -394,5 +432,36 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		}
 		mdown = 1;
 		break;
+
+	case SDL_MOUM_X1DOWN:
+	case SDL_MOUM_X2DOWN: {
+		SDL_Keycode vk = (what == SDL_MOUM_X1DOWN) ? INPUT_MOUSE_X1 : INPUT_MOUSE_X2;
+
+		if (keybind_panel_capturing()) {
+			keybind_panel_accept_key(vk, input_current_modifiers());
+			break;
+		}
+
+		Uint8 mods = input_current_modifiers();
+
+		int hb_slot = hotbar_find_extra_bind(vk, mods);
+		if (hb_slot >= 0) {
+			hotbar_activate_extra(hb_slot, vk, mods);
+			break;
+		}
+
+		InputBinding *b = input_find(vk, mods);
+		if (b) {
+			input_execute(b);
+		}
+		break;
+	}
+
+	case SDL_MOUM_X1UP:
+	case SDL_MOUM_X2UP: {
+		SDL_Keycode vk = (what == SDL_MOUM_X1UP) ? INPUT_MOUSE_X1 : INPUT_MOUSE_X2;
+		input_keyup(vk);
+		break;
+	}
 	}
 }

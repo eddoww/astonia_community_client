@@ -252,6 +252,10 @@ void keybind_panel_display(void)
 		}
 
 		render_text(rx - 42, py + y_primary, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Rebind]");
+
+		if (b && (b->key != b->default_key || b->modifiers != b->default_modifiers)) {
+			render_text(lx + 40, py + y_primary + KB_ROW, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Undo]");
+		}
 	}
 
 	/* ── Primary target override ──────────────────────────────────── */
@@ -424,6 +428,14 @@ int keybind_panel_click(int mx, int my)
 	    in_rect(mx, my, lx + 40, py + y_primary, 100, KB_BTN_H)) {
 		kb_capture = CAP_PRIMARY;
 		kb_capture_new = 0;
+		return 1;
+	}
+
+	/* ── Undo last rebind ──────────────────────────────────────── */
+	if (in_rect(mx, my, lx + 40, py + y_primary + KB_ROW, 40, KB_BTN_H)) {
+		if (input_undo_rebind() == 0) {
+			save_options();
+		}
 		return 1;
 	}
 

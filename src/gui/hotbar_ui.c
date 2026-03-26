@@ -20,6 +20,13 @@
 static int hb_hover_slot = -1;
 static tick_t hb_hover_start;
 
+static int hb_drag_src = -1;
+static tick_t hb_drag_start;
+
+#define HB_DRAG_THRESHOLD 4
+
+static int hb_drag_active(void);
+
 /* ── Hotbar rendering ──────────────────────────────────────────────────── */
 
 void hotbar_display(void)
@@ -53,6 +60,9 @@ void hotbar_display(void)
 		if (i == hsel) {
 			render_sprite(opt_sprite(SPR_ITSEL), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
 		}
+		if (i == hb_drag_src && hb_drag_active()) {
+			render_rect_alpha(x - 18, y - 18, x + 18, y + 18, IRGB(10, 31, 10), 80);
+		}
 
 		/* slot contents */
 		uint32_t sprite = hotbar_slot_sprite(i);
@@ -81,12 +91,10 @@ void hotbar_display(void)
 
 			render_sprite_fx(&fx, x, y);
 
-			/* activation flash — bright overlay that fades out quickly */
 			if (slot && slot->activated_at > 0) {
 				uint32_t elapsed = tick - slot->activated_at;
-				if (elapsed < 3) {
-					/* fade from 200 alpha to 0 over 3 ticks (~125ms) */
-					unsigned char alpha = (unsigned char)(200 - (elapsed * 200 / 3));
+				if (elapsed < HOTBAR_FLASH_TICKS) {
+					unsigned char alpha = (unsigned char)(200 - (elapsed * 200 / HOTBAR_FLASH_TICKS));
 					render_rect_alpha(x - 16, y - 16, x + 16, y + 16, IRGB(31, 31, 31), alpha);
 				}
 			}
@@ -170,6 +178,19 @@ void hotbar_display(void)
 		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = RENDERFX_NORMAL_LIGHT;
 		render_sprite_fx(&fx, rx, ry);
 	}
+
+	if (hb_drag_active()) {
+		uint32_t sprite = hotbar_slot_sprite(hb_drag_src);
+		if (sprite) {
+			bzero(&fx, sizeof(fx));
+			fx.sprite = sprite;
+			fx.scale = 80;
+			fx.light = RENDERFX_BRIGHT;
+			fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = fx.light;
+			fx.align = RENDER_ALIGN_CENTER;
+			render_sprite_fx(&fx, mousex, mousey);
+		}
+	}
 }
 
 /* ── Hotbar click handling ─────────────────────────────────────────────── */
@@ -180,7 +201,16 @@ int hotbar_click(int slot)
 		return 0;
 	}
 
-	/* dropping a spell from the spellbook onto this hotbar slot */
+	if (hb_drag_active()) {
+		if (hb_drag_src != slot) {
+			hotbar_swap(hb_drag_src, slot);
+			save_options();
+		}
+		hb_drag_src = -1;
+		return 1;
+	}
+	hb_drag_src = -1;
+
 	if (spellbook_is_dragging()) {
 		int action_slot = spellbook_dragging_slot();
 		if (action_slot >= 0) {
@@ -201,7 +231,7 @@ int hotbar_click(int slot)
 		if (csprite_origin >= 30 && csprite_origin < _inventorysize && !item[csprite_origin]) {
 			dest = csprite_origin;
 		} else {
-			for (int i = 30; i < _inventorysize; i++) {
+			for (int i = INVENTORY_EQUIP_SLOTS; i < _inventorysize; i++) {
 				if (!item[i]) {
 					dest = i;
 					break;
@@ -224,7 +254,35 @@ int hotbar_click(int slot)
 	return 0;
 }
 
-/* spellbook toggle button hit test — called from gui_input on left-click */
+int hotbar_mousedown(int slot)
+{
+	if (slot < 0 || slot >= hotbar_visible_slots() * hotbar_rows()) {
+		return 0;
+	}
+	const HotbarSlot *hs = hotbar_get(slot);
+	if (hs && hs->type != HOTBAR_EMPTY) {
+		hb_drag_src = slot;
+		hb_drag_start = tick;
+		return 1;
+	}
+	return 0;
+}
+
+static int hb_drag_active(void)
+{
+	return hb_drag_src >= 0 && (tick - hb_drag_start) >= HB_DRAG_THRESHOLD;
+}
+
+void hotbar_cancel_drag(void)
+{
+	hb_drag_src = -1;
+}
+
+int hotbar_is_dragging(void)
+{
+	return hb_drag_active();
+}
+
 int hotbar_toggle_hit(int mx, int my)
 {
 	int cols = hotbar_visible_slots();

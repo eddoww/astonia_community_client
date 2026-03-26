@@ -701,6 +701,12 @@ void sdl_loop(void)
 			if (event.button.button == SDL_BUTTON_RIGHT) {
 				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_RDOWN);
 			}
+			if (event.button.button == SDL_BUTTON_X1) {
+				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_X1DOWN);
+			}
+			if (event.button.button == SDL_BUTTON_X2) {
+				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_X2DOWN);
+			}
 			break;
 		case SDL_EVENT_MOUSE_BUTTON_UP:
 			if (event.button.button == SDL_BUTTON_LEFT) {
@@ -711,6 +717,12 @@ void sdl_loop(void)
 			}
 			if (event.button.button == SDL_BUTTON_RIGHT) {
 				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_RUP);
+			}
+			if (event.button.button == SDL_BUTTON_X1) {
+				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_X1UP);
+			}
+			if (event.button.button == SDL_BUTTON_X2) {
+				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_X2UP);
 			}
 			break;
 		case SDL_EVENT_MOUSE_WHEEL:

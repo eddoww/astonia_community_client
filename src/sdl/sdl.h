@@ -27,14 +27,18 @@
 #define SDL_KEYM_CTRL  2
 #define SDL_KEYM_ALT   4
 
-#define SDL_MOUM_NONE  0
-#define SDL_MOUM_LUP   1
-#define SDL_MOUM_LDOWN 2
-#define SDL_MOUM_RUP   3
-#define SDL_MOUM_RDOWN 4
-#define SDL_MOUM_MUP   5
-#define SDL_MOUM_MDOWN 6
-#define SDL_MOUM_WHEEL 7
+#define SDL_MOUM_NONE   0
+#define SDL_MOUM_LUP    1
+#define SDL_MOUM_LDOWN  2
+#define SDL_MOUM_RUP    3
+#define SDL_MOUM_RDOWN  4
+#define SDL_MOUM_MUP    5
+#define SDL_MOUM_MDOWN  6
+#define SDL_MOUM_WHEEL  7
+#define SDL_MOUM_X1DOWN 8
+#define SDL_MOUM_X1UP   9
+#define SDL_MOUM_X2DOWN 10
+#define SDL_MOUM_X2UP   11
 
 struct renderfont;
 typedef struct renderfont RenderFont;

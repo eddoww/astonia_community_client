@@ -182,6 +182,150 @@ static void on_chat_pagedown(InputBinding *self)
 
 /* movement */
 
+/* ── Keyboard movement (CL_WALK_DIR) ──────────────────────────────────
+ *
+ * Uses the server's CL_WALK_DIR command: "walk continuously in this
+ * direction until told to stop."  The server handles each step with
+ * do_walk() — no A* pathfinding, no idle gaps between steps.
+ *
+ * The client only sends a packet when the direction changes or
+ * movement starts/stops.  All held keys are sampled each game tick
+ * to prevent wrong-direction sends when two keys are pressed in
+ * quick succession (e.g. W then D for NE).
+ *
+ * Direction mapping (DX_ values match server direction.h 1-8):
+ *   W   → DX_LEFTUP(6)     screen N     W+D → DX_UP(7)       screen NE
+ *   S   → DX_RIGHTDOWN(2)  screen S     W+A → DX_LEFT(5)     screen NW
+ *   A   → DX_LEFTDOWN(4)   screen W     S+D → DX_RIGHT(1)    screen SE
+ *   D   → DX_RIGHTUP(8)    screen E     S+A → DX_DOWN(3)     screen SW
+ */
+
+static int kmove_held[4]; /* KMOVE_UP / DOWN / LEFT / RIGHT */
+static int kmove_active;
+static int kmove_last_dir; /* last direction sent to server (1-8, or 0) */
+
+/* convert world delta to server direction (DX_ constants 1-8) */
+static int kmove_delta_to_dir(int dx, int dy)
+{
+	if (dx == 1 && dy == 0) {
+		return 1; /* DX_RIGHT */
+	}
+	if (dx == 1 && dy == 1) {
+		return 2; /* DX_RIGHTDOWN */
+	}
+	if (dx == 0 && dy == 1) {
+		return 3; /* DX_DOWN */
+	}
+	if (dx == -1 && dy == 1) {
+		return 4; /* DX_LEFTDOWN */
+	}
+	if (dx == -1 && dy == 0) {
+		return 5; /* DX_LEFT */
+	}
+	if (dx == -1 && dy == -1) {
+		return 6; /* DX_LEFTUP */
+	}
+	if (dx == 0 && dy == -1) {
+		return 7; /* DX_UP */
+	}
+	if (dx == 1 && dy == -1) {
+		return 8; /* DX_RIGHTUP */
+	}
+	return 0;
+}
+
+static void kmove_compute_delta(int *dx, int *dy)
+{
+	*dx = 0;
+	*dy = 0;
+
+	if (kmove_held[KMOVE_UP]) {
+		*dx -= 1;
+		*dy -= 1;
+	}
+	if (kmove_held[KMOVE_DOWN]) {
+		*dx += 1;
+		*dy += 1;
+	}
+	if (kmove_held[KMOVE_LEFT]) {
+		*dx -= 1;
+		*dy += 1;
+	}
+	if (kmove_held[KMOVE_RIGHT]) {
+		*dx += 1;
+		*dy -= 1;
+	}
+
+	if (*dx > 1) {
+		*dx = 1;
+	}
+	if (*dx < -1) {
+		*dx = -1;
+	}
+	if (*dy > 1) {
+		*dy = 1;
+	}
+	if (*dy < -1) {
+		*dy = -1;
+	}
+}
+
+void keyboard_move_press(int dir)
+{
+	if (dir < 0 || dir > 3) {
+		return;
+	}
+	kmove_held[dir] = 1;
+	kmove_active = 1;
+}
+
+void keyboard_move_release(int dir)
+{
+	if (dir < 0 || dir > 3) {
+		return;
+	}
+	kmove_held[dir] = 0;
+
+	int dx, dy;
+	kmove_compute_delta(&dx, &dy);
+
+	if (!dx && !dy) {
+		if (kmove_active) {
+			cmd_walk_dir(0);
+			kmove_active = 0;
+			kmove_last_dir = 0;
+		}
+	}
+}
+
+void keyboard_move_tick(void)
+{
+	int dx, dy;
+	kmove_compute_delta(&dx, &dy);
+
+	int dir = (dx || dy) ? kmove_delta_to_dir(dx, dy) : 0;
+
+	if (dir != kmove_last_dir) {
+		if (dir) {
+			cmd_walk_dir(dir);
+		} else {
+			cmd_walk_dir(0);
+			kmove_active = 0;
+		}
+		kmove_last_dir = dir;
+	}
+}
+
+int keyboard_move_active(void)
+{
+	return kmove_active;
+}
+
+static void on_move_dir(InputBinding *self)
+{
+	keyboard_move_press(self->param);
+}
+
 static void on_set_speed(InputBinding *self)
 {
 	cmd_speed(self->param);
@@ -347,6 +491,16 @@ void hotbar_clear_all(void)
 	memset(hotbar, 0, sizeof(hotbar));
 }
 
+void hotbar_swap(int a, int b)
+{
+	if (a < 0 || a >= HOTBAR_MAX_SLOTS || b < 0 || b >= HOTBAR_MAX_SLOTS || a == b) {
+		return;
+	}
+	HotbarSlot tmp = hotbar[a];
+	hotbar[a] = hotbar[b];
+	hotbar[b] = tmp;
+}
+
 /* set up default hotbar contents for first-time users (no saved config).
  *
  * Default modifier scheme:
@@ -435,7 +589,7 @@ uint32_t hotbar_slot_sprite(int slot)
 		}
 		return hotbar[slot].item_type; /* show greyed-out icon if out of stock */
 	case HOTBAR_SPELL:
-		return (uint32_t)(800 + hotbar[slot].action_slot); /* spell icon sprites */
+		return (uint32_t)(SPELL_ICON_SPRITE_BASE + hotbar[slot].action_slot);
 	default:
 		return 0;
 	}
@@ -465,7 +619,7 @@ static int find_item_in_inventory(uint32_t item_type)
 	if (item_type == 0) {
 		return 0;
 	}
-	for (int i = 30; i < _inventorysize; i++) {
+	for (int i = INVENTORY_EQUIP_SLOTS; i < _inventorysize; i++) {
 		if (item[i] == item_type && (item_flags[i] & IF_USE)) {
 			return i;
 		}
@@ -475,6 +629,9 @@ static int find_item_in_inventory(uint32_t item_type)
 
 void hotbar_on_item_changed(int inventory_index)
 {
+	if (inventory_index < 0 || inventory_index >= _inventorysize) {
+		return;
+	}
 	for (int s = 0; s < HOTBAR_MAX_SLOTS; s++) {
 		if (hotbar[s].type != HOTBAR_ITEM || hotbar[s].item_type == 0) {
 			continue;
@@ -502,66 +659,44 @@ void hotbar_on_item_changed(int inventory_index)
 	}
 }
 
-/* ── Per-spell capability queries ───────────────────────────────────── */
+/* ── Per-spell capability table ─────────────────────────────────────── */
+
+#define ACTION_COUNT 14
+
+static const struct {
+	int valid_targets;
+	int has_cast_modes;
+} spell_caps[ACTION_COUNT] = {
+    [ACTION_ATTACK] = {HOTBAR_VTGT_CHR, 1},
+    [ACTION_FIREBALL] = {HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP, 1},
+    [ACTION_LBALL] = {HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP, 1},
+    [ACTION_FLASH] = {HOTBAR_VTGT_SELF, 0},
+    [ACTION_FREEZE] = {HOTBAR_VTGT_SELF, 0},
+    [ACTION_SHIELD] = {HOTBAR_VTGT_SELF, 0},
+    [ACTION_BLESS] = {HOTBAR_VTGT_CHR | HOTBAR_VTGT_SELF, 1},
+    [ACTION_HEAL] = {HOTBAR_VTGT_CHR | HOTBAR_VTGT_SELF, 1},
+    [ACTION_WARCRY] = {HOTBAR_VTGT_SELF, 0},
+    [ACTION_PULSE] = {HOTBAR_VTGT_SELF, 0},
+    [ACTION_FIRERING] = {HOTBAR_VTGT_SELF, 0},
+    [ACTION_TAKEGIVE] = {HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP, 1},
+    [ACTION_MAP] = {0, 0},
+    [ACTION_LOOK] = {HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP, 1},
+};
 
 int hotbar_spell_valid_targets(int action_slot)
 {
-	switch (action_slot) {
-	/* self-only — no target choice, always fires on self */
-	case ACTION_FLASH:
-	case ACTION_FREEZE:
-	case ACTION_SHIELD:
-	case ACTION_WARCRY:
-	case ACTION_PULSE:
-	case ACTION_FIRERING:
-		return HOTBAR_VTGT_SELF;
-
-	/* character or self */
-	case ACTION_BLESS:
-	case ACTION_HEAL:
-		return HOTBAR_VTGT_CHR | HOTBAR_VTGT_SELF;
-
-	/* character or map */
-	case ACTION_FIREBALL:
-	case ACTION_LBALL:
-		return HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP;
-
-	/* character only */
-	case ACTION_ATTACK:
-		return HOTBAR_VTGT_CHR;
-
-	/* context-dependent (take/give/use/drop) */
-	case ACTION_TAKEGIVE:
-		return HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP;
-
-	/* look at anything */
-	case ACTION_LOOK:
-		return HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP;
-
-	/* toggle (map) — no targeting */
-	case ACTION_MAP:
-		return 0;
-
-	default:
+	if (action_slot < 0 || action_slot >= ACTION_COUNT) {
 		return 0;
 	}
+	return spell_caps[action_slot].valid_targets;
 }
 
 int hotbar_spell_has_cast_modes(int action_slot)
 {
-	switch (action_slot) {
-	/* self-only spells — always instant, no mode choice */
-	case ACTION_FLASH:
-	case ACTION_FREEZE:
-	case ACTION_SHIELD:
-	case ACTION_WARCRY:
-	case ACTION_PULSE:
-	case ACTION_FIRERING:
-	case ACTION_MAP:
+	if (action_slot < 0 || action_slot >= ACTION_COUNT) {
 		return 0;
-	default:
-		return 1;
 	}
+	return spell_caps[action_slot].has_cast_modes;
 }
 
 /*
@@ -636,7 +771,6 @@ static void hotbar_cast_spell(int slot, int resolved, int mode)
 {
 	switch (mode) {
 	case CAST_QUICK:
-		/* instant: cast at whatever is under cursor right now */
 		hotbar_flash(slot);
 		context_execute_action(resolved);
 		break;
@@ -662,7 +796,7 @@ static void hotbar_cast_spell(int slot, int resolved, int mode)
 
 /* activate a hotbar slot with a given cast mode.
  * clicks pass CAST_NORMAL; hotkey presses pass the global cast_mode. */
-static void hotbar_activate_with_mode(int slot, int mode)
+void hotbar_activate_with_mode(int slot, int mode)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
@@ -678,6 +812,9 @@ static void hotbar_activate_with_mode(int slot, int mode)
 			resolved = resolve_target_override(hotbar[slot].action_slot, hotbar[slot].primary_target);
 		} else {
 			resolved = resolve_spell_action(hotbar[slot].action_slot);
+		}
+		if (mode != CAST_QUICK && (input_current_modifiers() & INPUT_MOD_SHIFT)) {
+			mode = CAST_QUICK;
 		}
 		hotbar_cast_spell(slot, resolved, mode);
 		break;
@@ -883,6 +1020,32 @@ static void on_hotbar_press(InputBinding *self)
 /* called on any key release — checks if it matches a held hotbar binding */
 void input_keyup(SDL_Keycode key)
 {
+	/* release keyboard movement direction if this key is a movement binding */
+	switch (key) {
+	case SDLK_UP:
+		keyboard_move_release(KMOVE_UP);
+		break;
+	case SDLK_DOWN:
+		keyboard_move_release(KMOVE_DOWN);
+		break;
+	case SDLK_LEFT:
+		keyboard_move_release(KMOVE_LEFT);
+		break;
+	case SDLK_RIGHT:
+		keyboard_move_release(KMOVE_RIGHT);
+		break;
+	default:
+		/* check WASD (rebindable) movement bindings */
+		for (int i = 0; i < binding_count; i++) {
+			InputBinding *b = &bindings[i];
+			if (b->on_press == on_move_dir && b->key == key) {
+				keyboard_move_release(b->param);
+				break;
+			}
+		}
+		break;
+	}
+
 	if (held_hotbar_slot < 0) {
 		return;
 	}
@@ -950,6 +1113,23 @@ static void register_all(void)
 		b->param = 2;
 	}
 
+	b = reg("move.up", "Move Up", INPUT_CAT_MOVEMENT, 'w', 0, on_move_dir);
+	if (b) {
+		b->param = KMOVE_UP;
+	}
+	b = reg("move.down", "Move Down", INPUT_CAT_MOVEMENT, 's', 0, on_move_dir);
+	if (b) {
+		b->param = KMOVE_DOWN;
+	}
+	b = reg("move.left", "Move Left", INPUT_CAT_MOVEMENT, 'a', 0, on_move_dir);
+	if (b) {
+		b->param = KMOVE_LEFT;
+	}
+	b = reg("move.right", "Move Right", INPUT_CAT_MOVEMENT, 'd', 0, on_move_dir);
+	if (b) {
+		b->param = KMOVE_RIGHT;
+	}
+
 	reg("move.action_on", "Enable Action Mode", INPUT_CAT_MOVEMENT, '+', 0, on_action_mode_on);
 	reg("move.action_on_alt", "Enable Action Mode (Alt)", INPUT_CAT_MOVEMENT, '=', 0, on_action_mode_on);
 	reg("move.action_off", "Disable Action Mode", INPUT_CAT_MOVEMENT, '-', 0, on_action_mode_off);
@@ -989,9 +1169,36 @@ void input_init(int sv_ver)
 	register_all();
 }
 
+static const char *undo_id;
+static SDL_Keycode undo_key;
+static Uint8 undo_mods;
+static const char *undo_conflict_id;
+static SDL_Keycode undo_conflict_key;
+static Uint8 undo_conflict_mods;
+
 void input_shutdown(void)
 {
 	binding_count = 0;
+	version_mask = INPUT_VALL;
+
+	/* hotbar */
+	memset(hotbar, 0, sizeof(hotbar));
+	visible_slots = HOTBAR_DEFAULT_SLOTS;
+	active_rows = 1;
+	cast_mode = CAST_NORMAL;
+	show_hotkeys = 1;
+	show_names = 0;
+
+	/* Quick Cast w/ Indicator hold state */
+	held_hotbar_slot = -1;
+	held_action_resolved = -1;
+
+	/* keyboard movement */
+	memset(kmove_held, 0, sizeof(kmove_held));
+	kmove_active = 0;
+	kmove_last_dir = 0;
+
+	undo_id = NULL;
 }
 
 /* ── Modifier helper ───────────────────────────────────────────────────── */
@@ -1117,6 +1324,7 @@ InputBinding *input_find_conflict(SDL_Keycode key, Uint8 modifiers, const char *
 
 /* ── Rebinding ─────────────────────────────────────────────────────────── */
 
+
 int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers)
 {
 	InputBinding *b = input_find_by_id(id);
@@ -1127,15 +1335,46 @@ int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers)
 		return -2;
 	}
 
-	/* auto-clear any conflicting binding */
+	undo_id = b->id;
+	undo_key = b->key;
+	undo_mods = b->modifiers;
+	undo_conflict_id = NULL;
+
 	InputBinding *conflict = input_find_conflict(key, modifiers, id);
 	if (conflict && conflict->rebindable) {
+		undo_conflict_id = conflict->id;
+		undo_conflict_key = conflict->key;
+		undo_conflict_mods = conflict->modifiers;
 		conflict->key = SDLK_UNKNOWN;
 		conflict->modifiers = INPUT_MOD_NONE;
 	}
 
 	b->key = key;
 	b->modifiers = modifiers;
+	return 0;
+}
+
+int input_undo_rebind(void)
+{
+	if (!undo_id) {
+		return -1;
+	}
+	InputBinding *b = input_find_by_id(undo_id);
+	if (!b) {
+		return -1;
+	}
+	b->key = undo_key;
+	b->modifiers = undo_mods;
+
+	if (undo_conflict_id) {
+		InputBinding *c = input_find_by_id(undo_conflict_id);
+		if (c) {
+			c->key = undo_conflict_key;
+			c->modifiers = undo_conflict_mods;
+		}
+	}
+
+	undo_id = NULL;
 	return 0;
 }
 
@@ -1222,6 +1461,15 @@ const char *input_key_to_string(SDL_Keycode key, Uint8 modifiers)
 		strcat(key_str_buf, "alt+");
 	}
 
+	if (key == INPUT_MOUSE_X1) {
+		strcat(key_str_buf, "mouse4");
+		return key_str_buf;
+	}
+	if (key == INPUT_MOUSE_X2) {
+		strcat(key_str_buf, "mouse5");
+		return key_str_buf;
+	}
+
 	const char *name = SDL_GetKeyName(key);
 	if (name && name[0]) {
 		size_t off = strlen(key_str_buf);
@@ -1269,8 +1517,15 @@ int input_string_to_key(const char *str, SDL_Keycode *out_key, Uint8 *out_modifi
 		}
 	}
 
-	/* try SDL lookup as-is, then capitalize first letter (e.g. "escape" → "Escape"),
-	 * then all uppercase (e.g. "f1" → "F1"). SDL_GetKeyFromName is case-sensitive. */
+	if (strcmp(p, "mouse4") == 0) {
+		*out_key = INPUT_MOUSE_X1;
+		return 0;
+	}
+	if (strcmp(p, "mouse5") == 0) {
+		*out_key = INPUT_MOUSE_X2;
+		return 0;
+	}
+
 	SDL_Keycode key = SDL_GetKeyFromName(p);
 	if (key != SDLK_UNKNOWN) {
 		*out_key = key;
@@ -1319,6 +1574,7 @@ int input_load_config(const char *path)
 	long size = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
 	if (size <= 0 || size > 1024 * 1024) {
+		addline("keybinds: %s has invalid size %ld, ignoring", path, size);
 		fclose(fp);
 		return -1;
 	}
@@ -1335,6 +1591,10 @@ int input_load_config(const char *path)
 	cJSON *root = cJSON_Parse(data);
 	xfree(data);
 	if (!root) {
+		addline("keybinds: failed to parse %s (corrupt JSON), backing up", path);
+		char bak[512];
+		snprintf(bak, sizeof(bak), "%s.corrupt", path);
+		rename(path, bak);
 		return -1;
 	}
 
@@ -1416,8 +1676,14 @@ int input_load_config(const char *path)
 					hotbar[slot].inv_index = find_item_in_inventory(itype);
 				} else if (strcmp(tstr, "spell") == 0) {
 					cJSON *jsp = cJSON_GetObjectItem(jslot, "spell");
+					int asp = (jsp && cJSON_IsNumber(jsp)) ? jsp->valueint : -1;
+					if (asp < 0 || asp >= ACTION_COUNT) {
+						addline("keybinds: hotbar slot %d has invalid spell %d, skipping", slot, asp);
+						slot++;
+						continue;
+					}
 					hotbar[slot].type = HOTBAR_SPELL;
-					hotbar[slot].action_slot = (jsp && cJSON_IsNumber(jsp)) ? jsp->valueint : 0;
+					hotbar[slot].action_slot = asp;
 
 					cJSON *jpt = cJSON_GetObjectItem(jslot, "target");
 					if (jpt && cJSON_IsString(jpt)) {

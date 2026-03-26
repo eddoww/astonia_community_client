@@ -21,6 +21,10 @@
 #define INPUT_MOD_CTRL  (1 << 1)
 #define INPUT_MOD_ALT   (1 << 2)
 
+/* Virtual keycodes for mouse buttons (outside SDL keycode range) */
+#define INPUT_MOUSE_X1 0x40000100
+#define INPUT_MOUSE_X2 0x40000101
+
 /* Categories — used to group bindings in the UI */
 typedef enum {
 	INPUT_CAT_SYSTEM, /* ESC, quit — not rebindable              */
@@ -89,6 +93,7 @@ DLL_EXPORT int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers);
 int input_unbind(const char *id);
 void input_reset_one(const char *id);
 void input_reset_all(void);
+int input_undo_rebind(void);
 
 /* conflict detection — returns conflicting binding, or NULL */
 InputBinding *input_find_conflict(SDL_Keycode key, Uint8 modifiers, const char *exclude_id);
@@ -128,6 +133,10 @@ int input_action_slot_available(int slot);
 #define HOTBAR_MAX_ROWS      3
 #define HOTBAR_MAX_SLOTS     (HOTBAR_SLOTS_PER_ROW * HOTBAR_MAX_ROWS) /* 45 */
 #define HOTBAR_DEFAULT_SLOTS HOTBAR_SLOTS_PER_ROW /* visible per row */
+
+#define INVENTORY_EQUIP_SLOTS  30
+#define SPELL_ICON_SPRITE_BASE 800
+#define HOTBAR_FLASH_TICKS     3
 
 /* what kind of thing is in a hotbar slot */
 typedef enum {
@@ -187,7 +196,6 @@ typedef struct {
 	HotbarBind extra_binds[HOTBAR_MAX_BINDS];
 	int extra_bind_count;
 
-	/* activation flash timestamp (for visual feedback) */
 	uint32_t activated_at;
 } HotbarSlot;
 
@@ -230,6 +238,7 @@ void hotbar_assign_item_by_type(int slot, uint32_t item_type);
 void hotbar_assign_spell(int slot, int action_slot);
 void hotbar_clear(int slot);
 void hotbar_clear_all(void);
+void hotbar_swap(int a, int b);
 void hotbar_setup_defaults(void);
 const HotbarSlot *hotbar_get(int slot);
 
@@ -256,6 +265,7 @@ const char *hotbar_slot_name(int slot);
 
 /* activate a hotbar slot (use item or cast spell) — used by both click and hotkey */
 void hotbar_activate(int slot);
+void hotbar_activate_with_mode(int slot, int mode);
 
 /* call from sv_setitem when an inventory slot changes */
 void hotbar_on_item_changed(int inventory_index);
@@ -264,11 +274,26 @@ void hotbar_on_item_changed(int inventory_index);
 void hotbar_init_dots(void);
 void hotbar_display(void);
 int hotbar_click(int slot);
+int hotbar_mousedown(int slot);
+void hotbar_cancel_drag(void);
+int hotbar_is_dragging(void);
 
 /* config persistence */
 int input_load_config(const char *path);
 int input_save_config(const char *path);
 int input_migrate_binary_config(const char *path);
+
+/* ── Keyboard movement ─────────────────────────────────────────────────── */
+
+#define KMOVE_UP    0
+#define KMOVE_DOWN  1
+#define KMOVE_LEFT  2
+#define KMOVE_RIGHT 3
+
+void keyboard_move_press(int dir);
+void keyboard_move_release(int dir);
+void keyboard_move_tick(void);
+int keyboard_move_active(void);
 
 /* utilities */
 Uint8 input_current_modifiers(void);

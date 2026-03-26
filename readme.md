@@ -48,7 +48,7 @@ ln -s /clang64/lib/clang/22 /clang64/lib/clang/21
 
 Then build:
 ```bash
-make -f build/make/Makefile.windows
+make
 ```
 
 #### Runtime DLLs

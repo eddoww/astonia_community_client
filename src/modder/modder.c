@@ -36,6 +36,7 @@ struct mod {
 	int (*_amod_keyup)(SDL_Keycode);
 	void (*_amod_update_hover_texts)(void);
 	int (*_amod_client_cmd)(const char *buf);
+	int (*_amod_hotbar_activate)(int slot, int mode);
 	char *(*_amod_version)(void);
 	int loaded;
 };
@@ -55,6 +56,7 @@ struct mod mod[MAXMOD] = {{
     NULL, // _amod_keyup
     NULL, // _amod_update_hover_texts
     NULL, // _amod_client_cmd
+    NULL, // _amod_hotbar_activate
     NULL, // _amod_version
     0 // loaded
 }};
@@ -131,6 +133,9 @@ int amod_init(void)
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_client_cmd"))) {
 			mod[i]._amod_client_cmd = (int (*)(const char *))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_hotbar_activate"))) {
+			mod[i]._amod_hotbar_activate = (int (*)(int, int))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_version"))) {
 			mod[i]._amod_version = (char *(*)(void))tmp;
@@ -387,6 +392,21 @@ int amod_client_cmd(const char *buf)
 	int ret = 0, tmp;
 	for (int i = 0; i < MAXMOD; i++) {
 		if (mod[i]._amod_client_cmd && (tmp = mod[i]._amod_client_cmd(buf))) {
+			if (tmp > 0) {
+				return 1;
+			} else {
+				ret = 1;
+			}
+		}
+	}
+	return ret;
+}
+
+int amod_hotbar_activate(int slot, int mode)
+{
+	int ret = 0, tmp;
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_hotbar_activate && (tmp = mod[i]._amod_hotbar_activate(slot, mode))) {
 			if (tmp > 0) {
 				return 1;
 			} else {

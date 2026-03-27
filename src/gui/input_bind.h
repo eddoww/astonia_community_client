@@ -85,15 +85,17 @@ void input_init(int sv_ver);
 void input_shutdown(void);
 
 /* lookup & dispatch */
-InputBinding *input_find(SDL_Keycode key, Uint8 modifiers);
-void input_execute(InputBinding *b);
+DLL_EXPORT InputBinding *input_find(SDL_Keycode key, Uint8 modifiers);
+DLL_EXPORT void input_execute(InputBinding *b);
 
 /* rebinding */
 DLL_EXPORT int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers);
-int input_unbind(const char *id);
-void input_reset_one(const char *id);
-void input_reset_all(void);
-int input_undo_rebind(void);
+DLL_EXPORT InputBinding *input_register(const char *id, const char *display_name, InputCategory cat, SDL_Keycode key,
+    Uint8 modifiers, void (*on_press)(InputBinding *self));
+DLL_EXPORT int input_unbind(const char *id);
+DLL_EXPORT void input_reset_one(const char *id);
+DLL_EXPORT void input_reset_all(void);
+DLL_EXPORT int input_undo_rebind(void);
 
 /* conflict detection — returns conflicting binding, or NULL */
 InputBinding *input_find_conflict(SDL_Keycode key, Uint8 modifiers, const char *exclude_id);
@@ -101,9 +103,9 @@ InputBinding *input_find_conflict(SDL_Keycode key, Uint8 modifiers, const char *
 /* queries */
 DLL_EXPORT InputBinding *input_find_by_id(const char *id);
 DLL_EXPORT SDL_Keycode input_get_key(const char *id);
-int input_binding_count(void);
-InputBinding *input_binding_at(int index);
-const char *input_category_name(InputCategory cat);
+DLL_EXPORT int input_binding_count(void);
+DLL_EXPORT InputBinding *input_binding_at(int index);
+DLL_EXPORT const char *input_category_name(InputCategory cat);
 
 /* action-bar compatibility */
 SDL_Keycode input_action_slot_key(int slot, int row);
@@ -169,10 +171,8 @@ typedef enum {
 #define HOTBAR_VTGT_SELF (1 << 2)
 
 /* returns bitmask of valid targets for an action slot, 0 = self-only/instant */
-int hotbar_spell_valid_targets(int action_slot);
-
-/* returns 1 if the action slot supports cast mode selection */
-int hotbar_spell_has_cast_modes(int action_slot);
+DLL_EXPORT int hotbar_spell_valid_targets(int action_slot);
+DLL_EXPORT int hotbar_spell_has_cast_modes(int action_slot);
 
 typedef struct {
 	SDL_Keycode key;
@@ -200,12 +200,10 @@ typedef struct {
 } HotbarSlot;
 
 /* how many hotbar slots are visible per row */
-int hotbar_visible_slots(void);
-
-/* how many hotbar rows are active (1-3) */
-int hotbar_rows(void);
-void hotbar_set_rows(int count);
-void hotbar_set_visible_slots(int count);
+DLL_EXPORT int hotbar_visible_slots(void);
+DLL_EXPORT int hotbar_rows(void);
+DLL_EXPORT void hotbar_set_rows(int count);
+DLL_EXPORT void hotbar_set_visible_slots(int count);
 
 /* casting modes for targeted spells (self-cast always fires immediately) */
 enum {
@@ -214,8 +212,8 @@ enum {
 	CAST_QUICK_INDICATOR, /* hold key → cursor changes → release key → casts */
 };
 
-int hotbar_cast_mode(void);
-void hotbar_set_cast_mode(int mode);
+DLL_EXPORT int hotbar_cast_mode(void);
+DLL_EXPORT void hotbar_set_cast_mode(int mode);
 
 /* key release handler for Quick Cast w/ Indicator mode */
 void hotbar_hotkey_release(int slot);
@@ -227,20 +225,20 @@ void hotbar_cancel_held(void);
 void input_keyup(SDL_Keycode key);
 
 /* toggle-able UI elements */
-int hotbar_show_hotkeys(void);
-void hotbar_set_show_hotkeys(int on);
-int hotbar_show_names(void);
-void hotbar_set_show_names(int on);
+DLL_EXPORT int hotbar_show_hotkeys(void);
+DLL_EXPORT void hotbar_set_show_hotkeys(int on);
+DLL_EXPORT int hotbar_show_names(void);
+DLL_EXPORT void hotbar_set_show_names(int on);
 
 /* slot management */
-void hotbar_assign_item(int slot, int inventory_index);
-void hotbar_assign_item_by_type(int slot, uint32_t item_type);
-void hotbar_assign_spell(int slot, int action_slot);
-void hotbar_clear(int slot);
-void hotbar_clear_all(void);
-void hotbar_swap(int a, int b);
+DLL_EXPORT void hotbar_assign_item(int slot, int inventory_index);
+DLL_EXPORT void hotbar_assign_item_by_type(int slot, uint32_t item_type);
+DLL_EXPORT void hotbar_assign_spell(int slot, int action_slot);
+DLL_EXPORT void hotbar_clear(int slot);
+DLL_EXPORT void hotbar_clear_all(void);
+DLL_EXPORT void hotbar_swap(int a, int b);
 void hotbar_setup_defaults(void);
-const HotbarSlot *hotbar_get(int slot);
+DLL_EXPORT const HotbarSlot *hotbar_get(int slot);
 
 /* primary target override */
 void hotbar_set_primary_target(int slot, HotbarTargetOverride tgt);
@@ -258,14 +256,10 @@ int hotbar_set_bind_cast(int slot, int bind_index, HotbarCastOverride cast);
 int hotbar_set_bind_target(int slot, int bind_index, HotbarTargetOverride target);
 
 /* returns the sprite to display in a hotbar slot (item sprite or spell icon) */
-uint32_t hotbar_slot_sprite(int slot);
-
-/* returns the display name for a hotbar slot (spell name or cached item name) */
-const char *hotbar_slot_name(int slot);
-
-/* activate a hotbar slot (use item or cast spell) — used by both click and hotkey */
-void hotbar_activate(int slot);
-void hotbar_activate_with_mode(int slot, int mode);
+DLL_EXPORT uint32_t hotbar_slot_sprite(int slot);
+DLL_EXPORT const char *hotbar_slot_name(int slot);
+DLL_EXPORT void hotbar_activate(int slot);
+DLL_EXPORT void hotbar_activate_with_mode(int slot, int mode);
 
 /* call from sv_setitem when an inventory slot changes */
 void hotbar_on_item_changed(int inventory_index);
@@ -293,11 +287,11 @@ int input_migrate_binary_config(const char *path);
 void keyboard_move_press(int dir);
 void keyboard_move_release(int dir);
 void keyboard_move_tick(void);
-int keyboard_move_active(void);
+DLL_EXPORT int keyboard_move_active(void);
 
 /* utilities */
-Uint8 input_current_modifiers(void);
-const char *input_key_to_string(SDL_Keycode key, Uint8 modifiers);
-int input_string_to_key(const char *str, SDL_Keycode *out_key, Uint8 *out_modifiers);
+DLL_EXPORT Uint8 input_current_modifiers(void);
+DLL_EXPORT const char *input_key_to_string(SDL_Keycode key, Uint8 modifiers);
+DLL_EXPORT int input_string_to_key(const char *str, SDL_Keycode *out_key, Uint8 *out_modifiers);
 
 #endif /* INPUT_BIND_H */

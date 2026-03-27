@@ -16,6 +16,9 @@
 #include "gui/input_bind.h"
 #include "gui/spellbook_ui.h"
 #include "gui/keybind_ui.h"
+#include "gui/keybind_settings_ui.h"
+#include "gui/escape_menu_ui.h"
+#include "gui/options_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -23,6 +26,20 @@
 
 void gui_sdl_keyproc(SDL_Keycode key)
 {
+	if (keybind_settings_capturing()) {
+		if (key == SDLK_ESCAPE) {
+			keybind_settings_cancel_capture();
+			return;
+		}
+		if (key == SDLK_LSHIFT || key == SDLK_RSHIFT || key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LALT ||
+		    key == SDLK_RALT) {
+			return;
+		}
+		keybind_settings_accept_key(key, input_current_modifiers());
+		sdl_flush_textinput();
+		return;
+	}
+
 	/* keybind panel key capture — intercept before anything else.
 	 * ignore modifier-only keys so Shift+E doesn't bind to "Shift". */
 	if (keybind_panel_capturing()) {
@@ -104,6 +121,17 @@ void gui_sdl_keyproc(SDL_Keycode key)
 
 	/* if chat is active, all keys go to chat - no hotkeys fire */
 	if (cmd_is_active()) {
+		return;
+	}
+
+	if (key == SDLK_ESCAPE) {
+		if (keybind_settings_is_open()) {
+			keybind_settings_close();
+		} else if (options_is_open()) {
+			options_close();
+		} else {
+			escape_menu_toggle();
+		}
 		return;
 	}
 
@@ -230,6 +258,30 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		if (options_is_open()) {
+			if (options_click(mousex, mousey)) {
+				break;
+			}
+			options_close();
+			break;
+		}
+
+		if (escape_menu_is_open()) {
+			if (escape_menu_click(mousex, mousey)) {
+				break;
+			}
+			escape_menu_close();
+			break;
+		}
+
+		if (keybind_settings_is_open()) {
+			if (keybind_settings_click(mousex, mousey)) {
+				break;
+			}
+			keybind_settings_close();
+			break;
+		}
+
 		/* keybind panel — consume clicks inside, close on click outside */
 		if (keybind_panel_is_open()) {
 			if (keybind_panel_click(mousex, mousey)) {
@@ -320,6 +372,16 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 	case SDL_MOUM_WHEEL:
 		delta = local_y;
+
+		if (keybind_settings_is_open()) {
+			keybind_settings_scroll(delta > 0 ? -1 : 1);
+			break;
+		}
+
+		if (options_is_open()) {
+			options_scroll(delta > 0 ? -1 : 1);
+			break;
+		}
 
 		if (amod_mouse_click(0, delta, what)) {
 			break;

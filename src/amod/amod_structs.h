@@ -506,3 +506,98 @@ struct shrine_ppd {
 	unsigned int used[MAXSHRINE / 32];
 	unsigned char continuity;
 };
+
+#define INPUT_MOD_NONE  0
+#define INPUT_MOD_SHIFT (1 << 0)
+#define INPUT_MOD_CTRL  (1 << 1)
+#define INPUT_MOD_ALT   (1 << 2)
+
+#define INPUT_MOUSE_X1 0x40000100
+#define INPUT_MOUSE_X2 0x40000101
+
+#define INPUT_MAX_BINDINGS 128
+
+typedef enum {
+	INPUT_CAT_SYSTEM,
+	INPUT_CAT_UI,
+	INPUT_CAT_COMBAT,
+	INPUT_CAT_SPELLS,
+	INPUT_CAT_MOVEMENT,
+	INPUT_CAT_HOTBAR,
+	INPUT_CAT_COUNT
+} InputCategory;
+
+#define INPUT_V3   (1 << 0)
+#define INPUT_V35  (1 << 1)
+#define INPUT_VALL (INPUT_V3 | INPUT_V35)
+
+typedef struct InputBinding {
+	const char *id;
+	const char *display_name;
+	InputCategory category;
+	uint32_t key;
+	uint8_t modifiers;
+	uint32_t default_key;
+	uint8_t default_modifiers;
+	void (*on_press)(struct InputBinding *self);
+	int param;
+	int action_slot;
+	int required_skill;
+	int version_mask;
+	uint64_t last_used;
+	int rebindable;
+} InputBinding;
+
+#define HOTBAR_SLOTS_PER_ROW 15
+#define HOTBAR_MAX_ROWS      3
+#define HOTBAR_MAX_SLOTS     (HOTBAR_SLOTS_PER_ROW * HOTBAR_MAX_ROWS)
+#define HOTBAR_DEFAULT_SLOTS HOTBAR_SLOTS_PER_ROW
+#define HOTBAR_MAX_BINDS     4
+
+typedef enum {
+	HOTBAR_EMPTY,
+	HOTBAR_ITEM,
+	HOTBAR_SPELL,
+} HotbarSlotType;
+
+typedef enum {
+	HOTBAR_CAST_DEFAULT,
+	HOTBAR_CAST_NORMAL,
+	HOTBAR_CAST_QUICK,
+	HOTBAR_CAST_INDICATOR,
+} HotbarCastOverride;
+
+typedef enum {
+	HOTBAR_TGT_DEFAULT,
+	HOTBAR_TGT_MAP,
+	HOTBAR_TGT_CHR,
+	HOTBAR_TGT_SELF,
+} HotbarTargetOverride;
+
+#define HOTBAR_VTGT_CHR  (1 << 0)
+#define HOTBAR_VTGT_MAP  (1 << 1)
+#define HOTBAR_VTGT_SELF (1 << 2)
+
+enum {
+	CAST_NORMAL,
+	CAST_QUICK,
+	CAST_QUICK_INDICATOR,
+};
+
+typedef struct {
+	uint32_t key;
+	uint8_t modifiers;
+	HotbarCastOverride cast_override;
+	HotbarTargetOverride target_override;
+} HotbarBind;
+
+typedef struct {
+	HotbarSlotType type;
+	int inv_index;
+	uint32_t item_type;
+	int action_slot;
+	HotbarTargetOverride primary_target;
+	HotbarBind extra_binds[HOTBAR_MAX_BINDS];
+	int extra_bind_count;
+	uint32_t activated_at;
+} HotbarSlot;

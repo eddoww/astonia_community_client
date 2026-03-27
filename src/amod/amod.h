@@ -39,6 +39,7 @@ DLL_EXPORT int amod_mouse_click(int x, int y, int what);
 DLL_EXPORT int amod_keydown(SDL_Keycode key);
 DLL_EXPORT int amod_keyup(SDL_Keycode key);
 DLL_EXPORT int amod_client_cmd(const char *buf);
+DLL_EXPORT int amod_hotbar_activate(int slot, int mode);
 
 // Main mod only:
 DLL_EXPORT int amod_process(const unsigned char *buf);
@@ -190,10 +191,54 @@ DLL_IMPORT int sound_is_playing(int channel);
 DLL_IMPORT int sound_is_enabled(void);
 
 // --- Sprite Config ---
-// Load custom sprite configurations in amod_sprite_config()
 DLL_IMPORT int sprite_config_load_characters(const char *path);
 DLL_IMPORT int sprite_config_load_animated(const char *path);
 DLL_IMPORT int sprite_config_load_metadata(const char *path);
+
+// --- Input Binding System ---
+DLL_IMPORT InputBinding *input_find(uint32_t key, uint8_t modifiers);
+DLL_IMPORT InputBinding *input_find_by_id(const char *id);
+DLL_IMPORT void input_execute(InputBinding *b);
+DLL_IMPORT uint32_t input_get_key(const char *id);
+DLL_IMPORT InputBinding *input_register(const char *id, const char *display_name, InputCategory cat, uint32_t key,
+    uint8_t modifiers, void (*on_press)(InputBinding *self));
+DLL_IMPORT int input_rebind(const char *id, uint32_t key, uint8_t modifiers);
+DLL_IMPORT int input_unbind(const char *id);
+DLL_IMPORT void input_reset_one(const char *id);
+DLL_IMPORT void input_reset_all(void);
+DLL_IMPORT int input_undo_rebind(void);
+DLL_IMPORT int input_binding_count(void);
+DLL_IMPORT InputBinding *input_binding_at(int index);
+DLL_IMPORT const char *input_category_name(InputCategory cat);
+DLL_IMPORT uint8_t input_current_modifiers(void);
+DLL_IMPORT const char *input_key_to_string(uint32_t key, uint8_t modifiers);
+DLL_IMPORT int input_string_to_key(const char *str, uint32_t *out_key, uint8_t *out_modifiers);
+DLL_IMPORT int keyboard_move_active(void);
+
+// --- Hotbar ---
+DLL_IMPORT const HotbarSlot *hotbar_get(int slot);
+DLL_IMPORT void hotbar_assign_spell(int slot, int action_slot);
+DLL_IMPORT void hotbar_assign_item(int slot, int inventory_index);
+DLL_IMPORT void hotbar_assign_item_by_type(int slot, uint32_t item_type);
+DLL_IMPORT void hotbar_clear(int slot);
+DLL_IMPORT void hotbar_clear_all(void);
+DLL_IMPORT void hotbar_swap(int a, int b);
+DLL_IMPORT void hotbar_activate(int slot);
+DLL_IMPORT void hotbar_activate_with_mode(int slot, int mode);
+DLL_IMPORT int hotbar_visible_slots(void);
+DLL_IMPORT int hotbar_rows(void);
+DLL_IMPORT void hotbar_set_rows(int count);
+DLL_IMPORT void hotbar_set_visible_slots(int count);
+DLL_IMPORT uint32_t hotbar_slot_sprite(int slot);
+DLL_IMPORT const char *hotbar_slot_name(int slot);
+DLL_IMPORT int hotbar_spell_valid_targets(int action_slot);
+DLL_IMPORT int hotbar_spell_has_cast_modes(int action_slot);
+DLL_IMPORT int hotbar_cast_mode(void);
+DLL_IMPORT void hotbar_set_cast_mode(int mode);
+DLL_IMPORT int hotbar_show_hotkeys(void);
+DLL_IMPORT void hotbar_set_show_hotkeys(int on);
+DLL_IMPORT int hotbar_show_names(void);
+DLL_IMPORT void hotbar_set_show_names(int on);
 
 // =====================================================================
 // Client Exported Variables

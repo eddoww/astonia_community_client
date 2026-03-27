@@ -15,6 +15,7 @@
 #include "gui/gui_private.h"
 #include "client/client.h"
 #include "game/game.h"
+#include "modder/modder.h"
 #include "lib/cjson/cJSON.h"
 
 /* ── Registry ──────────────────────────────────────────────────────────── */
@@ -32,7 +33,7 @@ static const char *category_names[INPUT_CAT_COUNT] = {
     [INPUT_CAT_HOTBAR] = "Hotbar",
 };
 
-const char *input_category_name(InputCategory cat)
+DLL_EXPORT const char *input_category_name(InputCategory cat)
 {
 	if (cat >= 0 && cat < INPUT_CAT_COUNT) {
 		return category_names[cat];
@@ -63,6 +64,12 @@ static InputBinding *reg(const char *id, const char *name, InputCategory cat, SD
 	b->rebindable = 1;
 
 	return b;
+}
+
+DLL_EXPORT InputBinding *input_register(const char *id, const char *display_name, InputCategory cat, SDL_Keycode key,
+    Uint8 modifiers, void (*on_press)(InputBinding *self))
+{
+	return reg(id, display_name, cat, key, modifiers, on_press);
 }
 
 /* ── Callback implementations ──────────────────────────────────────────
@@ -316,7 +323,7 @@ void keyboard_move_tick(void)
 	}
 }
 
-int keyboard_move_active(void)
+DLL_EXPORT int keyboard_move_active(void)
 {
 	return kmove_active;
 }
@@ -382,17 +389,17 @@ static int visible_slots = HOTBAR_DEFAULT_SLOTS;
 static int active_rows = 1; /* how many hotbar rows are visible (1-3) */
 static int cast_mode = CAST_NORMAL; /* how targeted spells are cast from hotkeys */
 
-int hotbar_visible_slots(void)
+DLL_EXPORT int hotbar_visible_slots(void)
 {
 	return visible_slots;
 }
 
-int hotbar_rows(void)
+DLL_EXPORT int hotbar_rows(void)
 {
 	return active_rows;
 }
 
-void hotbar_set_rows(int count)
+DLL_EXPORT void hotbar_set_rows(int count)
 {
 	if (count < 1) {
 		count = 1;
@@ -403,7 +410,7 @@ void hotbar_set_rows(int count)
 	active_rows = count;
 }
 
-void hotbar_set_visible_slots(int count)
+DLL_EXPORT void hotbar_set_visible_slots(int count)
 {
 	if (count < 1) {
 		count = 1;
@@ -414,39 +421,39 @@ void hotbar_set_visible_slots(int count)
 	visible_slots = count;
 }
 
-int hotbar_cast_mode(void)
+DLL_EXPORT int hotbar_cast_mode(void)
 {
 	return cast_mode;
 }
 
-void hotbar_set_cast_mode(int mode)
+DLL_EXPORT void hotbar_set_cast_mode(int mode)
 {
 	if (mode >= CAST_NORMAL && mode <= CAST_QUICK_INDICATOR) {
 		cast_mode = mode;
 	}
 }
 
-int hotbar_show_hotkeys(void)
+DLL_EXPORT int hotbar_show_hotkeys(void)
 {
 	return show_hotkeys;
 }
 
-void hotbar_set_show_hotkeys(int on)
+DLL_EXPORT void hotbar_set_show_hotkeys(int on)
 {
 	show_hotkeys = on ? 1 : 0;
 }
 
-int hotbar_show_names(void)
+DLL_EXPORT int hotbar_show_names(void)
 {
 	return show_names;
 }
 
-void hotbar_set_show_names(int on)
+DLL_EXPORT void hotbar_set_show_names(int on)
 {
 	show_names = on ? 1 : 0;
 }
 
-void hotbar_assign_item(int slot, int inventory_index)
+DLL_EXPORT void hotbar_assign_item(int slot, int inventory_index)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
@@ -457,7 +464,7 @@ void hotbar_assign_item(int slot, int inventory_index)
 	hotbar[slot].item_type = (inventory_index > 0) ? item[inventory_index] : 0;
 }
 
-void hotbar_assign_item_by_type(int slot, uint32_t item_type)
+DLL_EXPORT void hotbar_assign_item_by_type(int slot, uint32_t item_type)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
@@ -468,7 +475,7 @@ void hotbar_assign_item_by_type(int slot, uint32_t item_type)
 	hotbar[slot].inv_index = find_item_in_inventory(item_type);
 }
 
-void hotbar_assign_spell(int slot, int action_slot)
+DLL_EXPORT void hotbar_assign_spell(int slot, int action_slot)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
@@ -478,7 +485,7 @@ void hotbar_assign_spell(int slot, int action_slot)
 	hotbar[slot].action_slot = action_slot;
 }
 
-void hotbar_clear(int slot)
+DLL_EXPORT void hotbar_clear(int slot)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return;
@@ -486,12 +493,12 @@ void hotbar_clear(int slot)
 	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
 }
 
-void hotbar_clear_all(void)
+DLL_EXPORT void hotbar_clear_all(void)
 {
 	memset(hotbar, 0, sizeof(hotbar));
 }
 
-void hotbar_swap(int a, int b)
+DLL_EXPORT void hotbar_swap(int a, int b)
 {
 	if (a < 0 || a >= HOTBAR_MAX_SLOTS || b < 0 || b >= HOTBAR_MAX_SLOTS || a == b) {
 		return;
@@ -560,7 +567,7 @@ void hotbar_setup_defaults(void)
 	}
 }
 
-const HotbarSlot *hotbar_get(int slot)
+DLL_EXPORT const HotbarSlot *hotbar_get(int slot)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return NULL;
@@ -576,7 +583,7 @@ void hotbar_set_primary_target(int slot, HotbarTargetOverride tgt)
 	hotbar[slot].primary_target = tgt;
 }
 
-uint32_t hotbar_slot_sprite(int slot)
+DLL_EXPORT uint32_t hotbar_slot_sprite(int slot)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return 0;
@@ -595,7 +602,7 @@ uint32_t hotbar_slot_sprite(int slot)
 	}
 }
 
-const char *hotbar_slot_name(int slot)
+DLL_EXPORT const char *hotbar_slot_name(int slot)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
 		return NULL;
@@ -683,7 +690,7 @@ static const struct {
     [ACTION_LOOK] = {HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP, 1},
 };
 
-int hotbar_spell_valid_targets(int action_slot)
+DLL_EXPORT int hotbar_spell_valid_targets(int action_slot)
 {
 	if (action_slot < 0 || action_slot >= ACTION_COUNT) {
 		return 0;
@@ -691,7 +698,7 @@ int hotbar_spell_valid_targets(int action_slot)
 	return spell_caps[action_slot].valid_targets;
 }
 
-int hotbar_spell_has_cast_modes(int action_slot)
+DLL_EXPORT int hotbar_spell_has_cast_modes(int action_slot)
 {
 	if (action_slot < 0 || action_slot >= ACTION_COUNT) {
 		return 0;
@@ -796,9 +803,13 @@ static void hotbar_cast_spell(int slot, int resolved, int mode)
 
 /* activate a hotbar slot with a given cast mode.
  * clicks pass CAST_NORMAL; hotkey presses pass the global cast_mode. */
-void hotbar_activate_with_mode(int slot, int mode)
+DLL_EXPORT void hotbar_activate_with_mode(int slot, int mode)
 {
 	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS) {
+		return;
+	}
+
+	if (amod_hotbar_activate(slot, mode)) {
 		return;
 	}
 
@@ -825,7 +836,7 @@ void hotbar_activate_with_mode(int slot, int mode)
 }
 
 /* activate a hotbar slot from a mouse click — always uses normal cast */
-void hotbar_activate(int slot)
+DLL_EXPORT void hotbar_activate(int slot)
 {
 	hotbar_activate_with_mode(slot, CAST_NORMAL);
 }
@@ -1203,7 +1214,7 @@ void input_shutdown(void)
 
 /* ── Modifier helper ───────────────────────────────────────────────────── */
 
-Uint8 input_current_modifiers(void)
+DLL_EXPORT Uint8 input_current_modifiers(void)
 {
 	SDL_Keymod km = SDL_GetModState();
 	Uint8 m = INPUT_MOD_NONE;
@@ -1234,7 +1245,7 @@ static SDL_Keycode normalize_numpad(SDL_Keycode key)
 
 /* ── Lookup ────────────────────────────────────────────────────────────── */
 
-InputBinding *input_find(SDL_Keycode key, Uint8 modifiers)
+DLL_EXPORT InputBinding *input_find(SDL_Keycode key, Uint8 modifiers)
 {
 	key = normalize_numpad(key);
 
@@ -1254,7 +1265,7 @@ InputBinding *input_find(SDL_Keycode key, Uint8 modifiers)
 	return NULL;
 }
 
-InputBinding *input_find_by_id(const char *id)
+DLL_EXPORT InputBinding *input_find_by_id(const char *id)
 {
 	if (!id) {
 		return NULL;
@@ -1269,7 +1280,7 @@ InputBinding *input_find_by_id(const char *id)
 
 /* ── Execution ─────────────────────────────────────────────────────────── */
 
-void input_execute(InputBinding *b)
+DLL_EXPORT void input_execute(InputBinding *b)
 {
 	if (b && b->on_press) {
 		b->last_used = now;
@@ -1279,18 +1290,18 @@ void input_execute(InputBinding *b)
 
 /* ── Queries ───────────────────────────────────────────────────────────── */
 
-SDL_Keycode input_get_key(const char *id)
+DLL_EXPORT SDL_Keycode input_get_key(const char *id)
 {
 	InputBinding *b = input_find_by_id(id);
 	return b ? b->key : SDLK_UNKNOWN;
 }
 
-int input_binding_count(void)
+DLL_EXPORT int input_binding_count(void)
 {
 	return binding_count;
 }
 
-InputBinding *input_binding_at(int index)
+DLL_EXPORT InputBinding *input_binding_at(int index)
 {
 	if (index < 0 || index >= binding_count) {
 		return NULL;
@@ -1325,7 +1336,7 @@ InputBinding *input_find_conflict(SDL_Keycode key, Uint8 modifiers, const char *
 /* ── Rebinding ─────────────────────────────────────────────────────────── */
 
 
-int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers)
+DLL_EXPORT int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers)
 {
 	InputBinding *b = input_find_by_id(id);
 	if (!b) {
@@ -1354,7 +1365,7 @@ int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers)
 	return 0;
 }
 
-int input_undo_rebind(void)
+DLL_EXPORT int input_undo_rebind(void)
 {
 	if (!undo_id) {
 		return -1;
@@ -1378,7 +1389,7 @@ int input_undo_rebind(void)
 	return 0;
 }
 
-int input_unbind(const char *id)
+DLL_EXPORT int input_unbind(const char *id)
 {
 	InputBinding *b = input_find_by_id(id);
 	if (!b) {
@@ -1392,7 +1403,7 @@ int input_unbind(const char *id)
 	return 0;
 }
 
-void input_reset_one(const char *id)
+DLL_EXPORT void input_reset_one(const char *id)
 {
 	InputBinding *b = input_find_by_id(id);
 	if (b) {
@@ -1401,7 +1412,7 @@ void input_reset_one(const char *id)
 	}
 }
 
-void input_reset_all(void)
+DLL_EXPORT void input_reset_all(void)
 {
 	for (int i = 0; i < binding_count; i++) {
 		bindings[i].key = bindings[i].default_key;
@@ -1444,7 +1455,7 @@ int input_action_slot_available(int slot)
 
 static char key_str_buf[128];
 
-const char *input_key_to_string(SDL_Keycode key, Uint8 modifiers)
+DLL_EXPORT const char *input_key_to_string(SDL_Keycode key, Uint8 modifiers)
 {
 	if (key == SDLK_UNKNOWN) {
 		return "unbound";
@@ -1484,7 +1495,7 @@ const char *input_key_to_string(SDL_Keycode key, Uint8 modifiers)
 	return key_str_buf;
 }
 
-int input_string_to_key(const char *str, SDL_Keycode *out_key, Uint8 *out_modifiers)
+DLL_EXPORT int input_string_to_key(const char *str, SDL_Keycode *out_key, Uint8 *out_modifiers)
 {
 	if (!str || !out_key || !out_modifiers) {
 		return -1;

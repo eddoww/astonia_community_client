@@ -16,6 +16,9 @@
 #include "gui/input_bind.h"
 #include "gui/spellbook_ui.h"
 #include "gui/keybind_ui.h"
+#include "gui/keybind_settings_ui.h"
+#include "gui/escape_menu_ui.h"
+#include "gui/options_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -208,6 +211,9 @@ void display(void)
 	hotbar_display();
 	spellbook_display();
 	keybind_panel_display();
+	keybind_settings_display();
+	options_display();
+	escape_menu_display();
 	if (con_cnt) {
 		display_container();
 	} else {

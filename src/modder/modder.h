@@ -25,6 +25,7 @@ int amod_client_cmd(const char *buf);
 int amod_process(const unsigned char *buf);
 int amod_prefetch(const unsigned char *buf);
 int amod_is_playersprite(int sprite);
+int amod_hotbar_activate(int slot, int mode);
 
 int sharedmem_init(void);
 void sharedmem_update(void);

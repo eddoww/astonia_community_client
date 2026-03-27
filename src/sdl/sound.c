@@ -499,11 +499,7 @@ static void play_sdl_sound(unsigned int nr, int distance, int angle)
 	// Set 3D position
 	MIX_SetTrack3DPosition(track, &position);
 
-	// Set volume gain
-	// Note: sound_volume is an int (0 to -128) for backwards compatibility with the server protocol.
-	// 0 = maximum volume (gain 1.0), -128 = silence (gain 0.0)
-	// Convert from negative attenuation to positive gain: gain = 1.0 + (sound_volume / 128.0)
-	float gain = 1.0f + ((float)sound_volume / 128.0f);
+	float gain = (float)sound_volume / 128.0f;
 	MIX_SetTrackGain(track, gain);
 
 	// Assign the audio to the track and play it

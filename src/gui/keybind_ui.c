@@ -29,15 +29,15 @@
 #define KB_BTN_H 12 /* clickable button text height */
 
 /* highlight colors */
-#define COL_TITLE   IRGB(31, 31, 20)
-#define COL_LABEL   IRGB(24, 24, 24)
-#define COL_VALUE   IRGB(31, 31, 31)
-#define COL_BUTTON  IRGB(20, 28, 31)
-#define COL_REMOVE  IRGB(31, 16, 16)
-#define COL_CAPTURE IRGB(31, 31, 10)
-#define COL_HEADER  IRGB(20, 20, 20)
-#define COL_WARN    IRGB(31, 10, 10)
-#define COL_CYCLE   IRGB(18, 28, 18)
+#define COL_TITLE   IRGB(28, 26, 22)
+#define COL_LABEL   IRGB(22, 21, 19)
+#define COL_VALUE   IRGB(29, 28, 26)
+#define COL_BUTTON  IRGB(26, 24, 20)
+#define COL_REMOVE  IRGB(28, 14, 12)
+#define COL_CAPTURE IRGB(28, 26, 16)
+#define COL_HEADER  IRGB(16, 15, 14)
+#define COL_WARN    IRGB(28, 12, 10)
+#define COL_CYCLE   IRGB(22, 24, 18)
 
 /* ── State ──────────────────────────────────────────────────────────── */
 

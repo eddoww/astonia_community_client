@@ -60,6 +60,7 @@ pub fn build(b: *std.Build) void {
         "src/gui/keybind_ui.c",
         "src/gui/keybind_settings_ui.c",
         "src/gui/escape_menu_ui.c",
+        "src/gui/options_ui.c",
 
         // CLIENT
         "src/client/client.c",

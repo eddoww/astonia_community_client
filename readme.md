@@ -28,23 +28,6 @@ make build-sdl3 build-sdl3-mixer
 rustup toolchain install stable-x86_64-pc-windows-gnullvm
 rustup default stable-x86_64-pc-windows-gnullvm
 ```
-Then build:
-```bash
-make
-```
-
-#### Runtime DLLs
-
-To run `bin/moac.exe` outside of the MSYS2 shell, copy the required DLLs into `bin/`:
-
-```bash
-cp /clang64/bin/{zlib1,libpng16-16,libzip,libbz2-1,liblzma-5,libzstd,dwarfstack,SDL3,SDL3_mixer,libmimalloc,libc++}.dll bin/
-```
-
-The build requires clang 21 or higher. If pacman installed clang 22, create a symlink so the Makefile can find the runtime directory:
-```bash
-ln -s /clang64/lib/clang/22 /clang64/lib/clang/21
-```
 
 Then build:
 ```bash

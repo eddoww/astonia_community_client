@@ -28,12 +28,6 @@ make build-sdl3 build-sdl3-mixer
 rustup toolchain install stable-x86_64-pc-windows-gnullvm
 rustup default stable-x86_64-pc-windows-gnullvm
 ```
-
-The build requires clang 21 or higher. If pacman installed clang 22, create a symlink so the Makefile can find the runtime directory:
-```bash
-ln -s /clang64/lib/clang/22 /clang64/lib/clang/21
-```
-
 Then build:
 ```bash
 make

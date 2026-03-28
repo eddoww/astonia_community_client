@@ -73,16 +73,16 @@ static int ks_count_rows(void)
 {
 	int count = input_binding_count();
 	int rows = 0;
-	InputCategory last_cat = (InputCategory)-1;
+	int last_cat = -1;
 
 	for (int i = 0; i < count; i++) {
 		InputBinding *b = input_binding_at(i);
 		if (!b || !b->rebindable) {
 			continue;
 		}
-		if (b->category != last_cat) {
+		if ((int)(int)b->category != last_cat) {
 			rows++;
-			last_cat = b->category;
+			last_cat = (int)b->category;
 		}
 		rows++;
 	}
@@ -122,7 +122,7 @@ void keybind_settings_display(void)
 	int content_y = ks_py + KS_TITLE_H + KS_PAD + KS_SEP;
 	int count = input_binding_count();
 	int row = 0;
-	InputCategory last_cat = (InputCategory)-1;
+	int last_cat = -1;
 
 	for (int i = 0; i < count; i++) {
 		InputBinding *b = input_binding_at(i);
@@ -130,7 +130,7 @@ void keybind_settings_display(void)
 			continue;
 		}
 
-		if (b->category != last_cat) {
+		if ((int)b->category != last_cat) {
 			if (row >= ks_scroll && row < ks_scroll + ks_visible_rows) {
 				int ry = content_y + (row - ks_scroll) * KS_ROW;
 				if (row > 0) {
@@ -140,7 +140,7 @@ void keybind_settings_display(void)
 				    lx, ry, COL_HEADER, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, input_category_name(b->category));
 			}
 			row++;
-			last_cat = b->category;
+			last_cat = (int)b->category;
 		}
 
 		if (row >= ks_scroll && row < ks_scroll + ks_visible_rows) {
@@ -262,7 +262,7 @@ int keybind_settings_click(int mx, int my)
 
 	int count = input_binding_count();
 	int row = 0;
-	InputCategory last_cat = (InputCategory)-1;
+	int last_cat = -1;
 
 	for (int i = 0; i < count; i++) {
 		InputBinding *b = input_binding_at(i);
@@ -270,9 +270,9 @@ int keybind_settings_click(int mx, int my)
 			continue;
 		}
 
-		if (b->category != last_cat) {
+		if ((int)b->category != last_cat) {
 			row++;
-			last_cat = b->category;
+			last_cat = (int)b->category;
 		}
 
 		if (row >= ks_scroll && row < ks_scroll + ks_visible_rows) {

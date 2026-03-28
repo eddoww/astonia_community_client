@@ -461,7 +461,7 @@ DLL_EXPORT void hotbar_assign_item(int slot, int inventory_index)
 	memset(&hotbar[slot], 0, sizeof(hotbar[slot]));
 	hotbar[slot].type = HOTBAR_ITEM;
 	hotbar[slot].inv_index = inventory_index;
-	hotbar[slot].item_type = (inventory_index > 0) ? item[inventory_index] : 0;
+	hotbar[slot].item_type = (inventory_index > 0 && inventory_index < _inventorysize) ? item[inventory_index] : 0;
 }
 
 DLL_EXPORT void hotbar_assign_item_by_type(int slot, uint32_t item_type)
@@ -1462,22 +1462,23 @@ DLL_EXPORT const char *input_key_to_string(SDL_Keycode key, Uint8 modifiers)
 	}
 
 	key_str_buf[0] = '\0';
+	size_t pos = 0;
 	if (modifiers & INPUT_MOD_CTRL) {
-		strcat(key_str_buf, "ctrl+");
+		pos += (size_t)snprintf(key_str_buf + pos, sizeof(key_str_buf) - pos, "ctrl+");
 	}
 	if (modifiers & INPUT_MOD_SHIFT) {
-		strcat(key_str_buf, "shift+");
+		pos += (size_t)snprintf(key_str_buf + pos, sizeof(key_str_buf) - pos, "shift+");
 	}
 	if (modifiers & INPUT_MOD_ALT) {
-		strcat(key_str_buf, "alt+");
+		pos += (size_t)snprintf(key_str_buf + pos, sizeof(key_str_buf) - pos, "alt+");
 	}
 
 	if (key == INPUT_MOUSE_X1) {
-		strcat(key_str_buf, "mouse4");
+		snprintf(key_str_buf + pos, sizeof(key_str_buf) - pos, "mouse4");
 		return key_str_buf;
 	}
 	if (key == INPUT_MOUSE_X2) {
-		strcat(key_str_buf, "mouse5");
+		snprintf(key_str_buf + pos, sizeof(key_str_buf) - pos, "mouse5");
 		return key_str_buf;
 	}
 
@@ -1595,9 +1596,13 @@ int input_load_config(const char *path)
 		fclose(fp);
 		return -1;
 	}
-	fread(data, 1, (size_t)size, fp);
-	data[size] = '\0';
+	size_t nread = fread(data, 1, (size_t)size, fp);
 	fclose(fp);
+	if (nread == 0) {
+		xfree(data);
+		return -1;
+	}
+	data[nread] = '\0';
 
 	cJSON *root = cJSON_Parse(data);
 	xfree(data);
@@ -1889,15 +1894,14 @@ int input_migrate_binary_config(const char *path)
 	char old_action_row[2][MAXACTIONSLOT];
 	int old_action_enabled, old_gear_lock;
 
-	size_t ok = 0;
-	ok += fread(&old_user_keys, sizeof(old_user_keys), 1, fp);
-	ok += fread(&old_action_row, sizeof(old_action_row), 1, fp);
-	ok += fread(&old_action_enabled, sizeof(old_action_enabled), 1, fp);
-	ok += fread(&old_gear_lock, sizeof(old_gear_lock), 1, fp);
-	fclose(fp);
-	if (ok != 4) {
+	if (fread(&old_user_keys, sizeof(old_user_keys), 1, fp) != 1 ||
+	    fread(&old_action_row, sizeof(old_action_row), 1, fp) != 1 ||
+	    fread(&old_action_enabled, sizeof(old_action_enabled), 1, fp) != 1 ||
+	    fread(&old_gear_lock, sizeof(old_gear_lock), 1, fp) != 1) {
+		fclose(fp);
 		return -1;
 	}
+	fclose(fp);
 
 	action_enabled = old_action_enabled;
 	gear_lock = old_gear_lock;

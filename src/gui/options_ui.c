@@ -50,7 +50,7 @@ static int in_rect(int mx, int my, int x, int y, int w, int h)
 static void opt_compute_layout(void)
 {
 	int map_top = doty(DOT_MTL) + 10;
-	int map_bot = doty(DOT_MBR) - 10;
+	int map_bot = doty(DOT_HOTBAR) - 10;
 	int map_lx = dotx(DOT_MTL);
 	int map_rx = dotx(DOT_MBR);
 	int avail_h = map_bot - map_top;
@@ -92,7 +92,7 @@ static int opt_tab_total(void)
 {
 	switch (opt_tab) {
 	case 0:
-		return 6;
+		return 5;
 	case 1:
 		return 3;
 	case 2:
@@ -170,11 +170,6 @@ static void opt_display_video(void)
 
 	ry = opt_row_y(2);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, sdl_scale, 1, 4, "UI Scale");
-	}
-
-	ry = opt_row_y(3);
-	if (ry >= 0) {
 		const char *bnames[] = {"Normal", "Bright", "Brighter"};
 		int bv = 0;
 		if ((game_options & GO_LIGHTER) && (game_options & GO_LIGHTER2)) {
@@ -186,12 +181,12 @@ static void opt_display_video(void)
 		render_text(opt_lx + 100, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, bnames[bv]);
 	}
 
-	ry = opt_row_y(4);
+	ry = opt_row_y(3);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, (game_options & GO_LOWLIGHT) != 0, "Simplified Lighting");
 	}
 
-	ry = opt_row_y(5);
+	ry = opt_row_y(4);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, (game_options & GO_LARGE) != 0, "Large Font");
 	}
@@ -335,25 +330,6 @@ static int opt_click_video(int mx, int my)
 
 	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		int tx = opt_lx + OPT_SLIDER_LBL;
-		int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
-		int val = sdl_scale;
-		if (tw > 0) {
-			val = 1 + (mx - tx) * 4 / tw;
-		}
-		if (val < 1) {
-			val = 1;
-		}
-		if (val > 4) {
-			val = 4;
-		}
-		sdl_scale = val;
-		save_options();
-		return 1;
-	}
-
-	ry = opt_row_y(3);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		int bv = 0;
 		if ((game_options & GO_LIGHTER) && (game_options & GO_LIGHTER2)) {
 			bv = 2;
@@ -371,14 +347,14 @@ static int opt_click_video(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(4);
+	ry = opt_row_y(3);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_LOWLIGHT;
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(5);
+	ry = opt_row_y(4);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_LARGE;
 		save_options();

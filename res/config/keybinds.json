@@ -1,12 +1,11 @@
 {
 	"version":	1,
 	"bindings":	{
-		"ui.toggle_minimap":	"m"
 	},
 	"settings":	{
 		"action_enabled":	true,
 		"gear_lock":	false,
-		"cast_mode":	0,
+		"cast_mode":	1,
 		"show_hotkeys":	true,
 		"show_names":	true,
 		"hotbar_rows":	1
@@ -94,7 +93,8 @@
 			"type":	"spell",
 			"spell":	10
 		}, {
-			"type":	"empty"
+			"type":	"spell",
+			"spell":	11
 		}, {
 			"type":	"spell",
 			"spell":	11,

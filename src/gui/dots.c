@@ -262,7 +262,7 @@ void init_dots(void)
 			int col = i % cols;
 			int bx = dot[DOT_HOTBAR].x + col * FDX;
 			int by = dot[DOT_HOTBAR].y + row * (FDX + 2);
-			set_but(BUT_HOTBAR_BEG + i, bx, by, 18, 0);
+			set_but(BUT_HOTBAR_BEG + i, bx, by, FDX / 2, 0);
 		}
 		/* disable hit testing on inactive slots */
 		for (i = total_active; i < HOTBAR_MAX_SLOTS; i++) {

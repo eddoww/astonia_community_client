@@ -118,7 +118,7 @@ void hotbar_display(void)
 				} else {
 					snprintf(label, sizeof(label), "?");
 				}
-				render_text(x - 12, y - 14, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
+				render_text(x - 16, y - 16, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
 			}
 		}
 
@@ -126,7 +126,7 @@ void hotbar_display(void)
 		if (hotbar_show_names()) {
 			const char *name = hotbar_slot_name(i);
 			if (name) {
-				render_text(x, y + 16, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, name);
+				render_text(x, y + 10, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, name);
 			}
 		}
 	}
@@ -147,13 +147,17 @@ void hotbar_display(void)
 			const char *name = get_action_text(hs->action_slot);
 			const char *desc = get_action_desc(hs->action_slot);
 			if (name || desc) {
-				int text_h = 15;
+				int text_h = 0;
+				if (name) {
+					text_h += 15;
+				}
 				if (desc) {
 					text_h += render_text_break_length(0, 0, 120, IRGB(31, 31, 31), 0, desc);
 				}
-				int sy = ty - text_h - 8;
-				render_shaded_rect(tx - 64, sy, tx + 64, ty - 18, 0, 150);
-				int text_y = sy + 4;
+				int pad = 6;
+				int sy = ty - text_h - pad * 2;
+				render_shaded_rect(tx - 64, sy, tx + 64, ty, 0, 150);
+				int text_y = sy + pad;
 				if (name) {
 					render_text(
 					    tx, text_y, IRGB(31, 31, 31), RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, name);

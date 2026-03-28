@@ -40,7 +40,7 @@ static void em_compute_layout(void)
 	em_ph = EM_PAD + 16 + EM_BTN_PAD + (EM_BTN_H + EM_BTN_PAD) * EM_COUNT + EM_PAD;
 
 	int map_top = doty(DOT_MTL);
-	int map_bot = doty(DOT_MBR);
+	int map_bot = doty(DOT_HOTBAR) - 10;
 	int map_lx = dotx(DOT_MTL);
 	int map_rx = dotx(DOT_MBR);
 

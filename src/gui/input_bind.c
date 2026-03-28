@@ -16,6 +16,9 @@
 #include "client/client.h"
 #include "game/game.h"
 #include "modder/modder.h"
+#include "gui/escape_menu_ui.h"
+#include "gui/keybind_settings_ui.h"
+#include "gui/options_ui.h"
 #include "lib/cjson/cJSON.h"
 
 /* ── Registry ──────────────────────────────────────────────────────────── */
@@ -99,6 +102,18 @@ static void on_escape(InputBinding *self)
 		cmd_reset();
 	}
 	context_key_set(0);
+}
+
+static void on_menu(InputBinding *self)
+{
+	(void)self;
+	if (keybind_settings_is_open()) {
+		keybind_settings_close();
+	} else if (options_is_open()) {
+		options_close();
+	} else {
+		escape_menu_toggle();
+	}
 }
 
 static void on_quit(InputBinding *self)
@@ -336,22 +351,6 @@ static void on_move_dir(InputBinding *self)
 static void on_set_speed(InputBinding *self)
 {
 	cmd_speed(self->param);
-}
-
-static void on_action_mode_on(InputBinding *self)
-{
-	(void)self;
-	if (!context_key_isset()) {
-		context_action_enable(1);
-	}
-}
-
-static void on_action_mode_off(InputBinding *self)
-{
-	(void)self;
-	if (!context_key_isset()) {
-		context_action_enable(0);
-	}
 }
 
 /* forward declarations */
@@ -1087,10 +1086,8 @@ static void register_all(void)
 
 	/* ── System (locked) ─────────────────────────────────────────── */
 
-	b = reg("sys.escape", "Cancel", INPUT_CAT_SYSTEM, SDLK_ESCAPE, 0, on_escape);
-	if (b) {
-		b->rebindable = 0;
-	}
+	reg("ui.cancel", "Cancel All", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_escape);
+	reg("ui.menu", "Open Menu", INPUT_CAT_UI, SDLK_ESCAPE, 0, on_menu);
 
 	b = reg("sys.quit", "Quit Game", INPUT_CAT_SYSTEM, SDLK_F12, 0, on_quit);
 	if (b) {
@@ -1140,10 +1137,6 @@ static void register_all(void)
 	if (b) {
 		b->param = KMOVE_RIGHT;
 	}
-
-	reg("move.action_on", "Enable Action Mode", INPUT_CAT_MOVEMENT, '+', 0, on_action_mode_on);
-	reg("move.action_on_alt", "Enable Action Mode (Alt)", INPUT_CAT_MOVEMENT, '=', 0, on_action_mode_on);
-	reg("move.action_off", "Disable Action Mode", INPUT_CAT_MOVEMENT, '-', 0, on_action_mode_off);
 
 	/* ── Hotbar (3 rows × 15 slots) ──────────────────────────────── */
 
@@ -1353,6 +1346,8 @@ DLL_EXPORT int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers)
 
 	InputBinding *conflict = input_find_conflict(key, modifiers, id);
 	if (conflict && conflict->rebindable) {
+		addline("Keybind conflict: '%s' unbound (was %s)", conflict->display_name,
+		    input_key_to_string(conflict->key, conflict->modifiers));
 		undo_conflict_id = conflict->id;
 		undo_conflict_key = conflict->key;
 		undo_conflict_mods = conflict->modifiers;
@@ -1418,6 +1413,145 @@ DLL_EXPORT void input_reset_all(void)
 		bindings[i].key = bindings[i].default_key;
 		bindings[i].modifiers = bindings[i].default_modifiers;
 	}
+}
+
+DLL_EXPORT void input_load_modern_defaults(void)
+{
+	input_reset_all();
+	input_rebind("ui.menu", SDLK_ESCAPE, INPUT_MOD_NONE);
+	input_rebind("ui.cancel", SDLK_UNKNOWN, INPUT_MOD_NONE);
+	hotbar_setup_defaults();
+}
+
+static void hotbar_setup_legacy_defaults(void)
+{
+	static const SDL_Keycode row0_keys[] = {
+	    'a',
+	    's',
+	    'd',
+	    SDLK_UNKNOWN,
+	    SDLK_UNKNOWN,
+	    SDLK_UNKNOWN,
+	    'f',
+	    'g',
+	    SDLK_UNKNOWN,
+	    SDLK_UNKNOWN,
+	    SDLK_UNKNOWN,
+	    'h',
+	    SDLK_UNKNOWN,
+	    'l',
+	};
+	static const SDL_Keycode row1_legacy[] = {
+	    SDLK_UNKNOWN,
+	    SDLK_UNKNOWN,
+	    SDLK_UNKNOWN,
+	    'e',
+	    'r',
+	    't',
+	    'z',
+	    'u',
+	    'i',
+	    'o',
+	    'p',
+	    SDLK_UNKNOWN,
+	    'm',
+	    SDLK_UNKNOWN,
+	};
+	static const HotbarTargetOverride row0_tgt[] = {
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_CHR,
+	    HOTBAR_TGT_CHR,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_CHR,
+	    HOTBAR_TGT_CHR,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	};
+	static const HotbarTargetOverride row1_tgt[] = {
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_SELF,
+	    HOTBAR_TGT_SELF,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	    HOTBAR_TGT_DEFAULT,
+	};
+	int num = 14;
+
+	hotbar_clear_all();
+	for (int i = 0; i < binding_count; i++) {
+		if (bindings[i].category == INPUT_CAT_HOTBAR) {
+			bindings[i].key = SDLK_UNKNOWN;
+			bindings[i].modifiers = INPUT_MOD_NONE;
+		}
+	}
+
+	for (int i = 0; i < num; i++) {
+		hotbar_assign_spell(i, i);
+		hotbar[i].primary_target = row0_tgt[i];
+
+		char id[32];
+		snprintf(id, sizeof(id), "hotbar.%d", i);
+		if (row0_keys[i] != SDLK_UNKNOWN) {
+			input_rebind(id, row0_keys[i], INPUT_MOD_NONE);
+		}
+
+		if (row1_legacy[i] != SDLK_UNKNOWN) {
+			hotbar[i].extra_binds[0].key = (uint32_t)row1_legacy[i];
+			hotbar[i].extra_binds[0].modifiers = INPUT_MOD_NONE;
+			hotbar[i].extra_binds[0].target_override = row1_tgt[i];
+			hotbar[i].extra_binds[0].cast_override = HOTBAR_CAST_DEFAULT;
+			hotbar[i].extra_bind_count = 1;
+		}
+	}
+
+	hotbar[ACTION_FIREBALL].extra_binds[0].key = 'q';
+	hotbar[ACTION_FIREBALL].extra_binds[0].modifiers = INPUT_MOD_ALT;
+	hotbar[ACTION_FIREBALL].extra_binds[0].target_override = HOTBAR_TGT_MAP;
+	hotbar[ACTION_FIREBALL].extra_binds[0].cast_override = HOTBAR_CAST_DEFAULT;
+	hotbar[ACTION_FIREBALL].extra_binds[1].key = 'q';
+	hotbar[ACTION_FIREBALL].extra_binds[1].modifiers = INPUT_MOD_CTRL;
+	hotbar[ACTION_FIREBALL].extra_binds[1].target_override = HOTBAR_TGT_CHR;
+	hotbar[ACTION_FIREBALL].extra_binds[1].cast_override = HOTBAR_CAST_DEFAULT;
+	hotbar[ACTION_FIREBALL].extra_bind_count = 2;
+
+	hotbar[ACTION_LBALL].extra_binds[0].key = 'w';
+	hotbar[ACTION_LBALL].extra_binds[0].modifiers = INPUT_MOD_ALT;
+	hotbar[ACTION_LBALL].extra_binds[0].target_override = HOTBAR_TGT_MAP;
+	hotbar[ACTION_LBALL].extra_binds[0].cast_override = HOTBAR_CAST_DEFAULT;
+	hotbar[ACTION_LBALL].extra_binds[1].key = 'w';
+	hotbar[ACTION_LBALL].extra_binds[1].modifiers = INPUT_MOD_CTRL;
+	hotbar[ACTION_LBALL].extra_binds[1].target_override = HOTBAR_TGT_CHR;
+	hotbar[ACTION_LBALL].extra_binds[1].cast_override = HOTBAR_CAST_DEFAULT;
+	hotbar[ACTION_LBALL].extra_bind_count = 2;
+
+	visible_slots = num < HOTBAR_SLOTS_PER_ROW ? num : HOTBAR_SLOTS_PER_ROW;
+	init_dots();
+}
+
+DLL_EXPORT void input_load_legacy_defaults(void)
+{
+	input_reset_all();
+	input_rebind("ui.cancel", SDLK_ESCAPE, INPUT_MOD_NONE);
+	input_rebind("ui.menu", SDLK_F10, INPUT_MOD_NONE);
+	input_rebind("move.up", SDLK_UNKNOWN, INPUT_MOD_NONE);
+	input_rebind("move.down", SDLK_UNKNOWN, INPUT_MOD_NONE);
+	input_rebind("move.left", SDLK_UNKNOWN, INPUT_MOD_NONE);
+	input_rebind("move.right", SDLK_UNKNOWN, INPUT_MOD_NONE);
+	hotbar_setup_legacy_defaults();
 }
 
 /* ── Action-bar compatibility (stubs — legacy action bar removed) ──── */

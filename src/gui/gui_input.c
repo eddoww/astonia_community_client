@@ -124,17 +124,6 @@ void gui_sdl_keyproc(SDL_Keycode key)
 		return;
 	}
 
-	if (key == SDLK_ESCAPE) {
-		if (keybind_settings_is_open()) {
-			keybind_settings_close();
-		} else if (options_is_open()) {
-			options_close();
-		} else {
-			escape_menu_toggle();
-		}
-		return;
-	}
-
 	/* build modifier mask for binding lookup */
 	Uint8 mods = input_current_modifiers();
 

@@ -47,7 +47,7 @@ static int in_rect(int mx, int my, int x, int y, int w, int h)
 static void ks_compute_layout(void)
 {
 	int map_top = doty(DOT_MTL) + 10;
-	int map_bot = doty(DOT_MBR) - 10;
+	int map_bot = doty(DOT_HOTBAR) - 10;
 	int map_lx = dotx(DOT_MTL);
 	int map_rx = dotx(DOT_MBR);
 	int avail_h = map_bot - map_top;
@@ -163,6 +163,10 @@ void keybind_settings_display(void)
 		}
 		row++;
 	}
+
+	int btn_y = ks_py + ks_ph - KS_PAD - KS_ROW;
+	render_text(lx, btn_y, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Modern]");
+	render_text(lx + 60, btn_y, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Legacy]");
 
 	if (ks_warn[0] && tick - ks_warn_time < (uint32_t)(TICKS * 3)) {
 		render_text(
@@ -292,6 +296,18 @@ int keybind_settings_click(int mx, int my)
 			}
 		}
 		row++;
+	}
+
+	int btn_y = ks_py + ks_ph - KS_PAD - KS_ROW;
+	if (in_rect(mx, my, lx, btn_y, 55, KS_ROW)) {
+		input_load_modern_defaults();
+		save_options();
+		return 1;
+	}
+	if (in_rect(mx, my, lx + 60, btn_y, 55, KS_ROW)) {
+		input_load_legacy_defaults();
+		save_options();
+		return 1;
 	}
 
 	return 1;

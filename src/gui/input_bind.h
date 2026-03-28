@@ -95,6 +95,8 @@ DLL_EXPORT InputBinding *input_register(const char *id, const char *display_name
 DLL_EXPORT int input_unbind(const char *id);
 DLL_EXPORT void input_reset_one(const char *id);
 DLL_EXPORT void input_reset_all(void);
+DLL_EXPORT void input_load_modern_defaults(void);
+DLL_EXPORT void input_load_legacy_defaults(void);
 DLL_EXPORT int input_undo_rebind(void);
 
 /* conflict detection — returns conflicting binding, or NULL */

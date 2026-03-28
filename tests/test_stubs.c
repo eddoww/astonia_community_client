@@ -92,10 +92,9 @@ void gui_sdl_keyproc(SDL_Keycode key __attribute__((unused)))
 	// No-op in tests
 }
 
-void context_keyup(SDL_Keycode key __attribute__((unused)))
-{
-	// No-op in tests
-}
+void context_keyup(SDL_Keycode key __attribute__((unused))) {}
+
+void input_keyup(SDL_Keycode key __attribute__((unused))) {}
 
 void cmd_proc(int key __attribute__((unused)))
 {

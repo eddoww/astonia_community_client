@@ -28,6 +28,18 @@ make build-sdl3 build-sdl3-mixer
 rustup toolchain install stable-x86_64-pc-windows-gnullvm
 rustup default stable-x86_64-pc-windows-gnullvm
 ```
+Then build:
+```bash
+make
+```
+
+#### Runtime DLLs
+
+To run `bin/moac.exe` outside of the MSYS2 shell, copy the required DLLs into `bin/`:
+
+```bash
+cp /clang64/bin/{zlib1,libpng16-16,libzip,libbz2-1,liblzma-5,libzstd,dwarfstack,SDL3,SDL3_mixer,libmimalloc,libc++}.dll bin/
+```
 
 ### Linux
 

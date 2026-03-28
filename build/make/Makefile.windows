@@ -91,6 +91,16 @@ TARGET ?= x86_64-w64-mingw32
 SYSROOT ?= /clang64
 WIN32_WINNT ?= 0x0601
 
+# Detect and validate clang version (require 21+)
+CLANG_MAJOR_VERSION := $(shell $(CC) -dumpversion 2>/dev/null | cut -d. -f1)
+ifeq ($(CLANG_MAJOR_VERSION),)
+    $(error Could not detect $(CC) version. Is clang installed?)
+endif
+CLANG_VERSION_OK := $(shell [ "$(CLANG_MAJOR_VERSION)" -ge 21 ] 2>/dev/null && echo yes)
+ifneq ($(CLANG_VERSION_OK),yes)
+    $(error Clang version $(CLANG_MAJOR_VERSION) is too old. Version 21+ is required.)
+endif
+
 # SDL configuration
 # Get SDL3 flags and convert -I to -isystem to suppress warnings from SDL headers
 SDL_CFLAGS_RAW ?= $(shell pkg-config sdl3 --cflags)
@@ -109,7 +119,7 @@ PLATFORM_FLAGS = -fms-extensions -D_WIN32 -D_WIN32_WINNT=$(WIN32_WINNT)
 
 # Runtime library configuration
 # Note: Resource dir needed for cross-compilation to find headers/builtins during compilation
-RTLIB_FLAGS = -resource-dir=$(SYSROOT)/lib/clang/21
+RTLIB_FLAGS = -resource-dir=$(SYSROOT)/lib/clang/$(CLANG_MAJOR_VERSION)
 
 STRICT_WARNING_FLAGS = \
     -Wall -Wextra -Wpedantic \
@@ -192,7 +202,7 @@ LINKER_FLAGS = --target=$(TARGET) \
                --sysroot=$(SYSROOT) \
                -fuse-ld=lld \
                --rtlib=compiler-rt \
-               -resource-dir=$(SYSROOT)/lib/clang/21
+               -resource-dir=$(SYSROOT)/lib/clang/$(CLANG_MAJOR_VERSION)
 
 # Link-Time Optimization (must match CFLAGS)
 LDFLAGS_LTO = -flto=thin

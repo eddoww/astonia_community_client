@@ -21,6 +21,7 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "sdl/gamepad.h"
 #include "gui/gui.h"
 #include "gui/input_bind.h"
 
@@ -335,9 +336,6 @@ int sdl_init(int width, int height, char *title, int monitor)
 	}
 	note("SDL using %dx%d scale %d, options=%" PRIu64, XRES, YRES, sdl_scale, game_options);
 
-	// Let SDL3 use its default rendering behavior
-	// The game's sdl_scale and render_set_offset() handle all scaling and centering
-
 	sdl_create_cursors();
 
 	sdl_zip1 = zip_open("res/gx1.zip", ZIP_RDONLY, NULL);
@@ -547,6 +545,8 @@ int sdl_init(int width, int height, char *title, int monitor)
 		}
 	}
 
+	gamepad_init();
+
 	return 1;
 }
 
@@ -575,7 +575,8 @@ int sdl_render(void)
 
 void sdl_exit(void)
 {
-	// Signal workers to quit and join them
+	gamepad_shutdown();
+
 	if (sdl_multi && worker_threads) {
 		SDL_SetAtomicInt(&worker_quit, 1);
 
@@ -737,10 +738,26 @@ void sdl_loop(void)
 			}
 #endif
 			break;
+		case SDL_EVENT_GAMEPAD_ADDED:
+			gamepad_on_added(event.gdevice.which);
+			break;
+		case SDL_EVENT_GAMEPAD_REMOVED:
+			gamepad_on_removed(event.gdevice.which);
+			break;
+		case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+			gamepad_button_down((SDL_GamepadButton)event.gbutton.button);
+			break;
+		case SDL_EVENT_GAMEPAD_BUTTON_UP:
+			gamepad_button_up((SDL_GamepadButton)event.gbutton.button);
+			break;
+		case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+			gamepad_axis_motion((SDL_GamepadAxis)event.gaxis.axis, event.gaxis.value);
+			break;
 		default:
 			break;
 		}
 	}
+	gamepad_tick();
 }
 
 void sdl_set_cursor_pos(int x, int y)

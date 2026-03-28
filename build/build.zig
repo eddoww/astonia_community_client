@@ -89,6 +89,7 @@ pub fn build(b: *std.Build) void {
         "src/sdl/sdl_effects.c",
         "src/sdl/sdl_draw.c",
         "src/sdl/sound.c",
+        "src/sdl/gamepad.c",
 
         // HELPERS
         "src/helper/helper.c",

@@ -435,5 +435,5 @@ void cmd_reset(void)
 
 int cmd_is_active(void)
 {
-	return cmdline[0] != '\0';
+	return cmdline[0] != '\0' || context_key_isset();
 }

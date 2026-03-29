@@ -62,7 +62,7 @@ static void ks_compute_layout(void)
 	ks_px = map_lx + (avail_w - ks_pw) / 2;
 	ks_py = map_top;
 
-	int content_h = ks_ph - KS_TITLE_H - KS_PAD * 2 - KS_SEP;
+	int content_h = ks_ph - KS_TITLE_H - KS_PAD * 2 - KS_SEP - KS_ROW - 2;
 	ks_visible_rows = content_h / KS_ROW;
 	if (ks_visible_rows < 1) {
 		ks_visible_rows = 1;
@@ -117,9 +117,13 @@ void keybind_settings_display(void)
 
 	render_text(
 	    cx, ks_py + KS_PAD, COL_TITLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "Keybindings");
-	render_rect_alpha(lx, ks_py + KS_TITLE_H + KS_PAD, rx, ks_py + KS_TITLE_H + KS_PAD + 1, COL_HEADER, 100);
 
-	int content_y = ks_py + KS_TITLE_H + KS_PAD + KS_SEP;
+	int btn_y = ks_py + KS_TITLE_H + KS_PAD;
+	render_text(lx, btn_y, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Modern]");
+	render_text(lx + 60, btn_y, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Legacy]");
+	render_rect_alpha(lx, btn_y + KS_ROW + 2, rx, btn_y + KS_ROW + 3, COL_HEADER, 100);
+
+	int content_y = btn_y + KS_ROW + KS_SEP + 2;
 	int count = input_binding_count();
 	int row = 0;
 	int last_cat = -1;
@@ -163,10 +167,6 @@ void keybind_settings_display(void)
 		}
 		row++;
 	}
-
-	int btn_y = ks_py + ks_ph - KS_PAD - KS_ROW;
-	render_text(lx, btn_y, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Modern]");
-	render_text(lx + 60, btn_y, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Legacy]");
 
 	if (ks_warn[0] && tick - ks_warn_time < (uint32_t)(TICKS * 3)) {
 		render_text(
@@ -298,7 +298,7 @@ int keybind_settings_click(int mx, int my)
 		row++;
 	}
 
-	int btn_y = ks_py + ks_ph - KS_PAD - KS_ROW;
+	int btn_y = ks_py + KS_TITLE_H + KS_PAD;
 	if (in_rect(mx, my, lx, btn_y, 55, KS_ROW)) {
 		input_load_modern_defaults();
 		save_options();

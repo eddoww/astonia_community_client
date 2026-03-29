@@ -21,6 +21,7 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "sdl/gamepad.h"
 #include "gui/gui.h"
 #include "gui/input_bind.h"
 
@@ -52,6 +53,7 @@ DLL_EXPORT int sdl_scale = 1;
 DLL_EXPORT int sdl_frames = 0;
 DLL_EXPORT int sdl_multi = 4;
 DLL_EXPORT int sdl_cache_size = 8000;
+int sdl_vsync = 1;
 DLL_EXPORT int __yres = YRES0;
 
 // Worker thread management
@@ -213,6 +215,7 @@ int sdl_init(int width, int height, char *title, int monitor)
 	}
 
 	SDL_SetRenderVSync(sdlren, 1);
+	sdl_vsync = 1;
 
 	// Initialize hash table (statically allocated)
 	for (i = 0; i < MAX_TEXHASH; i++) {
@@ -573,9 +576,16 @@ int sdl_render(void)
 	return 1;
 }
 
+void sdl_set_vsync(int on)
+{
+	sdl_vsync = on ? 1 : 0;
+	SDL_SetRenderVSync(sdlren, sdl_vsync);
+}
+
 void sdl_exit(void)
 {
-	// Signal workers to quit and join them
+	gamepad_shutdown();
+
 	if (sdl_multi && worker_threads) {
 		SDL_SetAtomicInt(&worker_quit, 1);
 
@@ -737,10 +747,26 @@ void sdl_loop(void)
 			}
 #endif
 			break;
+		case SDL_EVENT_GAMEPAD_ADDED:
+			gamepad_on_added(event.gdevice.which);
+			break;
+		case SDL_EVENT_GAMEPAD_REMOVED:
+			gamepad_on_removed(event.gdevice.which);
+			break;
+		case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+			gamepad_button_down((SDL_GamepadButton)event.gbutton.button);
+			break;
+		case SDL_EVENT_GAMEPAD_BUTTON_UP:
+			gamepad_button_up((SDL_GamepadButton)event.gbutton.button);
+			break;
+		case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+			gamepad_axis_motion((SDL_GamepadAxis)event.gaxis.axis, event.gaxis.value);
+			break;
 		default:
 			break;
 		}
 	}
+	gamepad_tick();
 }
 
 void sdl_set_cursor_pos(int x, int y)
@@ -1208,7 +1234,9 @@ bool sdl_is_shown(void)
 		return false;
 	}
 
-	return true;
+	gamepad_init();
+
+	return 1;
 }
 
 bool sdl_has_focus(void)

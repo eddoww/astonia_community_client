@@ -251,7 +251,7 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 			src/game/render.o src/game/font.o src/game/main.o src/game/sprite.o src/game/sprite_config.o\
 			src/game/memory.o\
 			src/modder/modder.o\
-			src/sdl/sdl_core.o src/sdl/sdl_texture.o src/sdl/sdl_image.o src/sdl/sdl_effects.o src/sdl/sdl_draw.o src/sdl/sound.o\
+			src/sdl/sdl_core.o src/sdl/sdl_texture.o src/sdl/sdl_image.o src/sdl/sdl_effects.o src/sdl/sdl_draw.o src/sdl/gamepad.o src/sdl/sound.o\
 			src/game/resource.o src/helper/helper.o\
 			src/gui/dots.o src/gui/display.o src/gui/teleport.o src/gui/color.o src/gui/cmd.o\
 			src/gui/questlog.o src/gui/context.o src/gui/hover.o src/gui/minimap.o src/gui/input_bind.o src/gui/hotbar_ui.o src/gui/spellbook_ui.o src/gui/keybind_ui.o src/gui/keybind_settings_ui.o src/gui/escape_menu_ui.o src/gui/options_ui.o\

@@ -49,7 +49,12 @@ DLL_EXPORT extern int sdl_frames;
 DLL_EXPORT extern int sdl_multi;
 
 extern int sound_volume;
+extern int sound_volume_sfx;
+extern int sound_volume_ambient;
+extern int sound_volume_ui;
 
+extern int sdl_vsync;
+void sdl_set_vsync(int on);
 void sdl_set_cursor(int cursor);
 int init_sound(void);
 void sound_exit(void);

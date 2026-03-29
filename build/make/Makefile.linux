@@ -68,7 +68,7 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 			src/game/render.o src/game/font.o src/game/main.o src/game/sprite.o src/game/sprite_config.o\
 			src/game/memory.o\
 			src/modder/modder.o\
-			src/sdl/sdl_core.o src/sdl/sdl_texture.o src/sdl/sdl_image.o src/sdl/sdl_effects.o src/sdl/sdl_draw.o src/sdl/sound.o\
+			src/sdl/sdl_core.o src/sdl/sdl_texture.o src/sdl/sdl_image.o src/sdl/sdl_effects.o src/sdl/sdl_draw.o src/sdl/gamepad.o src/sdl/sound.o\
 			src/helper/helper.o\
 			src/gui/dots.o src/gui/display.o src/gui/teleport.o src/gui/color.o src/gui/cmd.o\
 			src/gui/questlog.o src/gui/context.o src/gui/hover.o src/gui/minimap.o src/gui/input_bind.o src/gui/hotbar_ui.o src/gui/spellbook_ui.o src/gui/keybind_ui.o src/gui/keybind_settings_ui.o src/gui/escape_menu_ui.o src/gui/options_ui.o\
@@ -150,6 +150,7 @@ src/sdl/sdl_texture.o:	src/sdl/sdl_texture.c src/astonia.h src/sdl/sdl.h src/sdl
 src/sdl/sdl_image.o:	src/sdl/sdl_image.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h src/game/game.h
 src/sdl/sdl_effects.o:	src/sdl/sdl_effects.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h
 src/sdl/sdl_draw.o:	src/sdl/sdl_draw.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h src/game/game.h
+src/sdl/gamepad.o:	src/sdl/gamepad.c src/sdl/gamepad.h src/gui/input_bind.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/game/game.h src/sdl/sdl.h
 
 src/helper/helper.o:	src/helper/helper.c src/astonia.h
 src/helper/convert.o:	src/helper/convert.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h

@@ -117,6 +117,73 @@ static const char *sfx_fallback[] = {
 static int sfx_fallback_cnt = (int)(sizeof(sfx_fallback) / sizeof(sfx_fallback[0])) - 1;
 
 int sound_volume = 128;
+int sound_volume_sfx = 128;
+int sound_volume_ambient = 128;
+int sound_volume_ui = 128;
+
+typedef enum {
+	SNDCAT_SFX,
+	SNDCAT_AMBIENT,
+	SNDCAT_UI,
+} SoundCategory;
+
+static SoundCategory sound_category(unsigned int nr)
+{
+	switch (nr) {
+	case 10:
+	case 11:
+	case 12:
+	case 13:
+	case 14:
+	case 15:
+	case 16:
+	case 17:
+	case 18:
+	case 19:
+	case 20:
+	case 21:
+	case 22:
+	case 23:
+	case 24:
+	case 25:
+	case 26:
+	case 27:
+	case 28:
+	case 36:
+	case 37:
+	case 38:
+	case 39:
+	case 40:
+	case 44:
+	case 45:
+	case 46:
+	case 47:
+	case 48:
+	case 49:
+		return SNDCAT_AMBIENT;
+	default:
+		return SNDCAT_SFX;
+	}
+}
+
+static float sound_category_volume(unsigned int nr)
+{
+	float master = (float)sound_volume / 128.0f;
+	float cat;
+	switch (sound_category(nr)) {
+	case SNDCAT_AMBIENT:
+		cat = (float)sound_volume_ambient / 128.0f;
+		break;
+	case SNDCAT_UI:
+		cat = (float)sound_volume_ui / 128.0f;
+		break;
+	default:
+		cat = (float)sound_volume_sfx / 128.0f;
+		break;
+	}
+	return master * cat;
+}
+
 static uint64_t time_play_sound = 0;
 
 static MIX_Audio *sound_effect[MAXSOUND];
@@ -499,9 +566,8 @@ static void play_sdl_sound(unsigned int nr, int distance, int angle)
 	// Set 3D position
 	MIX_SetTrack3DPosition(track, &position);
 
-	MIX_SetTrackGain(track, sound_get_master_volume());
+	MIX_SetTrackGain(track, sound_category_volume(nr));
 
-	// Assign the audio to the track and play it
 	MIX_SetTrackAudio(track, sound_effect[nr]);
 	MIX_PlayTrack(track, 0); // 0 means use default properties
 

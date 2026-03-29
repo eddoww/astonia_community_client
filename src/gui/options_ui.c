@@ -12,6 +12,7 @@
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
+#include "sdl/gamepad.h"
 
 #define OPT_WIDTH      340
 #define OPT_PAD        8
@@ -19,7 +20,7 @@
 #define OPT_TITLE_H    16
 #define OPT_TAB_H      16
 #define OPT_SEP        4
-#define OPT_NTABS      4
+#define OPT_NTABS      6
 #define OPT_SLIDER_LBL 90
 #define OPT_SLIDER_VAL 28
 
@@ -92,13 +93,17 @@ static int opt_tab_total(void)
 {
 	switch (opt_tab) {
 	case 0:
-		return 5;
-	case 1:
-		return 3;
-	case 2:
-		return 12;
-	case 3:
 		return 6;
+	case 1:
+		return 4;
+	case 2:
+		return 5;
+	case 3:
+		return 11;
+	case 4:
+		return 10;
+	case 5:
+		return 20;
 	default:
 		return 0;
 	}
@@ -154,6 +159,128 @@ static void draw_section_header(int x, int y, int w, const char *label)
 	render_text(x, y, COL_HEADER, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
 }
 
+static void opt_display_audio(void)
+{
+	int ry;
+
+	ry = opt_row_y(0);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Volume");
+	}
+
+	ry = opt_row_y(1);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, sound_volume, 0, 128, "Master");
+	}
+
+	ry = opt_row_y(2);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, sound_volume_sfx, 0, 128, "Sound Effects");
+	}
+
+	ry = opt_row_y(3);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, sound_volume_ambient, 0, 128, "Ambient");
+	}
+
+	ry = opt_row_y(4);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, sound_volume_ui, 0, 128, "Interface");
+	}
+
+	ry = opt_row_y(5);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_SOUND) != 0, "Sound Enabled");
+	}
+}
+
+static int opt_click_audio(int mx, int my)
+{
+	int ry;
+	int tx = opt_lx + OPT_SLIDER_LBL;
+	int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+	int val;
+
+	ry = opt_row_y(1);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		val = 0 + (mx - tx) * (128 - 0) / tw;
+		if (val < 0) {
+			val = 0;
+		}
+		if (val > 128) {
+			val = 128;
+		}
+		sound_volume = val;
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(2);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		val = 0 + (mx - tx) * (128 - 0) / tw;
+		if (val < 0) {
+			val = 0;
+		}
+		if (val > 128) {
+			val = 128;
+		}
+		sound_volume_sfx = val;
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(3);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		val = 0 + (mx - tx) * (128 - 0) / tw;
+		if (val < 0) {
+			val = 0;
+		}
+		if (val > 128) {
+			val = 128;
+		}
+		sound_volume_ambient = val;
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(4);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		val = 0 + (mx - tx) * (128 - 0) / tw;
+		if (val < 0) {
+			val = 0;
+		}
+		if (val > 128) {
+			val = 128;
+		}
+		sound_volume_ui = val;
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(5);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		game_options ^= GO_SOUND;
+		save_options();
+		return 1;
+	}
+
+	return 0;
+}
+
+static int opt_video_mode(void)
+{
+	int is_fullscreen = (SDL_GetWindowFlags(sdlwnd) & SDL_WINDOW_FULLSCREEN) != 0;
+	int is_exclusive = (game_options & GO_FULL) != 0;
+
+	if (is_fullscreen && is_exclusive) {
+		return 2;
+	}
+	if (is_fullscreen) {
+		return 1;
+	}
+	return 0;
+}
+
 static void opt_display_video(void)
 {
 	int ry;
@@ -165,10 +292,87 @@ static void opt_display_video(void)
 
 	ry = opt_row_y(1);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_FULL) != 0, "Fullscreen");
+		const char *modes[] = {"Windowed", "Borderless", "Exclusive"};
+		int mode = opt_video_mode();
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Window Mode:");
+		render_text(opt_lx + 100, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, modes[mode]);
 	}
 
 	ry = opt_row_y(2);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, sdl_vsync != 0, "VSync");
+	}
+
+	ry = opt_row_y(3);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, frames_per_second, 24, 244, "FPS Limit");
+	}
+}
+
+static int opt_click_video(int mx, int my)
+{
+	int ry;
+
+	ry = opt_row_y(1);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		int mode = (opt_video_mode() + 1) % 3;
+		switch (mode) {
+		case 0:
+			SDL_SetWindowFullscreen(sdlwnd, false);
+			game_options &= ~GO_FULL;
+			break;
+		case 1:
+			SDL_SetWindowFullscreenMode(sdlwnd, NULL);
+			SDL_SetWindowFullscreen(sdlwnd, true);
+			game_options &= ~GO_FULL;
+			break;
+		case 2:
+			game_options |= GO_FULL;
+			SDL_SetWindowFullscreen(sdlwnd, true);
+			break;
+		}
+		SDL_SyncWindow(sdlwnd);
+		init_dots();
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(2);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		sdl_set_vsync(!sdl_vsync);
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(3);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		int tx = opt_lx + OPT_SLIDER_LBL;
+		int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+		int val = 24 + (mx - tx) * (244 - 24) / tw;
+		if (val < 24) {
+			val = 24;
+		}
+		if (val > 244) {
+			val = 244;
+		}
+		frames_per_second = val;
+		save_options();
+		return 1;
+	}
+
+	return 0;
+}
+
+static void opt_display_display(void)
+{
+	int ry;
+
+	ry = opt_row_y(0);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Graphics");
+	}
+
+	ry = opt_row_y(1);
 	if (ry >= 0) {
 		const char *bnames[] = {"Normal", "Bright", "Brighter"};
 		int bv = 0;
@@ -181,154 +385,27 @@ static void opt_display_video(void)
 		render_text(opt_lx + 100, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, bnames[bv]);
 	}
 
-	ry = opt_row_y(3);
+	ry = opt_row_y(2);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, (game_options & GO_LOWLIGHT) != 0, "Simplified Lighting");
 	}
 
-	ry = opt_row_y(4);
+	ry = opt_row_y(3);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, (game_options & GO_LARGE) != 0, "Large Font");
 	}
-}
 
-static void opt_display_audio(void)
-{
-	int ry;
-
-	ry = opt_row_y(0);
-	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Sound");
-	}
-
-	ry = opt_row_y(1);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_SOUND) != 0, "Sound Enabled");
-	}
-
-	ry = opt_row_y(2);
-	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, sound_volume, 0, 128, "Volume");
-	}
-}
-
-static void opt_display_ui(void)
-{
-	int ry;
-
-	ry = opt_row_y(0);
-	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Appearance");
-	}
-
-	ry = opt_row_y(1);
+	ry = opt_row_y(4);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, (game_options & GO_DARK) != 0, "Dark Theme");
 	}
-
-	ry = opt_row_y(2);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_BIGBAR) != 0, "Big Health Bar");
-	}
-
-	ry = opt_row_y(3);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_SMALLTOP) != 0, "Small Top Window");
-	}
-
-	ry = opt_row_y(4);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_SMALLBOT) != 0, "Small Bottom Window");
-	}
-
-	ry = opt_row_y(5);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, !(game_options & GO_NOMAP), "Show Minimap");
-	}
-
-	ry = opt_row_y(6);
-	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Hotbar");
-	}
-
-	ry = opt_row_y(7);
-	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, hotbar_rows(), 1, 3, "Hotbar Rows");
-	}
-
-	ry = opt_row_y(8);
-	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, hotbar_visible_slots(), 1, 15, "Visible Slots");
-	}
-
-	ry = opt_row_y(9);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, hotbar_show_hotkeys(), "Show Hotkey Labels");
-	}
-
-	ry = opt_row_y(10);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, hotbar_show_names(), "Show Slot Names");
-	}
-
-	ry = opt_row_y(11);
-	if (ry >= 0) {
-		const char *cast_names[] = {"Normal", "Quick", "Quick w/ Indicator"};
-		int cm = hotbar_cast_mode();
-		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Cast Mode:");
-		render_text(opt_lx + 100, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, cast_names[cm]);
-	}
 }
 
-static void opt_display_gameplay(void)
-{
-	int ry;
-
-	ry = opt_row_y(0);
-	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Game Input");
-	}
-
-	ry = opt_row_y(1);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_CONTEXT) != 0, "Context Menu");
-	}
-
-	ry = opt_row_y(2);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_PREDICT) != 0, "Early Commands");
-	}
-
-	ry = opt_row_y(3);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_SHORT) != 0, "Short Command Delay");
-	}
-
-	ry = opt_row_y(4);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_WHEELSPEED) != 0, "Wheel Changes Speed");
-	}
-
-	ry = opt_row_y(5);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_MAPSAVE) != 0, "Save Minimap Data");
-	}
-}
-
-static int opt_click_video(int mx, int my)
+static int opt_click_display(int mx, int my)
 {
 	int ry;
 
 	ry = opt_row_y(1);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		game_options ^= GO_FULL;
-		SDL_SetWindowFullscreen(sdlwnd, (game_options & GO_FULL) ? true : false);
-		init_dots();
-		save_options();
-		return 1;
-	}
-
-	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		int bv = 0;
 		if ((game_options & GO_LIGHTER) && (game_options & GO_LIGHTER2)) {
@@ -347,75 +424,108 @@ static int opt_click_video(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(3);
+	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_LOWLIGHT;
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(4);
+	ry = opt_row_y(3);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_LARGE;
 		save_options();
 		return 1;
 	}
 
-	return 0;
-}
-
-static int opt_click_audio(int mx, int my)
-{
-	int ry;
-
-	ry = opt_row_y(1);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		game_options ^= GO_SOUND;
-		save_options();
-		return 1;
-	}
-
-	ry = opt_row_y(2);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		int tx = opt_lx + OPT_SLIDER_LBL;
-		int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
-		int val = 0;
-		if (tw > 0) {
-			val = (mx - tx) * 128 / tw;
-		}
-		if (val < 0) {
-			val = 0;
-		}
-		if (val > 128) {
-			val = 128;
-		}
-		sound_volume = val;
-		save_options();
-		return 1;
-	}
-
-	return 0;
-}
-
-static int opt_click_ui(int mx, int my)
-{
-	int ry;
-
-	ry = opt_row_y(1);
+	ry = opt_row_y(4);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_DARK;
 		save_options();
 		return 1;
 	}
 
+	return 0;
+}
+
+static void opt_display_ui(void)
+{
+	int ry;
+
+	ry = opt_row_y(0);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Interface");
+	}
+
+	ry = opt_row_y(1);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_BIGBAR) != 0, "Big Health Bar");
+	}
+
 	ry = opt_row_y(2);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_SMALLTOP) != 0, "Small Top Window");
+	}
+
+	ry = opt_row_y(3);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_SMALLBOT) != 0, "Small Bottom Window");
+	}
+
+	ry = opt_row_y(4);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, !(game_options & GO_NOMAP), "Show Minimap");
+	}
+
+	ry = opt_row_y(5);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Hotbar");
+	}
+
+	ry = opt_row_y(6);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, hotbar_rows(), 1, 3, "Hotbar Rows");
+	}
+
+	ry = opt_row_y(7);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, hotbar_visible_slots(), 1, 15, "Visible Slots");
+	}
+
+	ry = opt_row_y(8);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, hotbar_show_hotkeys(), "Show Hotkey Labels");
+	}
+
+	ry = opt_row_y(9);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, hotbar_show_names(), "Show Slot Names");
+	}
+
+	ry = opt_row_y(10);
+	if (ry >= 0) {
+		const char *cast_names[] = {"Normal", "Quick Cast", "Quick Cast w/ Indicator"};
+		int cm = hotbar_cast_mode();
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Cast Mode:");
+		render_text(opt_lx + 100, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, cast_names[cm]);
+	}
+}
+
+static int opt_click_ui(int mx, int my)
+{
+	int ry;
+	int tx = opt_lx + OPT_SLIDER_LBL;
+	int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+	int val;
+
+	ry = opt_row_y(1);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_BIGBAR;
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(3);
+	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_SMALLTOP;
 		init_dots();
@@ -423,7 +533,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(4);
+	ry = opt_row_y(3);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_SMALLBOT;
 		init_dots();
@@ -431,21 +541,16 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(5);
+	ry = opt_row_y(4);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_NOMAP;
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(7);
+	ry = opt_row_y(6);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		int tx = opt_lx + OPT_SLIDER_LBL;
-		int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
-		int val = hotbar_rows();
-		if (tw > 0) {
-			val = 1 + (mx - tx) * 3 / tw;
-		}
+		val = 1 + (mx - tx) * (3 - 1) / tw;
 		if (val < 1) {
 			val = 1;
 		}
@@ -453,18 +558,14 @@ static int opt_click_ui(int mx, int my)
 			val = 3;
 		}
 		hotbar_set_rows(val);
+		init_dots();
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(8);
+	ry = opt_row_y(7);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		int tx = opt_lx + OPT_SLIDER_LBL;
-		int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
-		int val = hotbar_visible_slots();
-		if (tw > 0) {
-			val = 1 + (mx - tx) * 15 / tw;
-		}
+		val = 1 + (mx - tx) * (15 - 1) / tw;
 		if (val < 1) {
 			val = 1;
 		}
@@ -472,25 +573,27 @@ static int opt_click_ui(int mx, int my)
 			val = 15;
 		}
 		hotbar_set_visible_slots(val);
+		init_dots();
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(9);
+	ry = opt_row_y(8);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		hotbar_set_show_hotkeys(!hotbar_show_hotkeys());
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(10);
+	ry = opt_row_y(9);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		hotbar_set_show_names(!hotbar_show_names());
+		init_dots();
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(11);
+	ry = opt_row_y(10);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		hotbar_set_cast_mode((hotbar_cast_mode() + 1) % 3);
 		save_options();
@@ -500,25 +603,76 @@ static int opt_click_ui(int mx, int my)
 	return 0;
 }
 
-static int opt_click_gameplay(int mx, int my)
+static void opt_display_advanced(void)
 {
 	int ry;
 
+	ry = opt_row_y(0);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Input");
+	}
+
 	ry = opt_row_y(1);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		game_options ^= GO_CONTEXT;
-		save_options();
-		return 1;
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_PREDICT) != 0, "Predictive Input");
 	}
 
 	ry = opt_row_y(2);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_SHORT) != 0, "Reduced Input Latency");
+	}
+
+	ry = opt_row_y(3);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Performance");
+	}
+
+	ry = opt_row_y(4);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, sdl_cache_size, 1000, 8000, "Texture Cache");
+	}
+
+	ry = opt_row_y(5);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, sdl_multi, 1, 8, "Worker Threads");
+	}
+
+	ry = opt_row_y(6);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Data");
+	}
+
+	ry = opt_row_y(7);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_MAPSAVE) != 0, "Save Minimap Data");
+	}
+
+	ry = opt_row_y(8);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_CONTEXT) != 0, "Context Menu");
+	}
+
+	ry = opt_row_y(9);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_WHEELSPEED) != 0, "Scroll Wheel Speed");
+	}
+}
+
+static int opt_click_advanced(int mx, int my)
+{
+	int ry;
+	int tx = opt_lx + OPT_SLIDER_LBL;
+	int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+	int val;
+
+	ry = opt_row_y(1);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_PREDICT;
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(3);
+	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_SHORT;
 		save_options();
@@ -527,14 +681,49 @@ static int opt_click_gameplay(int mx, int my)
 
 	ry = opt_row_y(4);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		game_options ^= GO_WHEELSPEED;
+		val = 1000 + (mx - tx) * (8000 - 1000) / tw;
+		if (val < 1000) {
+			val = 1000;
+		}
+		if (val > 8000) {
+			val = 8000;
+		}
+		sdl_cache_size = val;
 		save_options();
 		return 1;
 	}
 
 	ry = opt_row_y(5);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		val = 1 + (mx - tx) * (8 - 1) / tw;
+		if (val < 1) {
+			val = 1;
+		}
+		if (val > 8) {
+			val = 8;
+		}
+		sdl_multi = val;
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(7);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_MAPSAVE;
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(8);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		game_options ^= GO_CONTEXT;
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(9);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		game_options ^= GO_WHEELSPEED;
 		save_options();
 		return 1;
 	}
@@ -542,10 +731,112 @@ static int opt_click_gameplay(int mx, int my)
 	return 0;
 }
 
+static void opt_display_gamepad(void)
+{
+	int ry;
+	int connected = gamepad_is_connected();
+
+	ry = opt_row_y(0);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Controller");
+	}
+	ry = opt_row_y(1);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED,
+		    connected ? "Status: Connected" : "Status: Not Connected");
+	}
+
+	if (!connected) {
+		ry = opt_row_y(3);
+		if (ry >= 0) {
+			render_text(
+			    opt_lx, ry, COL_HEADER, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Connect a controller to configure.");
+		}
+		return;
+	}
+
+	ry = opt_row_y(3);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "LT (Left Trigger) + Button");
+	}
+	ry = opt_row_y(4);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "A/B/X/Y:");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Hotbar 1-4");
+	}
+	ry = opt_row_y(5);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "D-Pad:");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Hotbar 5-8");
+	}
+
+	ry = opt_row_y(7);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "RT (Right Trigger) + Button");
+	}
+	ry = opt_row_y(8);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "A/B/X/Y:");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Hotbar 9-12");
+	}
+	ry = opt_row_y(9);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "D-Pad:");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Hotbar 13-16");
+	}
+
+	ry = opt_row_y(11);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Sticks & Buttons");
+	}
+	ry = opt_row_y(12);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Left Stick:");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Move");
+	}
+	ry = opt_row_y(13);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Right Stick:");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Cursor");
+	}
+	ry = opt_row_y(14);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "R3 (R-Click):");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Left Click");
+	}
+	ry = opt_row_y(15);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "L3 (L-Click):");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Right Click");
+	}
+	ry = opt_row_y(16);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Start:");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Menu");
+	}
+	ry = opt_row_y(17);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Back/Select:");
+		render_text(opt_lx + 80, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Cancel All");
+	}
+
+	ry = opt_row_y(19);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "LT+RT + Button = Hotbar 17-24");
+	}
+}
+
+static int opt_click_gamepad(int mx, int my)
+{
+	(void)mx;
+	(void)my;
+	return 0;
+}
+
 void options_display(void)
 {
 	int total, max_scroll, cx, tab_w, i;
-	static const char *tab_labels[OPT_NTABS] = {"Video", "Audio", "UI", "Gameplay"};
+	static const char *tab_labels[OPT_NTABS] = {"Audio", "Video", "Display", "UI", "Advanced", "Gamepad"};
 
 	if (!opt_open) {
 		return;
@@ -580,16 +871,22 @@ void options_display(void)
 
 	switch (opt_tab) {
 	case 0:
-		opt_display_video();
-		break;
-	case 1:
 		opt_display_audio();
 		break;
+	case 1:
+		opt_display_video();
+		break;
 	case 2:
-		opt_display_ui();
+		opt_display_display();
 		break;
 	case 3:
-		opt_display_gameplay();
+		opt_display_ui();
+		break;
+	case 4:
+		opt_display_advanced();
+		break;
+	case 5:
+		opt_display_gamepad();
 		break;
 	default:
 		break;
@@ -665,16 +962,22 @@ int options_click(int mx, int my)
 
 	switch (opt_tab) {
 	case 0:
-		opt_click_video(mx, my);
-		break;
-	case 1:
 		opt_click_audio(mx, my);
 		break;
+	case 1:
+		opt_click_video(mx, my);
+		break;
 	case 2:
-		opt_click_ui(mx, my);
+		opt_click_display(mx, my);
 		break;
 	case 3:
-		opt_click_gameplay(mx, my);
+		opt_click_ui(mx, my);
+		break;
+	case 4:
+		opt_click_advanced(mx, my);
+		break;
+	case 5:
+		opt_click_gamepad(mx, my);
 		break;
 	default:
 		break;

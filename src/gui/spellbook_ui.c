@@ -62,7 +62,15 @@ static void sb_layout(int *ox, int *oy, int *cols_out, int *rows_out)
 	}
 }
 
-/* hit-test: returns the action slot index under (mx, my), or -1 */
+static int sb_inside(int mx, int my)
+{
+	int ox, oy, cols, rows;
+	sb_layout(&ox, &oy, &cols, &rows);
+	int pw = cols * SB_CELL + SB_PAD * 2;
+	int ph = rows * SB_CELL + SB_PAD * 2;
+	return mx >= ox && mx < ox + pw && my >= oy && my < oy + ph;
+}
+
 static int sb_hit(int mx, int my)
 {
 	if (!sb_open) {
@@ -221,6 +229,11 @@ int spellbook_click(int mx, int my)
 	/* click outside while dragging — cancel drag */
 	if (sb_dragging >= 0) {
 		sb_dragging = -1;
+		return 1;
+	}
+
+	/* consume clicks on spellbook background */
+	if (sb_inside(mx, my)) {
 		return 1;
 	}
 

@@ -1713,6 +1713,9 @@ void cmd_walk_dir(int dir)
 {
 	unsigned char buf[16];
 
+	if (dir < 0 || dir > 7) {
+		return;
+	}
 	buf[0] = CL_WALK_DIR;
 	buf[1] = (unsigned char)dir;
 	client_send(buf, 2);

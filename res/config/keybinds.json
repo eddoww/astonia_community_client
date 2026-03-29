@@ -5,9 +5,9 @@
 	"settings":	{
 		"action_enabled":	true,
 		"gear_lock":	false,
-		"cast_mode":	1,
+		"cast_mode":	0,
 		"show_hotkeys":	true,
-		"show_names":	true,
+		"show_names":	false,
 		"hotbar_rows":	1
 	},
 	"hotbar":	[{
@@ -90,11 +90,9 @@
 			"type":	"spell",
 			"spell":	9
 		}, {
-			"type":	"spell",
-			"spell":	10
+			"type":	"empty"
 		}, {
-			"type":	"spell",
-			"spell":	11
+			"type":	"empty"
 		}, {
 			"type":	"spell",
 			"spell":	11,

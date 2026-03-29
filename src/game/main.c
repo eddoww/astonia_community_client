@@ -469,6 +469,8 @@ static void get_config_path(char *buf, size_t bufsize)
 	const char *charname = get_character_name();
 	if (charname && localdata) {
 		snprintf(buf, bufsize, "%skeybinds_%s.json", localdata, charname);
+	} else if (charname) {
+		snprintf(buf, bufsize, "res/config/keybinds_%s.json", charname);
 	} else if (localdata) {
 		snprintf(buf, bufsize, "%skeybinds.json", localdata);
 	} else {

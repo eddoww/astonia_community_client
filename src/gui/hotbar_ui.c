@@ -232,7 +232,7 @@ int hotbar_click(int slot)
 
 		/* put the item back — prefer its original slot, fallback to first empty */
 		int dest = -1;
-		if (csprite_origin >= 30 && csprite_origin < _inventorysize && !item[csprite_origin]) {
+		if (csprite_origin >= INVENTORY_EQUIP_SLOTS && csprite_origin < _inventorysize && !item[csprite_origin]) {
 			dest = csprite_origin;
 		} else {
 			for (int i = INVENTORY_EQUIP_SLOTS; i < _inventorysize; i++) {

@@ -390,6 +390,7 @@ static int opt_click_audio(int mx, int my)
 			val = 128;
 		}
 		sound_volume = val;
+		save_options();
 		return 1;
 	}
 

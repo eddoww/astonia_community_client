@@ -499,8 +499,7 @@ static void play_sdl_sound(unsigned int nr, int distance, int angle)
 	// Set 3D position
 	MIX_SetTrack3DPosition(track, &position);
 
-	float gain = (float)sound_volume / 128.0f;
-	MIX_SetTrackGain(track, gain);
+	MIX_SetTrackGain(track, sound_get_master_volume());
 
 	// Assign the audio to the track and play it
 	MIX_SetTrackAudio(track, sound_effect[nr]);

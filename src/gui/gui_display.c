@@ -211,9 +211,6 @@ void display(void)
 	hotbar_display();
 	spellbook_display();
 	keybind_panel_display();
-	keybind_settings_display();
-	options_display();
-	escape_menu_display();
 	if (con_cnt) {
 		display_container();
 	} else {
@@ -235,7 +232,11 @@ void display(void)
 	display_minimap();
 	display_citem();
 	context_display(mousex, mousey);
-	display_helpandquest(); // display last because it is on top
+	display_helpandquest();
+
+	keybind_settings_display();
+	options_display();
+	escape_menu_display();
 
 	// Display lag warning when no server data received for > 500ms
 	if (sockstate == 4 && last_tick_received_time > 0) {

@@ -542,9 +542,7 @@ DLL_EXPORT extern char hover_rank_text[];
 DLL_EXPORT extern char hover_time_text[];
 
 int action_key2slot(SDL_Keycode key);
-SDL_Keycode action_slot2key(int slot);
 int16_t has_action_skill(int i);
-void action_set_key(int slot, SDL_Keycode key);
 void context_action_enable(int onoff);
 
 void minimap_init(void);

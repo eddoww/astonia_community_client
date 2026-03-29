@@ -165,6 +165,7 @@ void bzero_client(int part)
 
 		cflags = 0;
 		csprite = 0;
+		csprite_origin = -1;
 
 		originx = 0;
 		originy = 0;

@@ -270,6 +270,25 @@ jobs:
           strip bin/moac
           strip bin/libastonia_net.so
 
+      - name: Collect Binaries (Linux)
+        run: |
+          mkdir -p binaries
+          cp bin/moac binaries/
+          cp bin/libastonia_net.so binaries/
+          cp -L /usr/local/lib/libSDL3.so.0 binaries/ 2>/dev/null || \
+            cp -L /tmp/sdl3-install/lib/libSDL3.so.0 binaries/ || true
+          cp -L /usr/local/lib/libSDL3_mixer.so.0 binaries/ 2>/dev/null || \
+            cp -L /tmp/sdl3-install/lib/libSDL3_mixer.so.0 binaries/ || true
+          echo "=== Linux Binaries ==="
+          ls -la binaries/
+
+      - name: Upload Binaries (Linux)
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binaries
+          path: binaries/
+          retention-days: 7
+
       - name: Prepare distribution staging
         run: make distrib-stage
 
@@ -357,6 +376,13 @@ jobs:
           path: distrib/windows_client/
           retention-days: 7
 
+      - name: Upload Binaries (Windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          path: distrib/windows_client/bin/
+          retention-days: 7
+
       - name: Upload Mod SDK (Windows)
         uses: actions/upload-artifact@v4
         with:
@@ -422,6 +448,23 @@ jobs:
         run: |
           strip bin/moac
           strip -x bin/libastonia_net.dylib
+
+      - name: Collect Binaries (macOS)
+        run: |
+          mkdir -p binaries
+          cp bin/moac binaries/
+          cp bin/libastonia_net.dylib binaries/
+          cp -L /opt/homebrew/lib/libSDL3.0.dylib binaries/ 2>/dev/null || true
+          cp -L /opt/homebrew/lib/libSDL3_mixer.0.dylib binaries/ 2>/dev/null || true
+          echo "=== macOS Binaries ==="
+          ls -la binaries/
+
+      - name: Upload Binaries (macOS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-binaries
+          path: binaries/
+          retention-days: 7
 
       # Build unsigned .app bundle
       - name: Build .app bundle
@@ -584,29 +627,62 @@ jobs:
           name: mod-sdk-windows
           path: mod-sdk
 
+      - name: Download Linux Binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binaries
+          path: linux-binaries
+
+      - name: Download Windows Binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binaries
+          path: windows-binaries
+
+      - name: Download macOS Binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-binaries
+          path: macos-binaries
+
+      - name: Rename DMG to match convention
+        run: mv Astonia-macOS.dmg client-macos.dmg
+
+      - name: Rename AppImage to match convention
+        run: mv astonia-client.AppImage client-linux.AppImage
+
       - name: Create distribution archives
         run: |
-          tar czf linux_client.tar.gz linux_client
-          zip -q -r windows_client.zip windows_client
+          tar czf client-linux.tar.gz linux_client
+          zip -q -r client-windows.zip windows_client
           zip -q -r mod-sdk.zip mod-sdk
+          tar czf client-linux-binaries.tar.gz -C linux-binaries .
+          cd windows-binaries && zip -q -r ../client-windows-binaries.zip . && cd ..
+          tar czf client-macos-binaries.tar.gz -C macos-binaries .
 
       - name: Generate checksums
         run: |
-          sha256sum linux_client.tar.gz > checksums.txt
-          sha256sum windows_client.zip >> checksums.txt
-          sha256sum astonia-client.AppImage >> checksums.txt
-          sha256sum Astonia-macOS.dmg >> checksums.txt
+          sha256sum client-linux.tar.gz > checksums.txt
+          sha256sum client-windows.zip >> checksums.txt
+          sha256sum client-linux.AppImage >> checksums.txt
+          sha256sum client-macos.dmg >> checksums.txt
           sha256sum mod-sdk.zip >> checksums.txt
+          sha256sum client-linux-binaries.tar.gz >> checksums.txt
+          sha256sum client-windows-binaries.zip >> checksums.txt
+          sha256sum client-macos-binaries.tar.gz >> checksums.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            linux_client.tar.gz
-            windows_client.zip
-            astonia-client.AppImage
-            Astonia-macOS.dmg
+            client-linux.tar.gz
+            client-windows.zip
+            client-linux.AppImage
+            client-macos.dmg
             mod-sdk.zip
+            client-linux-binaries.tar.gz
+            client-windows-binaries.zip
+            client-macos-binaries.tar.gz
             checksums.txt
           draft: false
           prerelease: false

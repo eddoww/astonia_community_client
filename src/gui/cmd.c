@@ -432,3 +432,8 @@ void cmd_reset(void)
 	cmdcursor = 0;
 	histpos = -1;
 }
+
+int cmd_is_active(void)
+{
+	return cmdline[0] != '\0' || context_key_isset();
+}

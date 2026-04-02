@@ -15,6 +15,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
 
 extern int __textdisplay_sy;
 
@@ -188,8 +189,17 @@ void init_dots(void)
 	// color picker window
 	set_dot(DOT_COL, 340, 210, 0);
 
-	// action bar
+	// action bar (kept for BUT_ACT_* hit testing, but no longer rendered)
 	set_dot(DOT_ACT, XRES - MAXACTIONSLOT * 40 - (XRES - MAXACTIONSLOT * 40) / 2, doty(DOT_BOT) - 12, 0);
+
+	// hotbar — centered above the bottom panel
+	// DOT_HOTBAR marks the BOTTOM row (row 0). Additional rows stack upward.
+	{
+		int name_offset = hotbar_show_names() ? 10 : 0;
+		int row_offset = (hotbar_rows() - 1) * (FDX + 2); /* extra rows above */
+		set_dot(
+		    DOT_HOTBAR, (XRES - hotbar_visible_slots() * FDX) / 2, doty(DOT_BOT) - 15 - name_offset - row_offset, 0);
+	}
 
 	// tutor window
 	dots_update();
@@ -242,4 +252,21 @@ void init_dots(void)
 	set_but(BUT_MOD_WALK1, dot[DOT_MOD].x + 0 * 14, dot[DOT_MOD].y + 0 * 30, 30, 0);
 	set_but(BUT_MOD_WALK2, dot[DOT_MOD].x + 2 * 14, dot[DOT_MOD].y + 0 * 30, 30, 0);
 	set_but(BUT_HELP_DRAG, (dotx(DOT_HLP) + dotx(DOT_HL2)) / 2, doty(DOT_HLP) + 6, 0, BUTF_CAPTURE | BUTF_MOVEEXEC);
+
+	{
+		int cols = hotbar_visible_slots();
+		int rows = hotbar_rows();
+		int total_active = cols * rows;
+		for (i = 0; i < total_active; i++) {
+			int row = i / cols;
+			int col = i % cols;
+			int bx = dot[DOT_HOTBAR].x + col * FDX;
+			int by = dot[DOT_HOTBAR].y + row * (FDX + 2);
+			set_but(BUT_HOTBAR_BEG + i, bx, by, FDX / 2, 0);
+		}
+		/* disable hit testing on inactive slots */
+		for (i = total_active; i < HOTBAR_MAX_SLOTS; i++) {
+			set_but(BUT_HOTBAR_BEG + i, 0, 0, 0, BUTF_NOHIT);
+		}
+	}
 }

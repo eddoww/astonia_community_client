@@ -16,10 +16,13 @@
 #include "client/client.h"
 #include "client/client_private.h"
 #include "gui/gui.h"
+#include "gui/input_bind.h"
 #include "modder/modder.h"
 #include "protocol.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+
+void load_character_options(void);
 
 struct otext otext[MAXOTEXT];
 
@@ -324,6 +327,7 @@ static void sv_setitem(unsigned char *buf)
 	item_flags[n] = load_u32(buf + 6);
 
 	hover_invalidate_inv(n);
+	hotbar_on_item_changed(n);
 }
 
 static void sv_setorigin(unsigned char *buf)
@@ -356,6 +360,9 @@ static void sv_setcitem(unsigned char *buf)
 {
 	csprite = load_u32(buf + 1);
 	cflags = load_u32(buf + 5);
+	if (!csprite) {
+		csprite_origin = -1;
+	}
 }
 
 static void sv_act(unsigned char *buf)
@@ -919,6 +926,7 @@ static void sv_server(unsigned char *buf)
 static void sv_logindone(void)
 {
 	login_done = 1;
+	load_character_options();
 	bzero_client(1);
 }
 
@@ -1699,6 +1707,18 @@ void cmd_stop(void)
 
 	buf[0] = CL_STOP;
 	client_send(buf, 1);
+}
+
+void cmd_walk_dir(int dir)
+{
+	unsigned char buf[16];
+
+	if (dir < 0 || dir > 7) {
+		return;
+	}
+	buf[0] = CL_WALK_DIR;
+	buf[1] = (unsigned char)dir;
+	client_send(buf, 2);
 }
 
 void cmd_kill(unsigned int cn)

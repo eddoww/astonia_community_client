@@ -14,6 +14,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
 #include "game/game.h"
 #include "client/client.h"
 #include "modder/modder.h"
@@ -582,45 +583,8 @@ void display_skill(void)
 
 void display_keys(void)
 {
-	int i, x, u;
-	char buf[256];
-	unsigned short int col;
-
-	for (u = i = 0; i < max_keytab; i++) {
-		if ((keytab[i].vk_item && !vk_item) || (!keytab[i].vk_item && vk_item)) {
-			continue;
-		}
-		if ((keytab[i].vk_char && !vk_char) || (!keytab[i].vk_char && vk_char)) {
-			continue;
-		}
-		if ((keytab[i].vk_spell && !vk_spell) || (!keytab[i].vk_spell && vk_spell)) {
-			continue;
-		}
-
-		if (keytab[i].usetime > now - 300) {
-			col = bluecolor;
-		} else {
-			col = textcolor;
-		}
-
-		x = 10 + u++ * ((XRES - 20) / 10);
-
-		if (keytab[i].skill == -1) {
-			continue;
-		}
-		if (!value[0][keytab[i].skill]) {
-			continue;
-		}
-
-		if (keytab[i].userdef) {
-			sprintf(buf, "%c/%c %s", keytab[i].keycode, keytab[i].userdef, keytab[i].name);
-		} else {
-			sprintf(buf, "%c %s", keytab[i].keycode, keytab[i].name);
-		}
-
-		render_text(
-		    dotx(DOT_BOT) + x, doty(DOT_BOT) - 6, col, RENDER_TEXT_LEFT | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, buf);
-	}
+	/* Legacy keytab display disabled - hotbar system replaces this */
+	(void)0;
 }
 
 void display_tutor(void)
@@ -1164,7 +1128,7 @@ static int v35_action_skill[MAXACTIONSLOT] = {V35_PERCEPT, V35_FIRE, V35_FLASH, 
 char (*action_row)[MAXACTIONSLOT] = v3_action_row;
 static char **action_text = v3_action_text;
 static char **action_desc = v3_action_desc;
-static int *action_skill = v3_action_skill;
+int *action_skill = v3_action_skill;
 
 void set_v35_actions(void)
 {
@@ -1205,226 +1169,34 @@ void actions_loaded(void)
 
 int16_t has_action_skill(int i)
 {
-	if (action_skill[i] == -1) {
-		return 1;
-	}
-	if (action_skill[i] == -2) {
-		return 0;
-	}
-	return value[0][action_skill[i]];
+	return (int16_t)input_action_slot_available(i);
 }
 
 int action_key2slot(SDL_Keycode key)
 {
-	int i;
-
-	for (i = 0; i < MAXACTIONSLOT; i++) {
-		if (!has_action_skill(i)) {
-			continue;
-		}
-		if ((SDL_Keycode)action_row[0][i] == key) {
-			return i;
-		}
-		if ((SDL_Keycode)action_row[1][i] == key) {
-			return i + 100;
-		}
-	}
-	return -1;
+	return input_key_to_action_slot(key);
 }
 
-SDL_Keycode action_slot2key(int slot)
-{
-	if (slot > 100) {
-		slot -= 100;
-		if (slot < 0 || slot >= MAXACTIONSLOT) {
-			return SDLK_UNKNOWN;
-		}
-		return (SDL_Keycode)action_row[1][slot];
-	}
-	if (slot < 0 || slot >= MAXACTIONSLOT) {
-		return SDLK_UNKNOWN;
-	}
-	return (SDL_Keycode)action_row[0][slot];
-}
+void display_action(void) {}
 
 int act_lck = 1;
 
-static int get_action_key_row(int slot)
-{
-	if (action_row[0][slot] == ' ') {
-		return 1;
-	} else if (action_row[1][slot] == ' ') {
-		return 0;
-	} else if (actsel >= 0 && actsel < MAXACTIONSLOT && butx(BUT_ACT_BEG + actsel) < mousex) {
-		return 1;
-	}
+/* ── Accessors for spellbook ─────────────────────────────────────────── */
 
-	return 0;
+const char *get_action_text(int slot)
+{
+	if (slot < 0 || slot >= MAXACTIONSLOT || !action_text) {
+		return NULL;
+	}
+	return action_text[slot];
 }
 
-void action_set_key(int slot, SDL_Keycode key)
+const char *get_action_desc(int slot)
 {
-	int row, i;
-
-	if (slot < 0 || slot >= MAXACTIONSLOT) {
-		return;
+	if (slot < 0 || slot >= MAXACTIONSLOT || !action_desc) {
+		return NULL;
 	}
-	if (key < 'a' || key > 'z') {
-		return;
-	}
-
-	row = get_action_key_row(slot);
-
-	if (action_row[row][slot] == ' ') {
-		return;
-	}
-
-	for (i = 0; i < MAXACTIONSLOT * 2; i++) {
-		if ((SDL_Keycode) * (action_row[0] + i) == key) {
-			*(action_row[0] + i) = '-';
-		}
-	}
-
-	action_row[row][slot] = (char)key;
-
-	save_options();
-}
-
-static char *unlocked_desc = "Move the mouse over one of the other icons and press the key you want to assign to it.";
-static char *locked_desc = "Change the keys assigned to the icons.";
-
-void display_action(void)
-{
-	static uint32_t hoover_start = 0, hoover_start2 = 0;
-	static int hoover_sel = 0;
-	char buf[4];
-	RenderFX fx;
-
-	if (!context_key_enabled()) {
-		hoover_sel = 0;
-		return;
-	}
-	if (vk_control || vk_alt) {
-		hoover_sel = 0;
-		return;
-	}
-
-	if (hoover_sel != actsel) {
-		hoover_sel = actsel;
-		hoover_start = tick + HOVER_DELAY;
-	}
-
-	bzero(&fx, sizeof(fx));
-	fx.scale = 80;
-	fx.sat = 14;
-	if (context_action_enabled()) {
-		for (int i = 0; i < MAXACTIONSLOT; i++) {
-			if (!has_action_skill(i)) {
-				continue;
-			}
-			fx.sprite = (unsigned int)(800 + i);
-			fx.ml = fx.ll = fx.rl = fx.ul = fx.dl =
-			    (i == actsel || i == action_ovr) ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT;
-			render_sprite_fx(&fx, butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i));
-			if (i == actsel) {
-				if (act_lck) { // non-keybinding mode
-					if (hoover_start > tick) { // display just the name first
-						render_text(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - 30, IRGB(31, 31, 31),
-						    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, action_text[i]);
-					} else { // display name and desc after hovering for a short while
-						int y = 40 + render_text_break_length(0, 0, 120, IRGB(31, 31, 31), 0, action_desc[i]);
-						render_shaded_rect(butx(BUT_ACT_BEG + i) - 64, buty(BUT_ACT_BEG + i) - y - 4,
-						    butx(BUT_ACT_BEG + i) + 64, buty(BUT_ACT_BEG + i) - 15, 0, 130);
-						render_text(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - y, IRGB(31, 31, 31),
-						    RENDER_TEXT_BIG | RENDER_ALIGN_CENTER, action_text[i]);
-						render_text_break(butx(BUT_ACT_BEG + i) - 60, buty(BUT_ACT_BEG + i) - y + 15,
-						    butx(BUT_ACT_BEG + i) + 60, IRGB(31, 31, 31), 0, action_desc[i]);
-					}
-					// display key-bindings
-					if (action_row[0][i] > ' ') {
-						buf[0] = (char)action_slot2key(i);
-						buf[1] = 0;
-						render_text(butx(BUT_ACT_BEG + i) - 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
-						    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
-					}
-					if (action_row[1][i] > ' ') {
-						buf[0] = (char)action_slot2key(i + 100);
-						buf[1] = 0;
-						render_text(butx(BUT_ACT_BEG + i) + 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
-						    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
-					}
-				} else { // keybinding mode
-					int row = get_action_key_row(i);
-					// display key-bindings
-					if (row == 0 && action_row[0][i] > ' ') {
-						buf[0] = (char)action_slot2key(i);
-						buf[1] = 0;
-						render_text(butx(BUT_ACT_BEG + i) - 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
-						    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
-					}
-					if (row == 1 && action_row[1][i] > ' ') {
-						buf[0] = (char)action_slot2key(i + 100);
-						buf[1] = 0;
-						render_text(butx(BUT_ACT_BEG + i) + 8, buty(BUT_ACT_BEG + i) - 11, IRGB(31, 31, 31),
-						    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, buf);
-					}
-					int y = 30;
-					if (action_row[0][i] > ' ' && action_row[1][i] > ' ') {
-						if (row == 0) {
-							render_text(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - y, IRGB(31, 31, 31),
-							    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "(Aimed at character version)");
-						} else if (action_skill[i] == sv_val(V_BLESS) || action_skill[i] == sv_val(V_HEAL)) {
-							render_text(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - y, IRGB(31, 31, 31),
-							    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "(Aimed at self version)");
-						} else {
-							render_text(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - y, IRGB(31, 31, 31),
-							    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "(Aimed at map tile version)");
-						}
-						y += 10;
-					}
-					render_text_fmt(butx(BUT_ACT_BEG + i), buty(BUT_ACT_BEG + i) - y, IRGB(31, 31, 31),
-					    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "Press key to assign to %s", action_text[i]);
-				}
-			}
-		}
-
-		fx.sprite = 853;
-		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = butsel == BUT_ACT_OPN ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT;
-		render_sprite_fx(&fx, butx(BUT_ACT_OPN), buty(BUT_ACT_OPN));
-		if (butsel == BUT_ACT_OPN) {
-			render_text(butx(BUT_ACT_OPN) - 8, buty(BUT_ACT_OPN) - 11, IRGB(31, 31, 31),
-			    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "-");
-			render_text(butx(BUT_ACT_OPN) + 8, buty(BUT_ACT_OPN) - 11, IRGB(31, 31, 31),
-			    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "=");
-			render_text(butx(BUT_ACT_OPN), buty(BUT_ACT_OPN) - 30, IRGB(31, 31, 31),
-			    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "Hide/Show");
-		}
-
-		fx.sprite = (unsigned int)(851 - act_lck);
-		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = butsel == BUT_ACT_LCK ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT;
-		render_sprite_fx(&fx, butx(BUT_ACT_LCK), buty(BUT_ACT_LCK));
-		if (butsel == BUT_ACT_LCK) {
-			if (hoover_start2 > tick) { // display just the name first
-				render_text(butx(BUT_ACT_LCK), buty(BUT_ACT_LCK) - 30, IRGB(31, 31, 31),
-				    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, act_lck ? "Assign Keys" : "Lock Keys");
-			} else { // display name and desc after hovering for a short while
-				int y = 40 +
-				        render_text_break_length(0, 0, 120, IRGB(31, 31, 31), 0, act_lck ? locked_desc : unlocked_desc);
-				render_shaded_rect(butx(BUT_ACT_LCK) - 64, buty(BUT_ACT_LCK) - y - 4, butx(BUT_ACT_LCK) + 64,
-				    buty(BUT_ACT_LCK) - 15, 0, 130);
-				render_text(butx(BUT_ACT_LCK), buty(BUT_ACT_LCK) - y, IRGB(31, 31, 31),
-				    RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER | RENDER_TEXT_BIG, act_lck ? "Assign Keys" : "Lock Keys");
-				render_text_break(butx(BUT_ACT_LCK) - 60, buty(BUT_ACT_LCK) - y + 15, butx(BUT_ACT_LCK) + 60,
-				    IRGB(31, 31, 31), 0, act_lck ? locked_desc : unlocked_desc);
-			}
-		} else {
-			hoover_start2 = tick + HOVER_DELAY;
-		}
-	} else {
-		fx.sprite = 852;
-		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = butsel == BUT_ACT_OPN ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT;
-		render_sprite_fx(&fx, butx(BUT_ACT_OPN), buty(BUT_ACT_OPN));
-	}
+	return action_desc[slot];
 }
 
 void display_action_lock(void)

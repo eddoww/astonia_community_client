@@ -13,6 +13,12 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
+#include "gui/spellbook_ui.h"
+#include "gui/keybind_ui.h"
+#include "gui/keybind_settings_ui.h"
+#include "gui/escape_menu_ui.h"
+#include "gui/options_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -202,7 +208,9 @@ void display(void)
 	}
 	display_wear();
 	display_inventory();
-	display_action();
+	hotbar_display();
+	spellbook_display();
+	keybind_panel_display();
 	if (con_cnt) {
 		display_container();
 	} else {
@@ -224,7 +232,11 @@ void display(void)
 	display_minimap();
 	display_citem();
 	context_display(mousex, mousey);
-	display_helpandquest(); // display last because it is on top
+	display_helpandquest();
+
+	keybind_settings_display();
+	options_display();
+	escape_menu_display();
 
 	// Display lag warning when no server data received for > 500ms
 	if (sockstate == 4 && last_tick_received_time > 0) {

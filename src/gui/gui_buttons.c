@@ -12,6 +12,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -441,7 +442,11 @@ static void detect_hover_target(void)
 
 	if (butsel == -1 && context_key_enabled()) {
 		butsel = get_near_button(mousex, mousey);
-		if (context_action_enabled()) {
+
+		/* hotbar buttons are always valid targets */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			; /* keep butsel */
+		} else if (context_action_enabled()) {
 			if (butsel >= BUT_ACT_BEG && butsel <= BUT_ACT_END && has_action_skill(butsel - BUT_ACT_BEG)) {
 				actsel = butsel - BUT_ACT_BEG;
 			}
@@ -517,7 +522,7 @@ static void detect_hover_target(void)
 				}
 			}
 
-			if (chrsel == MAXMN && itmsel == MAXMN && !vk_char && (!vk_item || csprite)) {
+			if (chrsel == MAXMN && itmsel == MAXMN) {
 				mapsel = get_near_ground(mousex, mousey);
 			}
 			if (mapsel != MAXMN || itmsel != MAXMN || chrsel != MAXMN) {
@@ -602,6 +607,7 @@ void exec_cmd(int cmd, int a)
 		cmd_use_inv(invsel);
 		return;
 	case CMD_INV_TAKE:
+		csprite_origin = invsel;
 		cmd_swap(invsel);
 		return;
 	case CMD_INV_SWAP:
@@ -986,6 +992,9 @@ static void set_cmd_key_states(void)
 	vk_control = (km & SDL_KEYM_CTRL) || control_override;
 	vk_alt = (km & SDL_KEYM_ALT) != 0;
 
+	/* Mouse modifier behaviors — these affect what happens on mouse click.
+	 * Note: mapsel is now always computed regardless of modifiers, so
+	 * keybinds using shift+key for map-cast spells work correctly. */
 	vk_char = vk_control;
 	vk_item = vk_shift;
 	vk_spell = vk_alt;
@@ -1206,6 +1215,13 @@ void handle_special_buttons_logic(void)
 		}
 		if (butsel == BUT_WEA_LCK) {
 			lcmd = CMD_WEAR_LOCK;
+		}
+
+		/* hotbar: just prevent other commands when hovering with item on cursor */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			if (csprite) {
+				lcmd = CMD_NONE;
+			}
 		}
 	}
 }

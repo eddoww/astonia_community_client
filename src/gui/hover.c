@@ -97,7 +97,7 @@ void display_mouseover(void)
 }
 
 #define MAXVALID (TICKS * 60 * 2)
-#define MAXDESC  20
+#define MAXDESC  40
 
 struct hover_item {
 	uint32_t valid_till;
@@ -178,6 +178,9 @@ int hover_capture_text(char *line)
 	}
 
 	if (capture) {
+		if (last_line >= MAXDESC) {
+			return capture; /* too many lines, skip */
+		}
 		int len = textlength(line);
 		hi[last_invsel].valid_till = tick + MAXVALID;
 		hi[last_invsel].desc[last_line++] = xstrdup(line, MEM_TEMP11);
@@ -226,6 +229,96 @@ void hover_invalidate_con(int slot)
 		return;
 	}
 	hi[slot + _inventorysize].valid_till = 0;
+}
+
+const char *hover_get_item_name(int inv_slot)
+{
+	if (inv_slot < 0 || inv_slot >= _inventorysize) {
+		return NULL;
+	}
+	if (hi[inv_slot].valid_till < tick) {
+		return NULL;
+	}
+	if (hi[inv_slot].cnt < 1 || !hi[inv_slot].desc[0]) {
+		return NULL;
+	}
+	return hi[inv_slot].desc[0];
+}
+
+int hover_render_for_slot(int inv_slot, int anchor_x, int anchor_y)
+{
+	char buf[4];
+
+	if (inv_slot < 0 || inv_slot >= _inventorysize || !item[inv_slot]) {
+		return 0;
+	}
+
+	if (hi[inv_slot].valid_till >= tick) {
+		hi[inv_slot].valid_till = max(hi[inv_slot].valid_till, tick + TICKS);
+
+		int sx = anchor_x - hi[inv_slot].width / 2;
+		if (sx < dotx(DOT_TL)) {
+			sx = dotx(DOT_TL);
+		}
+		if (sx > dotx(DOT_BR) - hi[inv_slot].width - 8) {
+			sx = dotx(DOT_BR) - hi[inv_slot].width - 8;
+		}
+
+		int sy = anchor_y - hi[inv_slot].cnt * 10 - 16;
+		if (sy < doty(DOT_TL)) {
+			sy = doty(DOT_TL);
+		}
+
+		render_shaded_rect(sx, sy, sx + hi[inv_slot].width + 8, sy + hi[inv_slot].cnt * 10 + 8, 0x0000, 150);
+
+		for (int n = 0; n < hi[inv_slot].cnt; n++) {
+			int x = sx + 4;
+			unsigned short col = IRGB(24, 24, 24);
+
+			for (int i = 0; hi[inv_slot].desc[n][i]; i++) {
+				if (hi[inv_slot].desc[n][i] == RENDER_TEXT_TERMINATOR) {
+					if (hi[inv_slot].desc[n][i + 1] == 'c') {
+						if (isdigit(hi[inv_slot].desc[n][i + 2])) {
+							if (hi[inv_slot].desc[n][i + 2] == '5') {
+								col = IRGB(31, 31, 31);
+							} else {
+								col = IRGB(16, 16, 16);
+							}
+							if (isdigit(hi[inv_slot].desc[n][i + 3])) {
+								i += 3;
+								continue;
+							}
+							i += 2;
+							continue;
+						}
+						i += 1;
+						continue;
+					}
+					continue;
+				}
+				buf[0] = hi[inv_slot].desc[n][i];
+				buf[1] = 0;
+				x = render_text(x, sy + n * 10 + 4, col, 0, buf);
+			}
+		}
+		return 1;
+	}
+
+	/* cache expired — request fresh data from server */
+	if (!last_look && hi[inv_slot].valid_till < tick) {
+		cmd_look_inv(inv_slot);
+		last_line = 0;
+		last_look = 20;
+		last_invsel = inv_slot;
+		for (int i = 0; i < MAXDESC; i++) {
+			if (hi[inv_slot].desc[i]) {
+				xfree(hi[inv_slot].desc[i]);
+				hi[inv_slot].desc[i] = NULL;
+			}
+		}
+		hi[inv_slot].cnt = 0;
+	}
+	return 0;
 }
 
 static int display_hover(void)

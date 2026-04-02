@@ -64,7 +64,10 @@
 #define BUT_WEA_LCK 101
 // BUT_HELP_INDEX is 102
 
-#define MAX_BUT 103
+#define BUT_HOTBAR_BEG 103
+#define BUT_HOTBAR_END 147 /* 45 slots (3×15): 103..147 */
+
+#define MAX_BUT 148
 
 #define BUTF_NOHIT    (1 << 1) // button is ignored int hit processing
 #define BUTF_CAPTURE  (1 << 2) // button captures mouse on lclick
@@ -483,6 +486,9 @@ int do_display_questlog(int nr);
 void display_action(void);
 void display_selfbars(void);
 
+const char *get_action_text(int slot);
+const char *get_action_desc(int slot);
+
 void display_teleport(void);
 int get_teleport(int x, int y);
 
@@ -491,6 +497,10 @@ int get_color(int x, int y);
 void cmd_color(int nr);
 void cmd_reset(void);
 void cmd_proc(int key);
+int cmd_is_active(void);
+
+/* hotbar_ui.c */
+int hotbar_toggle_hit(int mx, int my);
 
 #define NEAR_ITEM    1024
 #define NEAR_CHAR    2048
@@ -507,14 +517,20 @@ void context_stop(void);
 int context_click(int mx, int my);
 int context_key(int key);
 void context_keydown(SDL_Keycode key);
+void context_activate_action(int action_slot);
+int context_execute_action(int action_slot);
+int context_execute_action_normal(int action_slot);
 void context_keyup(SDL_Keycode key);
 int context_key_set(int onoff);
-int context_key_isset(void);
 int context_key_isset(void);
 int context_key_enabled(void);
 int context_key_set_cmd(void);
 void context_key_reset(void);
 int context_key_click(void);
+
+/* hover.c accessors for hotbar */
+const char *hover_get_item_name(int inv_slot);
+int hover_render_for_slot(int inv_slot, int anchor_x, int anchor_y);
 
 DLL_EXPORT extern char hover_bless_text[];
 DLL_EXPORT extern char hover_freeze_text[];
@@ -526,9 +542,7 @@ DLL_EXPORT extern char hover_rank_text[];
 DLL_EXPORT extern char hover_time_text[];
 
 int action_key2slot(SDL_Keycode key);
-SDL_Keycode action_slot2key(int slot);
 int16_t has_action_skill(int i);
-void action_set_key(int slot, SDL_Keycode key);
 void context_action_enable(int onoff);
 
 void minimap_init(void);

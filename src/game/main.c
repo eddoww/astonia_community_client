@@ -28,6 +28,7 @@
 #include "game/sprite_config.h"
 #include "sdl/sdl.h"
 #include "gui/gui.h"
+#include "gui/input_bind.h"
 #include "client/client.h"
 #include "modder/modder.h"
 
@@ -453,76 +454,101 @@ int parse_args(int argc, char *argv[])
 	return 0;
 }
 
+static char active_charname[80];
+
+static const char *get_character_name(void)
+{
+	if (active_charname[0]) {
+		return active_charname;
+	}
+	return NULL;
+}
+
+static void get_config_path(char *buf, size_t bufsize)
+{
+	const char *charname = get_character_name();
+	if (charname && localdata) {
+		snprintf(buf, bufsize, "%skeybinds_%s.json", localdata, charname);
+	} else if (charname) {
+		snprintf(buf, bufsize, "res/config/keybinds_%s.json", charname);
+	} else if (localdata) {
+		snprintf(buf, bufsize, "%skeybinds.json", localdata);
+	} else {
+		snprintf(buf, bufsize, "res/config/keybinds.json");
+	}
+}
+
+static void get_shared_config_path(char *buf, size_t bufsize)
+{
+	if (localdata) {
+		snprintf(buf, bufsize, "%skeybinds.json", localdata);
+	} else {
+		snprintf(buf, bufsize, "res/config/keybinds.json");
+	}
+}
+
+static void get_legacy_config_path(char *buf, size_t bufsize)
+{
+	if (localdata) {
+		snprintf(buf, bufsize, "%s%s", localdata, sv_ver == 35 ? "moac35.dat" : "moac.dat");
+	} else {
+		snprintf(buf, bufsize, "bin/data/%s", sv_ver == 35 ? "moac35.dat" : "moac.dat");
+	}
+}
+
 void save_options(void)
 {
-	FILE *fp;
-	char filename[MAX_PATH];
-
-	if (localdata) {
-		if (sv_ver == 35) {
-			sprintf(filename, "%s%s", localdata, "moac35.dat");
-		} else {
-			sprintf(filename, "%s%s", localdata, "moac.dat");
-		}
-	} else {
-		if (sv_ver == 35) {
-			sprintf(filename, "%s", "bin/data/moac35.dat");
-		} else {
-			sprintf(filename, "%s", "bin/data/moac.dat");
-		}
-	}
-
-	fp = fopen(filename, "wb");
-	if (!fp) {
-		return;
-	}
-
-	fwrite(&user_keys, sizeof(user_keys), 1, fp);
-	if (sv_ver == 35) {
-		fwrite(&v35_action_row, sizeof(v35_action_row), 1, fp);
-	} else {
-		fwrite(&v3_action_row, sizeof(v3_action_row), 1, fp);
-	}
-	fwrite(&action_enabled, sizeof(action_enabled), 1, fp);
-	fwrite(&gear_lock, sizeof(gear_lock), 1, fp);
-	fclose(fp);
+	char path[MAX_PATH];
+	get_config_path(path, sizeof(path));
+	input_save_config(path);
 }
 
 void load_options(void)
 {
-	FILE *fp;
-	char filename[MAX_PATH];
+	char path[MAX_PATH];
 
-	if (localdata) {
-		if (sv_ver == 35) {
-			sprintf(filename, "%s%s", localdata, "moac35.dat");
-		} else {
-			sprintf(filename, "%s%s", localdata, "moac.dat");
-		}
-	} else {
-		if (sv_ver == 35) {
-			sprintf(filename, "%s", "bin/data/moac35.dat");
-		} else {
-			sprintf(filename, "%s", "bin/data/moac.dat");
-		}
-	}
+	active_charname[0] = '\0';
+	input_init(sv_ver);
 
-	fp = fopen(filename, "rb");
-	if (!fp) {
+	get_shared_config_path(path, sizeof(path));
+	if (input_load_config(path) == 0) {
 		return;
 	}
 
-	fread(&user_keys, sizeof(user_keys), 1, fp);
-	if (sv_ver == 35) {
-		fread(&v35_action_row, sizeof(v35_action_row), 1, fp);
-	} else {
-		fread(&v3_action_row, sizeof(v3_action_row), 1, fp);
+	get_legacy_config_path(path, sizeof(path));
+	if (input_migrate_binary_config(path) == 0) {
+		char json_path[MAX_PATH];
+		get_shared_config_path(json_path, sizeof(json_path));
+		input_save_config(json_path);
+		return;
 	}
-	fread(&action_enabled, sizeof(action_enabled), 1, fp);
-	fread(&gear_lock, sizeof(gear_lock), 1, fp);
-	fclose(fp);
 
-	actions_loaded();
+	hotbar_setup_defaults();
+	save_options();
+}
+
+void load_character_options(void)
+{
+	int center = (int)(DIST + DIST * MAPDX);
+	unsigned int cn = map[center].cn;
+	if (cn == 0 || cn >= MAXCHARS || player[cn].name[0] == '\0') {
+		return;
+	}
+
+	snprintf(active_charname, sizeof(active_charname), "%s", player[cn].name);
+
+	char path[MAX_PATH];
+	get_config_path(path, sizeof(path));
+
+	char shared[MAX_PATH];
+	get_shared_config_path(shared, sizeof(shared));
+	if (strcmp(path, shared) == 0) {
+		return;
+	}
+
+	if (input_load_config(path) == 0) {
+		addline("Loaded keybinds for %s", active_charname);
+	}
 }
 
 void init_logging(void)

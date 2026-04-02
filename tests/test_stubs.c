@@ -92,10 +92,25 @@ void gui_sdl_keyproc(SDL_Keycode key __attribute__((unused)))
 	// No-op in tests
 }
 
-void context_keyup(SDL_Keycode key __attribute__((unused)))
-{
-	// No-op in tests
-}
+void context_keyup(SDL_Keycode key __attribute__((unused))) {}
+
+void input_keyup(SDL_Keycode key __attribute__((unused))) {}
+
+void gamepad_init(void) {}
+
+void gamepad_shutdown(void) {}
+
+void gamepad_tick(void) {}
+
+void gamepad_on_added(uint32_t id __attribute__((unused))) {}
+
+void gamepad_on_removed(uint32_t id __attribute__((unused))) {}
+
+void gamepad_button_down(int button __attribute__((unused))) {}
+
+void gamepad_button_up(int button __attribute__((unused))) {}
+
+void gamepad_axis_motion(int axis __attribute__((unused)), int16_t value __attribute__((unused))) {}
 
 void cmd_proc(int key __attribute__((unused)))
 {

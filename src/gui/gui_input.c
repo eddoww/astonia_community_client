@@ -6,8 +6,6 @@
  */
 
 #include <inttypes.h>
-#include <time.h>
-#include <ctype.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_stdinc.h>
@@ -15,100 +13,56 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
+#include "gui/spellbook_ui.h"
+#include "gui/keybind_ui.h"
+#include "gui/keybind_settings_ui.h"
+#include "gui/escape_menu_ui.h"
+#include "gui/options_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
 #include "modder/modder.h"
 
-void gui_sdl_keyproc(SDL_Keycode wparam)
+void gui_sdl_keyproc(SDL_Keycode key)
 {
-	int i;
-
-	if (wparam != SDLK_ESCAPE && wparam != SDLK_F12 && amod_keydown(wparam)) {
+	if (keybind_settings_capturing()) {
+		if (key == SDLK_ESCAPE) {
+			keybind_settings_cancel_capture();
+			return;
+		}
+		if (key == SDLK_LSHIFT || key == SDLK_RSHIFT || key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LALT ||
+		    key == SDLK_RALT) {
+			return;
+		}
+		keybind_settings_accept_key(key, input_current_modifiers());
+		sdl_flush_textinput();
 		return;
 	}
 
-	switch (wparam) {
-	case SDLK_ESCAPE:
-		cmd_stop();
-		context_stop();
-		show_look = 0;
-		display_gfx = 0;
-		teleporter = 0;
-		show_tutor = 0;
-		display_help = 0;
-		display_quest = 0;
-		show_color = 0;
-		context_key_reset();
-		action_ovr = ACTION_NONE;
-		minimap_hide();
-		if (context_key_enabled()) {
-			cmd_reset();
+	/* keybind panel key capture — intercept before anything else.
+	 * ignore modifier-only keys so Shift+E doesn't bind to "Shift". */
+	if (keybind_panel_capturing()) {
+		if (key == SDLK_ESCAPE) {
+			keybind_panel_cancel_capture();
+			return;
 		}
-		context_key_set(0);
-		return;
-	case SDLK_F1:
-		if (fkeyitem[0]) {
-			exec_cmd(CMD_USE_FKEYITEM, 0);
+		if (key == SDLK_LSHIFT || key == SDLK_RSHIFT || key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LALT ||
+		    key == SDLK_RALT) {
+			return; /* wait for a real key */
 		}
+		keybind_panel_accept_key(key, input_current_modifiers());
+		sdl_flush_textinput();
 		return;
-	case SDLK_F2:
-		if (fkeyitem[1]) {
-			exec_cmd(CMD_USE_FKEYITEM, 1);
-		}
-		return;
-	case SDLK_F3:
-		if (fkeyitem[2]) {
-			exec_cmd(CMD_USE_FKEYITEM, 2);
-		}
-		return;
-	case SDLK_F4:
-		if (fkeyitem[3]) {
-			exec_cmd(CMD_USE_FKEYITEM, 3);
-		}
-		return;
+	}
 
-	case SDLK_F5:
-		cmd_speed(1);
+	/* let mods intercept first (except ESC and F12 which are non-rebindable) */
+	if (key != SDLK_ESCAPE && key != SDLK_F12 && amod_keydown(key)) {
 		return;
-	case SDLK_F6:
-		cmd_speed(0);
-		return;
-	case SDLK_F7:
-		cmd_speed(2);
-		return;
+	}
 
-	case SDLK_F8:
-		nocut ^= 1;
-		return;
-
-	case SDLK_F9:
-		if (display_quest) {
-			display_quest = 0;
-		} else {
-			display_help = 0;
-			display_quest = 1;
-		}
-		return;
-
-	case SDLK_F10:
-		display_vc ^= 1;
-		list_mem();
-		render_list_text();
-		return;
-
-	case SDLK_F11:
-		if (display_help) {
-			display_help = 0;
-		} else {
-			display_quest = 0;
-			display_help = 1;
-		}
-		return;
-	case SDLK_F12:
-		quit = 1;
-		return;
-
+	/* text editing keys — always go to the command line, never through bindings */
+	switch (key) {
 	case SDLK_RETURN:
 	case SDLK_KP_ENTER:
 		cmd_proc(CMD_RETURN);
@@ -120,10 +74,18 @@ void gui_sdl_keyproc(SDL_Keycode wparam)
 		cmd_proc(CMD_BACK);
 		return;
 	case SDLK_LEFT:
-		cmd_proc(CMD_LEFT);
+		if (cmd_is_active()) {
+			cmd_proc(CMD_LEFT);
+			return;
+		}
+		keyboard_move_press(KMOVE_LEFT);
 		return;
 	case SDLK_RIGHT:
-		cmd_proc(CMD_RIGHT);
+		if (cmd_is_active()) {
+			cmd_proc(CMD_RIGHT);
+			return;
+		}
+		keyboard_move_press(KMOVE_RIGHT);
 		return;
 	case SDLK_HOME:
 		cmd_proc(CMD_HOME);
@@ -132,159 +94,72 @@ void gui_sdl_keyproc(SDL_Keycode wparam)
 		cmd_proc(CMD_END);
 		return;
 	case SDLK_UP:
-		cmd_proc(CMD_UP);
+		if (cmd_is_active()) {
+			cmd_proc(CMD_UP);
+			return;
+		}
+		keyboard_move_press(KMOVE_UP);
 		return;
 	case SDLK_DOWN:
-		cmd_proc(CMD_DOWN);
+		if (cmd_is_active()) {
+			cmd_proc(CMD_DOWN);
+			return;
+		}
+		keyboard_move_press(KMOVE_DOWN);
 		return;
 	case SDLK_TAB:
 		cmd_proc(9);
 		return;
-
-	case SDLK_KP_0:
-		wparam = '0';
-		goto spellbindkey;
-	case SDLK_KP_1:
-		wparam = '1';
-		goto spellbindkey;
-	case SDLK_KP_2:
-		wparam = '2';
-		goto spellbindkey;
-	case SDLK_KP_3:
-		wparam = '3';
-		goto spellbindkey;
-	case SDLK_KP_4:
-		wparam = '4';
-		goto spellbindkey;
-	case SDLK_KP_5:
-		wparam = '5';
-		goto spellbindkey;
-	case SDLK_KP_6:
-		wparam = '6';
-		goto spellbindkey;
-	case SDLK_KP_7:
-		wparam = '7';
-		goto spellbindkey;
-	case SDLK_KP_8:
-		wparam = '8';
-		goto spellbindkey;
-	case SDLK_KP_9:
-		wparam = '9';
-		goto spellbindkey;
-
-	case 'm':
-		if (vk_shift && vk_control && !context_key_enabled()) {
-			minimap_toggle();
-		} else {
-			goto spellbindkey;
-		}
-		return;
-
-	case '0':
-	case '1':
-	case '2':
-	case '3':
-	case '4':
-	case '5':
-	case '6':
-	case '7':
-	case '8':
-	case '9':
-	case 'a':
-	case 'b':
-	case 'c':
-	case 'd':
-	case 'e':
-	case 'f':
-	case 'g':
-	case 'h':
-	case 'i':
-	case 'j':
-	case 'k':
-	case 'l':
-	case 'n':
-	case 'o':
-	case 'p':
-	case 'q':
-	case 'r':
-	case 's':
-	case 't':
-	case 'u':
-	case 'v':
-	case 'w':
-	case 'x':
-	case 'y':
-	case 'z':
-	spellbindkey:
-		if (!vk_item && !vk_char && !vk_spell) {
-			context_keydown(wparam);
-			return;
-		}
-
-		// This rules out numbers, we already got here so a-z garaunteed.
-		// toupper for unsigned (aka SDL_Keycode)
-		if (wparam >= 97) {
-			wparam -= 32;
-		}
-
-		for (i = 0; i < max_keytab; i++) {
-			if (keytab[i].keycode != wparam && keytab[i].userdef != wparam) {
-				continue;
-			}
-
-			if ((keytab[i].vk_item && !vk_item) || (!keytab[i].vk_item && vk_item)) {
-				continue;
-			}
-			if ((keytab[i].vk_char && !vk_char) || (!keytab[i].vk_char && vk_char)) {
-				continue;
-			}
-			if ((keytab[i].vk_spell && !vk_spell) || (!keytab[i].vk_spell && vk_spell)) {
-				continue;
-			}
-
-			if (keytab[i].cl_spell) {
-				if (keytab[i].tgt == TGT_MAP) {
-					exec_cmd(CMD_MAP_CAST_K, keytab[i].cl_spell);
-				} else if (keytab[i].tgt == TGT_CHR) {
-					exec_cmd(CMD_CHR_CAST_K, keytab[i].cl_spell);
-				} else if (keytab[i].tgt == TGT_SLF) {
-					exec_cmd(CMD_SLF_CAST_K, keytab[i].cl_spell);
-				} else {
-					return; // hu ?
-				}
-				keytab[i].usetime = now;
-				return;
-			}
-			return;
-		}
-		return;
-
-	case SDLK_PAGEUP:
-		render_text_pageup();
-		break;
-	case SDLK_PAGEDOWN:
-		render_text_pagedown();
-		break;
-
-	case '+':
-	case '=':
-		if (!context_key_isset()) {
-			context_action_enable(1);
-		}
-		break;
-	case '-':
-		if (!context_key_isset()) {
-			context_action_enable(0);
-		}
-		break;
-
-		// case '<':               render_sceweup(); break;
-
 	case SDLK_INSERT:
 		if (vk_shift && !vk_control && !vk_alt) {
 			gui_insert();
 		}
+		return;
+	default:
 		break;
+	}
+
+	/* if chat is active, all keys go to chat - no hotkeys fire */
+	if (cmd_is_active()) {
+		return;
+	}
+
+	/* build modifier mask for binding lookup */
+	Uint8 mods = input_current_modifiers();
+
+	/* check hotbar extra binds first (modifier combos take priority) */
+	{
+		int hb_slot = hotbar_find_extra_bind(key, mods);
+		if (hb_slot >= 0) {
+			hotbar_activate_extra(hb_slot, key, mods);
+			sdl_flush_textinput();
+			return;
+		}
+	}
+
+	/* try the unified binding system */
+	InputBinding *b = input_find(key, mods);
+	if (b) {
+		input_execute(b);
+		sdl_flush_textinput();
+		return;
+	}
+
+	/* Shift+hotbar key → quick-cast: strip Shift and retry.
+	 * Only triggers when Shift is the sole modifier and the underlying
+	 * binding is a hotbar slot — other bindings are not affected. */
+	if ((mods & INPUT_MOD_SHIFT) && !(mods & ~INPUT_MOD_SHIFT)) {
+		b = input_find(key, INPUT_MOD_NONE);
+		if (b && b->category == INPUT_CAT_HOTBAR) {
+			hotbar_activate_with_mode(b->param, CAST_QUICK);
+			sdl_flush_textinput();
+			return;
+		}
+	}
+
+	/* no modifiers held: letter/number keys go to the action bar context system */
+	if (!vk_item && !vk_char && !vk_spell) {
+		context_keydown(key);
 	}
 }
 
@@ -331,6 +206,10 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			hotbar_mousedown(butsel - BUT_HOTBAR_BEG);
+		}
+
 		if (butsel != -1 && capbut == -1 && (but[butsel].flags & BUTF_CAPTURE)) {
 			amod_mouse_capture(1);
 			SDL_HideCursor();
@@ -368,6 +247,60 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		if (options_is_open()) {
+			if (options_click(mousex, mousey)) {
+				break;
+			}
+			options_close();
+			break;
+		}
+
+		if (escape_menu_is_open()) {
+			if (escape_menu_click(mousex, mousey)) {
+				break;
+			}
+			escape_menu_close();
+			break;
+		}
+
+		if (keybind_settings_is_open()) {
+			if (keybind_settings_click(mousex, mousey)) {
+				break;
+			}
+			keybind_settings_close();
+			break;
+		}
+
+		/* keybind panel — consume clicks inside, close on click outside */
+		if (keybind_panel_is_open()) {
+			if (keybind_panel_click(mousex, mousey)) {
+				break;
+			}
+			keybind_panel_close();
+		}
+
+		/* spellbook toggle button */
+		if (hotbar_toggle_hit(mousex, mousey)) {
+			break;
+		}
+
+		/* hotbar: assign (drag) or activate (click) */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			if (hotbar_click(butsel - BUT_HOTBAR_BEG)) {
+				break;
+			}
+		}
+
+		if (hotbar_is_dragging()) {
+			hotbar_cancel_drag();
+			break;
+		}
+
+		/* spellbook panel clicks (pick up spell, or cancel drag) */
+		if (spellbook_click(mousex, mousey)) {
+			break;
+		}
+
 		if (capbut != -1) {
 			sdl_set_cursor_pos(
 			    (but[capbut].x + render_offset_x()) * sdl_scale, (but[capbut].y + render_offset_y()) * sdl_scale);
@@ -392,12 +325,31 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
+		hotbar_cancel_held();
+		hotbar_cancel_drag();
 		context_stop();
 		break;
 
 	case SDL_MOUM_RUP:
 		vk_rbut = 0;
 		if (amod_mouse_click(mousex, mousey, what)) {
+			break;
+		}
+		/* right-click cancels spellbook drag */
+		if (spellbook_rclick(mousex, mousey)) {
+			break;
+		}
+		/* keybind panel right-click (cycle backward on cast/target) */
+		if (keybind_panel_is_open()) {
+			if (keybind_panel_rclick(mousex, mousey)) {
+				break;
+			}
+			keybind_panel_close();
+			break;
+		}
+		/* right-click hotbar slot opens keybind config panel */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			keybind_panel_open(butsel - BUT_HOTBAR_BEG);
 			break;
 		}
 		if (rcmd == CMD_MAP_LOOK && context_open(mousex, mousey)) {
@@ -409,6 +361,16 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 	case SDL_MOUM_WHEEL:
 		delta = local_y;
+
+		if (keybind_settings_is_open()) {
+			keybind_settings_scroll(delta > 0 ? -1 : 1);
+			break;
+		}
+
+		if (options_is_open()) {
+			options_scroll(delta > 0 ? -1 : 1);
+			break;
+		}
 
 		if (amod_mouse_click(0, delta, what)) {
 			break;
@@ -521,5 +483,36 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		}
 		mdown = 1;
 		break;
+
+	case SDL_MOUM_X1DOWN:
+	case SDL_MOUM_X2DOWN: {
+		SDL_Keycode vk = (what == SDL_MOUM_X1DOWN) ? INPUT_MOUSE_X1 : INPUT_MOUSE_X2;
+
+		if (keybind_panel_capturing()) {
+			keybind_panel_accept_key(vk, input_current_modifiers());
+			break;
+		}
+
+		Uint8 mods = input_current_modifiers();
+
+		int hb_slot = hotbar_find_extra_bind(vk, mods);
+		if (hb_slot >= 0) {
+			hotbar_activate_extra(hb_slot, vk, mods);
+			break;
+		}
+
+		InputBinding *b = input_find(vk, mods);
+		if (b) {
+			input_execute(b);
+		}
+		break;
+	}
+
+	case SDL_MOUM_X1UP:
+	case SDL_MOUM_X2UP: {
+		SDL_Keycode vk = (what == SDL_MOUM_X1UP) ? INPUT_MOUSE_X1 : INPUT_MOUSE_X2;
+		input_keyup(vk);
+		break;
+	}
 	}
 }

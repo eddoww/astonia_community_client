@@ -54,6 +54,13 @@ pub fn build(b: *std.Build) void {
         "src/gui/context.c",
         "src/gui/hover.c",
         "src/gui/minimap.c",
+        "src/gui/input_bind.c",
+        "src/gui/hotbar_ui.c",
+        "src/gui/spellbook_ui.c",
+        "src/gui/keybind_ui.c",
+        "src/gui/keybind_settings_ui.c",
+        "src/gui/escape_menu_ui.c",
+        "src/gui/options_ui.c",
 
         // CLIENT
         "src/client/client.c",
@@ -81,6 +88,7 @@ pub fn build(b: *std.Build) void {
         "src/sdl/sdl_image.c",
         "src/sdl/sdl_effects.c",
         "src/sdl/sdl_draw.c",
+        "src/sdl/gamepad.c",
         "src/sdl/sound.c",
 
         // HELPERS

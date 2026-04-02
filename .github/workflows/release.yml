@@ -289,6 +289,13 @@ jobs:
           retention-days: 7
           overwrite: true
 
+      - name: Upload Binaries (Linux)
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binaries
+          path: distrib/linux_client/bin/
+          retention-days: 7
+
   build-windows-release:
     needs: build-sdl3-windows
     name: Build Windows Release

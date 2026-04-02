@@ -28,6 +28,7 @@ make build-sdl3 build-sdl3-mixer
 rustup toolchain install stable-x86_64-pc-windows-gnullvm
 rustup default stable-x86_64-pc-windows-gnullvm
 ```
+
 Then build:
 ```bash
 make

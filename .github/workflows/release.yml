@@ -273,14 +273,6 @@ jobs:
       - name: Prepare distribution staging
         run: make distrib-stage
 
-      - name: Upload distribution staging
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-staging
-          path: distrib/linux_client/
-          retention-days: 7
-          overwrite: true
-
       - name: Upload Binaries (Linux)
         uses: actions/upload-artifact@v4
         with:

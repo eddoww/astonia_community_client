@@ -378,6 +378,8 @@ jobs:
     name: Build MacOS Release
     runs-on: macos-latest
     timeout-minutes: 30
+    env:
+      CAN_SIGN: ${{ env.CAN_SIGN == 'true' }}
 
     steps:
       - name: Checkout code
@@ -444,32 +446,32 @@ jobs:
 
       # ---- macOS signing + DMG (skipped when Apple secrets are not configured) ----
       - name: Build .app bundle
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         run: make macos-appbundle
 
       - name: Install signing certificate
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         run: |
           mkdir -p certs
           echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certs/dist.p12
 
       - name: Install App Store Connect API key
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         run: |
           mkdir -p private_keys
           echo '${{ secrets.APP_STORE_CONNECT_KEY }}' > "private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8"
 
       - name: Install App Store Connect API key JSON
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         run: |
           echo '${{ secrets.APP_STORE_CONNECT_KEY_JSON }}' > private_keys/appstore_key.json
 
       - name: Rename app to tmp name
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         run: mv distrib/Astonia.app distrib/Astonia-unsigned.app
 
       - name: Sign Astonia.app
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         uses: indygreg/apple-code-sign-action@v1
         with:
           input_path: distrib/Astonia-unsigned.app
@@ -485,11 +487,11 @@ jobs:
             --for-notarization
 
       - name: Remove unsigned app bundle
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         run: rm -rf distrib/Astonia-unsigned.app
 
       - name: Create unsigned DMG from signed app
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         run: |
           cd distrib
           hdiutil create \
@@ -502,7 +504,7 @@ jobs:
           ls -lh distrib/Astonia-macOS-unsigned.dmg
 
       - name: Sign, notarize, and staple DMG
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         uses: indygreg/apple-code-sign-action@v1
         with:
           input_path: distrib/Astonia-macOS-unsigned.dmg
@@ -519,11 +521,11 @@ jobs:
           app_store_connect_api_key: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
 
       - name: Remove unsigned DMG
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         run: rm -f distrib/Astonia-macOS-unsigned.dmg
 
       - name: Upload signed DMG
-        if: secrets.APPLE_CERT_P12 != ''
+        if: env.CAN_SIGN == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg

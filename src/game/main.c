@@ -555,7 +555,7 @@ void init_logging(void)
 {
 	char filename[MAX_PATH];
 
-	if (game_options & GO_APPDATA) {
+	if ((game_options & GO_APPDATA) || (game_options & GO_NOTSET)) {
 		localdata = SDL_GetPrefPath(ORG_NAME, APP_NAME);
 		if (localdata) {
 			snprintf(filename, sizeof(filename), "%s%s", localdata, "moac.log");

@@ -13,6 +13,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/escape_menu_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -871,7 +872,7 @@ void exec_cmd(int cmd, int a)
 		return;
 
 	case CMD_EXIT:
-		quit = 1;
+		escape_menu_toggle();
 		return;
 	case CMD_NOLOOK:
 		show_look = 0;

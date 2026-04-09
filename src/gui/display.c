@@ -660,6 +660,14 @@ void display_screen(void)
 
 	render_sprite(opt_sprite(999), dotx(DOT_TOP), doty(DOT_TOP), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 
+	/* draw exit/menu button label depending on game state */
+	{
+		int bx = dotx(DOT_TOP) + 713;
+		int by = doty(DOT_TOP) + 8;
+		const char *label = (sockstate >= 4) ? "Menu" : "Exit";
+		render_text(bx, by, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, label);
+	}
+
 	trans_date((int)realtime, &h, &m);
 
 	h1 = h / 10 * 3;

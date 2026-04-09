@@ -413,6 +413,11 @@ DLL_EXPORT unsigned int _opt_sprite(unsigned int sprite)
 			return 306;
 		}
 		break;
+	case 309:
+		if (game_options & GO_DARK) {
+			return 310;
+		}
+		break;
 	}
 	return sprite;
 }

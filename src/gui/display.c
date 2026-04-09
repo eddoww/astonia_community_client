@@ -658,18 +658,9 @@ void display_screen(void)
 	int h1, h2, m1, m2;
 	static int rh1 = 0, rh2 = 0, rm1 = 0, rm2 = 0;
 
-	render_sprite(opt_sprite(999), dotx(DOT_TOP), doty(DOT_TOP), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-
-	/* draw button labels on top bar (text removed from sprite) */
-	{
-		int tx = dotx(DOT_TOP);
-		int ty = doty(DOT_TOP);
-		int flags = RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER;
-		const char *exit_label = (sockstate >= 4) ? "Menu" : "Exit";
-		render_text(tx + 713, ty + 8, darkgraycolor, flags, exit_label);
-		render_text(tx + 721, ty + 23, darkgraycolor, flags, "Help");
-		render_text(tx + 758, ty + 23, darkgraycolor, flags, "Quest");
-	}
+	/* use "Menu" sprite variant (309) when in game, original "Exit" (999) otherwise */
+	render_sprite(opt_sprite((sockstate >= 4) ? 309 : 999), dotx(DOT_TOP), doty(DOT_TOP), RENDERFX_NORMAL_LIGHT,
+	    RENDER_ALIGN_NORMAL);
 
 	trans_date((int)realtime, &h, &m);
 

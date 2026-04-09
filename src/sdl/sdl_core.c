@@ -99,7 +99,7 @@ int sdl_init(int width, int height, char *title, int monitor)
 	SDL_DisplayID *displays;
 	SDL_DisplayID display_id;
 
-	if (!SDL_Init(SDL_INIT_VIDEO | ((game_options & GO_SOUND) ? SDL_INIT_AUDIO : 0))) {
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | ((game_options & GO_SOUND) ? SDL_INIT_AUDIO : 0))) {
 		fail("SDL_Init Error: %s", SDL_GetError());
 		return 0;
 	}

@@ -872,7 +872,11 @@ void exec_cmd(int cmd, int a)
 		return;
 
 	case CMD_EXIT:
-		escape_menu_toggle();
+		if (sockstate < 4) {
+			quit = 1;
+		} else {
+			escape_menu_toggle();
+		}
 		return;
 	case CMD_NOLOOK:
 		show_look = 0;

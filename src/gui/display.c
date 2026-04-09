@@ -660,18 +660,15 @@ void display_screen(void)
 
 	render_sprite(opt_sprite(999), dotx(DOT_TOP), doty(DOT_TOP), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 
-	/* draw button labels on top bar (text removed from sprite, double-strike for bold) */
+	/* draw button labels on top bar (text removed from sprite) */
 	{
 		int tx = dotx(DOT_TOP);
 		int ty = doty(DOT_TOP);
-		int flags = RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER;
+		int flags = RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER;
 		const char *exit_label = (sockstate >= 4) ? "Menu" : "Exit";
-		render_text(tx + 713, ty + 8, blackcolor, flags, exit_label);
-		render_text(tx + 714, ty + 8, blackcolor, flags, exit_label);
-		render_text(tx + 721, ty + 23, blackcolor, flags, "Help");
-		render_text(tx + 722, ty + 23, blackcolor, flags, "Help");
-		render_text(tx + 758, ty + 23, blackcolor, flags, "Quest");
-		render_text(tx + 759, ty + 23, blackcolor, flags, "Quest");
+		render_text(tx + 713, ty + 8, whitecolor, flags, exit_label);
+		render_text(tx + 721, ty + 23, whitecolor, flags, "Help");
+		render_text(tx + 758, ty + 23, whitecolor, flags, "Quest");
 	}
 
 	trans_date((int)realtime, &h, &m);

@@ -666,9 +666,9 @@ void display_screen(void)
 		int ty = doty(DOT_TOP);
 		int flags = RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER;
 		const char *exit_label = (sockstate >= 4) ? "Menu" : "Exit";
-		render_text(tx + 713, ty + 8, whitecolor, flags, exit_label);
-		render_text(tx + 721, ty + 23, whitecolor, flags, "Help");
-		render_text(tx + 758, ty + 23, whitecolor, flags, "Quest");
+		render_text(tx + 713, ty + 8, darkgraycolor, flags, exit_label);
+		render_text(tx + 721, ty + 23, darkgraycolor, flags, "Help");
+		render_text(tx + 758, ty + 23, darkgraycolor, flags, "Quest");
 	}
 
 	trans_date((int)realtime, &h, &m);

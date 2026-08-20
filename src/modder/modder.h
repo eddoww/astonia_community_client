@@ -3,6 +3,8 @@
  */
 
 #include <SDL3/SDL_keycode.h>
+
+struct amod_option;
 #define MAXMOD 6
 
 int amod_init(void);
@@ -24,6 +26,9 @@ void amod_update_hover_texts(void);
 int amod_client_cmd(const char *buf);
 int amod_process(const unsigned char *buf);
 int amod_prefetch(const unsigned char *buf);
+int amod_options_count(void);
+int amod_option_get(int index, struct amod_option *out);
+void amod_option_set(int index, int value);
 int amod_main_loaded(void);
 void amod_note_unhandled(int type, int subtype);
 int amod_is_playersprite(int sprite);

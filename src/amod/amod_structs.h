@@ -23,6 +23,9 @@
 
 #ifndef bzero
 #define bzero(ptr, size) memset(ptr, 0, size)
+
+#include "amod/amod_options.h"
+
 #endif
 
 #define V_MAX 200

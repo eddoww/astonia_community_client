@@ -13,6 +13,8 @@
 #include "game/game.h"
 #include "sdl/sdl.h"
 #include "sdl/gamepad.h"
+#include "modder/modder.h"
+#include "amod/amod_options.h"
 
 #define OPT_WIDTH      340
 #define OPT_PAD        8
@@ -20,7 +22,7 @@
 #define OPT_TITLE_H    16
 #define OPT_TAB_H      16
 #define OPT_SEP        4
-#define OPT_NTABS      6
+#define OPT_NTABS      7
 #define OPT_SLIDER_LBL 90
 #define OPT_SLIDER_VAL 28
 
@@ -100,9 +102,13 @@ static int opt_tab_total(void)
 		return 5;
 	case 3:
 		return 11;
-	case 4:
-		return 10;
+	case 4: {
+		int n = amod_options_count();
+		return n > 0 ? n : 1;
+	}
 	case 5:
+		return 10;
+	case 6:
 		return 20;
 	default:
 		return 0;
@@ -833,10 +839,81 @@ static int opt_click_gamepad(int mx, int my)
 	return 0;
 }
 
+/* Gameplay tab: options provided by the loaded mod (see amod_option in amod_structs.h) */
+static void opt_display_gameplay(void)
+{
+	int n = amod_options_count();
+	int i, ry;
+	struct amod_option o;
+
+	if (n <= 0) {
+		ry = opt_row_y(0);
+		if (ry >= 0) {
+			render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED,
+			    amod_main_loaded() ? "The loaded mod has no options." : "No gameplay mod loaded.");
+		}
+		return;
+	}
+	for (i = 0; i < n; i++) {
+		ry = opt_row_y(i);
+		if (ry < 0 || !amod_option_get(i, &o)) {
+			continue;
+		}
+		o.label[sizeof(o.label) - 1] = 0;
+		switch (o.type) {
+		case AMOD_OPT_TOGGLE:
+			draw_checkbox(opt_lx, ry, o.value != 0, o.label);
+			break;
+		case AMOD_OPT_SLIDER:
+			draw_slider(opt_lx, ry, opt_content_w, o.value, o.min_val, o.max_val, o.label);
+			break;
+		default:
+			draw_section_header(opt_lx, ry, opt_content_w, o.label);
+			break;
+		}
+	}
+}
+
+static int opt_click_gameplay(int mx, int my)
+{
+	int n = amod_options_count();
+	int i, ry, val;
+	int tx = opt_lx + OPT_SLIDER_LBL;
+	int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+	struct amod_option o;
+
+	for (i = 0; i < n; i++) {
+		ry = opt_row_y(i);
+		if (ry < 0 || !in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW) || !amod_option_get(i, &o)) {
+			continue;
+		}
+		if (o.type == AMOD_OPT_TOGGLE) {
+			amod_option_set(i, !o.value);
+			return 1;
+		}
+		if (o.type == AMOD_OPT_SLIDER && o.max_val > o.min_val) {
+			if (tw < 10) {
+				tw = 10;
+			}
+			val = o.min_val + (mx - tx) * (o.max_val - o.min_val) / tw;
+			if (val < o.min_val) {
+				val = o.min_val;
+			}
+			if (val > o.max_val) {
+				val = o.max_val;
+			}
+			amod_option_set(i, val);
+			return 1;
+		}
+		return 0;
+	}
+	return 0;
+}
+
 void options_display(void)
 {
 	int total, max_scroll, cx, tab_w, i;
-	static const char *tab_labels[OPT_NTABS] = {"Audio", "Video", "Display", "UI", "Advanced", "Gamepad"};
+	static const char *tab_labels[OPT_NTABS] = {"Audio", "Video", "Display", "UI", "Gameplay", "Advanced", "Gamepad"};
 
 	if (!opt_open) {
 		return;
@@ -883,9 +960,12 @@ void options_display(void)
 		opt_display_ui();
 		break;
 	case 4:
-		opt_display_advanced();
+		opt_display_gameplay();
 		break;
 	case 5:
+		opt_display_advanced();
+		break;
+	case 6:
 		opt_display_gamepad();
 		break;
 	default:
@@ -974,9 +1054,12 @@ int options_click(int mx, int my)
 		opt_click_ui(mx, my);
 		break;
 	case 4:
-		opt_click_advanced(mx, my);
+		opt_click_gameplay(mx, my);
 		break;
 	case 5:
+		opt_click_advanced(mx, my);
+		break;
+	case 6:
 		opt_click_gamepad(mx, my);
 		break;
 	default:

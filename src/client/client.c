@@ -126,6 +126,11 @@ DLL_EXPORT int _containersize = V3_CONTAINERSIZE;
 DLL_EXPORT unsigned int _client_dist = 25;
 
 // Unaligned load/store helpers
+DLL_EXPORT const char *client_config_dir(void)
+{
+	return localdata ? localdata : "res/config/";
+}
+
 DLL_EXPORT void client_send(void *buf, size_t len)
 {
 	if (len > MAX_OUTBUF - outused) {

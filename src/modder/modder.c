@@ -14,6 +14,7 @@
 
 #include "astonia.h"
 #include "modder/modder.h"
+#include "amod/amod_options.h"
 #include "modder/modder_private.h"
 #include "game/game.h"
 #include "game/game_private.h"
@@ -66,6 +67,9 @@ int (*_amod_is_playersprite)(int sprite) = NULL;
 int (*_amod_display_skill_line)(int v, int base, int curr, int cn, char *buf) = NULL;
 int (*_amod_process)(const unsigned char *buf) = NULL;
 int (*_amod_prefetch)(const unsigned char *buf) = NULL;
+int (*_amod_options_count)(void) = NULL;
+int (*_amod_option_get)(int index, struct amod_option *out) = NULL;
+void (*_amod_option_set)(int index, int value) = NULL;
 
 char *game_email_main = "<no one>";
 char *game_email_cash = "<no one>";
@@ -153,6 +157,15 @@ int amod_init(void)
 
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_process"))) {
 			_amod_process = (int (*)(const unsigned char *))tmp;
+		}
+		if (!_amod_options_count && (tmp = SDL_LoadFunction(dll_instance, "amod_options_count"))) {
+			_amod_options_count = (int (*)(void))tmp;
+		}
+		if (!_amod_option_get && (tmp = SDL_LoadFunction(dll_instance, "amod_option_get"))) {
+			_amod_option_get = (int (*)(int, struct amod_option *))tmp;
+		}
+		if (!_amod_option_set && (tmp = SDL_LoadFunction(dll_instance, "amod_option_set"))) {
+			_amod_option_set = (void (*)(int, int))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_prefetch"))) {
 			_amod_prefetch = (int (*)(const unsigned char *))tmp;
@@ -494,4 +507,27 @@ void amod_note_unhandled(int type, int subtype)
 	seen[type - SV_MOD1][subtype] = 1;
 	note("mod: skipped unhandled server mod packet type %d subtype 0x%02X%s", type, subtype,
 	    _amod_process ? "" : " (no mod loaded)");
+}
+
+int amod_options_count(void)
+{
+	if (_amod_options_count && _amod_option_get) {
+		return _amod_options_count();
+	}
+	return 0;
+}
+
+int amod_option_get(int index, struct amod_option *out)
+{
+	if (_amod_option_get && out) {
+		return _amod_option_get(index, out);
+	}
+	return 0;
+}
+
+void amod_option_set(int index, int value)
+{
+	if (_amod_option_set) {
+		_amod_option_set(index, value);
+	}
 }

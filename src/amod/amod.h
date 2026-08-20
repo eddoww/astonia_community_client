@@ -46,6 +46,10 @@ DLL_EXPORT int amod_process(const unsigned char *buf);
 DLL_EXPORT int amod_prefetch(const unsigned char *buf);
 DLL_EXPORT int amod_display_skill_line(int v, int base, int curr, int cn, char *buf);
 DLL_EXPORT int amod_is_playersprite(int sprite);
+/* Options shown in the client's Options > Gameplay tab (see struct amod_option) */
+DLL_EXPORT int amod_options_count(void);
+DLL_EXPORT int amod_option_get(int index, struct amod_option *out);
+DLL_EXPORT void amod_option_set(int index, int value);
 
 // =====================================================================
 // Client Exported Functions - Call these from your mod
@@ -174,6 +178,9 @@ DLL_IMPORT int mil_rank(int exp);
 
 // --- Client/Server Communication ---
 DLL_IMPORT void client_send(void *buf, size_t len);
+/* Directory the client stores user settings in (trailing slash, user-writable). Mods should
+ * keep their settings here instead of next to the game files. */
+DLL_IMPORT const char *client_config_dir(void);
 
 // --- Sound ---
 // Sounds loaded from: sx_mod.zip > sx_patch.zip > sx.zip

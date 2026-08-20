@@ -37,6 +37,11 @@ DLL_EXPORT void amod_update_hover_texts(void);
 //  -1  = client should ignore, but allow other mods to process
 //   0  = not processed, continue normal handling
 DLL_EXPORT int amod_mouse_click(int x, int y, int what);
+// Optional: return non-zero if the mod draws an interactive surface (window, bar, ...) at
+// (x,y). While it does, the client suppresses its own hover detection there (no "take"/"use"
+// cursor or tooltips for the inventory/map underneath a mod window). Clicks are still routed
+// through amod_mouse_click().
+DLL_EXPORT int amod_mouse_over(int x, int y);
 DLL_EXPORT int amod_keydown(SDL_Keycode key);
 DLL_EXPORT int amod_keyup(SDL_Keycode key);
 DLL_EXPORT int amod_client_cmd(const char *buf);

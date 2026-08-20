@@ -32,6 +32,7 @@ struct mod {
 	void (*_amod_tick)(void);
 	void (*_amod_mouse_move)(int x, int y);
 	int (*_amod_mouse_click)(int x, int y, int what);
+	int (*_amod_mouse_over)(int x, int y);
 	void (*_amod_mouse_capture)(int onoff);
 	void (*_amod_areachange)(void);
 	int (*_amod_keydown)(SDL_Keycode);
@@ -52,6 +53,7 @@ struct mod mod[MAXMOD] = {{
     NULL, // _amod_tick
     NULL, // _amod_mouse_move
     NULL, // _amod_mouse_click
+    NULL, // _amod_mouse_over
     NULL, // _amod_mouse_capture
     NULL, // _amod_areachange
     NULL, // _amod_keydown
@@ -126,6 +128,9 @@ int amod_init(void)
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_click"))) {
 			mod[i]._amod_mouse_click = (int (*)(int, int, int))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_over"))) {
+			mod[i]._amod_mouse_over = (int (*)(int, int))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_capture"))) {
 			mod[i]._amod_mouse_capture = (void (*)(int))tmp;
@@ -347,6 +352,16 @@ int amod_mouse_click(int x, int y, int what)
 		}
 	}
 	return ret;
+}
+
+int amod_mouse_over(int x, int y)
+{
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_mouse_over && mod[i]._amod_mouse_over(x, y)) {
+			return 1;
+		}
+	}
+	return 0;
 }
 
 void amod_mouse_capture(int onoff)

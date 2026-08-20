@@ -417,6 +417,15 @@ static void detect_hover_target(void)
 	    mousey <= doty(DOT_TOP) + 18) {
 		butsel = BUT_EXIT;
 	}
+	/* experience / military bars (top left): click cycles the numbers shown on them */
+	if (mousex >= dotx(DOT_BOT) + 25 && mousex <= dotx(DOT_BOT) + 135) {
+		if (mousey >= doty(DOT_TOP) + 5 && mousey <= doty(DOT_TOP) + 13) {
+			butsel = BUT_EXPBAR;
+		}
+		if (mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
+			butsel = BUT_MILBAR;
+		}
+	}
 
 	// hit teleport?
 	telsel = get_teleport(mousex, mousey);
@@ -1201,6 +1210,12 @@ void handle_special_buttons_logic(void)
 		}
 		if (butsel == BUT_EXIT) {
 			lcmd = CMD_EXIT;
+		}
+		if (butsel == BUT_EXPBAR) {
+			exp_bar_toggle();
+		}
+		if (butsel == BUT_MILBAR) {
+			mil_bar_toggle();
 		}
 		if (butsel == BUT_HELP) {
 			lcmd = CMD_HELP;

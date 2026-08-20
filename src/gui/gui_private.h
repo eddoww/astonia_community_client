@@ -46,6 +46,8 @@
 #define BUT_HELP_MISC  75
 #define BUT_HELP_CLOSE 76
 #define BUT_HELP_INDEX 102
+#define BUT_EXPBAR     103
+#define BUT_MILBAR     104
 #define BUT_EXIT       77
 #define BUT_HELP       78
 #define BUT_NOLOOK     79

@@ -28,8 +28,8 @@ DLL_EXPORT char hover_freeze_text[120];
 DLL_EXPORT char hover_heal_text[120];
 DLL_EXPORT char hover_potion_text[120];
 DLL_EXPORT char hover_rage_text[120];
-DLL_EXPORT char hover_level_text[120];
-DLL_EXPORT char hover_rank_text[120];
+DLL_EXPORT char hover_level_text[200];
+DLL_EXPORT char hover_rank_text[200];
 DLL_EXPORT char hover_time_text[120];
 
 static int display_hover(void);

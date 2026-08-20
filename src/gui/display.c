@@ -840,9 +840,86 @@ void display_selfspells(void)
 	}
 }
 
+/* What the experience / military bars print on top of themselves.
+ * Cycled by clicking the bar: nothing -> percent -> have/need -> to go. */
+#define BAR_INFO_NONE    0
+#define BAR_INFO_PERCENT 1
+#define BAR_INFO_VALUES  2
+#define BAR_INFO_TOGO    3
+#define BAR_INFO_MODES   4
+
+static int exp_info_mode = BAR_INFO_PERCENT;
+static int mil_info_mode = BAR_INFO_PERCENT;
+
+void exp_bar_toggle(void)
+{
+	exp_info_mode = (exp_info_mode + 1) % BAR_INFO_MODES;
+}
+
+void mil_bar_toggle(void)
+{
+	mil_info_mode = (mil_info_mode + 1) % BAR_INFO_MODES;
+}
+
+/* 1234567 -> "1.23M", 45678 -> "45.7k", 999 -> "999" */
+static const char *fmt_compact(long long v, char *buf, size_t sz)
+{
+	if (v >= 1000000000LL) {
+		snprintf(buf, sz, "%.2fG", (double)v / 1e9);
+	} else if (v >= 1000000LL) {
+		snprintf(buf, sz, "%.2fM", (double)v / 1e6);
+	} else if (v >= 10000LL) {
+		snprintf(buf, sz, "%.1fk", (double)v / 1e3);
+	} else {
+		snprintf(buf, sz, "%lld", v);
+	}
+	return buf;
+}
+
+/* 1234567 -> "1,234,567" */
+static const char *fmt_thousands(long long v, char *buf, size_t sz)
+{
+	char tmp[32];
+	int len, i, o = 0;
+
+	snprintf(tmp, sizeof(tmp), "%lld", v);
+	len = (int)strlen(tmp);
+	for (i = 0; i < len && o < (int)sz - 1; i++) {
+		if (i && (len - i) % 3 == 0 && tmp[i] != '-') {
+			buf[o++] = ',';
+		}
+		buf[o++] = tmp[i];
+	}
+	buf[o] = 0;
+	return buf;
+}
+
+static void draw_bar_info(int mode, int y, long long have, long long need, long long togo)
+{
+	char a[32], b[32], text[64];
+	int pct = need > 0 ? (int)(100 * have / need) : 0;
+
+	switch (mode) {
+	case BAR_INFO_PERCENT:
+		snprintf(text, sizeof(text), "%d%%", pct);
+		break;
+	case BAR_INFO_VALUES:
+		snprintf(text, sizeof(text), "%s / %s", fmt_compact(have, a, sizeof(a)), fmt_compact(need, b, sizeof(b)));
+		break;
+	case BAR_INFO_TOGO:
+		snprintf(text, sizeof(text), "%s to go", fmt_compact(togo, a, sizeof(a)));
+		break;
+	default:
+		return;
+	}
+	render_text(dotx(DOT_TOP) + 31 + 50, y, IRGB(31, 31, 31),
+	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, text);
+}
+
 void display_exp(void)
 {
 	static int last_exp = 0, exp_ticker = 0;
+	char n1[32], n2[32], n3[32], n4[32];
 
 	sprintf(hover_level_text, "Level: unknown");
 
@@ -860,6 +937,7 @@ void display_exp(void)
 	}
 
 	if (total) {
+		long long have = total - step; /* exp gathered in this level */
 		if (last_exp != expe) {
 			exp_ticker = 3;
 			last_exp = expe;
@@ -875,7 +953,12 @@ void display_exp(void)
 			exp_ticker--;
 		}
 
-		sprintf(hover_level_text, "Level: From %d to %d", clevel, nlevel);
+		draw_bar_info(exp_info_mode, doty(DOT_TOP) + 6, have, total, step);
+
+		snprintf(hover_level_text, 200,
+		    "Level %d to %d: %s / %s (%lld%%)\n%s to go, total %s exp\n(click the bar to change the numbers shown)",
+		    clevel, nlevel, fmt_thousands(have, n1, sizeof(n1)), fmt_thousands(total, n2, sizeof(n2)),
+		    100LL * have / total, fmt_thousands(step, n3, sizeof(n3)), fmt_thousands(expe, n4, sizeof(n4)));
 	}
 }
 
@@ -904,7 +987,23 @@ char *_game_rankname[] = {
     "Knight of Astonia", // 21
     "Baron of Astonia", // 22
     "Earl of Astonia", // 23
-    "Warlord of Astonia" // 24    lvl 125
+    "Warlord of Astonia", // 24    lvl 125
+    "Duke of Astonia", // 25    lvl 130
+    "Archduke of Astonia", // 26    lvl 135
+    "Prince of Astonia", // 27    lvl 140
+    "High Prince of Astonia", // 28    lvl 145
+    "Royal Guardian", // 29    lvl 150
+    "Slayer of Demons", // 30    lvl 155
+    "Astonian Champion", // 31    lvl 161
+    "Defender of the Realm", // 32    lvl 167
+    "Sword of Astonia", // 33    lvl 173
+    "Shield of the Kingdom", // 34    lvl 179
+    "Legendary Warrior", // 35    lvl 185
+    "Immortal Guardian", // 36    lvl 188
+    "Hero of Ages", // 37    lvl 191
+    "Mythic Protector", // 38    lvl 194
+    "Eternal Champion", // 39    lvl 197
+    "Avatar of Astonia" // 40    lvl 200
 };
 char **game_rankname = _game_rankname;
 
@@ -927,11 +1026,18 @@ DLL_EXPORT int mil_rank(int exp)
 
 void display_military(void)
 {
-	int step, total, rank, cost1, cost2;
+	int step, total, rank, cost1, cost2, maxrank;
+	char n1[32], n2[32], n3[32], n4[32];
 
 	sprintf(hover_rank_text, "Rank: none or unknown");
 
+	/* Ranks follow the server: rank = cbrt(military points), capped at the last name
+	 * in the table (40 = Avatar of Astonia). */
+	maxrank = *game_rankcount - 1;
 	rank = mil_rank((int)mil_exp);
+	if (rank > maxrank) {
+		rank = maxrank;
+	}
 	cost1 = rank * rank * rank;
 	cost2 = (rank + 1) * (rank + 1) * (rank + 1);
 
@@ -940,17 +1046,29 @@ void display_military(void)
 	if (step > total) {
 		step = total;
 	}
+	if (step < 0) {
+		step = 0;
+	}
 
 	if (mil_exp && total) {
-		if (rank < *game_rankcount - 1) {
+		if (rank < maxrank) {
 			render_push_clip();
 			render_more_clip(0, 0, dotx(DOT_TOP) + 31 + 100 * step / total, doty(DOT_TOP) + 8 + 24);
 			render_sprite(993, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 24, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 			render_pop_clip();
 
-			sprintf(hover_rank_text, "Rank: '%s' to '%s'", game_rankname[rank], game_rankname[rank + 1]);
+			draw_bar_info(mil_info_mode, doty(DOT_TOP) + 23, step, total, total - step);
+
+			snprintf(hover_rank_text, 200,
+			    "Rank %d '%s' to %d '%s': %s / %s (%d%%)\n%s to go, total %s military points", rank,
+			    game_rankname[rank], rank + 1, game_rankname[rank + 1], fmt_thousands(step, n1, sizeof(n1)),
+			    fmt_thousands(total, n2, sizeof(n2)), 100 * step / total, fmt_thousands(total - step, n3, sizeof(n3)),
+			    fmt_thousands((long long)mil_exp, n4, sizeof(n4)));
 		} else {
-			sprintf(hover_rank_text, "%s", game_rankname[*game_rankcount - 1]);
+			/* Highest rank: full bar */
+			render_sprite(993, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 24, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+			snprintf(hover_rank_text, 200, "Rank %d '%s' (highest rank)\ntotal %s military points", rank,
+			    game_rankname[maxrank], fmt_thousands((long long)mil_exp, n4, sizeof(n4)));
 		}
 	}
 }

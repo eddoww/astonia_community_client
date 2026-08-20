@@ -4,6 +4,7 @@
  * Mod SDK Header - API for creating client modifications
  */
 
+#include "amod/amod_options.h"
 #include "../dll.h"
 #include "../astonia.h"
 #include "amod_structs.h"

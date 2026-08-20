@@ -136,6 +136,86 @@ void dx_copysprite_emerald(int scrx, int scry, int emx, int emy)
 
 size_t get_memory_usage(void);
 
+/* "Loading world" phase: right after login the first map tick enqueues hundreds of
+ * sprites for the background texture workers. Drawing the map immediately would make
+ * the render thread wait for each of them (several seconds of apparent freeze), so we
+ * show a progress screen until the initial burst is done (or a timeout elapses). */
+static int world_loading;
+static Uint64 world_loading_start;
+
+static Uint64 world_loading_ready;
+
+/* Called when the login has been sent (sockstate 3). Everything the texture workers get
+ * from here on - including the first map tick, which arrives before login_done - counts
+ * towards the progress bar, and the map is not drawn until that burst is processed. */
+void world_loading_begin(void)
+{
+	world_loading = 1;
+	world_loading_start = SDL_GetTicks();
+	world_loading_ready = 0;
+	sdl_tex_jobs_mark();
+}
+
+static int world_loading_active(void)
+{
+	int done = 0, total = 0;
+	Uint64 now, since_ready;
+
+	if (!world_loading) {
+		return 0;
+	}
+	if (sockstate < 3) { /* connection dropped while loading */
+		world_loading = 0;
+		return 0;
+	}
+	if (sockstate < 4) {
+		return 1; /* still logging in */
+	}
+	now = SDL_GetTicks();
+	if (!world_loading_ready) {
+		world_loading_ready = now;
+	}
+	since_ready = now - world_loading_ready;
+	sdl_tex_jobs_progress(&done, &total);
+	if ((since_ready > 300 && done >= total) || since_ready > 8000) {
+		note("world loaded: %d/%d textures prepared, %u ms after login (%u ms after connect)", done, total,
+		    (unsigned)since_ready, (unsigned)(now - world_loading_start));
+		world_loading = 0;
+		return 0;
+	}
+	return 1;
+}
+
+static void display_world_loading(void)
+{
+	int done = 0, total = 0, pct = 0;
+	int cx = XRES / 2, cy = (YRES0 - 60) / 2;
+	int bw = 220, bh = 8, bx = cx - bw / 2, by = cy + 10;
+	Uint64 elapsed = SDL_GetTicks() - world_loading_start;
+
+	sdl_tex_jobs_progress(&done, &total);
+	if (total > 0) {
+		pct = done * 100 / total;
+	}
+	render_rect(0, 0, XRES, YRES0 - 60, blackcolor);
+	render_sprite(60, XRES / 2, ((YRES0 - 60) - 240) / 2, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+	render_text(
+	    cx, cy - 14, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, "Loading world...");
+	render_rounded_rect_filled_alpha(bx, by, bx + bw, by + bh, 3, IRGB(4, 4, 4), 230);
+	if (total > 0) {
+		render_rounded_rect_filled_alpha(bx, by, bx + bw * pct / 100, by + bh, 3, IRGB(28, 22, 10), 240);
+	} else {
+		/* indeterminate: sweep a short bar */
+		int sw = bw / 4, sx = bx + (int)((elapsed / 8) % (Uint64)(bw - sw));
+		render_rounded_rect_filled_alpha(sx, by, sx + sw, by + bh, 3, IRGB(28, 22, 10), 240);
+	}
+	render_rounded_rect_alpha(bx, by, bx + bw, by + bh, 3, IRGB(18, 16, 12), 200);
+	if (total > 0) {
+		render_text_fmt(cx, by + bh + 6, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
+		    "%d%% (%d / %d sprites)", pct, done, total);
+	}
+}
+
 void display(void)
 {
 	extern long long sdl_time_make, sdl_time_tex, sdl_time_tex_main, sdl_time_text, sdl_time_blit;
@@ -169,6 +249,13 @@ void display(void)
 	}
 
 	set_cmd_states();
+
+	if (sockstate >= 3 && world_loading_active()) {
+		display_world_loading();
+		display_screen();
+		display_text();
+		goto display_graphs;
+	}
 
 	if (sockstate < 4 && ((t = time(NULL) - (time_t)socktimeout) > 10 || !originx)) {
 		render_rect(0, 0, XRES, YRES0 - 60, blackcolor);

@@ -90,6 +90,9 @@ void sdl_bargraph_add(int dx, unsigned char *data, int val);
 void sdl_bargraph(int sx, int sy, int dx, unsigned char *data, int x_offset, int y_offset);
 bool sdl_has_focus(void);
 bool sdl_is_shown(void);
+// Texture preload progress since the last mark (login / area change)
+void sdl_tex_jobs_mark(void);
+void sdl_tex_jobs_progress(int *done, int *total);
 void sdl_set_cursor_pos(int x, int y);
 void sdl_capture_mouse(int flag);
 int sdl_tx_load(unsigned int sprite, signed char sink, unsigned char freeze, unsigned char scale, char cr, char cg,

@@ -109,3 +109,4 @@ extern int last_right_click_invsel;
 
 // Platform-specific GUI functions
 void gui_sdl_draghack(void);
+void world_loading_begin(void);

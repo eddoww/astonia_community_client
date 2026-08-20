@@ -382,6 +382,7 @@ int poll_network(void)
 
 		// statechange
 		sockstate = 3;
+		world_loading_begin();
 	}
 
 	// here we go ...

@@ -17,10 +17,14 @@
 #define EM_BTN_PAD 6
 #define EM_PAD     12
 
-#define COL_BTN_TEXT IRGB(29, 28, 26)
-#define COL_BTN_BG   IRGB(6, 6, 5)
-#define COL_BTN_HOV  IRGB(12, 11, 9)
-#define COL_TITLE    IRGB(28, 26, 22)
+#define COL_BTN_TEXT  IRGB(29, 28, 26)
+#define COL_BTN_BG    IRGB(6, 6, 5)
+#define COL_BTN_HOV   IRGB(12, 11, 9)
+#define COL_TITLE     IRGB(28, 26, 22)
+#define COL_PANEL_TOP IRGB(9, 8, 7)
+#define COL_PANEL_BOT IRGB(3, 3, 3)
+#define COL_BORDER    IRGB(18, 16, 12)
+#define COL_ACCENT    IRGB(28, 22, 10)
 
 static int em_open;
 static int em_px, em_py, em_pw, em_ph;
@@ -69,7 +73,12 @@ void escape_menu_display(void)
 
 	em_compute_layout();
 
-	render_shaded_rect(em_px, em_py, em_px + em_pw, em_py + em_ph, 0, 210);
+	/* panel: same look as the Options window (gradient, rounded border, title strip) */
+	render_rounded_rect_filled_alpha(em_px, em_py, em_px + em_pw, em_py + em_ph, 6, COL_PANEL_BOT, 235);
+	render_gradient_rect_v(
+	    em_px + 1, em_py + 1, em_px + em_pw - 1, em_py + em_ph / 2, COL_PANEL_TOP, COL_PANEL_BOT, 200);
+	render_rounded_rect_alpha(em_px, em_py, em_px + em_pw, em_py + em_ph, 6, COL_BORDER, 200);
+	render_rect_alpha(em_px + 1, em_py + EM_PAD + 14, em_px + em_pw - 1, em_py + EM_PAD + 15, COL_BORDER, 120);
 
 	int cx = em_px + em_pw / 2;
 	render_text(cx, em_py + EM_PAD, COL_TITLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "Menu");
@@ -80,8 +89,12 @@ void escape_menu_display(void)
 	for (int i = 0; i < EM_COUNT; i++) {
 		int by = em_btn_y(i);
 		int hovered = (mousex >= bx && mousex < bx + bw && mousey >= by && mousey < by + EM_BTN_H);
-		unsigned short bg = hovered ? COL_BTN_HOV : COL_BTN_BG;
-		render_rect_alpha(bx, by, bx + bw, by + EM_BTN_H, bg, 180);
+		render_rounded_rect_filled_alpha(bx, by, bx + bw, by + EM_BTN_H, 4, hovered ? COL_BTN_HOV : COL_BTN_BG, 210);
+		render_rounded_rect_alpha(
+		    bx, by, bx + bw, by + EM_BTN_H, 4, hovered ? COL_ACCENT : COL_BORDER, hovered ? 220 : 110);
+		if (hovered) {
+			render_rect_alpha(bx + 2, by + 2, bx + 4, by + EM_BTN_H - 2, COL_ACCENT, 230);
+		}
 		render_text(
 		    cx, by + 4, COL_BTN_TEXT, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, em_labels[i]);
 	}

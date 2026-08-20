@@ -46,6 +46,15 @@ void display_mouseover(void)
 		return;
 	}
 
+	/* a mod window/bar covers the pointer: none of the coordinate-based hover texts
+	 * (spell status, level/rank, time, minimap, item descriptions) may pop through */
+	if (amod_mouse_over(mousex, mousey)) {
+		if (capbut == -1) {
+			SDL_ShowCursor();
+		}
+		return;
+	}
+
 	if (mousey >= doty(DOT_SSP) && mousey <= doty(DOT_SSP) + 53) {
 		if (mousex >= dotx(DOT_SSP) + 28 && mousex <= dotx(DOT_SSP) + 35) {
 			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,

@@ -647,7 +647,12 @@ static MIX_Audio *try_load_sound_from_zip(zip_t *zip_archive, const char *path)
 		return NULL; // File not found in this archive
 	}
 
-	return load_sound_from_zip(zip_archive, path);
+	MIX_Audio *audio = load_sound_from_zip(zip_archive, path);
+	if (!audio) {
+		// Present but undecodable (e.g. a malformed Ogg that only libvorbisfile tolerates)
+		warn("sound_load: '%s' found in archive but could not be decoded: %s", path, SDL_GetError());
+	}
+	return audio;
 }
 
 /**

@@ -27,7 +27,10 @@ fn resolve_one(host: &str, port: u16) -> Option<SocketAddr> {
     if let Ok(ip) = host.parse::<IpAddr>() {
         Some(SocketAddr::new(ip, port))
     } else {
-        (host, port).to_socket_addrs().ok().and_then(|mut it| it.next())
+        // Prefer IPv4: the game servers (and local docker stacks) listen on IPv4 only,
+        // and names like "localhost" often resolve to ::1 first.
+        let addrs: Vec<SocketAddr> = (host, port).to_socket_addrs().ok()?.collect();
+        addrs.iter().find(|a| a.is_ipv4()).or_else(|| addrs.first()).copied()
     }
 }
 

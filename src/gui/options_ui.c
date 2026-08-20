@@ -16,7 +16,7 @@
 #include "modder/modder.h"
 #include "amod/amod_options.h"
 
-#define OPT_WIDTH      340
+#define OPT_WIDTH      360
 #define OPT_PAD        8
 #define OPT_ROW        18
 #define OPT_TITLE_H    16
@@ -35,6 +35,13 @@
 #define COL_CHECK     IRGB(20, 22, 14)
 #define COL_SLIDER_BG IRGB(6, 6, 5)
 #define COL_SLIDER_FG IRGB(22, 20, 16)
+#define COL_PANEL_TOP IRGB(9, 8, 7)
+#define COL_PANEL_BOT IRGB(3, 3, 3)
+#define COL_BORDER    IRGB(18, 16, 12)
+#define COL_ACCENT    IRGB(28, 22, 10)
+#define COL_HOVER     IRGB(14, 13, 11)
+#define COL_KNOB      IRGB(30, 28, 24)
+#define COL_TRACK     IRGB(4, 4, 4)
 
 static int opt_open;
 static int opt_tab;
@@ -115,13 +122,31 @@ static int opt_tab_total(void)
 	}
 }
 
+/* Soft highlight behind the row under the mouse cursor */
+static int draw_row_hover(int y)
+{
+	if (in_rect(mousex, mousey, opt_lx - 4, y - 1, opt_content_w + 8, OPT_ROW)) {
+		render_rounded_rect_filled_alpha(opt_lx - 4, y - 1, opt_rx + 4, y + OPT_ROW - 2, 3, COL_HOVER, 110);
+		return 1;
+	}
+	return 0;
+}
+
 static void draw_checkbox(int x, int y, int checked, const char *label)
 {
-	render_rect_alpha(x, y + 1, x + 12, y + 13, COL_INACTIVE, 220);
+	int hov = draw_row_hover(y);
+
+	/* box */
+	render_rounded_rect_filled_alpha(x, y + 1, x + 13, y + 14, 2, COL_TRACK, 230);
+	render_rounded_rect_alpha(x, y + 1, x + 13, y + 14, 2, hov ? COL_ACCENT : COL_BORDER, hov ? 220 : 160);
 	if (checked) {
-		render_rect_alpha(x + 2, y + 3, x + 10, y + 11, COL_CHECK, 240);
+		/* check mark: two strokes, drawn twice for weight */
+		render_line_alpha(x + 3, y + 7, x + 6, y + 10, COL_ACCENT, 255);
+		render_line_alpha(x + 3, y + 8, x + 6, y + 11, COL_ACCENT, 255);
+		render_line_alpha(x + 6, y + 10, x + 10, y + 4, COL_ACCENT, 255);
+		render_line_alpha(x + 6, y + 11, x + 10, y + 5, COL_ACCENT, 255);
 	}
-	render_text(x + 16, y, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
+	render_text(x + 18, y, hov ? COL_VALUE : COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
 }
 
 static void draw_slider(int x, int y, int w, int value, int min_val, int max_val, const char *label)
@@ -129,40 +154,77 @@ static void draw_slider(int x, int y, int w, int value, int min_val, int max_val
 	char buf[16];
 	int tx = x + OPT_SLIDER_LBL;
 	int tw = w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+	int hov = draw_row_hover(y);
+	int filled = 0;
 
-	render_text(x, y, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
+	render_text(x, y, hov ? COL_VALUE : COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
 	if (tw < 10) {
 		tw = 10;
 	}
-	render_rect_alpha(tx, y + 4, tx + tw, y + 12, COL_SLIDER_BG, 220);
 	if (max_val > min_val) {
-		int filled = (value - min_val) * tw / (max_val - min_val);
-		if (filled > 0) {
-			render_rect_alpha(tx, y + 4, tx + filled, y + 12, COL_SLIDER_FG, 220);
+		filled = (value - min_val) * tw / (max_val - min_val);
+		if (filled < 0) {
+			filled = 0;
+		}
+		if (filled > tw) {
+			filled = tw;
 		}
 	}
+	/* track + filled part */
+	render_rounded_rect_filled_alpha(tx, y + 5, tx + tw, y + 11, 3, COL_TRACK, 230);
+	if (filled > 0) {
+		render_rounded_rect_filled_alpha(tx, y + 5, tx + filled, y + 11, 3, COL_SLIDER_FG, 230);
+	}
+	render_rounded_rect_alpha(tx, y + 5, tx + tw, y + 11, 3, COL_BORDER, 120);
+	/* knob */
+	render_circle_filled_alpha(tx + filled, y + 8, 5, hov ? COL_ACCENT : COL_KNOB, 255);
+	render_circle_filled_alpha(tx + filled, y + 8, 2, COL_TRACK, 200);
 	snprintf(buf, sizeof(buf), "%d", value);
-	render_text(tx + tw + 4, y, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, buf);
+	render_text(tx + tw + OPT_SLIDER_VAL - render_text_length(RENDER_TEXT_SMALL, buf), y, COL_VALUE,
+	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, buf);
 }
 
 static int draw_tab(int x, int y, int w, int h, const char *label, int active)
 {
-	unsigned short bg = (unsigned short)(active ? COL_ACTIVE : COL_INACTIVE);
-	unsigned short text_col = (unsigned short)(active ? COL_VALUE : COL_LABEL);
+	int hov = in_rect(mousex, mousey, x, y, w, h);
+	unsigned short text_col = (unsigned short)(active ? COL_VALUE : (hov ? COL_VALUE : COL_LABEL));
 
 	if (active) {
-		render_rect_alpha(x, y, x + w, y + h, bg, 220);
+		render_gradient_rect_v(x + 1, y, x + w - 1, y + h, COL_ACTIVE, COL_PANEL_TOP, 240);
+		render_rect_alpha(x + 1, y + h - 2, x + w - 1, y + h, COL_ACCENT, 255);
 	} else {
-		render_rect_alpha(x, y, x + w, y + h, bg, 160);
+		render_rect_alpha(x + 1, y, x + w - 1, y + h, hov ? COL_HOVER : COL_INACTIVE, hov ? 200 : 140);
 	}
-	render_text(x + w / 2, y + 2, text_col, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, label);
+	render_text(x + w / 2, y + 3, text_col, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, label);
 	return 0;
 }
 
 static void draw_section_header(int x, int y, int w, const char *label)
 {
-	render_rect_alpha(x, y + 7, x + w, y + 8, COL_HEADER, 150);
-	render_text(x, y, COL_HEADER, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
+	int lw = render_text_length(RENDER_TEXT_SMALL, label);
+
+	render_text(x, y, COL_ACCENT, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
+	render_gradient_rect_h(x + lw + 6, y + 7, x + w, y + 8, COL_ACCENT, COL_PANEL_BOT, 170);
+}
+
+/* Thin scrollbar on the right edge when the tab has more rows than fit */
+static void draw_scrollbar(int total)
+{
+	int track_y = opt_content_y;
+	int track_h = opt_visible_rows * OPT_ROW;
+	int sx = opt_rx + 6;
+	int thumb_h, thumb_y;
+
+	if (total <= opt_visible_rows || track_h <= 0) {
+		return;
+	}
+	render_rounded_rect_filled_alpha(sx, track_y, sx + 4, track_y + track_h, 2, COL_TRACK, 200);
+	thumb_h = track_h * opt_visible_rows / total;
+	if (thumb_h < 12) {
+		thumb_h = 12;
+	}
+	thumb_y = track_y + (track_h - thumb_h) * opt_scroll / (total - opt_visible_rows);
+	render_rounded_rect_filled_alpha(sx, thumb_y, sx + 4, thumb_y + thumb_h, 2, COL_ACCENT, 220);
 }
 
 static void opt_display_audio(void)
@@ -933,18 +995,28 @@ void options_display(void)
 		opt_scroll = 0;
 	}
 
-	render_shaded_rect(opt_px, opt_py, opt_px + opt_pw, opt_py + opt_ph, 0, 200);
+	/* panel: vertical gradient, rounded border, darker title strip */
+	render_rounded_rect_filled_alpha(opt_px, opt_py, opt_px + opt_pw, opt_py + opt_ph, 6, COL_PANEL_BOT, 235);
+	render_gradient_rect_v(
+	    opt_px + 1, opt_py + 1, opt_px + opt_pw - 1, opt_py + opt_ph / 2, COL_PANEL_TOP, COL_PANEL_BOT, 200);
+	render_rounded_rect_alpha(opt_px, opt_py, opt_px + opt_pw, opt_py + opt_ph, 6, COL_BORDER, 200);
+	render_rect_alpha(opt_px + 1, opt_py + OPT_TITLE_H + OPT_PAD - 2, opt_px + opt_pw - 1,
+	    opt_py + OPT_TITLE_H + OPT_PAD - 1, COL_BORDER, 120);
 
 	cx = opt_px + opt_pw / 2;
 	render_text(
 	    cx, opt_py + OPT_PAD, COL_TITLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "Options");
+	render_text(opt_px + opt_pw - OPT_PAD - render_text_length(RENDER_TEXT_SMALL, "Esc closes"), opt_py + OPT_PAD,
+	    COL_HEADER, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Esc closes");
+	draw_scrollbar(total);
 
 	tab_w = opt_pw / OPT_NTABS;
 	for (i = 0; i < OPT_NTABS; i++) {
 		draw_tab(opt_px + i * tab_w, opt_tab_bar_y, tab_w, OPT_TAB_H, tab_labels[i], opt_tab == i);
 	}
 
-	render_rect_alpha(opt_lx, opt_tab_bar_y + OPT_TAB_H, opt_rx, opt_tab_bar_y + OPT_TAB_H + 1, COL_HEADER, 100);
+	render_rect_alpha(
+	    opt_px + 1, opt_tab_bar_y + OPT_TAB_H, opt_px + opt_pw - 1, opt_tab_bar_y + OPT_TAB_H + 1, COL_BORDER, 160);
 
 	switch (opt_tab) {
 	case 0:

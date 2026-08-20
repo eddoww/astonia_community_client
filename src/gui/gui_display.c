@@ -12,6 +12,7 @@
 
 #include "astonia.h"
 #include "gui/gui.h"
+#include "gui/loading_ui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/spellbook_ui.h"
@@ -250,6 +251,22 @@ void display(void)
 
 	set_cmd_states();
 
+	/* Startup: one loading screen from window creation until the world is ready */
+	if (loading_active()) {
+		if (sockstate >= 4) {
+			int ld = 0, lt = 0;
+			sdl_tex_jobs_progress(&ld, &lt);
+			loading_progress(ld, lt);
+		}
+		if (sockstate >= 3 && !world_loading_active()) {
+			loading_finish();
+		} else {
+			loading_display();
+			goto display_graphs;
+		}
+	}
+
+	/* Later (re)connects / area changes: compact world-loading screen */
 	if (sockstate >= 3 && world_loading_active()) {
 		display_world_loading();
 		display_screen();

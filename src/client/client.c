@@ -22,6 +22,7 @@
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
 #include "gui/gui.h"
+#include "gui/loading_ui.h"
 #include "modder/modder.h"
 #include "protocol.h"
 
@@ -382,6 +383,7 @@ int poll_network(void)
 
 		// statechange
 		sockstate = 3;
+		loading_step(LS_LOGIN);
 		world_loading_begin();
 	}
 
@@ -406,6 +408,7 @@ int poll_network(void)
 			// note("go ahead (left at tick=%d)",tick);
 			// bzero_client(1);
 			sockstate = 4;
+			loading_step(LS_WORLD);
 		}
 	}
 

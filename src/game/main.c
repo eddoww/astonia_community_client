@@ -28,6 +28,7 @@
 #include "game/sprite_config.h"
 #include "sdl/sdl.h"
 #include "gui/gui.h"
+#include "gui/loading_ui.h"
 #include "gui/input_bind.h"
 #include "client/client.h"
 #include "modder/modder.h"
@@ -689,6 +690,8 @@ int main(int argc, char *argv[])
 	}
 
 	render_init();
+	loading_step(LS_SOUND);
+	loading_present();
 	init_sound();
 
 	if (game_options & GO_LARGE) {
@@ -700,6 +703,8 @@ int main(int argc, char *argv[])
 	help_init();
 	update_user_keys();
 
+	loading_step(LS_MODS);
+	loading_present();
 	main_loop();
 
 #ifdef ENABLE_SHAREDMEM

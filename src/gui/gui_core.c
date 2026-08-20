@@ -12,6 +12,7 @@
 
 #include "astonia.h"
 #include "gui/gui.h"
+#include "gui/loading_ui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "client/client.h"
@@ -337,6 +338,7 @@ int main_loop(void)
 	uint64_t gui_last_frame = 0, gui_last_tick = 0;
 
 	amod_gamestart();
+	loading_step(LS_CONNECT);
 
 	nexttick = (int)(SDL_GetTicks() + (Uint32)MPT);
 	nextframe = (int)(SDL_GetTicks() + (Uint32)MPF);

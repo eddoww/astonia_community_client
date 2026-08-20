@@ -238,6 +238,19 @@ void display(void)
 	options_display();
 	escape_menu_display();
 
+	// Loud, persistent notice when playing without the Ugaris mod (auction house,
+	// weather, achievements, info window all live in the mod). The server keeps
+	// serving such clients but the experience is incomplete.
+	if (sockstate == 4 && !amod_main_loaded()) {
+		int by = doty(DOT_MTL) + 60;
+		render_text(XRES / 2, by, IRGB(31, 0, 0), RENDER_TEXT_LARGE | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
+		    "UNSUPPORTED CLIENT - Ugaris mod not loaded");
+		render_text(XRES / 2, by + 22, IRGB(31, 31, 0), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
+		    "Weather, auction house, achievements and the info window are unavailable.");
+		render_text(XRES / 2, by + 36, IRGB(31, 31, 0), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
+		    "Please install Ugaris from Steam (it includes the mod): store.steampowered.com/app/1044010");
+	}
+
 	// Display lag warning when no server data received for > 500ms
 	if (sockstate == 4 && last_tick_received_time > 0) {
 		uint64_t lag_ms = SDL_GetTicks() - last_tick_received_time;

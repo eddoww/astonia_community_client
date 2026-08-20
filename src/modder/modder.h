@@ -24,6 +24,8 @@ void amod_update_hover_texts(void);
 int amod_client_cmd(const char *buf);
 int amod_process(const unsigned char *buf);
 int amod_prefetch(const unsigned char *buf);
+int amod_main_loaded(void);
+void amod_note_unhandled(int type, int subtype);
 int amod_is_playersprite(int sprite);
 int amod_hotbar_activate(int slot, int mode);
 

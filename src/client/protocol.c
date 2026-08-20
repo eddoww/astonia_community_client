@@ -1285,6 +1285,12 @@ void process(unsigned char *buf, int size)
 
 			default:
 				len = (size_t)amod_process(buf);
+				if (!len && buf[0] >= SV_MOD1 && buf[0] <= SV_MOD5) {
+					// Mod packet ([type][len][subtype][data], len excludes type+len) that no
+					// loaded mod claimed. Skip it instead of dropping the connection.
+					len = (size_t)buf[1] + 2;
+					amod_note_unhandled(buf[0], buf[2]);
+				}
 				if (!len) {
 					warn("process: unknown command %d (0x%02X), disconnecting", buf[0], buf[0]);
 					sockstate = 0;
@@ -1513,8 +1519,12 @@ uint32_t prefetch(unsigned char *buf, int size)
 
 			default:
 				len = (size_t)amod_prefetch(buf);
+				if (!len && buf[0] >= SV_MOD1 && buf[0] <= SV_MOD5) {
+					// Unclaimed mod packet: size from the protocol len byte (see process()).
+					len = (size_t)buf[1] + 2;
+				}
 				if (!len) {
-					warn("process: unknown command %d (0x%02X), disconnecting", buf[0], buf[0]);
+					warn("prefetch: unknown command %d (0x%02X), disconnecting", buf[0], buf[0]);
 					sockstate = 0;
 					return 0;
 				}

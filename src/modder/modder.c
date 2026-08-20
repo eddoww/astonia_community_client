@@ -18,6 +18,7 @@
 #include "game/game.h"
 #include "game/game_private.h"
 #include "client/client.h"
+#include "client/client_private.h"
 #include "gui/gui.h"
 #include "sdl/sdl.h"
 
@@ -86,8 +87,14 @@ int amod_init(void)
 #endif
 		dll_instance = SDL_LoadObject(fname);
 		if (!dll_instance) {
+			// Only the first slot (amod) is expected to exist; report why it failed to load
+			// so a broken Steam install / wrong arch / missing dependency is diagnosable.
+			if (i == 0) {
+				note("mod loader: could not load %s: %s", fname, SDL_GetError());
+			}
 			continue;
 		};
+		note("mod loader: loaded %s", fname);
 
 		mod[i].loaded = 1;
 
@@ -464,4 +471,27 @@ char *amod_version(int idx)
 	}
 
 	return NULL;
+}
+
+// True if a loaded mod handles server mod packets (i.e. the Ugaris mod is present).
+int amod_main_loaded(void)
+{
+	return _amod_process != NULL;
+}
+
+// Called by the protocol layer when a SV_MOD packet was skipped because no mod
+// claimed it. Logged once per (type,subtype) pair to avoid spamming.
+void amod_note_unhandled(int type, int subtype)
+{
+	static unsigned char seen[5][256];
+
+	if (type < SV_MOD1 || type > SV_MOD5 || subtype < 0 || subtype > 255) {
+		return;
+	}
+	if (seen[type - SV_MOD1][subtype]) {
+		return;
+	}
+	seen[type - SV_MOD1][subtype] = 1;
+	note("mod: skipped unhandled server mod packet type %d subtype 0x%02X%s", type, subtype,
+	    _amod_process ? "" : " (no mod loaded)");
 }

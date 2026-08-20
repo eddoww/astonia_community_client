@@ -1289,7 +1289,7 @@ void process(unsigned char *buf, int size)
 					// Mod packet ([type][len][subtype][data], len excludes type+len) that no
 					// loaded mod claimed. Skip it instead of dropping the connection.
 					len = (size_t)buf[1] + 2;
-					amod_note_unhandled(buf[0], buf[2]);
+					amod_note_unhandled(buf[0], buf[1] >= 1 ? buf[2] : -1);
 				}
 				if (!len) {
 					warn("process: unknown command %d (0x%02X), disconnecting", buf[0], buf[0]);

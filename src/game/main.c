@@ -308,10 +308,10 @@ int parse_args(int argc, char *argv[])
 		if (arg[2] != '\0') {
 			val = &arg[2];
 		} else if (i + 1 < argc) {
-			val = argv[i + 1];
-			// We only consume the next arg if we use it.
-			// However, in the loop, we need to be careful.
-			// If we define that flags taking args MUST have them, we increment i.
+			// Every option takes a value: consume the next argv entry now so a value
+			// that happens to start with '-' (e.g. a password "-w12") is not re-parsed
+			// as an option on the next iteration.
+			val = argv[++i];
 		}
 
 		switch (opt) {

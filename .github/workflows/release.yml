@@ -568,6 +568,12 @@ jobs:
         build-macos-release,
         build-appimage-release,
       ]
+    # macOS is not shipped yet: a failed macOS build must not block the Linux/Windows release
+    if: >-
+      ${{ !cancelled()
+          && needs.build-linux-release.result == 'success'
+          && needs.build-windows-release.result == 'success'
+          && needs.build-appimage-release.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -610,6 +616,7 @@ jobs:
 
       - name: Download macOS Binaries
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: macos-binaries
           path: macos-binaries
@@ -635,7 +642,11 @@ jobs:
           zip -q -r mod-sdk.zip mod-sdk
           tar czf client-linux-binaries.tar.gz -C linux_client/bin .
           cd windows_client/bin && zip -q -r ../../client-windows-binaries.zip . && cd ../..
-          tar czf client-macos-binaries.tar.gz -C macos-binaries .
+          if [ -d macos-binaries ] && [ -n "$(ls -A macos-binaries)" ]; then
+            tar czf client-macos-binaries.tar.gz -C macos-binaries .
+          else
+            echo "No macOS binaries (build skipped/failed) - releasing Linux/Windows only"
+          fi
 
       - name: Generate checksums
         run: |
@@ -646,7 +657,7 @@ jobs:
           sha256sum mod-sdk.zip >> checksums.txt
           sha256sum client-linux-binaries.tar.gz >> checksums.txt
           sha256sum client-windows-binaries.zip >> checksums.txt
-          sha256sum client-macos-binaries.tar.gz >> checksums.txt
+          [ -f client-macos-binaries.tar.gz ] && sha256sum client-macos-binaries.tar.gz >> checksums.txt || true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

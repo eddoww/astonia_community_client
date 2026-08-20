@@ -115,7 +115,8 @@ void loading_display(void)
 
 	/* whole window black, logo on top */
 	render_rect(0, 0, XRES, YRES, blackcolor);
-	render_sprite(60, cx, 30, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+	render_sprite(
+	    60, cx, 64, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER); /* centre-aligned; 30 clipped the top of the logo */
 
 	/* step list */
 	y = YRES / 2 - (LS_COUNT * 16) / 2 - 10;

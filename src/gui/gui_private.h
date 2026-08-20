@@ -46,8 +46,8 @@
 #define BUT_HELP_MISC  75
 #define BUT_HELP_CLOSE 76
 #define BUT_HELP_INDEX 102
-#define BUT_EXPBAR     103
-#define BUT_MILBAR     104
+#define BUT_EXPBAR     150 /* above BUT_HOTBAR_END (147) */
+#define BUT_MILBAR     151
 #define BUT_EXIT       77
 #define BUT_HELP       78
 #define BUT_NOLOOK     79
@@ -191,6 +191,8 @@
 
 #define CMD_WEAR_LOCK  81
 #define CMD_HELP_INDEX 82
+#define CMD_EXPBAR     83 /* cycle the numbers printed on the experience bar */
+#define CMD_MILBAR     84 /* cycle the numbers printed on the military bar */
 
 #define STV_EMPTYLINE  -1
 #define STV_JUSTAVALUE -2 // value is in curr

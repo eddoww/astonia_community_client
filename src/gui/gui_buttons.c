@@ -269,6 +269,10 @@ static void set_cmd_cursor(int cmd)
 	case CMD_EXIT:
 		cursor = SDL_CUR_c_use;
 		break;
+	case CMD_EXPBAR:
+	case CMD_MILBAR:
+		cursor = SDL_CUR_c_use;
+		break;
 	case CMD_NOLOOK:
 		cursor = SDL_CUR_c_use;
 		break;
@@ -890,6 +894,12 @@ void exec_cmd(int cmd, int a)
 	case CMD_NOLOOK:
 		show_look = 0;
 		return;
+	case CMD_EXPBAR:
+		exp_bar_toggle();
+		return;
+	case CMD_MILBAR:
+		mil_bar_toggle();
+		return;
 
 	case CMD_ACTION:
 		cmd_action();
@@ -1212,10 +1222,10 @@ void handle_special_buttons_logic(void)
 			lcmd = CMD_EXIT;
 		}
 		if (butsel == BUT_EXPBAR) {
-			exp_bar_toggle();
+			lcmd = CMD_EXPBAR;
 		}
 		if (butsel == BUT_MILBAR) {
-			mil_bar_toggle();
+			lcmd = CMD_MILBAR;
 		}
 		if (butsel == BUT_HELP) {
 			lcmd = CMD_HELP;

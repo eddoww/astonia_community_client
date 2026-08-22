@@ -23,4 +23,11 @@ void loading_server_exit(const char *reason);
 int loading_retry_due(void); /* 1 when the countdown has elapsed (caller reconnects) */
 void loading_retry_begin(void); /* clear the error and show "Connecting" again */
 
+/* Non-fatal status under the progress bar (connection attempts failing, connection
+ * lost while loading, server not answering ...). NULL clears it. */
+void loading_notice(const char *text);
+/* Last reason the server gave for ending the session (also after the loading screen
+ * is gone, for the "not connected" screen); "" if none. */
+const char *loading_last_exit_reason(void);
+
 #endif

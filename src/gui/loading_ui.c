@@ -44,17 +44,48 @@ static Uint64 started_at, step_started_at;
 
 /* server-side refusal shown on the loading screen (+ optional auto retry) */
 static char err_text[256];
+static char last_exit_reason[256];
+static char notice_text[160];
 static Uint64 retry_at; /* SDL ticks when to reconnect, 0 = no automatic retry */
 static int retry_secs;
+
+void loading_notice(const char *text)
+{
+	if (!text) {
+		notice_text[0] = 0;
+		return;
+	}
+	if (strcmp(notice_text, text) != 0) {
+		note("loading: %s", text);
+	}
+	snprintf(notice_text, sizeof(notice_text), "%s", text);
+}
+
+const char *loading_last_exit_reason(void)
+{
+	return last_exit_reason;
+}
 
 void loading_server_exit(const char *reason)
 {
 	const char *tag;
 	size_t n;
 
-	if (!reason || finished) {
+	if (!reason) {
 		return;
 	}
+	snprintf(last_exit_reason, sizeof(last_exit_reason), "%s", reason);
+	if ((tag = strstr(last_exit_reason, "[retry="))) {
+		n = (size_t)(tag - last_exit_reason);
+		while (n > 0 && last_exit_reason[n - 1] == ' ') {
+			n--;
+		}
+		last_exit_reason[n] = 0;
+	}
+	if (finished) {
+		return;
+	}
+	notice_text[0] = 0;
 	snprintf(err_text, sizeof(err_text), "%s", reason);
 	retry_at = 0;
 	retry_secs = 0;
@@ -86,6 +117,7 @@ void loading_retry_begin(void)
 {
 	note("loading: retrying connection/login now");
 	err_text[0] = 0;
+	notice_text[0] = 0;
 	retry_at = 0;
 	retry_secs = 0;
 	step_state[LS_LOGIN] = LS_PENDING;
@@ -257,6 +289,16 @@ void loading_display(void)
 		render_text(cx, y + bh + 6, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, buf);
 	}
 
+	/* non-fatal status: connection attempts failing, connection lost, server silent */
+	if (notice_text[0] && !err_text[0]) {
+		char lines[4][128];
+		int n = wrap_lines(notice_text, bw + 200, lines, 4), ly = y + bh + 26;
+
+		for (i = 0; i < n; i++, ly += 13) {
+			render_text(cx, ly, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, lines[i]);
+		}
+	}
+
 	/* the server refused us (e.g. another character of the account still in the world) */
 	if (err_text[0]) {
 		char lines[6][128];
@@ -274,6 +316,9 @@ void loading_display(void)
 				snprintf(buf, sizeof(buf), "Retrying...");
 			}
 			render_text(cx, ly + 6, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, buf);
+		} else {
+			render_text(cx, ly + 6, COL_DIM, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
+			    "Close the game and start it again from the launcher.");
 		}
 		return;
 	}

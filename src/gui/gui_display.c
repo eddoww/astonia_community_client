@@ -292,6 +292,16 @@ void display(void)
 				    RENDER_TEXT_LARGE | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 				    "Please check %s for troubleshooting advice.", game_url);
 			}
+		} else {
+			/* the server ended the session (kick, shutdown, idle ...): say why */
+			const char *why = loading_last_exit_reason();
+			if (why[0]) {
+				render_text(XRES / 2, (YRES0 - 60) / 2 - 40, redcolor,
+				    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, why);
+			}
+			render_text(XRES / 2, (YRES0 - 60) / 2 - 24, textcolor,
+			    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
+			    "The connection was closed by the server. Close the game and start it again from the launcher.");
 		}
 		goto display_graphs; // I know, I know. goto considered harmful and all that.
 	}

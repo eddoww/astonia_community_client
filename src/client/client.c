@@ -22,6 +22,7 @@
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
 #include "gui/gui.h"
+#include <stdio.h>
 #include "gui/loading_ui.h"
 #include "modder/modder.h"
 #include "protocol.h"
@@ -34,6 +35,9 @@ static int rec_bytes = 0;
 static int sent_bytes = 0;
 static astonia_sock *sock = NULL;
 int sockstate = 0;
+static int connect_failures = 0;
+static Uint64 login_sent_at = 0;
+static char notice_buf[160];
 static Uint64 socktime = 0;
 time_t socktimeout = 0;
 int change_area = 0;
@@ -319,6 +323,11 @@ int poll_network(void)
 		sock = astonia_net_connect(target_server, (unsigned short)target_port, 0);
 		if (!sock) {
 			fail("creating socket failed");
+			connect_failures++;
+			snprintf(notice_buf, sizeof(notice_buf),
+			    "Could not reach the server at %s - it may be down or restarting. Retrying in 5 seconds (attempt %d).",
+			    target_server, connect_failures + 1);
+			loading_notice(notice_buf);
 			sockstate = 0;
 			socktime = SDL_GetTicks() + 5000;
 			return -1;
@@ -341,6 +350,11 @@ int poll_network(void)
 			return 0;
 		} else if (n < 0 || (n & 2) == 0) { /* error or not writable */
 			note("connect failed");
+			connect_failures++;
+			snprintf(notice_buf, sizeof(notice_buf),
+			    "Could not reach the server at %s - it may be down or restarting. Retrying in 5 seconds (attempt %d).",
+			    target_server, connect_failures + 1);
+			loading_notice(notice_buf);
 			sockstate = 0;
 			socktime = SDL_GetTicks() + 5000;
 			return -1;
@@ -392,8 +406,23 @@ int poll_network(void)
 
 		// statechange
 		sockstate = 3;
+		connect_failures = 0;
+		login_sent_at = SDL_GetTicks();
+		loading_notice(NULL);
 		loading_step(LS_LOGIN);
 		world_loading_begin();
+	}
+
+	// the server accepted the connection but never answers the login (hung area server,
+	// firewall dropping the reply, ...): tell the player and reconnect instead of waiting forever
+	if (sockstate == 3 && !login_done && !kicked_out && login_sent_at && SDL_GetTicks() - login_sent_at > 30000) {
+		note("login: no answer from server for 30 s, reconnecting");
+		loading_notice("The server is not answering the login. Reconnecting...");
+		login_sent_at = 0;
+		sockstate = 0;
+		socktime = SDL_GetTicks() + 2000;
+		socktimeout = time(NULL);
+		return -1;
 	}
 
 	// here we go ...
@@ -426,6 +455,9 @@ int poll_network(void)
 		n = (int)astonia_net_send(sock, outbuf, outused);
 		if (n == 0) {
 			addline("connection lost during write\n");
+			if (loading_active()) {
+				loading_notice("Connection to the server was lost - reconnecting...");
+			}
 			sockstate = 0;
 			socktimeout = time(NULL);
 			return -1;
@@ -447,6 +479,9 @@ int poll_network(void)
 			n = 0; /* would-block */
 		} else if (n == 0) {
 			addline("connection lost during read\n");
+			if (loading_active() && !kicked_out) {
+				loading_notice("Connection to the server was lost - reconnecting...");
+			}
 			sockstate = 0;
 			socktimeout = time(NULL);
 			return -1;

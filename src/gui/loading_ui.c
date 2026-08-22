@@ -71,6 +71,10 @@ void loading_server_exit(const char *reason)
 			retry_at = SDL_GetTicks() + (Uint64)retry_secs * 1000;
 		}
 	}
+	note("loading: server ended the session: %s%s", err_text, retry_at ? " (will retry automatically)" : "");
+	if (retry_at) {
+		note("loading: automatic retry in %d s", retry_secs);
+	}
 }
 
 int loading_retry_due(void)
@@ -80,6 +84,7 @@ int loading_retry_due(void)
 
 void loading_retry_begin(void)
 {
+	note("loading: retrying connection/login now");
 	err_text[0] = 0;
 	retry_at = 0;
 	retry_secs = 0;

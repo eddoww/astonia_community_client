@@ -12,6 +12,7 @@
 #include <ctype.h>
 #include <SDL3/SDL.h>
 
+#include "gui/loading_ui.h"
 #include "astonia.h"
 #include "client/client.h"
 #include "client/client_private.h"
@@ -470,6 +471,7 @@ static size_t sv_exit(unsigned char *buf)
 		memcpy(line, buf + 2, (size_t)len);
 		line[len] = 0;
 		addline("Server demands exit: %s", line);
+		loading_server_exit(line); /* shown on the loading screen if we are still there */
 	}
 	kicked_out = 1;
 

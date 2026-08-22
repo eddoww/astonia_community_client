@@ -3,6 +3,7 @@
  */
 #include <SDL3/SDL.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "astonia.h"
@@ -40,6 +41,91 @@ static int prog_done, prog_total;
 static char detail[96];
 static int finished;
 static Uint64 started_at, step_started_at;
+
+/* server-side refusal shown on the loading screen (+ optional auto retry) */
+static char err_text[256];
+static Uint64 retry_at; /* SDL ticks when to reconnect, 0 = no automatic retry */
+static int retry_secs;
+
+void loading_server_exit(const char *reason)
+{
+	const char *tag;
+	size_t n;
+
+	if (!reason || finished) {
+		return;
+	}
+	snprintf(err_text, sizeof(err_text), "%s", reason);
+	retry_at = 0;
+	retry_secs = 0;
+	tag = strstr(err_text, "[retry=");
+	if (tag) {
+		retry_secs = atoi(tag + 7);
+		/* strip the hint (and the blank before it) from what the player sees */
+		n = (size_t)(tag - err_text);
+		while (n > 0 && err_text[n - 1] == ' ') {
+			n--;
+		}
+		err_text[n] = 0;
+		if (retry_secs > 0) {
+			retry_at = SDL_GetTicks() + (Uint64)retry_secs * 1000;
+		}
+	}
+}
+
+int loading_retry_due(void)
+{
+	return err_text[0] && retry_at && SDL_GetTicks() >= retry_at;
+}
+
+void loading_retry_begin(void)
+{
+	err_text[0] = 0;
+	retry_at = 0;
+	retry_secs = 0;
+	step_state[LS_LOGIN] = LS_PENDING;
+	step_state[LS_WORLD] = LS_PENDING;
+	loading_step(LS_CONNECT);
+}
+
+/* word-wrap helper for the error text */
+static int wrap_lines(const char *text, int max_w, char out[][128], int max_lines)
+{
+	int lines = 0;
+	const char *p = text;
+	char cur[128] = "";
+
+	while (*p && lines < max_lines) {
+		const char *sp = strchr(p, ' ');
+		size_t wl = sp ? (size_t)(sp - p) : strlen(p);
+		char word[128], trial[128];
+
+		if (wl >= sizeof(word)) {
+			wl = sizeof(word) - 1;
+		}
+		memcpy(word, p, wl);
+		word[wl] = 0;
+		p += wl;
+		while (*p == ' ') {
+			p++;
+		}
+		if (cur[0]) {
+			snprintf(trial, sizeof(trial), "%s %s", cur, word);
+		} else {
+			snprintf(trial, sizeof(trial), "%s", word);
+		}
+		if (cur[0] && render_text_length(RENDER_TEXT_SMALL, trial) > max_w) {
+			snprintf(out[lines++], 128, "%s", cur);
+			snprintf(cur, sizeof(cur), "%s", word);
+		} else {
+			snprintf(cur, sizeof(cur), "%s", trial);
+		}
+	}
+	if (cur[0] && lines < max_lines) {
+		snprintf(out[lines++], 128, "%s", cur);
+	}
+	return lines;
+}
 
 void loading_step(int step)
 {
@@ -164,6 +250,27 @@ void loading_display(void)
 	if (prog_total > 0) {
 		snprintf(buf, sizeof(buf), "%d%%", pct);
 		render_text(cx, y + bh + 6, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, buf);
+	}
+
+	/* the server refused us (e.g. another character of the account still in the world) */
+	if (err_text[0]) {
+		char lines[6][128];
+		int n = wrap_lines(err_text, bw + 200, lines, 6), ly = y + bh + 26;
+
+		for (i = 0; i < n; i++, ly += 13) {
+			render_text(cx, ly, redcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, lines[i]);
+		}
+		if (retry_at) {
+			Uint64 left = retry_at > now ? (retry_at - now + 999) / 1000 : 0;
+			if (left > 0) {
+				snprintf(buf, sizeof(buf), "Retrying automatically in %llu:%02llu", (unsigned long long)(left / 60),
+				    (unsigned long long)(left % 60));
+			} else {
+				snprintf(buf, sizeof(buf), "Retrying...");
+			}
+			render_text(cx, ly + 6, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, buf);
+		}
+		return;
 	}
 
 	/* long connect: point at help */

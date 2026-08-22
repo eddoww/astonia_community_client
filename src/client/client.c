@@ -274,6 +274,15 @@ int poll_network(void)
 		return -1;
 	}
 
+	// the server refused the login with a retry hint (another character of the account
+	// still in the world): the loading screen counted down, now reconnect by ourselves
+	if (kicked_out && loading_retry_due()) {
+		loading_retry_begin();
+		kicked_out = 0;
+		socktime = 0;
+		socktimeout = time(NULL);
+	}
+
 	// create nonblocking socket
 	if (sockstate == 0 && !kicked_out) {
 		if (SDL_GetTicks() < socktime) {

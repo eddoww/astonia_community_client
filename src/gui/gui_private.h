@@ -70,6 +70,10 @@
 #define BUT_HOTBAR_END 147 /* 45 slots (3×15): 103..147 */
 
 #define MAX_BUT 152 /* keep > the highest BUT_* id (BUT_MILBAR 151) */
+_Static_assert(BUT_MILBAR < MAX_BUT && BUT_EXPBAR < MAX_BUT && BUT_HOTBAR_END < MAX_BUT,
+    "MAX_BUT must exceed every BUT_* id (but[] is indexed by id)");
+_Static_assert(
+    BUT_EXPBAR > BUT_HOTBAR_END && BUT_MILBAR > BUT_HOTBAR_END, "bar button ids must not fall into the hotbar range");
 
 #define BUTF_NOHIT    (1 << 1) // button is ignored int hit processing
 #define BUTF_CAPTURE  (1 << 2) // button captures mouse on lclick

@@ -59,8 +59,9 @@ TEST_CONCURRENT = $(BIN_DIR)/test_concurrent
 TEST_HASH_DIAG = $(BIN_DIR)/test_hash_distribution
 TEST_RENDER_PRIMS = $(BIN_DIR)/test_render_primitives
 TEST_SPRITE_CONFIG = $(BIN_DIR)/test_sprite_config
+TEST_LOADING_UI = $(BIN_DIR)/test_loading_ui
 
-all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG)
+all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI)
 test: run
 
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
@@ -85,6 +86,19 @@ SPRITE_CONFIG_SRCS = ../src/game/sprite_config.c ../src/lib/cjson/cJSON.c
 $(TEST_SPRITE_CONFIG): test_sprite_config.c $(SPRITE_CONFIG_SRCS)
 	@mkdir -p $(BIN_DIR)
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
+
+# Loading screen logic test (loading_ui.c + stubs, only SDL for SDL_GetTicks/SDL_Delay)
+$(TEST_LOADING_UI): test_loading_ui.c ../src/gui/loading_ui.c
+	@mkdir -p $(BIN_DIR)
+	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src -I../include $(shell pkg-config --cflags sdl3) $^ -o $@ $(shell pkg-config --libs sdl3)
+
+# Run loading screen tests
+test_loading_ui: $(TEST_LOADING_UI)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running loading screen tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_loading_ui
 
 # Run serialized tests (single-threaded cache tests)
 test_serialized: $(TEST_SERIALIZED)
@@ -127,13 +141,13 @@ test_sprite_config: $(TEST_SPRITE_CONFIG)
 	cd .. && ./bin/test_sprite_config
 
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config
+run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"
 	@echo "==============================================="
 
 clean:
-	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) *.o
+	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) *.o
 
-.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config
+.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui

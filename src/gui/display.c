@@ -1008,6 +1008,7 @@ char *_game_rankname[] = {
 char **game_rankname = _game_rankname;
 
 int _game_rankcount = ARRAYSIZE(_game_rankname);
+_Static_assert(ARRAYSIZE(_game_rankname) == 41, "rank table must cover ranks 0..40 (server mil_rank table)");
 int *game_rankcount = &_game_rankcount;
 
 DLL_EXPORT int mil_rank(int exp);

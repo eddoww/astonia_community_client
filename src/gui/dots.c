@@ -102,12 +102,14 @@ void init_dots(void)
 
 	// equipment, inventory, container. center of first displayed item.
 	set_dot(DOT_WEA, 180, 20, !stop ? 0 : DOTF_TOPOFF);
-	set_dot(DOT_INV, 660, doty(DOT_BOT) + 27, 0);
+	// inventory cluster is anchored to the right edge (art columns 645-795
+	// of the XRES0-wide bottom bar, which is drawn right-anchored too)
+	set_dot(DOT_INV, XRES - 140, doty(DOT_BOT) + 27, 0);
 	set_dot(DOT_CON, 20, doty(DOT_BOT) + 27, 0);
 
 	// inventory top left and bottom right
-	set_dot(DOT_IN1, 645, doty(DOT_BOT) + 2, 0);
-	set_dot(DOT_IN2, 795, doty(DOT_BO2) - 2, 0);
+	set_dot(DOT_IN1, XRES - 155, doty(DOT_BOT) + 2, 0);
+	set_dot(DOT_IN2, XRES - 5, doty(DOT_BO2) - 2, 0);
 	if (!sbot) {
 		__invdy = 4;
 	} else {
@@ -153,8 +155,8 @@ void init_dots(void)
 	// gold
 	set_dot(DOT_GLD, 195, doty(DOT_BO2) - 22, 0);
 
-	// trashcan
-	set_dot(DOT_JNK, 610, doty(DOT_BO2) - 22, 0);
+	// trashcan (right-anchored, next to the inventory)
+	set_dot(DOT_JNK, XRES - 190, doty(DOT_BO2) - 22, 0);
 
 	// speed options: stealth/normal/fast
 	set_dot(DOT_MOD, 181, doty(DOT_BOT) + 24, 0);

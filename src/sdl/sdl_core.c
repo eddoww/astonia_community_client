@@ -55,6 +55,7 @@ DLL_EXPORT int sdl_multi = 4;
 extern SDL_AtomicInt sdl_tex_jobs_enqueued, sdl_tex_jobs_finished;
 DLL_EXPORT int sdl_cache_size = 8000;
 int sdl_vsync = 1;
+DLL_EXPORT int __xres = XRES0;
 DLL_EXPORT int __yres = YRES0;
 
 // Worker thread management
@@ -271,46 +272,27 @@ int sdl_init(int width, int height, char *title, int monitor)
 	}
 #endif
 
-	// decide on screen format
-	if (width != XRES || height != YRES) {
-		int tmp_scale = 1, off = 0;
+	// Decide on the logical canvas. Pick the largest integer scale that
+	// still yields at least the classic XRES0 x YRES3 canvas, then let the
+	// canvas fill the window at that scale (clamped): the map viewport and
+	// right-anchored UI grow into what used to be black side bars.
+	{
+		int off = 0;
 
-		// Check 4:3 aspect ratio (YRES0=600)
-		if (width / XRES >= 4 && height / YRES0 >= 4) {
-			sdl_scale = 4;
-		} else if (width / XRES >= 3 && height / YRES0 >= 3) {
-			sdl_scale = 3;
-		} else if (width / XRES >= 2 && height / YRES0 >= 2) {
-			sdl_scale = 2;
+		sdl_scale = 1;
+		for (int probe = 4; probe >= 2; probe--) {
+			if (width / probe >= XRES0 && height / probe >= YRES3) {
+				sdl_scale = probe;
+				break;
+			}
 		}
 
-		// Check 16:10 aspect ratio (YRES2=500)
-		if (width / XRES >= 4 && height / YRES2 >= 4) {
-			tmp_scale = 4;
-		} else if (width / XRES >= 3 && height / YRES2 >= 3) {
-			tmp_scale = 3;
-		} else if (width / XRES >= 2 && height / YRES2 >= 2) {
-			tmp_scale = 2;
+		XRES = width / sdl_scale;
+		if (XRES < XRES0) {
+			XRES = XRES0;
 		}
-
-		if (tmp_scale > sdl_scale || height < YRES0) {
-			sdl_scale = tmp_scale;
-			YRES = height / sdl_scale;
-		}
-
-		// Check 16:9 widescreen aspect ratio (YRES3=450) - most permissive
-		tmp_scale = 1;
-		if (width / XRES >= 4 && height / YRES3 >= 4) {
-			tmp_scale = 4;
-		} else if (width / XRES >= 3 && height / YRES3 >= 3) {
-			tmp_scale = 3;
-		} else if (width / XRES >= 2 && height / YRES3 >= 2) {
-			tmp_scale = 2;
-		}
-
-		if (tmp_scale > sdl_scale) {
-			sdl_scale = tmp_scale;
-			YRES = height / sdl_scale;
+		if (XRES > XRES1) {
+			XRES = XRES1;
 		}
 
 		YRES = height / sdl_scale;

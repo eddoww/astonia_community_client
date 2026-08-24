@@ -93,7 +93,7 @@ void display_wheel(void)
 	int i;
 
 	render_push_clip();
-	render_more_clip(0, 0, XRES, YRES0);
+	render_more_clip(0, 0, XRES, YRES);
 
 	if (now - vk_special_time < 2000) {
 		int n, panic = 99;
@@ -190,7 +190,7 @@ static int world_loading_active(void)
 static void display_world_loading(void)
 {
 	int done = 0, total = 0, pct = 0;
-	int cx = XRES / 2, cy = (YRES0 - 60) / 2;
+	int cx = XRES / 2, cy = (YRES - 60) / 2;
 	int bw = 220, bh = 8, bx = cx - bw / 2, by = cy + 10;
 	Uint64 elapsed = SDL_GetTicks() - world_loading_start;
 
@@ -198,8 +198,8 @@ static void display_world_loading(void)
 	if (total > 0) {
 		pct = done * 100 / total;
 	}
-	render_rect(0, 0, XRES, YRES0 - 60, blackcolor);
-	render_sprite(60, XRES / 2, ((YRES0 - 60) - 240) / 2, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+	render_rect(0, 0, XRES, YRES - 60, blackcolor);
+	render_sprite(60, XRES / 2, ((YRES - 60) - 240) / 2, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
 	render_text(
 	    cx, cy - 14, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, "Loading world...");
 	render_rounded_rect_filled_alpha(bx, by, bx + bw, by + bh, 3, IRGB(4, 4, 4), 230);
@@ -275,20 +275,20 @@ void display(void)
 	}
 
 	if (sockstate < 4 && ((t = time(NULL) - (time_t)socktimeout) > 10 || !originx)) {
-		render_rect(0, 0, XRES, YRES0 - 60, blackcolor);
+		render_rect(0, 0, XRES, YRES - 60, blackcolor);
 		display_screen();
 		display_text();
 		if ((now / 1000) & 1) {
 			render_text(
-			    XRES / 2, (YRES0 - 60) / 2 - 60, redcolor, RENDER_ALIGN_CENTER | RENDER_TEXT_LARGE, "not connected");
+			    XRES / 2, (YRES - 60) / 2 - 60, redcolor, RENDER_ALIGN_CENTER | RENDER_TEXT_LARGE, "not connected");
 		}
-		render_sprite(60, XRES / 2, ((YRES0 - 60) - 240) / 2, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+		render_sprite(60, XRES / 2, ((YRES - 60) - 240) / 2, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
 		if (!kicked_out) {
-			render_text_fmt(XRES / 2, (YRES0 - 60) / 2 - 40, textcolor,
+			render_text_fmt(XRES / 2, (YRES - 60) / 2 - 40, textcolor,
 			    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 			    "Trying to establish connection. %ld seconds...", (long)t);
 			if (t > 15) {
-				render_text_fmt(XRES / 2, (YRES0 - 60) / 2 - 0, textcolor,
+				render_text_fmt(XRES / 2, (YRES - 60) / 2 - 0, textcolor,
 				    RENDER_TEXT_LARGE | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 				    "Please check %s for troubleshooting advice.", game_url);
 			}
@@ -296,10 +296,10 @@ void display(void)
 			/* the server ended the session (kick, shutdown, idle ...): say why */
 			const char *why = loading_last_exit_reason();
 			if (why[0]) {
-				render_text(XRES / 2, (YRES0 - 60) / 2 - 40, redcolor,
+				render_text(XRES / 2, (YRES - 60) / 2 - 40, redcolor,
 				    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, why);
 			}
-			render_text(XRES / 2, (YRES0 - 60) / 2 - 24, textcolor,
+			render_text(XRES / 2, (YRES - 60) / 2 - 24, textcolor,
 			    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 			    "The connection was closed by the server. Close the game and start it again from the launcher.");
 		}

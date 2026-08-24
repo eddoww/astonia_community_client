@@ -548,7 +548,15 @@ void load_character_options(void)
 	}
 
 	if (input_load_config(path) == 0) {
-		addline("Loaded keybinds for %s", active_charname);
+		/* Every area transfer (including a death rescue) is a full
+		 * relogin and reloads the profile so per-character binds follow
+		 * the player across zones - but announcing it each time spammed
+		 * the chat. Say it once per character. */
+		static char announced_for[sizeof(active_charname)];
+		if (strcmp(announced_for, active_charname) != 0) {
+			snprintf(announced_for, sizeof(announced_for), "%s", active_charname);
+			addline("Loaded keybinds for %s", active_charname);
+		}
 		/* saved profiles can still carry spells from before the skill
 		 * filter existed (or from another class's shared config) */
 		hotbar_filter_uncastable();

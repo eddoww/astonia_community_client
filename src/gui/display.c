@@ -615,26 +615,24 @@ void display_tutor(void)
 {
 	int mx = dotx(DOT_TUT) + 406, my = doty(DOT_TUT) + 80;
 	char buf[80];
-	char hint1[128], hint2[128];
+	char hint1[128];
 	int bh;
 
 	if (!show_tutor) {
 		return;
 	}
 
-	/* The old popups told the player to "press ESCAPE", but Escape opens
-	 * the menu now - dismissing windows is the rebindable Cancel All
-	 * action. Tell the player what is actually bound (or how to bind it). */
+	/* Escape dismisses open windows before it opens the menu, so it always
+	 * works here; name the dedicated Cancel All key instead when one is
+	 * bound. */
 	InputBinding *cancel = input_find_by_id("ui.cancel");
 	if (cancel && cancel->key != SDLK_UNKNOWN) {
 		snprintf(hint1, sizeof(hint1), "Press %s or click the X to dismiss this window.",
 		    input_key_to_string(cancel->key, cancel->modifiers));
-		hint2[0] = 0;
 	} else {
-		snprintf(hint1, sizeof(hint1), "Thou hast not bound a key to dismiss this window: click the X above,");
-		snprintf(hint2, sizeof(hint2), "or press ESCAPE, open Keybindings and assign a key to Cancel All.");
+		snprintf(hint1, sizeof(hint1), "Press ESCAPE or click the X to dismiss this window.");
 	}
-	bh = hint2[0] ? 112 : 102;
+	bh = 102;
 
 	render_rect(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + bh, IRGB(24, 22, 16));
 
@@ -659,10 +657,6 @@ void display_tutor(void)
 	/* dismissal hint below the server text */
 	render_line(dotx(DOT_TUT) + 4, doty(DOT_TUT) + 84, dotx(DOT_TUT) + 406, doty(DOT_TUT) + 84, IRGB(18, 16, 10));
 	render_text(dotx(DOT_TUT) + 6, doty(DOT_TUT) + 88, IRGB(12, 10, 4), RENDER_TEXT_SMALL | RENDER_TEXT_LEFT, hint1);
-	if (hint2[0]) {
-		render_text(
-		    dotx(DOT_TUT) + 6, doty(DOT_TUT) + 98, IRGB(12, 10, 4), RENDER_TEXT_SMALL | RENDER_TEXT_LEFT, hint2);
-	}
 
 	int x = dotx(DOT_TUT) + 6;
 	int y = doty(DOT_TUT) + 4;

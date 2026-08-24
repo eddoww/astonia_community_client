@@ -328,6 +328,7 @@ static int opt_click_audio(int mx, int my)
 	ry = opt_row_y(5);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_SOUND;
+		game_options_record_override(GO_SOUND);
 		save_options();
 		return 1;
 	}
@@ -495,6 +496,7 @@ static int opt_click_display(int mx, int my)
 	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_LOWLIGHT;
+		game_options_record_override(GO_LOWLIGHT);
 		save_options();
 		return 1;
 	}
@@ -502,6 +504,7 @@ static int opt_click_display(int mx, int my)
 	ry = opt_row_y(3);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_LARGE;
+		game_options_record_override(GO_LARGE);
 		save_options();
 		return 1;
 	}
@@ -509,6 +512,7 @@ static int opt_click_display(int mx, int my)
 	ry = opt_row_y(4);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_DARK;
+		game_options_record_override(GO_DARK);
 		save_options();
 		return 1;
 	}
@@ -589,6 +593,7 @@ static int opt_click_ui(int mx, int my)
 	ry = opt_row_y(1);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_BIGBAR;
+		game_options_record_override(GO_BIGBAR);
 		save_options();
 		return 1;
 	}
@@ -596,6 +601,7 @@ static int opt_click_ui(int mx, int my)
 	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_SMALLTOP;
+		game_options_record_override(GO_SMALLTOP);
 		init_dots();
 		save_options();
 		return 1;
@@ -604,6 +610,7 @@ static int opt_click_ui(int mx, int my)
 	ry = opt_row_y(3);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_SMALLBOT;
+		game_options_record_override(GO_SMALLBOT);
 		init_dots();
 		save_options();
 		return 1;
@@ -612,6 +619,7 @@ static int opt_click_ui(int mx, int my)
 	ry = opt_row_y(4);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_NOMAP;
+		game_options_record_override(GO_NOMAP);
 		save_options();
 		return 1;
 	}
@@ -722,7 +730,7 @@ static void opt_display_advanced(void)
 
 	ry = opt_row_y(9);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_WHEELSPEED) != 0, "Scroll Wheel Speed");
+		draw_checkbox(opt_lx, ry, (game_options & GO_WHEELSPEED) != 0, "Wheel Changes Walk Speed");
 	}
 }
 
@@ -736,6 +744,7 @@ static int opt_click_advanced(int mx, int my)
 	ry = opt_row_y(1);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_PREDICT;
+		game_options_record_override(GO_PREDICT);
 		save_options();
 		return 1;
 	}
@@ -743,6 +752,7 @@ static int opt_click_advanced(int mx, int my)
 	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_SHORT;
+		game_options_record_override(GO_SHORT);
 		save_options();
 		return 1;
 	}
@@ -778,6 +788,7 @@ static int opt_click_advanced(int mx, int my)
 	ry = opt_row_y(7);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_MAPSAVE;
+		game_options_record_override(GO_MAPSAVE);
 		save_options();
 		return 1;
 	}
@@ -785,6 +796,7 @@ static int opt_click_advanced(int mx, int my)
 	ry = opt_row_y(8);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_CONTEXT;
+		game_options_record_override(GO_CONTEXT);
 		save_options();
 		return 1;
 	}
@@ -792,6 +804,7 @@ static int opt_click_advanced(int mx, int my)
 	ry = opt_row_y(9);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		game_options ^= GO_WHEELSPEED;
+		game_options_record_override(GO_WHEELSPEED);
 		save_options();
 		return 1;
 	}

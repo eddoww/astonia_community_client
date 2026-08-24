@@ -702,6 +702,10 @@ int main(int argc, char *argv[])
 	sharedmem_init();
 #endif
 
+	/* remember the launcher-provided options before the saved config gets
+	 * a chance to override them (see game_options_record_override) */
+	game_options_note_launch();
+
 	load_options();
 
 	// set some stuff

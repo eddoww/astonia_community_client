@@ -104,13 +104,23 @@ static void on_escape(InputBinding *self)
 	context_key_set(0);
 }
 
+/* Something dismissable is on screen (popups, look window, chat input ...).
+ * Escape deals with those before it opens the menu - players expect Escape
+ * to close whatever is in the way, and Cancel All is unbound by default. */
+static int anything_to_cancel(void)
+{
+	return show_look || display_gfx || teleporter || show_tutor || display_help || display_quest || show_color ||
+	       cmd_is_active();
+}
+
 static void on_menu(InputBinding *self)
 {
-	(void)self;
 	if (keybind_settings_is_open()) {
 		keybind_settings_close();
 	} else if (options_is_open()) {
 		options_close();
+	} else if (anything_to_cancel()) {
+		on_escape(self);
 	} else {
 		escape_menu_toggle();
 	}
@@ -174,6 +184,59 @@ static void on_toggle_minimap(InputBinding *self)
 /* hotbar display settings — defined here so toggle callbacks can access them */
 static int show_hotkeys = 1;
 static int show_names = 1;
+
+/* ── Persisted overrides of launcher-provided game options ─────────────
+ *
+ * The launcher passes its own game-option bitmask via -o on every launch,
+ * which used to silently revert anything the player toggled in the in-game
+ * options window. Toggles are now recorded here (with the launch value they
+ * overrode) and re-applied on startup - but only while the launcher still
+ * sends the same value for that bit. If the player changes the setting in
+ * the launcher instead, the launcher's newer choice wins and the stale
+ * override is dropped. */
+#define GO_UI_MANAGED                                                                                                  \
+	((uint32_t)(GO_SOUND | GO_LOWLIGHT | GO_LARGE | GO_DARK | GO_BIGBAR | GO_SMALLTOP | GO_SMALLBOT | GO_NOMAP |       \
+	            GO_PREDICT | GO_SHORT | GO_MAPSAVE | GO_CONTEXT | GO_WHEELSPEED))
+
+static uint32_t go_override_mask; /* which bits the player changed in-game */
+static uint32_t go_override_value; /* the values those bits were set to */
+static uint32_t go_override_base; /* the launch value each bit had when changed */
+static uint64_t launch_game_options; /* game_options as the launcher passed them */
+
+void game_options_note_launch(void)
+{
+	launch_game_options = game_options;
+}
+
+void game_options_record_override(uint64_t bit)
+{
+	uint32_t b = (uint32_t)bit & GO_UI_MANAGED;
+
+	if (!b) {
+		return;
+	}
+	go_override_mask |= b;
+	go_override_value = (go_override_value & ~b) | ((uint32_t)game_options & b);
+	go_override_base = (go_override_base & ~b) | ((uint32_t)launch_game_options & b);
+}
+
+static void game_options_apply_overrides(void)
+{
+	uint32_t launch = (uint32_t)launch_game_options;
+
+	go_override_mask &= GO_UI_MANAGED;
+	for (uint32_t b = 1; b; b <<= 1) {
+		if (!(go_override_mask & b)) {
+			continue;
+		}
+		if ((launch & b) == (go_override_base & b)) {
+			game_options = (game_options & ~(uint64_t)b) | (uint64_t)(go_override_value & b);
+		} else {
+			/* the launcher setting changed since - it wins */
+			go_override_mask &= ~b;
+		}
+	}
+}
 
 static void on_toggle_hotbar_names(InputBinding *self)
 {
@@ -1882,6 +1945,15 @@ int input_load_config(const char *path)
 		if (v && cJSON_IsNumber(v)) {
 			hotbar_set_rows((int)cJSON_GetNumberValue(v));
 		}
+		v = cJSON_GetObjectItem(jsettings, "go_override_mask");
+		if (v && cJSON_IsNumber(v)) {
+			go_override_mask = (uint32_t)cJSON_GetNumberValue(v);
+			v = cJSON_GetObjectItem(jsettings, "go_override_value");
+			go_override_value = (v && cJSON_IsNumber(v)) ? (uint32_t)cJSON_GetNumberValue(v) : 0;
+			v = cJSON_GetObjectItem(jsettings, "go_override_base");
+			go_override_base = (v && cJSON_IsNumber(v)) ? (uint32_t)cJSON_GetNumberValue(v) : 0;
+			game_options_apply_overrides();
+		}
 	}
 
 	/* load hotbar: each entry is an object {"type":"item","item_type":N}
@@ -2043,6 +2115,11 @@ int input_save_config(const char *path)
 	cJSON_AddBoolToObject(jsettings, "show_hotkeys", show_hotkeys);
 	cJSON_AddBoolToObject(jsettings, "show_names", show_names);
 	cJSON_AddNumberToObject(jsettings, "hotbar_rows", active_rows);
+	if (go_override_mask) {
+		cJSON_AddNumberToObject(jsettings, "go_override_mask", go_override_mask);
+		cJSON_AddNumberToObject(jsettings, "go_override_value", go_override_value);
+		cJSON_AddNumberToObject(jsettings, "go_override_base", go_override_base);
+	}
 	cJSON_AddItemToObject(root, "settings", jsettings);
 
 	/* save hotbar slots */

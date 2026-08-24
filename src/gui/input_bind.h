@@ -279,6 +279,13 @@ int hotbar_is_dragging(void);
 
 /* config persistence */
 int input_load_config(const char *path);
+
+/* Persisted in-game overrides of the launcher's -o game options. Call
+ * game_options_note_launch() once after argument parsing (before the config
+ * loads), and game_options_record_override(bit) after every in-game toggle
+ * of a game_options bit. */
+void game_options_note_launch(void);
+void game_options_record_override(uint64_t bit);
 int input_save_config(const char *path);
 int input_migrate_binary_config(const char *path);
 

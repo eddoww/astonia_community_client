@@ -38,6 +38,17 @@ static zip_t *sx_mod_zip = NULL; // Mod sounds (res/sx_mod.zip)
 static MIX_Audio *mod_sounds[MAX_MOD_SOUNDS];
 static int mod_sound_count = 0;
 
+/* The 32 mixer tracks are split between the two play paths: the legacy
+ * game-sound path (play_sdl_sound, driven by server sound ids) round-robins
+ * over [0, LEGACY_CHANNELS), and the mod-facing sound_play/sound_play_loop
+ * API allocates from [LEGACY_CHANNELS, MAX_SOUND_CHANNELS). They used to
+ * share the whole pool with independent allocators, so a game sound could
+ * land on the track carrying the mod's rain loop: the loop died and the
+ * mod's later stop/fade calls hit a track the game was reusing (crash
+ * reported ~5 s after a thunder clap). */
+#define LEGACY_CHANNELS 20
+#define MOD_CHANNELS    (MAX_SOUND_CHANNELS - LEGACY_CHANNELS)
+
 // Track state for channel queries
 typedef struct {
 	int in_use; // Is this channel currently playing?
@@ -573,7 +584,7 @@ static void play_sdl_sound(unsigned int nr, int distance, int angle)
 
 	// Increment sound channel so the next sound played is on its own layer
 	sound_channel++;
-	if (sound_channel >= MAX_SOUND_CHANNELS) {
+	if (sound_channel >= LEGACY_CHANNELS) {
 		sound_channel = 0;
 	}
 
@@ -760,10 +771,10 @@ static int sound_play_internal(int handle, float volume, int loop)
 
 	audio = mod_sounds[handle];
 
-	// Find a free channel or use round-robin
-	channel = next_channel;
-	for (int i = 0; i < MAX_SOUND_CHANNELS; i++) {
-		int test_ch = (next_channel + i) % MAX_SOUND_CHANNELS;
+	// Find a free channel in the mod range or use round-robin
+	channel = LEGACY_CHANNELS + next_channel;
+	for (int i = 0; i < MOD_CHANNELS; i++) {
+		int test_ch = LEGACY_CHANNELS + (next_channel + i) % MOD_CHANNELS;
 		if (!channel_states[test_ch].in_use) {
 			channel = test_ch;
 			break;
@@ -771,7 +782,7 @@ static int sound_play_internal(int handle, float volume, int loop)
 	}
 
 	// Update round-robin counter
-	next_channel = (channel + 1) % MAX_SOUND_CHANNELS;
+	next_channel = (channel + 1 - LEGACY_CHANNELS) % MOD_CHANNELS;
 
 	track = sdl_tracks[channel];
 	if (!track) {

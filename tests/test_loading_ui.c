@@ -12,6 +12,7 @@
 #include "gui/loading_ui.h"
 
 /* ---- stubs for everything loading_ui.c touches outside itself ---- */
+int __xres = 800;
 int __yres = 600;
 unsigned short textcolor = 1, redcolor = 2, blackcolor = 3;
 char game_url[] = "https://ugaris.com";

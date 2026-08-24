@@ -185,7 +185,7 @@
 #define RENDERFX_NORMAL_LIGHT 15
 #define RENDERFX_BRIGHT       0
 
-#define XRES 800
+#define XRES (__xres)
 #define YRES (__yres)
 
 struct ddfx {

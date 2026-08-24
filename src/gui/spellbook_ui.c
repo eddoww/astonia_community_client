@@ -105,6 +105,10 @@ static int sb_hit(int mx, int my)
 
 void spellbook_display(void)
 {
+	if (hotbar_rows() <= 0) {
+		return; /* hotbar disabled - the spellbook anchors to it */
+	}
+
 	if (!sb_open) {
 		return;
 	}
@@ -215,6 +219,10 @@ void spellbook_cancel_drag(void)
 
 int spellbook_click(int mx, int my)
 {
+	if (hotbar_rows() <= 0) {
+		return 0;
+	}
+
 	if (!sb_open) {
 		return 0;
 	}
@@ -242,6 +250,10 @@ int spellbook_click(int mx, int my)
 
 int spellbook_rclick(int mx, int my)
 {
+	if (hotbar_rows() <= 0) {
+		return 0;
+	}
+
 	(void)mx;
 	(void)my;
 	if (!sb_open) {

@@ -415,17 +415,20 @@ static void detect_hover_target(void)
 		}
 	}
 
-	if (mousex >= dotx(DOT_TOP) + 704 && mousex <= dotx(DOT_TOP) + 739 && mousey >= doty(DOT_TOP) + 22 &&
-	    mousey <= doty(DOT_TOP) + 30) {
-		butsel = BUT_HELP;
-	}
-	if (mousex >= dotx(DOT_TOP) + 741 && mousex <= dotx(DOT_TOP) + 775 && mousey >= doty(DOT_TOP) + 22 &&
-	    mousey <= doty(DOT_TOP) + 30) {
-		butsel = BUT_QUEST;
-	}
-	if (mousex >= dotx(DOT_TOP) + 704 && mousex <= dotx(DOT_TOP) + 723 && mousey >= doty(DOT_TOP) + 7 &&
-	    mousey <= doty(DOT_TOP) + 18) {
-		butsel = BUT_EXIT;
+	/* Exit/Help/Question live in the right-anchored section of the top
+	 * bar art, so their hit boxes shift with the canvas width */
+	{
+		int rx = dotx(DOT_TOP) + XRES - XRES0;
+
+		if (mousex >= rx + 704 && mousex <= rx + 739 && mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
+			butsel = BUT_HELP;
+		}
+		if (mousex >= rx + 741 && mousex <= rx + 775 && mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
+			butsel = BUT_QUEST;
+		}
+		if (mousex >= rx + 704 && mousex <= rx + 723 && mousey >= doty(DOT_TOP) + 7 && mousey <= doty(DOT_TOP) + 18) {
+			butsel = BUT_EXIT;
+		}
 	}
 	/* experience / military bars (top left): click cycles the numbers shown on them */
 	if (mousex >= dotx(DOT_BOT) + 25 && mousex <= dotx(DOT_BOT) + 135) {

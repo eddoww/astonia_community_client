@@ -9,6 +9,7 @@
 #include "gui/gui.h"
 #include "gui/input_bind.h"
 #include "sdl/sdl.h"
+#include "game/game.h"
 
 extern SDL_Window *sdlwnd;
 extern int mousex, mousey;
@@ -302,17 +303,21 @@ void gamepad_tick(void)
 		}
 		nx = mousex + (int)rx;
 		ny = mousey + (int)ry;
-		if (nx < 0) {
-			nx = 0;
+		/* clamp to the logical canvas in window coordinates, so the
+		 * virtual cursor cannot wander into the letterbox bars */
+		int minx = render_offset_x() * sdl_scale;
+		int miny = render_offset_y() * sdl_scale;
+		if (nx < minx) {
+			nx = minx;
 		}
-		if (ny < 0) {
-			ny = 0;
+		if (ny < miny) {
+			ny = miny;
 		}
-		if (nx >= XRES * sdl_scale) {
-			nx = XRES * sdl_scale - 1;
+		if (nx >= (render_offset_x() + XRES) * sdl_scale) {
+			nx = (render_offset_x() + XRES) * sdl_scale - 1;
 		}
-		if (ny >= YRES * sdl_scale) {
-			ny = YRES * sdl_scale - 1;
+		if (ny >= (render_offset_y() + YRES) * sdl_scale) {
+			ny = (render_offset_y() + YRES) * sdl_scale - 1;
 		}
 		SDL_WarpMouseInWindow(sdlwnd, (float)nx, (float)ny);
 	}

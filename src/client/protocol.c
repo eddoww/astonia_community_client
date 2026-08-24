@@ -1738,7 +1738,11 @@ void cmd_walk_dir(int dir)
 {
 	unsigned char buf[16];
 
-	if (dir < 0 || dir > 7) {
+	/* 0 = stop, 1-8 = DX_ directions. The old `> 7` guard silently
+	 * dropped DX_RIGHTUP (8) - the D key - so walking east sent nothing
+	 * and direction changes onto east left the server walking the
+	 * previous direction. */
+	if (dir < 0 || dir > 8) {
 		return;
 	}
 	buf[0] = CL_WALK_DIR;

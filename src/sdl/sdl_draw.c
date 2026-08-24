@@ -104,7 +104,10 @@ SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t co
 	const char *c, *otext = text;
 	Uint64 start = SDL_GetTicks();
 
-	for (sizex = 0, c = text; *c; c++) {
+	for (sizex = 0, c = text; *c && *c != RENDER_TEXT_TERMINATOR; c++) {
+		if (*c < 0) {
+			continue; /* the raster loop below skips these too */
+		}
 		sizex += font[(unsigned char)*c].dim * sdl_scale;
 	}
 
@@ -206,10 +209,13 @@ int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char
 	} else {
 		cache_index = sdl_tx_load(
 		    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, text, (int)IRGBA(r, g, b, a), flags, font, 0, 0);
-		tex = sdlt[cache_index].tex;
+		tex = (cache_index != STX_NONE) ? sdlt[cache_index].tex : NULL;
 	}
 
-	for (dx = 0, c = text; *c; c++) {
+	for (dx = 0, c = text; *c && *c != RENDER_TEXT_TERMINATOR; c++) {
+		if (*c < 0) {
+			continue;
+		}
 		dx += font[(unsigned char)*c].dim;
 	}
 

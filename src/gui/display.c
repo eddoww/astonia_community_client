@@ -402,7 +402,7 @@ void display_citem(void)
 		return;
 	}
 
-	if (x < 0 || y >= XRES) {
+	if (x < 0 || x >= XRES) {
 		return;
 	}
 	if (y < 0 || y >= YRES) {
@@ -642,6 +642,51 @@ void display_tutor(void)
 #define HOURLEN (DAYLEN / 24)
 #define MINLEN  (HOURLEN / 60)
 
+/* Draw one of the XRES0-wide chrome bars on a possibly wider canvas:
+ * left section as-is, right section anchored to the right edge, and the
+ * tileable middle repeated to fill the space between. Tiles are laid
+ * right-to-left so the single cut tile meets the left section, where the
+ * art has a natural break (strut/ornament edge). Art geometry:
+ *   top bars (999/309):   left [0,160), tile [160,640), right [640,800)
+ *   bottom bars (998/991): left [0,222), tile [232,620), right [629,800)
+ * The bottom tile is strictly inside the rock texture: the art's strut
+ * columns (220-221, 629-640) must appear exactly once, not per tile. */
+static void render_bar_tiled(unsigned int sprite, int bx, int by, int left_w, int right_x0, int tile_x0, int tile_x1)
+{
+	if (XRES <= XRES0) {
+		render_sprite(sprite, bx, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+		return;
+	}
+
+	int right_w = XRES0 - right_x0;
+	int gap_l = bx + left_w;
+	int gap_r = bx + XRES - right_w;
+	int tw = tile_x1 - tile_x0;
+	int x, x0;
+
+	/* left section */
+	render_push_clip();
+	render_more_clip(bx, by, gap_l, by + 200);
+	render_sprite(sprite, bx, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_pop_clip();
+
+	/* middle tiles, right to left; art column tile_x1 meets the right
+	 * section's first column so that junction is always seamless */
+	for (x = gap_r; x > gap_l; x -= tw) {
+		x0 = (x - tw > gap_l) ? x - tw : gap_l;
+		render_push_clip();
+		render_more_clip(x0, by, x, by + 200);
+		render_sprite(sprite, x - tw - tile_x0, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+		render_pop_clip();
+	}
+
+	/* right section */
+	render_push_clip();
+	render_more_clip(gap_r, by, bx + XRES, by + 200);
+	render_sprite(sprite, bx + XRES - XRES0, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_pop_clip();
+}
+
 static void trans_date(int t, int *phour, int *pmin)
 {
 	if (pmin) {
@@ -659,8 +704,7 @@ void display_screen(void)
 	static int rh1 = 0, rh2 = 0, rm1 = 0, rm2 = 0;
 
 	/* use "Menu" sprite variant (309) when in game, original "Exit" (999) otherwise */
-	render_sprite(opt_sprite((sockstate >= 4) ? 309 : 999), dotx(DOT_TOP), doty(DOT_TOP), RENDERFX_NORMAL_LIGHT,
-	    RENDER_ALIGN_NORMAL);
+	render_bar_tiled(opt_sprite((sockstate >= 4) ? 309 : 999), dotx(DOT_TOP), doty(DOT_TOP), 160, 640, 160, 640);
 
 	trans_date((int)realtime, &h, &m);
 
@@ -697,21 +741,21 @@ void display_screen(void)
 		rm2 = 0;
 	}
 
-	render_sprite((unsigned int)(200 + rh1), dotx(DOT_TOP) + 730 + 0 * 10 - 2, doty(DOT_TOP) + 5 + 3,
+	render_sprite((unsigned int)(200 + rh1), dotx(DOT_TOP) + XRES - XRES0 + 730 + 0 * 10 - 2, doty(DOT_TOP) + 5 + 3,
 	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rh2), dotx(DOT_TOP) + 730 + 1 * 10 - 2, doty(DOT_TOP) + 5 + 3,
+	render_sprite((unsigned int)(200 + rh2), dotx(DOT_TOP) + XRES - XRES0 + 730 + 1 * 10 - 2, doty(DOT_TOP) + 5 + 3,
 	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rm1), dotx(DOT_TOP) + 734 + 2 * 10 - 2, doty(DOT_TOP) + 5 + 3,
+	render_sprite((unsigned int)(200 + rm1), dotx(DOT_TOP) + XRES - XRES0 + 734 + 2 * 10 - 2, doty(DOT_TOP) + 5 + 3,
 	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rm2), dotx(DOT_TOP) + 734 + 3 * 10 - 2, doty(DOT_TOP) + 5 + 3,
+	render_sprite((unsigned int)(200 + rm2), dotx(DOT_TOP) + XRES - XRES0 + 734 + 3 * 10 - 2, doty(DOT_TOP) + 5 + 3,
 	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 
 	sprintf(hover_time_text, "%02d:%02d Astonia Standard Time", h, m);
 
 	if (game_options & GO_SMALLBOT) {
-		render_sprite(opt_sprite(991), dotx(DOT_BOT), doty(DOT_BOT), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+		render_bar_tiled(opt_sprite(991), dotx(DOT_BOT), doty(DOT_BOT), 222, 629, 232, 620);
 	} else {
-		render_sprite(opt_sprite(998), dotx(DOT_BOT), doty(DOT_BOT), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+		render_bar_tiled(opt_sprite(998), dotx(DOT_BOT), doty(DOT_BOT), 222, 629, 232, 620);
 	}
 }
 
@@ -1090,7 +1134,7 @@ void display_rage(void)
 		step = (int)(50 - 50 * rage / value[0][V3_RAGE]);
 	}
 	render_push_clip();
-	render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
+	render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
 	render_sprite(997, dotx(DOT_SSP) + 3 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 	render_pop_clip();
 
@@ -1139,7 +1183,7 @@ void display_game_special(void)
 		render_sprite(50475, 75, 47, 14, 0);
 		break;
 	case 8:
-		render_sprite(50475, 763, 62, 14, 0);
+		render_sprite(50475, XRES - 37, 62, 14, 0);
 		break;
 
 	case 9:
@@ -1171,10 +1215,10 @@ void display_game_special(void)
 		render_sprite(50476, 625, 456, 14, 0);
 		break;
 	case 14:
-		render_sprite(50476, 700, 456, 14, 0);
+		render_sprite(50476, XRES - 100, 456, 14, 0);
 		break;
 	case 15:
-		render_sprite(50476, 741, 456, 14, 0);
+		render_sprite(50476, XRES - 59, 456, 14, 0);
 		break;
 
 	case 16:
@@ -1182,7 +1226,7 @@ void display_game_special(void)
 		break;
 
 	case 17:
-		render_sprite(50473, 722, 382, 14, 0);
+		render_sprite(50473, XRES - 78, 382, 14, 0);
 		render_sprite(50475, 257, 60, 14, 0);
 		break;
 

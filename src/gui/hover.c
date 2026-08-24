@@ -240,6 +240,33 @@ void hover_invalidate_con(int slot)
 	hi[slot + _inventorysize].valid_till = 0;
 }
 
+/* Ask the server for look data on an inventory slot so hover_get_item_name()
+ * can answer on a later frame. Shares the request throttle with the tooltip
+ * path; safe to call every frame. */
+void hover_request_item_info(int inv_slot)
+{
+	if (inv_slot < 0 || inv_slot >= _inventorysize || !item[inv_slot]) {
+		return;
+	}
+	if (hi[inv_slot].valid_till >= tick) {
+		return; /* cache is warm */
+	}
+	if (last_look) {
+		return; /* a request is already in flight */
+	}
+	cmd_look_inv(inv_slot);
+	last_line = 0;
+	last_look = 20;
+	last_invsel = inv_slot;
+	for (int i = 0; i < MAXDESC; i++) {
+		if (hi[inv_slot].desc[i]) {
+			xfree(hi[inv_slot].desc[i]);
+			hi[inv_slot].desc[i] = NULL;
+		}
+	}
+	hi[inv_slot].cnt = 0;
+}
+
 const char *hover_get_item_name(int inv_slot)
 {
 	if (inv_slot < 0 || inv_slot >= _inventorysize) {

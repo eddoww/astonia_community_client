@@ -86,6 +86,27 @@ void hotbar_display(void)
 				fx.align = RENDER_ALIGN_CENTER;
 			}
 
+			/* Item values are not drawable sprite ids as-is: colored and
+			 * animated variants (a green torch, ...) must be resolved
+			 * through trans_asprite like the inventory does, or the
+			 * renderer looks for a png that does not exist. */
+			if (slot && slot->type == HOTBAR_ITEM) {
+				unsigned short c1, c2, c3, shine;
+				unsigned char tscale, cr, cg, cb, tlight, tsat;
+
+				fx.sprite =
+				    trans_asprite(0, sprite, tick, &tscale, &cr, &cg, &cb, &tlight, &tsat, &c1, &c2, &c3, &shine);
+				fx.c1 = c1;
+				fx.c2 = c2;
+				fx.c3 = c3;
+				fx.shine = shine;
+				fx.cr = (char)cr;
+				fx.cg = (char)cg;
+				fx.cb = (char)cb;
+				fx.clight = (char)tlight;
+				fx.sat = (char)tsat;
+			}
+
 			/* grey out item slots that are empty (out of stock) */
 			if (slot && slot->type == HOTBAR_ITEM && slot->inv_index <= 0) {
 				fx.sat = 20;
@@ -201,12 +222,30 @@ void hotbar_display(void)
 	if (hb_drag_active()) {
 		uint32_t sprite = hotbar_slot_sprite(hb_drag_src);
 		if (sprite) {
+			const HotbarSlot *slot = hotbar_get(hb_drag_src);
+
 			bzero(&fx, sizeof(fx));
 			fx.sprite = sprite;
 			fx.scale = 80;
 			fx.light = RENDERFX_BRIGHT;
 			fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = fx.light;
 			fx.align = RENDER_ALIGN_CENTER;
+			if (slot && slot->type == HOTBAR_ITEM) {
+				unsigned short c1, c2, c3, shine;
+				unsigned char tscale, cr, cg, cb, tlight, tsat;
+
+				fx.sprite =
+				    trans_asprite(0, sprite, tick, &tscale, &cr, &cg, &cb, &tlight, &tsat, &c1, &c2, &c3, &shine);
+				fx.c1 = c1;
+				fx.c2 = c2;
+				fx.c3 = c3;
+				fx.shine = shine;
+				fx.cr = (char)cr;
+				fx.cg = (char)cg;
+				fx.cb = (char)cb;
+				fx.clight = (char)tlight;
+				fx.sat = (char)tsat;
+			}
 			render_sprite_fx(&fx, mousex, mousey);
 		}
 	}

@@ -648,7 +648,9 @@ void display_tutor(void)
  * right-to-left so the single cut tile meets the left section, where the
  * art has a natural break (strut/ornament edge). Art geometry:
  *   top bars (999/309):   left [0,160), tile [160,640), right [640,800)
- *   bottom bars (998/991): left [0,220), tile [220,629), right [629,800) */
+ *   bottom bars (998/991): left [0,222), tile [232,620), right [629,800)
+ * The bottom tile is strictly inside the rock texture: the art's strut
+ * columns (220-221, 629-640) must appear exactly once, not per tile. */
 static void render_bar_tiled(unsigned int sprite, int bx, int by, int left_w, int right_x0, int tile_x0, int tile_x1)
 {
 	if (XRES <= XRES0) {
@@ -751,9 +753,9 @@ void display_screen(void)
 	sprintf(hover_time_text, "%02d:%02d Astonia Standard Time", h, m);
 
 	if (game_options & GO_SMALLBOT) {
-		render_bar_tiled(opt_sprite(991), dotx(DOT_BOT), doty(DOT_BOT), 220, 629, 220, 629);
+		render_bar_tiled(opt_sprite(991), dotx(DOT_BOT), doty(DOT_BOT), 222, 629, 232, 620);
 	} else {
-		render_bar_tiled(opt_sprite(998), dotx(DOT_BOT), doty(DOT_BOT), 220, 629, 220, 629);
+		render_bar_tiled(opt_sprite(998), dotx(DOT_BOT), doty(DOT_BOT), 222, 629, 232, 620);
 	}
 }
 

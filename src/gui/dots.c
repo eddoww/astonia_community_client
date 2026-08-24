@@ -231,7 +231,9 @@ void init_dots(void)
 		set_but(BUT_ACT_BEG + i, dot[DOT_ACT].x + i * 40, dot[DOT_ACT].y, 18, 0);
 	}
 
-	set_but(BUT_WEA_LCK, dot[DOT_WEA].x + 12 * FDX - 12, dot[DOT_WEA].y + 4, 18, !stop ? 0 : BUTF_TOPOFF);
+	/* gear lock sits flush against the right-anchored Menu cluster, as it
+	 * did on the classic 800px bar - not floating after the equipment row */
+	set_but(BUT_WEA_LCK, XRES - XRES0 + 648, dot[DOT_WEA].y + 4, 18, !stop ? 0 : BUTF_TOPOFF);
 	set_but(BUT_ACT_LCK, dot[DOT_ACT].x - 40, dot[DOT_ACT].y, 18, 0);
 	set_but(BUT_ACT_OPN, dot[DOT_ACT].x + MAXACTIONSLOT * 40, dot[DOT_ACT].y, 18, 0);
 

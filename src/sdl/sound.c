@@ -771,14 +771,41 @@ static int sound_play_internal(int handle, float volume, int loop)
 
 	audio = mod_sounds[handle];
 
-	// Find a free channel in the mod range or use round-robin
-	channel = LEGACY_CHANNELS + next_channel;
+	/* Find a free channel in the mod range. in_use is never cleared when a
+	 * one-shot finishes on its own, so channels whose track stopped playing
+	 * are reclaimed here - otherwise a dozen thunder claps marked every
+	 * channel busy and the fallback stomped the rain loop ("rain goes mute
+	 * during storms"). Looping channels (rain, wind, music) are never
+	 * stolen; if everything is genuinely busy, the oldest one-shot loses. */
+	channel = -1;
 	for (int i = 0; i < MOD_CHANNELS; i++) {
 		int test_ch = LEGACY_CHANNELS + (next_channel + i) % MOD_CHANNELS;
 		if (!channel_states[test_ch].in_use) {
 			channel = test_ch;
 			break;
 		}
+		if (!channel_states[test_ch].looping) {
+			MIX_Track *t = sdl_tracks[test_ch];
+			if (t && !MIX_TrackPlaying(t)) {
+				channel_states[test_ch].in_use = 0;
+				channel = test_ch;
+				break;
+			}
+		}
+	}
+	if (channel < 0) {
+		for (int i = 0; i < MOD_CHANNELS; i++) {
+			int test_ch = LEGACY_CHANNELS + (next_channel + i) % MOD_CHANNELS;
+			if (!channel_states[test_ch].looping) {
+				channel = test_ch;
+				break;
+			}
+		}
+	}
+	if (channel < 0) {
+		/* every mod channel carries a loop; refuse rather than kill one */
+		warn("sound_play: all mod channels hold loops, dropping sound");
+		return 0;
 	}
 
 	// Update round-robin counter

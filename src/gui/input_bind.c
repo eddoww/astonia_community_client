@@ -173,7 +173,7 @@ static void on_toggle_minimap(InputBinding *self)
 
 /* hotbar display settings — defined here so toggle callbacks can access them */
 static int show_hotkeys = 1;
-static int show_names;
+static int show_names = 1;
 
 static void on_toggle_hotbar_names(InputBinding *self)
 {
@@ -605,15 +605,18 @@ int hotbar_filter_uncastable(void)
  * greyed-out icon until then. */
 void hotbar_add_default_items(void)
 {
-	static const uint32_t starter_items[] = {
-	    50011, /* Recall to Cameron */
-	    10292, /* Healing Potion (small) */
+	static const struct {
+		uint32_t item_type;
+		const char *name;
+	} starter_items[] = {
+	    {50011, "Recall Scroll"},
+	    {10292, "Healing Potion"},
 	};
 
 	for (size_t i = 0; i < sizeof(starter_items) / sizeof(starter_items[0]); i++) {
 		int already = 0;
 		for (int s = 0; s < HOTBAR_MAX_SLOTS; s++) {
-			if (hotbar[s].type == HOTBAR_ITEM && hotbar[s].item_type == starter_items[i]) {
+			if (hotbar[s].type == HOTBAR_ITEM && hotbar[s].item_type == starter_items[i].item_type) {
 				already = 1;
 				break;
 			}
@@ -623,7 +626,8 @@ void hotbar_add_default_items(void)
 		}
 		for (int s = 0; s < HOTBAR_SLOTS_PER_ROW; s++) {
 			if (hotbar[s].type == HOTBAR_EMPTY) {
-				hotbar_assign_item_by_type(s, starter_items[i]);
+				hotbar_assign_item_by_type(s, starter_items[i].item_type);
+				snprintf(hotbar[s].item_name, sizeof(hotbar[s].item_name), "%s", starter_items[i].name);
 				break;
 			}
 		}
@@ -675,7 +679,18 @@ DLL_EXPORT const char *hotbar_slot_name(int slot)
 		return get_action_text(hotbar[slot].action_slot);
 	case HOTBAR_ITEM:
 		if (hotbar[slot].inv_index > 0) {
-			return hover_get_item_name(hotbar[slot].inv_index);
+			const char *n = hover_get_item_name(hotbar[slot].inv_index);
+			if (n && n[0]) {
+				/* remember it so the label survives cold look data
+				 * and out-of-stock (greyed) slots */
+				if (strncmp(hotbar[slot].item_name, n, sizeof(hotbar[slot].item_name) - 1) != 0) {
+					snprintf(hotbar[slot].item_name, sizeof(hotbar[slot].item_name), "%s", n);
+				}
+				return n;
+			}
+		}
+		if (hotbar[slot].item_name[0]) {
+			return hotbar[slot].item_name;
 		}
 		return NULL;
 	default:
@@ -1889,9 +1904,18 @@ int input_load_config(const char *path)
 				if (strcmp(tstr, "item") == 0) {
 					cJSON *jit = cJSON_GetObjectItem(jslot, "item_type");
 					uint32_t itype = (jit && cJSON_IsNumber(jit)) ? (uint32_t)jit->valueint : 0;
+					cJSON *jname = cJSON_GetObjectItem(jslot, "name");
 					hotbar[slot].type = HOTBAR_ITEM;
 					hotbar[slot].item_type = itype;
 					hotbar[slot].inv_index = find_item_in_inventory(itype);
+					if (jname && cJSON_IsString(jname)) {
+						snprintf(hotbar[slot].item_name, sizeof(hotbar[slot].item_name), "%s", jname->valuestring);
+					} else if (itype == 50011) {
+						/* configs saved before the name cache existed */
+						snprintf(hotbar[slot].item_name, sizeof(hotbar[slot].item_name), "Recall Scroll");
+					} else if (itype == 10292) {
+						snprintf(hotbar[slot].item_name, sizeof(hotbar[slot].item_name), "Healing Potion");
+					}
 				} else if (strcmp(tstr, "spell") == 0) {
 					cJSON *jsp = cJSON_GetObjectItem(jslot, "spell");
 					int asp = (jsp && cJSON_IsNumber(jsp)) ? jsp->valueint : -1;
@@ -2029,6 +2053,9 @@ int input_save_config(const char *path)
 		case HOTBAR_ITEM:
 			cJSON_AddStringToObject(jslot, "type", "item");
 			cJSON_AddNumberToObject(jslot, "item_type", (double)hotbar[i].item_type);
+			if (hotbar[i].item_name[0]) {
+				cJSON_AddStringToObject(jslot, "name", hotbar[i].item_name);
+			}
 			break;
 		case HOTBAR_SPELL: {
 			static const char *tgt_names[] = {"default", "map", "chr", "self"};

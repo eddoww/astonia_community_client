@@ -189,6 +189,7 @@ typedef struct {
 	/* HOTBAR_ITEM fields */
 	int inv_index; /* inventory position (0 = none found yet) */
 	uint32_t item_type; /* item[] sprite ID for auto-refill */
+	char item_name[24]; /* last known name, shown when look data is cold */
 
 	/* HOTBAR_SPELL fields */
 	int action_slot; /* ACTION_* index (0-13) */

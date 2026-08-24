@@ -530,13 +530,15 @@ void load_options(void)
 
 void load_character_options(void)
 {
-	int center = (int)(DIST + DIST * MAPDX);
-	unsigned int cn = map[center].cn;
-	if (cn == 0 || cn >= MAXCHARS || player[cn].name[0] == '\0') {
+	/* The name comes from the login credentials, not from the map: with
+	 * the protocol v3 staggered login the center tile often has no
+	 * character yet when sv_logindone fires, and reading it here made
+	 * the per-character profile load a coin flip. */
+	if (username[0] == '\0') {
 		return;
 	}
 
-	snprintf(active_charname, sizeof(active_charname), "%s", player[cn].name);
+	snprintf(active_charname, sizeof(active_charname), "%s", username);
 
 	char path[MAX_PATH];
 	get_config_path(path, sizeof(path));

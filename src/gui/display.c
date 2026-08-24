@@ -1285,8 +1285,8 @@ static char *v3_action_desc[MAXACTIONSLOT] = {"Attacks another character using y
     "Increases the basic attributes (WIS/INT/AGI/STR) of the target.", "Restores some of the target's hitpoints.",
     "Gives you a temporary Life Shield, blocking some damage. Slows enemies and might interrupt spellcasting in a "
     "fairly wide radius around you.",
-    "Deals some damage to adjacent enemies. If an enemy is killed you will receive a small amount of their life force "
-    "as mana.",
+    "A finishing move: instantly kills adjacent enemies that are weakened enough, converting their remaining life "
+    "force into mana for you. Has no effect on healthy enemies.",
     "Deals high damage to adjacent enemies.",
     "Interact with items. Can be used to take or use an item on the ground, or to drop or give an item on your mouse "
     "cursor.",
@@ -1389,6 +1389,15 @@ const char *get_action_desc(int slot)
 	if (slot < 0 || slot >= MAXACTIONSLOT || !action_desc) {
 		return NULL;
 	}
+
+	/* Warcry only grants a Life Shield to characters WITHOUT the Magic
+	 * Shield skill (warriors); for Seyan'du the shield part of the
+	 * description would be a lie */
+	if (slot == ACTION_WARCRY && action_skill && action_skill[ACTION_SHIELD] >= 0 &&
+	    value[0][action_skill[ACTION_SHIELD]]) {
+		return "Slows enemies and might interrupt spellcasting in a fairly wide radius around you.";
+	}
+
 	return action_desc[slot];
 }
 

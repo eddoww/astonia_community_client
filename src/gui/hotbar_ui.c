@@ -130,7 +130,11 @@ void hotbar_display(void)
 		if (hotbar_show_names()) {
 			const char *name = hotbar_slot_name(i);
 			if (name) {
-				render_text(x, y + 10, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, name);
+				/* item names can be long ("Recall to Cameron"); cap them
+				 * near the longest spell name so neighbours stay legible */
+				char label[16];
+				snprintf(label, sizeof(label), "%s", name);
+				render_text(x, y + 10, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, label);
 			} else {
 				/* item names come from server look data; nothing else
 				 * requests it for hotbar items, so labels stayed blank */

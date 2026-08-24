@@ -101,7 +101,9 @@ void init_dots(void)
 	set_dot(DOT_BO2, XRES, YRES, 0);
 
 	// equipment, inventory, container. center of first displayed item.
-	set_dot(DOT_WEA, 180, 20, !stop ? 0 : DOTF_TOPOFF);
+	/* equipment row is centered between the top bar's left ornament and
+	 * the right control cluster (== 180 on the classic 800px bar) */
+	set_dot(DOT_WEA, (XRES - 480) / 2 + 20, 20, !stop ? 0 : DOTF_TOPOFF);
 	// inventory cluster is anchored to the right edge (art columns 645-795
 	// of the XRES0-wide bottom bar, which is drawn right-anchored too)
 	set_dot(DOT_INV, XRES - 140, doty(DOT_BOT) + 27, 0);

@@ -642,14 +642,53 @@ void display_tutor(void)
 #define HOURLEN (DAYLEN / 24)
 #define MINLEN  (HOURLEN / 60)
 
-/* Draw one of the XRES0-wide chrome bars on a possibly wider canvas:
- * left section as-is, right section anchored to the right edge, and the
- * tileable middle repeated to fill the space between. Tiles are laid
- * right-to-left so the single cut tile meets the left section, where the
- * art has a natural break (strut/ornament edge). Art geometry:
- *   top bars (999/309):   left [0,160), tile [160,640), right [640,800)
- *   bottom bars (998/991): left [0,222), tile [232,620), right [629,800)
- * The bottom tile is strictly inside the rock texture: the art's strut
+/* Blit art columns [art_x0, art_x0 + (sx1-sx0)) of a chrome bar sprite to
+ * screen [sx0, sx1) at row by. */
+static void draw_bar_region(unsigned int sprite, int by, int sx0, int sx1, int art_x0)
+{
+	render_push_clip();
+	render_more_clip(sx0, by, sx1, by + 200);
+	render_sprite(sprite, sx0 - art_x0, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_pop_clip();
+}
+
+/* Top bars (999/309) on a wider canvas. The chain plates read as item
+ * slots, so plates are drawn ONLY under the 12 equipment slots (centered
+ * between the ornament and the control cluster); the remaining stretches
+ * use a plain plate-free slice of the art (plate-interior rock between
+ * the rails, art columns 212-228). Art geometry: left ornament [0,160), 12 plates
+ * [160,640), right controls [640,800). At XRES0 this degenerates to the
+ * original single blit. */
+static void render_top_bar(unsigned int sprite, int bx, int by)
+{
+	if (XRES <= XRES0) {
+		render_sprite(sprite, bx, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+		return;
+	}
+
+	int wea_left = bx + (XRES - 480) / 2; /* matches DOT_WEA - 20 */
+	int right_x = bx + XRES - 160;
+	int x, e;
+
+	draw_bar_region(sprite, by, bx, bx + 160, 0); /* ornament + exp bars */
+	draw_bar_region(sprite, by, wea_left, wea_left + 480, 160); /* equipment plates */
+	draw_bar_region(sprite, by, right_x, bx + XRES, 640); /* gear lock + menu + clock */
+
+	for (x = bx + 160; x < wea_left; x += 16) { /* plain filler, left of the slots */
+		e = (x + 16 < wea_left) ? x + 16 : wea_left;
+		draw_bar_region(sprite, by, x, e, 212);
+	}
+	for (x = wea_left + 480; x < right_x; x += 16) { /* plain filler, right of the slots */
+		e = (x + 16 < right_x) ? x + 16 : right_x;
+		draw_bar_region(sprite, by, x, e, 212);
+	}
+}
+
+/* Bottom bars (998/991) on a wider canvas: left section as-is, right
+ * section anchored to the right edge, and the tileable middle repeated to
+ * fill the space between. Tiles are laid right-to-left so the single cut
+ * tile meets the left section, where the art has a natural break. The
+ * tile [232,620) is strictly inside the rock texture: the art's strut
  * columns (220-221, 629-640) must appear exactly once, not per tile. */
 static void render_bar_tiled(unsigned int sprite, int bx, int by, int left_w, int right_x0, int tile_x0, int tile_x1)
 {
@@ -664,27 +703,16 @@ static void render_bar_tiled(unsigned int sprite, int bx, int by, int left_w, in
 	int tw = tile_x1 - tile_x0;
 	int x, x0;
 
-	/* left section */
-	render_push_clip();
-	render_more_clip(bx, by, gap_l, by + 200);
-	render_sprite(sprite, bx, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_pop_clip();
+	draw_bar_region(sprite, by, bx, gap_l, 0); /* left section */
 
 	/* middle tiles, right to left; art column tile_x1 meets the right
 	 * section's first column so that junction is always seamless */
 	for (x = gap_r; x > gap_l; x -= tw) {
 		x0 = (x - tw > gap_l) ? x - tw : gap_l;
-		render_push_clip();
-		render_more_clip(x0, by, x, by + 200);
-		render_sprite(sprite, x - tw - tile_x0, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-		render_pop_clip();
+		draw_bar_region(sprite, by, x0, x, tile_x0 + (x0 - (x - tw)));
 	}
 
-	/* right section */
-	render_push_clip();
-	render_more_clip(gap_r, by, bx + XRES, by + 200);
-	render_sprite(sprite, bx + XRES - XRES0, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_pop_clip();
+	draw_bar_region(sprite, by, gap_r, bx + XRES, right_x0); /* right section */
 }
 
 static void trans_date(int t, int *phour, int *pmin)
@@ -704,7 +732,7 @@ void display_screen(void)
 	static int rh1 = 0, rh2 = 0, rm1 = 0, rm2 = 0;
 
 	/* use "Menu" sprite variant (309) when in game, original "Exit" (999) otherwise */
-	render_bar_tiled(opt_sprite((sockstate >= 4) ? 309 : 999), dotx(DOT_TOP), doty(DOT_TOP), 160, 640, 160, 640);
+	render_top_bar(opt_sprite((sockstate >= 4) ? 309 : 999), dotx(DOT_TOP), doty(DOT_TOP));
 
 	trans_date((int)realtime, &h, &m);
 

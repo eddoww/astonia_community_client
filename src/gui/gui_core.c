@@ -379,6 +379,7 @@ int main_loop(void)
 				}
 				amod_tick();
 				keyboard_move_tick();
+				finish_character_options();
 #ifdef ENABLE_SHAREDMEM
 				sharedmem_update();
 #endif
@@ -402,8 +403,12 @@ int main_loop(void)
 			if (sdl_is_shown() && (!(tick & 3) || !game_slowdown || sockstate != 4)) {
 				sdl_clear();
 				display();
-				amod_frame();
-				display_mouseover();
+				/* mod widgets (weather, menu button ...) and hover texts
+				 * have no place on top of a loading screen */
+				if (!gui_is_loading()) {
+					amod_frame();
+					display_mouseover();
+				}
 				minimap_update();
 			}
 

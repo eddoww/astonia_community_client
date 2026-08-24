@@ -587,21 +587,82 @@ void display_keys(void)
 	(void)0;
 }
 
+/* Close button in the top-right corner of the tutorial popup. */
+static void tutor_close_rect(int *x1, int *y1, int *x2, int *y2)
+{
+	*x1 = dotx(DOT_TUT) + 410 - 13;
+	*y1 = doty(DOT_TUT) + 3;
+	*x2 = dotx(DOT_TUT) + 410 - 3;
+	*y2 = doty(DOT_TUT) + 13;
+}
+
+int tutor_click(int x, int y)
+{
+	int x1, y1, x2, y2;
+
+	if (!show_tutor) {
+		return 0;
+	}
+	tutor_close_rect(&x1, &y1, &x2, &y2);
+	if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+		show_tutor = 0;
+		return 1;
+	}
+	return 0;
+}
+
 void display_tutor(void)
 {
 	int mx = dotx(DOT_TUT) + 406, my = doty(DOT_TUT) + 80;
 	char buf[80];
+	char hint1[128], hint2[128];
+	int bh;
 
 	if (!show_tutor) {
 		return;
 	}
 
-	render_rect(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + 90, IRGB(24, 22, 16));
+	/* The old popups told the player to "press ESCAPE", but Escape opens
+	 * the menu now - dismissing windows is the rebindable Cancel All
+	 * action. Tell the player what is actually bound (or how to bind it). */
+	InputBinding *cancel = input_find_by_id("ui.cancel");
+	if (cancel && cancel->key != SDLK_UNKNOWN) {
+		snprintf(hint1, sizeof(hint1), "Press %s or click the X to dismiss this window.",
+		    input_key_to_string(cancel->key, cancel->modifiers));
+		hint2[0] = 0;
+	} else {
+		snprintf(hint1, sizeof(hint1), "Thou hast not bound a key to dismiss this window: click the X above,");
+		snprintf(hint2, sizeof(hint2), "or press ESCAPE, open Keybindings and assign a key to Cancel All.");
+	}
+	bh = hint2[0] ? 112 : 102;
+
+	render_rect(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + bh, IRGB(24, 22, 16));
 
 	render_line(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT), IRGB(12, 10, 4));
-	render_line(dotx(DOT_TUT) + 410, doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + 90, IRGB(12, 10, 4));
-	render_line(dotx(DOT_TUT), doty(DOT_TUT) + 90, dotx(DOT_TUT) + 410, doty(DOT_TUT) + 90, IRGB(12, 10, 4));
-	render_line(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT), doty(DOT_TUT) + 90, IRGB(12, 10, 4));
+	render_line(dotx(DOT_TUT) + 410, doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + bh, IRGB(12, 10, 4));
+	render_line(dotx(DOT_TUT), doty(DOT_TUT) + bh, dotx(DOT_TUT) + 410, doty(DOT_TUT) + bh, IRGB(12, 10, 4));
+	render_line(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT), doty(DOT_TUT) + bh, IRGB(12, 10, 4));
+
+	/* close button */
+	{
+		int x1, y1, x2, y2;
+		tutor_close_rect(&x1, &y1, &x2, &y2);
+		int hov = (mousex >= x1 && mousex <= x2 && mousey >= y1 && mousey <= y2);
+		render_rect(x1, y1, x2, y2, hov ? IRGB(28, 22, 12) : IRGB(21, 19, 13));
+		render_line(x1, y1, x2, y1, IRGB(12, 10, 4));
+		render_line(x2, y1, x2, y2, IRGB(12, 10, 4));
+		render_line(x1, y2, x2, y2, IRGB(12, 10, 4));
+		render_line(x1, y1, x1, y2, IRGB(12, 10, 4));
+		render_text((x1 + x2) / 2 + 1, y1 + 2, IRGB(12, 10, 4), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER, "X");
+	}
+
+	/* dismissal hint below the server text */
+	render_line(dotx(DOT_TUT) + 4, doty(DOT_TUT) + 84, dotx(DOT_TUT) + 406, doty(DOT_TUT) + 84, IRGB(18, 16, 10));
+	render_text(dotx(DOT_TUT) + 6, doty(DOT_TUT) + 88, IRGB(12, 10, 4), RENDER_TEXT_SMALL | RENDER_TEXT_LEFT, hint1);
+	if (hint2[0]) {
+		render_text(
+		    dotx(DOT_TUT) + 6, doty(DOT_TUT) + 98, IRGB(12, 10, 4), RENDER_TEXT_SMALL | RENDER_TEXT_LEFT, hint2);
+	}
 
 	int x = dotx(DOT_TUT) + 6;
 	int y = doty(DOT_TUT) + 4;

@@ -475,6 +475,7 @@ void display_keys(void);
 void display_skill(void);
 void display_scrollbars(void);
 void display_tutor(void);
+int tutor_click(int x, int y);
 void display_screen(void);
 void display_text(void);
 void display_mode(void);

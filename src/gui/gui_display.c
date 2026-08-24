@@ -187,6 +187,24 @@ static int world_loading_active(void)
 	return 1;
 }
 
+/* 1 while any loading screen (startup or area change) is covering the game.
+ * The GUI proper is not usable then: input handling and the mod overlay
+ * check this to stay out of the way until the world is really there. */
+int gui_is_loading(void)
+{
+	return loading_active() || world_loading;
+}
+
+/* The escape menu (and the windows reachable from it) are the one part of
+ * the GUI that must work on the loading screens too, so the player can
+ * adjust options or exit while the world is still loading. */
+static void display_menu_overlays(void)
+{
+	keybind_settings_display();
+	options_display();
+	escape_menu_display();
+}
+
 static void display_world_loading(void)
 {
 	int done = 0, total = 0, pct = 0;
@@ -262,6 +280,7 @@ void display(void)
 			loading_finish();
 		} else {
 			loading_display();
+			display_menu_overlays();
 			goto display_graphs;
 		}
 	}
@@ -271,6 +290,7 @@ void display(void)
 		display_world_loading();
 		display_screen();
 		display_text();
+		display_menu_overlays();
 		goto display_graphs;
 	}
 
@@ -348,9 +368,7 @@ void display(void)
 	context_display(mousex, mousey);
 	display_helpandquest();
 
-	keybind_settings_display();
-	options_display();
-	escape_menu_display();
+	display_menu_overlays();
 
 	// Loud, persistent notice when playing without the Ugaris mod (auction house,
 	// weather, achievements, info window all live in the mod). The server keeps

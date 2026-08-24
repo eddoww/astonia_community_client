@@ -56,6 +56,22 @@ void gui_sdl_keyproc(SDL_Keycode key)
 		return;
 	}
 
+	/* While a loading screen is up the game GUI is not there yet: no mod
+	 * keys, no bindings, no chat. Escape still works so the player can
+	 * reach the menu (options, exit game). */
+	if (gui_is_loading()) {
+		if (key == SDLK_ESCAPE) {
+			if (keybind_settings_is_open()) {
+				keybind_settings_close();
+			} else if (options_is_open()) {
+				options_close();
+			} else {
+				escape_menu_toggle();
+			}
+		}
+		return;
+	}
+
 	/* let mods intercept first (except ESC and F12 which are non-rebindable) */
 	if (key != SDLK_ESCAPE && key != SDLK_F12 && amod_keydown(key)) {
 		return;
@@ -196,6 +212,10 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		mousex -= render_offset_x();
 		mousey -= render_offset_y();
 
+		if (gui_is_loading()) {
+			break; /* hover only feeds the menu overlays while loading */
+		}
+
 		if (butsel != -1 && vk_lbut && (but[butsel].flags & BUTF_MOVEEXEC)) {
 			exec_cmd(lcmd, 0);
 		}
@@ -205,6 +225,10 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 	case SDL_MOUM_LDOWN:
 		vk_lbut = 1;
+
+		if (gui_is_loading()) {
+			break; /* clicks are handled on release while loading */
+		}
 
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
@@ -244,6 +268,24 @@ void gui_sdl_mouseproc(float x, float y, int what)
 	case SDL_MOUM_LUP:
 		vk_lbut = 0;
 
+		/* loading screen: only the escape menu and its windows are live */
+		if (gui_is_loading()) {
+			if (options_is_open()) {
+				if (!options_click(mousex, mousey)) {
+					options_close();
+				}
+			} else if (escape_menu_is_open()) {
+				if (!escape_menu_click(mousex, mousey)) {
+					escape_menu_close();
+				}
+			} else if (keybind_settings_is_open()) {
+				if (!keybind_settings_click(mousex, mousey)) {
+					keybind_settings_close();
+				}
+			}
+			break;
+		}
+
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
@@ -281,6 +323,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 				break;
 			}
 			keybind_panel_close();
+		}
+
+		/* tutorial popup close button */
+		if (tutor_click(mousex, mousey)) {
+			break;
 		}
 
 		/* spellbook toggle button */
@@ -326,6 +373,9 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 	case SDL_MOUM_RDOWN:
 		vk_rbut = 1;
+		if (gui_is_loading()) {
+			break;
+		}
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
@@ -336,6 +386,9 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 	case SDL_MOUM_RUP:
 		vk_rbut = 0;
+		if (gui_is_loading()) {
+			break;
+		}
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
@@ -373,6 +426,10 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 		if (options_is_open()) {
 			options_scroll(delta > 0 ? -1 : 1);
+			break;
+		}
+
+		if (gui_is_loading()) {
 			break;
 		}
 
@@ -491,6 +548,10 @@ void gui_sdl_mouseproc(float x, float y, int what)
 	case SDL_MOUM_X1DOWN:
 	case SDL_MOUM_X2DOWN: {
 		SDL_Keycode vk = (what == SDL_MOUM_X1DOWN) ? INPUT_MOUSE_X1 : INPUT_MOUSE_X2;
+
+		if (gui_is_loading()) {
+			break;
+		}
 
 		if (keybind_panel_capturing()) {
 			keybind_panel_accept_key(vk, input_current_modifiers());

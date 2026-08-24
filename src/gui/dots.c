@@ -80,7 +80,7 @@ DLL_EXPORT int buty(int bidx)
 
 void dots_update(void)
 {
-	set_dot(DOT_TUT, (XRES - 410) / 2, doty(DOT_MBR) - 100 - (context_action_enabled() ? 30 : 0), 0);
+	set_dot(DOT_TUT, (XRES - 410) / 2, doty(DOT_MBR) - 122 - (context_action_enabled() ? 30 : 0), 0);
 }
 
 void init_dots(void)

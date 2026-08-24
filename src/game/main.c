@@ -528,6 +528,13 @@ void load_options(void)
 	save_options();
 }
 
+/* The v3 staggered login often delivers SV_LOGINDONE before the skill
+ * values, so the hotbar setup below cannot always run right away. When it
+ * can't, this remembers what is still owed (1 = re-filter a loaded profile,
+ * 2 = full fresh-character setup) and finish_character_options() settles
+ * the debt once the values are in. */
+static int char_options_pending;
+
 void load_character_options(void)
 {
 	/* The name comes from the login credentials, not from the map: with
@@ -561,18 +568,36 @@ void load_character_options(void)
 		}
 		/* saved profiles can still carry spells from before the skill
 		 * filter existed (or from another class's shared config) */
-		hotbar_filter_uncastable();
+		char_options_pending = (hotbar_filter_uncastable() < 0) ? 1 : 0;
 		return;
 	}
 
 	/* No saved profile for this character: the hotbar currently holds the
-	 * pre-login defaults, which include every spell in the game. Now that
+	 * pre-login defaults, which include every spell in the game. Once
 	 * skill values are known, strip what this character cannot cast and
 	 * offer a recall scroll and a healing potion instead. */
 	if (hotbar_filter_uncastable() >= 0) {
 		hotbar_add_default_items();
 		save_options();
+		char_options_pending = 0;
+	} else {
+		char_options_pending = 2;
 	}
+}
+
+void finish_character_options(void)
+{
+	if (!char_options_pending) {
+		return;
+	}
+	if (hotbar_filter_uncastable() < 0) {
+		return; /* skill values still on their way */
+	}
+	if (char_options_pending == 2) {
+		hotbar_add_default_items();
+		save_options();
+	}
+	char_options_pending = 0;
 }
 
 void init_logging(void)

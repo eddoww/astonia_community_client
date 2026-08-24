@@ -262,7 +262,10 @@ int keybind_settings_click(int mx, int my)
 
 	int lx = ks_px + KS_PAD;
 	int rx = ks_px + ks_pw - KS_PAD;
-	int content_y = ks_py + KS_TITLE_H + KS_PAD + KS_SEP;
+	/* must mirror the layout in keybind_settings_display exactly: the rows
+	 * start below the Modern/Legacy button row */
+	int btn_y = ks_py + KS_TITLE_H + KS_PAD;
+	int content_y = btn_y + KS_ROW + KS_SEP + 2;
 
 	int count = input_binding_count();
 	int row = 0;
@@ -298,7 +301,6 @@ int keybind_settings_click(int mx, int my)
 		row++;
 	}
 
-	int btn_y = ks_py + KS_TITLE_H + KS_PAD;
 	if (in_rect(mx, my, lx, btn_y, 55, KS_ROW)) {
 		input_load_modern_defaults();
 		save_options();

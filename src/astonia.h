@@ -202,4 +202,4 @@ char *client_version(void);
 // Crash handler (platform-specific, Windows only)
 void register_crash_handler(void);
 
-extern int sv_ver;
+DLL_EXPORT extern int sv_ver;

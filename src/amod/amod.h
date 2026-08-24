@@ -176,7 +176,16 @@ DLL_IMPORT map_index_t get_near_item(int x, int y, unsigned int flag, unsigned i
 DLL_IMPORT map_index_t get_near_char(int x, int y, unsigned int looksize);
 DLL_IMPORT map_index_t mapmn(unsigned int x, unsigned int y);
 
-// --- Misc ---
+// --- Teleporter ---
+// The built-in teleporter window can be replaced by a mod: set teleport_override
+// to non-zero and the client stops drawing and hit-testing its own window while
+// keeping all protocol state intact. The mod then watches `teleporter` (set by
+// SV_TELEPORT, cleared by SV_ACT / Escape, writable), reads availability from
+// may_teleport[] (0..63 map destinations; 64..95 clan halls when sv_ver == 30)
+// and answers with a raw CL_TELEPORT packet via client_send().
+DLL_IMPORT int teleporter;
+DLL_IMPORT int teleport_override;
+DLL_IMPORT int may_teleport[64 + 32];
 DLL_IMPORT void set_teleport(int idx, int x, int y);
 DLL_IMPORT int exp2level(int val);
 DLL_IMPORT int level2exp(int level);
@@ -356,6 +365,8 @@ DLL_IMPORT int server_port;
 // --- Timing ---
 DLL_IMPORT tick_t tick;
 DLL_IMPORT uint32_t mirror;
+DLL_IMPORT uint32_t newmirror;
+DLL_IMPORT int sv_ver;
 DLL_IMPORT uint32_t realtime;
 DLL_IMPORT int frames_per_second;
 

@@ -448,7 +448,7 @@ static void detect_hover_target(void)
 		butsel = BUT_COLOR;
 	}
 
-	if (teleporter && butsel == -1) {
+	if (teleporter && !teleport_override && butsel == -1) {
 		if (mousex >= dotx(DOT_TEL) && mousex <= dotx(DOT_TEL) + 520 && mousey >= doty(DOT_TEL) &&
 		    mousey <= doty(DOT_TEL) + 320) {
 			butsel = BUT_TEL_MISC;

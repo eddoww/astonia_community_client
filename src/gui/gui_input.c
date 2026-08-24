@@ -180,10 +180,14 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		mousey = local_y;
 
 		if (capbut != -1) {
-			if (mousex != XRES / 2 || mousey != YRES / 2) {
-				mousedx += (mousex - (XRES / 2)) / sdl_scale;
-				mousedy += (mousey - (YRES / 2)) / sdl_scale;
-				sdl_set_cursor_pos(XRES / 2, YRES / 2);
+			/* canvas centre in window coordinates - mousex/mousey are
+			 * still raw window coords at this point */
+			int cwx = (XRES / 2 + render_offset_x()) * sdl_scale;
+			int cwy = (YRES / 2 + render_offset_y()) * sdl_scale;
+			if (mousex != cwx || mousey != cwy) {
+				mousedx += (mousex - cwx) / sdl_scale;
+				mousedy += (mousey - cwy) / sdl_scale;
+				sdl_set_cursor_pos(cwx, cwy);
 			}
 		}
 
@@ -216,7 +220,7 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			sdl_capture_mouse(1);
 			mousedx = 0;
 			mousedy = 0;
-			sdl_set_cursor_pos(XRES / 2, YRES / 2);
+			sdl_set_cursor_pos((XRES / 2 + render_offset_x()) * sdl_scale, (YRES / 2 + render_offset_y()) * sdl_scale);
 			capbut = butsel;
 		}
 		break;

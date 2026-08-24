@@ -402,7 +402,7 @@ void display_citem(void)
 		return;
 	}
 
-	if (x < 0 || y >= XRES) {
+	if (x < 0 || x >= XRES) {
 		return;
 	}
 	if (y < 0 || y >= YRES) {

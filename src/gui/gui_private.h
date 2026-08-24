@@ -538,6 +538,7 @@ int context_key_click(void);
 
 /* hover.c accessors for hotbar */
 const char *hover_get_item_name(int inv_slot);
+void hover_request_item_info(int inv_slot);
 int hover_render_for_slot(int inv_slot, int anchor_x, int anchor_y);
 
 DLL_EXPORT extern char hover_bless_text[];

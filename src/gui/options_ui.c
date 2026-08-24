@@ -552,7 +552,7 @@ static void opt_display_ui(void)
 
 	ry = opt_row_y(6);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, hotbar_rows(), 1, 3, "Hotbar Rows");
+		draw_slider(opt_lx, ry, opt_content_w, hotbar_rows(), 0, 3, "Hotbar Rows");
 	}
 
 	ry = opt_row_y(7);
@@ -618,9 +618,9 @@ static int opt_click_ui(int mx, int my)
 
 	ry = opt_row_y(6);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		val = 1 + (mx - tx) * (3 - 1) / tw;
-		if (val < 1) {
-			val = 1;
+		val = (mx - tx) * 3 / tw; /* 0 = hotbar off */
+		if (val < 0) {
+			val = 0;
 		}
 		if (val > 3) {
 			val = 3;

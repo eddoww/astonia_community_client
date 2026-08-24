@@ -36,6 +36,10 @@ void hotbar_display(void)
 	int cols = hotbar_visible_slots();
 	int count = cols * hotbar_rows();
 
+	if (hotbar_rows() <= 0) {
+		return; /* hotbar disabled - nothing to draw, including the spellbook toggle */
+	}
+
 	/* detect hover */
 	if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
 		hsel = butsel - BUT_HOTBAR_BEG;
@@ -127,6 +131,13 @@ void hotbar_display(void)
 			const char *name = hotbar_slot_name(i);
 			if (name) {
 				render_text(x, y + 10, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, name);
+			} else {
+				/* item names come from server look data; nothing else
+				 * requests it for hotbar items, so labels stayed blank */
+				const HotbarSlot *ns = hotbar_get(i);
+				if (ns && ns->type == HOTBAR_ITEM && ns->inv_index > 0) {
+					hover_request_item_info(ns->inv_index);
+				}
 			}
 		}
 	}
@@ -289,6 +300,9 @@ int hotbar_is_dragging(void)
 
 int hotbar_toggle_hit(int mx, int my)
 {
+	if (hotbar_rows() <= 0) {
+		return 0; /* hotbar disabled - no toggle button to hit */
+	}
 	int cols = hotbar_visible_slots();
 	int rx = butx(BUT_HOTBAR_BEG + cols - 1) + FDX + 8;
 	int ry = buty(BUT_HOTBAR_BEG);

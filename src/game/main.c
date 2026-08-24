@@ -549,6 +549,19 @@ void load_character_options(void)
 
 	if (input_load_config(path) == 0) {
 		addline("Loaded keybinds for %s", active_charname);
+		/* saved profiles can still carry spells from before the skill
+		 * filter existed (or from another class's shared config) */
+		hotbar_filter_uncastable();
+		return;
+	}
+
+	/* No saved profile for this character: the hotbar currently holds the
+	 * pre-login defaults, which include every spell in the game. Now that
+	 * skill values are known, strip what this character cannot cast and
+	 * offer a recall scroll and a healing potion instead. */
+	if (hotbar_filter_uncastable() >= 0) {
+		hotbar_add_default_items();
+		save_options();
 	}
 }
 

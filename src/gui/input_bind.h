@@ -240,6 +240,8 @@ DLL_EXPORT void hotbar_clear(int slot);
 DLL_EXPORT void hotbar_clear_all(void);
 DLL_EXPORT void hotbar_swap(int a, int b);
 void hotbar_setup_defaults(void);
+int hotbar_filter_uncastable(void);
+void hotbar_add_default_items(void);
 DLL_EXPORT const HotbarSlot *hotbar_get(int slot);
 
 /* primary target override */

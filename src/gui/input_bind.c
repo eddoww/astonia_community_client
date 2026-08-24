@@ -400,8 +400,9 @@ DLL_EXPORT int hotbar_rows(void)
 
 DLL_EXPORT void hotbar_set_rows(int count)
 {
-	if (count < 1) {
-		count = 1;
+	/* 0 rows = hotbar disabled entirely */
+	if (count < 0) {
+		count = 0;
 	}
 	if (count > HOTBAR_MAX_ROWS) {
 		count = HOTBAR_MAX_ROWS;
@@ -562,6 +563,69 @@ void hotbar_setup_defaults(void)
 		/* ctrl + key = indicator cast, character target (only if chr is valid) */
 		if (vtgt & HOTBAR_VTGT_CHR) {
 			hotbar_add_bind(i, row1_keys[i], INPUT_MOD_CTRL, HOTBAR_CAST_INDICATOR, HOTBAR_TGT_CHR);
+		}
+	}
+}
+
+/* Remove spells the character cannot cast from the hotbar. The default bar
+ * is built before login (skills unknown), so warriors ended up with a full
+ * row of mage spells. Called once skill values are in; returns the number of
+ * slots cleared. Does nothing (returns -1) while no skill data is available,
+ * so it is safe to call from any point in the login flow. */
+int hotbar_filter_uncastable(void)
+{
+	extern int *action_skill;
+
+	/* no skill data yet (pre-login)? leave the bar alone */
+	int have_data = 0;
+	for (int i = 0; i < MAXACTIONSLOT; i++) {
+		int skill = action_skill[i];
+		if (skill >= 0 && value[0][skill] != 0) {
+			have_data = 1;
+			break;
+		}
+	}
+	if (!have_data) {
+		return -1;
+	}
+
+	int removed = 0;
+	for (int s = 0; s < HOTBAR_MAX_SLOTS; s++) {
+		if (hotbar[s].type == HOTBAR_SPELL && !input_action_slot_available(hotbar[s].action_slot)) {
+			memset(&hotbar[s], 0, sizeof(hotbar[s]));
+			removed++;
+		}
+	}
+	return removed;
+}
+
+/* Starter items for characters without a saved profile: a recall scroll and
+ * a healing potion in the first free first-row slots. Items are stored by
+ * type, so the slot lights up as soon as the character owns one and shows a
+ * greyed-out icon until then. */
+void hotbar_add_default_items(void)
+{
+	static const uint32_t starter_items[] = {
+	    50011, /* Recall to Cameron */
+	    10292, /* Healing Potion (small) */
+	};
+
+	for (size_t i = 0; i < sizeof(starter_items) / sizeof(starter_items[0]); i++) {
+		int already = 0;
+		for (int s = 0; s < HOTBAR_MAX_SLOTS; s++) {
+			if (hotbar[s].type == HOTBAR_ITEM && hotbar[s].item_type == starter_items[i]) {
+				already = 1;
+				break;
+			}
+		}
+		if (already) {
+			continue;
+		}
+		for (int s = 0; s < HOTBAR_SLOTS_PER_ROW; s++) {
+			if (hotbar[s].type == HOTBAR_EMPTY) {
+				hotbar_assign_item_by_type(s, starter_items[i]);
+				break;
+			}
 		}
 	}
 }
@@ -1421,6 +1485,8 @@ DLL_EXPORT void input_load_modern_defaults(void)
 	input_rebind("ui.menu", SDLK_ESCAPE, INPUT_MOD_NONE);
 	input_rebind("ui.cancel", SDLK_UNKNOWN, INPUT_MOD_NONE);
 	hotbar_setup_defaults();
+	hotbar_filter_uncastable();
+	hotbar_add_default_items();
 }
 
 static void hotbar_setup_legacy_defaults(void)
@@ -1552,6 +1618,8 @@ DLL_EXPORT void input_load_legacy_defaults(void)
 	input_rebind("move.left", SDLK_UNKNOWN, INPUT_MOD_NONE);
 	input_rebind("move.right", SDLK_UNKNOWN, INPUT_MOD_NONE);
 	hotbar_setup_legacy_defaults();
+	hotbar_filter_uncastable();
+	hotbar_add_default_items();
 }
 
 /* ── Action-bar compatibility (stubs — legacy action bar removed) ──── */

@@ -40,7 +40,8 @@ DLL_EXPORT extern unsigned short int lightorangecolor, orangecolor, darkorangeco
 DLL_EXPORT extern unsigned short int textcolor;
 extern int update_skltab;
 
-extern int teleporter;
+DLL_EXPORT extern int teleporter;
+DLL_EXPORT extern int teleport_override;
 extern int show_tutor;
 extern char tutor_text[1024];
 extern int show_look;

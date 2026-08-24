@@ -18,7 +18,12 @@
 #include "game/game.h"
 #include "lib/cjson/cJSON.h"
 
-int teleporter = 0;
+DLL_EXPORT int teleporter = 0;
+
+// When a mod sets this it takes over the teleporter UI: the built-in window
+// is neither drawn nor hit-tested, but the open/close protocol state
+// (teleporter flag, may_teleport[], mirror handling) keeps working.
+DLL_EXPORT int teleport_override = 0;
 
 // Forward declaration
 DLL_EXPORT void set_teleport(int idx, int x, int y);
@@ -118,7 +123,7 @@ int get_teleport(int x, int y)
 {
 	int n;
 
-	if (!teleporter) {
+	if (!teleporter || teleport_override) {
 		return -1;
 	}
 
@@ -188,7 +193,7 @@ void display_teleport(void)
 {
 	int n;
 
-	if (!teleporter) {
+	if (!teleporter || teleport_override) {
 		return;
 	}
 

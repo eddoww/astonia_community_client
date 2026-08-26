@@ -838,11 +838,24 @@ static int sound_play_internal(int handle, float volume, int loop)
 	MIX_SetTrackGain(track, final_volume);
 	MIX_SetTrackAudio(track, audio);
 
-	// Set looping: -1 = infinite loop, 0 = play once
-	MIX_SetTrackLoops(track, loop != 0 ? -1 : 0);
+	// Set looping: -1 = infinite loop, 0 = play once. MIX_SetTrackLoops on a
+	// stopped track is discarded - MIX_PlayTrack re-reads the loop count from
+	// its options (MIX_PROP_PLAY_LOOPS_NUMBER, default 0), so it must be
+	// passed through the play options.
+	SDL_PropertiesID play_opts = 0;
+	if (loop != 0) {
+		play_opts = SDL_CreateProperties();
+		if (play_opts) {
+			SDL_SetNumberProperty(play_opts, MIX_PROP_PLAY_LOOPS_NUMBER, -1);
+		}
+	}
 
 	// Play the track
-	MIX_PlayTrack(track, 0);
+	MIX_PlayTrack(track, play_opts);
+
+	if (play_opts) {
+		SDL_DestroyProperties(play_opts);
+	}
 
 	// Update channel state
 	channel_states[channel].in_use = 1;
@@ -1032,7 +1045,10 @@ void sound_fade_tick(void)
 				MIX_SetTrackGain(track, new_vol * master);
 			}
 
-			// If faded to zero and not looping, stop the channel
+			// A completed fade to zero stops the channel, looping or not:
+			// callers use fade(ch,0,ms) as fade-out-and-stop and then forget
+			// the channel (e.g. WeatherAudio::stop_layer), so a looping
+			// channel left playing silently here would be leaked forever.
 			if (new_vol <= 0.0f && channel_states[i].fade_ticks_left == 0) {
 				sound_stop(i + 1);
 			}

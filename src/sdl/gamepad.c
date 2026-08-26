@@ -33,6 +33,19 @@ static Uint64 move_last_ms = 0;
 
 static void pad_hotbar_press(SDL_GamepadButton button);
 
+/* mousex/mousey are logical canvas coordinates (gui_input.c divides window
+ * coords by sdl_scale and subtracts the render offset); gui_sdl_mouseproc and
+ * SDL_WarpMouseInWindow both expect window coordinates, so convert back */
+static float pad_window_x(void)
+{
+	return (float)((mousex + render_offset_x()) * sdl_scale);
+}
+
+static float pad_window_y(void)
+{
+	return (float)((mousey + render_offset_y()) * sdl_scale);
+}
+
 void gamepad_init(void)
 {
 	int count = 0;
@@ -116,11 +129,11 @@ void gamepad_button_down(SDL_GamepadButton button)
 		break;
 
 	case SDL_GAMEPAD_BUTTON_LEFT_STICK:
-		gui_sdl_mouseproc((float)mousex, (float)mousey, SDL_MOUM_RDOWN);
+		gui_sdl_mouseproc(pad_window_x(), pad_window_y(), SDL_MOUM_RDOWN);
 		break;
 
 	case SDL_GAMEPAD_BUTTON_RIGHT_STICK:
-		gui_sdl_mouseproc((float)mousex, (float)mousey, SDL_MOUM_LDOWN);
+		gui_sdl_mouseproc(pad_window_x(), pad_window_y(), SDL_MOUM_LDOWN);
 		break;
 
 	case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
@@ -147,10 +160,10 @@ void gamepad_button_up(SDL_GamepadButton button)
 {
 	switch (button) {
 	case SDL_GAMEPAD_BUTTON_LEFT_STICK:
-		gui_sdl_mouseproc((float)mousex, (float)mousey, SDL_MOUM_RUP);
+		gui_sdl_mouseproc(pad_window_x(), pad_window_y(), SDL_MOUM_RUP);
 		break;
 	case SDL_GAMEPAD_BUTTON_RIGHT_STICK:
-		gui_sdl_mouseproc((float)mousex, (float)mousey, SDL_MOUM_LUP);
+		gui_sdl_mouseproc(pad_window_x(), pad_window_y(), SDL_MOUM_LUP);
 		break;
 	default:
 		break;
@@ -301,8 +314,11 @@ void gamepad_tick(void)
 			rx = (rx / mag) * adjusted * 4.0f;
 			ry = (ry / mag) * adjusted * 4.0f;
 		}
-		nx = mousex + (int)rx;
-		ny = mousey + (int)ry;
+		/* current position converted to window coordinates, since
+		 * SDL_WarpMouseInWindow takes window coords while mousex/mousey
+		 * are logical canvas coords */
+		nx = (int)pad_window_x() + (int)rx;
+		ny = (int)pad_window_y() + (int)ry;
 		/* clamp to the logical canvas in window coordinates, so the
 		 * virtual cursor cannot wander into the letterbox bars */
 		int minx = render_offset_x() * sdl_scale;

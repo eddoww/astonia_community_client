@@ -168,6 +168,9 @@ static void on_toggle_nocut(InputBinding *self)
 static void on_toggle_quest(InputBinding *self)
 {
 	(void)self;
+	if (do_toggle_questlog && do_toggle_questlog()) {
+		return; /* mod journal handled it - keep the legacy quest log closed */
+	}
 	if (display_quest) {
 		display_quest = 0;
 	} else {

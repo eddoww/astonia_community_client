@@ -79,6 +79,11 @@ void hover_invalidate_con(int slot);
 extern int (*do_display_random)(void);
 DLL_EXPORT int _do_display_random(void);
 
+/* Mod override for the quest log toggle (F9 / quest button). When a mod
+ * exports do_toggle_questlog and it returns non-zero, the legacy in-client
+ * quest log stays closed and the mod shows its own quest UI instead. */
+extern int (*do_toggle_questlog)(void);
+
 void help_init(void);
 void teleport_init(void);
 extern int (*do_display_help)(int);

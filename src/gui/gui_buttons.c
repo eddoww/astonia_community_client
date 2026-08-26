@@ -885,6 +885,9 @@ void exec_cmd(int cmd, int a)
 		}
 		return;
 	case CMD_QUEST:
+		if (do_toggle_questlog && do_toggle_questlog()) {
+			return; /* mod journal handled it - keep the legacy quest log closed */
+		}
 		if (display_quest) {
 			display_quest = 0;
 		} else {

@@ -236,6 +236,9 @@ int amod_init(void)
 		if ((tmp = SDL_LoadFunction(dll_instance, "do_display_random"))) {
 			do_display_random = (int (*)(void))tmp;
 		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "do_toggle_questlog"))) {
+			do_toggle_questlog = (int (*)(void))tmp;
+		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "do_display_help"))) {
 			do_display_help = (int (*)(int))tmp;
 		}

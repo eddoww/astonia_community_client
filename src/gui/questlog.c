@@ -144,6 +144,10 @@ static int questcmp(const void *a, const void *b)
 
 int (*do_display_random)(void) = _do_display_random;
 
+/* Set by the mod loader when the active mod exports do_toggle_questlog.
+ * NULL means no mod override: the legacy quest log is used. */
+int (*do_toggle_questlog)(void) = NULL;
+
 DLL_EXPORT int _do_display_random(void)
 {
 	int y = doty(DOT_HLP) + 15, x, n;

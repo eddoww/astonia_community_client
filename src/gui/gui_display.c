@@ -323,6 +323,11 @@ void display(void)
 			    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 			    "The connection was closed by the server. Close the game and start it again from the launcher.");
 		}
+		render_text(XRES / 2, (YRES - 60) / 2 + 30, textcolor,
+		    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, "Press Escape for the menu.");
+		/* the menu must stay reachable here - players were stuck on this
+		 * screen with no way to quit or change settings from inside */
+		display_menu_overlays();
 		goto display_graphs; // I know, I know. goto considered harmful and all that.
 	}
 

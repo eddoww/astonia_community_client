@@ -17,6 +17,7 @@
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/keybind_ui.h"
+#include "gui/ui_draw.h"
 #include "client/client.h"
 #include "game/game.h"
 
@@ -28,14 +29,9 @@
 #define KB_SEP   4 /* vertical gap between sections */
 #define KB_BTN_H 12 /* clickable button text height */
 
-/* highlight colors */
-#define COL_TITLE   IRGB(28, 26, 22)
-#define COL_LABEL   IRGB(22, 21, 19)
-#define COL_VALUE   IRGB(29, 28, 26)
-#define COL_BUTTON  IRGB(26, 24, 20)
+/* highlight colors with no shared-token equivalent */
 #define COL_REMOVE  IRGB(28, 14, 12)
 #define COL_CAPTURE IRGB(28, 26, 16)
-#define COL_HEADER  IRGB(16, 15, 14)
 #define COL_WARN    IRGB(28, 12, 10)
 #define COL_CYCLE   IRGB(22, 24, 18)
 
@@ -106,6 +102,35 @@ static int y_clear;
 static int kb_has_extras; /* 1 = show extra bindings section */
 static int kb_has_cast; /* 1 = show cast mode options */
 static int kb_valid_tgts; /* HOTBAR_VTGT_* bitmask */
+
+typedef struct {
+	int x, y, w, h;
+} KbRect;
+
+/* Clickable regions in absolute screen coordinates, computed once per
+ * frame by kb_layout() and shared by keybind_panel_display(),
+ * keybind_panel_click() and keybind_panel_rclick() so hover feedback,
+ * drawing and hit-testing cannot drift apart. A zeroed rect (w == 0)
+ * means the region is not present. */
+static struct {
+	KbRect rebind_btn; /* "[Rebind]" */
+	KbRect primary_key; /* key text next to "Key:" (also starts capture) */
+	KbRect undo; /* "[Undo]" (hit-tested even when hidden, as before) */
+	int undo_visible;
+	KbRect primary_tgt; /* target cycle for the primary key */
+	KbRect extra_key[HOTBAR_MAX_BINDS];
+	KbRect extra_cast[HOTBAR_MAX_BINDS];
+	KbRect extra_tgt[HOTBAR_MAX_BINDS];
+	KbRect extra_remove[HOTBAR_MAX_BINDS];
+	int extra_count; /* extras with valid rects (0 unless kb_has_extras) */
+	int extra_show_tgt; /* spell has more than one valid target */
+	KbRect add; /* "[+ Add Binding]" */
+	KbRect cast_mode; /* global cast mode cycle */
+	KbRect clear; /* "[Clear Slot]" */
+	KbRect close; /* "[Close]" */
+} kb_r;
+
+static InputBinding *kb_primary_binding(void);
 
 static void kb_layout(void)
 {
@@ -193,6 +218,43 @@ static void kb_layout(void)
 	if (py < 2) {
 		py = 2;
 	}
+
+	/* clickable-region table (see kb_r above) */
+	int lx = px + KB_PAD;
+	int rx = px + pw - KB_PAD;
+
+	memset(&kb_r, 0, sizeof(kb_r));
+	kb_r.rebind_btn = (KbRect){rx - 48, py + y_primary, 48, KB_BTN_H};
+	kb_r.primary_key = (KbRect){lx + 40, py + y_primary, 100, KB_BTN_H};
+	kb_r.undo = (KbRect){lx + 40, py + y_primary + KB_ROW, 40, KB_BTN_H};
+	{
+		InputBinding *b = kb_primary_binding();
+		kb_r.undo_visible = b && (b->key != b->default_key || b->modifiers != b->default_modifiers);
+	}
+	if (y_primary_tgt >= 0 && hs && hs->type == HOTBAR_SPELL) {
+		kb_r.primary_tgt = (KbRect){lx + 56, py + y_primary_tgt, 120, KB_BTN_H};
+	}
+	if (kb_has_extras && hs) {
+		kb_r.extra_show_tgt = (kb_valid_tgts & (kb_valid_tgts - 1)) != 0;
+		kb_r.extra_count = extra_count;
+		for (int i = 0; i < extra_count; i++) {
+			int ry = py + y_extra[i];
+			kb_r.extra_key[i] = (KbRect){lx, ry, 74, KB_BTN_H};
+			if (kb_has_cast) {
+				kb_r.extra_cast[i] = (KbRect){lx + 76, ry, 60, KB_BTN_H};
+			}
+			if (kb_r.extra_show_tgt) {
+				kb_r.extra_tgt[i] = (KbRect){lx + 140, ry, 60, KB_BTN_H};
+			}
+			kb_r.extra_remove[i] = (KbRect){rx - 16, ry, 16, KB_BTN_H};
+		}
+		if (y_add >= 0) {
+			kb_r.add = (KbRect){lx, py + y_add, 120, KB_BTN_H};
+		}
+		kb_r.cast_mode = (KbRect){lx + 80, py + y_cast_mode, 100, KB_BTN_H};
+	}
+	kb_r.clear = (KbRect){lx, py + y_clear, 80, KB_BTN_H};
+	kb_r.close = (KbRect){rx - 44, py + y_clear, 44, KB_BTN_H};
 }
 
 /* ── Helpers ────────────────────────────────────────────────────────── */
@@ -209,6 +271,19 @@ static int in_rect(int mx, int my, int x, int y, int w, int h)
 	return mx >= x && mx < x + w && my >= y && my < y + h;
 }
 
+static int kb_hit(const KbRect *r, int mx, int my)
+{
+	return r->w > 0 && in_rect(mx, my, r->x, r->y, r->w, r->h);
+}
+
+/* soft hover wash behind a clickable region */
+static void kb_hover(const KbRect *r)
+{
+	if (kb_hit(r, mousex, mousey)) {
+		ui_row_hover(r->x - 2, r->y - 1, r->x + r->w + 2, r->h + 2);
+	}
+}
+
 /* ── Rendering ──────────────────────────────────────────────────────── */
 
 void keybind_panel_display(void)
@@ -221,7 +296,7 @@ void keybind_panel_display(void)
 	kb_layout();
 
 	/* background */
-	render_shaded_rect(px, py, px + pw, py + ph, 0, 175);
+	ui_panel(px, py, px + pw, py + ph);
 
 	int lx = px + KB_PAD;
 	int rx = px + pw - KB_PAD;
@@ -233,48 +308,49 @@ void keybind_panel_display(void)
 		if (!name) {
 			name = "(empty)";
 		}
-		render_text(cx, py + y_title, COL_TITLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, name);
+		render_text(cx, py + y_title, UI_TEXT_TITLE, UI_FONT_CENTER, name);
 	}
 
-	render_rect_alpha(lx, py + y_title + KB_ROW, rx, py + y_title + KB_ROW + 1, COL_HEADER, 100);
+	render_rect_alpha(lx, py + y_title + KB_ROW, rx, py + y_title + KB_ROW + 1, UI_BORDER, UI_A_RULE);
 
 	/* ── Primary key ──────────────────────────────────────────────── */
 	{
 		InputBinding *b = kb_primary_binding();
-		render_text(lx, py + y_primary, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Key:");
+		render_text(lx, py + y_primary, UI_TEXT_LABEL, UI_FONT_BODY, "Key:");
 
 		if (kb_capture == CAP_PRIMARY) {
 			render_rect_alpha(lx + 40, py + y_primary - 1, rx - 50, py + y_primary + KB_BTN_H + 1, COL_CAPTURE, 60);
-			render_text(lx + 42, py + y_primary, COL_CAPTURE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Press a key...");
+			render_text(lx + 42, py + y_primary, COL_CAPTURE, UI_FONT_BODY, "Press a key...");
 		} else if (b) {
+			kb_hover(&kb_r.primary_key);
 			const char *kstr = input_key_to_string(b->key, b->modifiers);
-			render_text(lx + 40, py + y_primary, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, kstr);
+			render_text(lx + 40, py + y_primary, UI_TEXT, UI_FONT_BODY, kstr);
 		}
 
-		render_text(rx - 42, py + y_primary, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Rebind]");
+		kb_hover(&kb_r.rebind_btn);
+		render_text(rx - 42, py + y_primary, UI_TEXT_LABEL, UI_FONT_BODY, "[Rebind]");
 
-		if (b && (b->key != b->default_key || b->modifiers != b->default_modifiers)) {
-			render_text(lx + 40, py + y_primary + KB_ROW, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Undo]");
+		if (kb_r.undo_visible) {
+			kb_hover(&kb_r.undo);
+			render_text(lx + 40, py + y_primary + KB_ROW, UI_TEXT_LABEL, UI_FONT_BODY, "[Undo]");
 		}
 	}
 
 	/* ── Primary target override ──────────────────────────────────── */
 	if (y_primary_tgt >= 0 && hs && hs->type == HOTBAR_SPELL) {
-		render_text(lx, py + y_primary_tgt, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Target:");
+		render_text(lx, py + y_primary_tgt, UI_TEXT_LABEL, UI_FONT_BODY, "Target:");
 		char tbuf[32];
 		snprintf(tbuf, sizeof(tbuf), "< %s >", target_labels[hs->primary_target]);
-		render_text(lx + 56, py + y_primary_tgt, COL_CYCLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, tbuf);
+		kb_hover(&kb_r.primary_tgt);
+		render_text(lx + 56, py + y_primary_tgt, COL_CYCLE, UI_FONT_BODY, tbuf);
 	}
 
 	/* ── Extra bindings (only for targeted spells) ────────────────── */
 	if (kb_has_extras) {
-		render_rect_alpha(lx, py + y_extra_header - 2, rx, py + y_extra_header - 1, COL_HEADER, 100);
-		render_text(cx, py + y_extra_header, COL_HEADER, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-		    "Extra Bindings");
+		render_rect_alpha(lx, py + y_extra_header - 2, rx, py + y_extra_header - 1, UI_BORDER, UI_A_RULE);
+		render_text(cx, py + y_extra_header, UI_TEXT_MUTED, UI_FONT_CENTER, "Extra Bindings");
 
 		if (hs) {
-			int show_tgt = (kb_valid_tgts & (kb_valid_tgts - 1)) != 0; /* more than one bit set */
-
 			for (int i = 0; i < hs->extra_bind_count; i++) {
 				int ry = py + y_extra[i];
 				const HotbarBind *hb = &hs->extra_binds[i];
@@ -282,28 +358,32 @@ void keybind_panel_display(void)
 				/* key */
 				if (kb_capture == CAP_EXTRA(i)) {
 					render_rect_alpha(lx, ry - 1, lx + 70, ry + KB_BTN_H + 1, COL_CAPTURE, 60);
-					render_text(lx + 2, ry, COL_CAPTURE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Press key...");
+					render_text(lx + 2, ry, COL_CAPTURE, UI_FONT_BODY, "Press key...");
 				} else {
+					kb_hover(&kb_r.extra_key[i]);
 					const char *kstr = input_key_to_string(hb->key, hb->modifiers);
-					render_text(lx + 2, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, kstr);
+					render_text(lx + 2, ry, UI_TEXT, UI_FONT_BODY, kstr);
 				}
 
 				/* cast mode cycle */
 				if (kb_has_cast) {
 					char cbuf[32];
 					snprintf(cbuf, sizeof(cbuf), "<%s>", cast_labels[hb->cast_override]);
-					render_text(lx + 76, ry, COL_CYCLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, cbuf);
+					kb_hover(&kb_r.extra_cast[i]);
+					render_text(lx + 76, ry, COL_CYCLE, UI_FONT_BODY, cbuf);
 				}
 
 				/* target cycle (only if spell has multiple valid targets) */
-				if (show_tgt) {
+				if (kb_r.extra_show_tgt) {
 					char tbuf[32];
 					snprintf(tbuf, sizeof(tbuf), "<%s>", target_labels[hb->target_override]);
-					render_text(lx + 140, ry, COL_CYCLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, tbuf);
+					kb_hover(&kb_r.extra_tgt[i]);
+					render_text(lx + 140, ry, COL_CYCLE, UI_FONT_BODY, tbuf);
 				}
 
 				/* remove button */
-				render_text(rx - 12, ry, COL_REMOVE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "X");
+				kb_hover(&kb_r.extra_remove[i]);
+				render_text(rx - 12, ry, COL_REMOVE, UI_FONT_BODY, "X");
 			}
 		}
 
@@ -311,31 +391,35 @@ void keybind_panel_display(void)
 		if (y_add >= 0) {
 			if (kb_capture_new && CAP_IS_EXTRA(kb_capture)) {
 				render_rect_alpha(lx, py + y_add - 1, lx + 120, py + y_add + KB_BTN_H + 1, COL_CAPTURE, 60);
-				render_text(lx + 2, py + y_add, COL_CAPTURE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Press a key...");
+				render_text(lx + 2, py + y_add, COL_CAPTURE, UI_FONT_BODY, "Press a key...");
 			} else {
-				render_text(lx, py + y_add, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[+ Add Binding]");
+				kb_hover(&kb_r.add);
+				render_text(lx, py + y_add, UI_TEXT_LABEL, UI_FONT_BODY, "[+ Add Binding]");
 			}
 		}
 
 		/* global cast mode */
-		render_rect_alpha(lx, py + y_cast_mode - 2, rx, py + y_cast_mode - 1, COL_HEADER, 100);
-		render_text(lx, py + y_cast_mode, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Cast Mode:");
+		render_rect_alpha(lx, py + y_cast_mode - 2, rx, py + y_cast_mode - 1, UI_BORDER, UI_A_RULE);
+		render_text(lx, py + y_cast_mode, UI_TEXT_LABEL, UI_FONT_BODY, "Cast Mode:");
 
 		static const char *mode_labels[] = {"Normal", "Quick", "Indicator", "Smart"};
 		int mode = hotbar_cast_mode();
 		char mbuf[32];
 		snprintf(mbuf, sizeof(mbuf), "< %s >", mode_labels[mode]);
-		render_text(lx + 80, py + y_cast_mode, COL_CYCLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, mbuf);
+		kb_hover(&kb_r.cast_mode);
+		render_text(lx + 80, py + y_cast_mode, COL_CYCLE, UI_FONT_BODY, mbuf);
 	}
 
 	/* ── Bottom buttons ───────────────────────────────────────────── */
-	render_rect_alpha(lx, py + y_clear - 2, rx, py + y_clear - 1, COL_HEADER, 100);
-	render_text(lx, py + y_clear, COL_REMOVE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Clear Slot]");
-	render_text(rx - 40, py + y_clear, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Close]");
+	render_rect_alpha(lx, py + y_clear - 2, rx, py + y_clear - 1, UI_BORDER, UI_A_RULE);
+	kb_hover(&kb_r.clear);
+	render_text(lx, py + y_clear, COL_REMOVE, UI_FONT_BODY, "[Clear Slot]");
+	kb_hover(&kb_r.close);
+	render_text(rx - 40, py + y_clear, UI_TEXT_LABEL, UI_FONT_BODY, "[Close]");
 
 	/* ── Conflict warning ─────────────────────────────────────────── */
 	if (kb_warn[0] && tick - kb_warn_time < TICKS * 3) {
-		render_text(cx, py + ph + 2, COL_WARN, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, kb_warn);
+		render_text(cx, py + ph + 2, COL_WARN, UI_FONT_CENTER, kb_warn);
 	}
 }
 
@@ -420,19 +504,16 @@ int keybind_panel_click(int mx, int my)
 	}
 
 	const HotbarSlot *hs = hotbar_get(kb_slot);
-	int lx = px + KB_PAD;
-	int rx = px + pw - KB_PAD;
 
 	/* ── Rebind primary key ────────────────────────────────────── */
-	if (in_rect(mx, my, rx - 48, py + y_primary, 48, KB_BTN_H) ||
-	    in_rect(mx, my, lx + 40, py + y_primary, 100, KB_BTN_H)) {
+	if (kb_hit(&kb_r.rebind_btn, mx, my) || kb_hit(&kb_r.primary_key, mx, my)) {
 		kb_capture = CAP_PRIMARY;
 		kb_capture_new = 0;
 		return 1;
 	}
 
 	/* ── Undo last rebind ──────────────────────────────────────── */
-	if (in_rect(mx, my, lx + 40, py + y_primary + KB_ROW, 40, KB_BTN_H)) {
+	if (kb_hit(&kb_r.undo, mx, my)) {
 		if (input_undo_rebind() == 0) {
 			save_options();
 		}
@@ -440,8 +521,7 @@ int keybind_panel_click(int mx, int my)
 	}
 
 	/* ── Primary target override cycle (left-click = forward) ──── */
-	if (y_primary_tgt >= 0 && hs && hs->type == HOTBAR_SPELL &&
-	    in_rect(mx, my, lx + 56, py + y_primary_tgt, 120, KB_BTN_H)) {
+	if (kb_hit(&kb_r.primary_tgt, mx, my) && hs) {
 		HotbarTargetOverride next = next_valid_target(hs->primary_target, kb_valid_tgts, 1);
 		hotbar_set_primary_target(kb_slot, next);
 		save_options();
@@ -450,20 +530,16 @@ int keybind_panel_click(int mx, int my)
 
 	/* ── Extra bindings section (only if shown) ────────────────── */
 	if (kb_has_extras && hs) {
-		int show_tgt = (kb_valid_tgts & (kb_valid_tgts - 1)) != 0;
-
-		for (int i = 0; i < hs->extra_bind_count; i++) {
-			int ry = py + y_extra[i];
-
+		for (int i = 0; i < kb_r.extra_count; i++) {
 			/* click key = rebind */
-			if (in_rect(mx, my, lx, ry, 74, KB_BTN_H)) {
+			if (kb_hit(&kb_r.extra_key[i], mx, my)) {
 				kb_capture = CAP_EXTRA(i);
 				kb_capture_new = 0;
 				return 1;
 			}
 
 			/* click cast label = cycle forward */
-			if (kb_has_cast && in_rect(mx, my, lx + 76, ry, 60, KB_BTN_H)) {
+			if (kb_hit(&kb_r.extra_cast[i], mx, my)) {
 				int next = ((int)hs->extra_binds[i].cast_override + 1) % cast_count;
 				hotbar_set_bind_cast(kb_slot, i, (HotbarCastOverride)next);
 				save_options();
@@ -471,7 +547,7 @@ int keybind_panel_click(int mx, int my)
 			}
 
 			/* click target label = cycle forward through valid targets */
-			if (show_tgt && in_rect(mx, my, lx + 140, ry, 60, KB_BTN_H)) {
+			if (kb_hit(&kb_r.extra_tgt[i], mx, my)) {
 				HotbarTargetOverride next = next_valid_target(hs->extra_binds[i].target_override, kb_valid_tgts, 1);
 				hotbar_set_bind_target(kb_slot, i, next);
 				save_options();
@@ -479,7 +555,7 @@ int keybind_panel_click(int mx, int my)
 			}
 
 			/* click X = remove */
-			if (in_rect(mx, my, rx - 16, ry, 16, KB_BTN_H)) {
+			if (kb_hit(&kb_r.extra_remove[i], mx, my)) {
 				hotbar_remove_bind(kb_slot, i);
 				save_options();
 				return 1;
@@ -487,15 +563,14 @@ int keybind_panel_click(int mx, int my)
 		}
 
 		/* add binding */
-		if (y_add >= 0 && in_rect(mx, my, lx, py + y_add, 120, KB_BTN_H)) {
-			int count = hs ? hs->extra_bind_count : 0;
-			kb_capture = CAP_EXTRA(count);
+		if (kb_hit(&kb_r.add, mx, my)) {
+			kb_capture = CAP_EXTRA(kb_r.extra_count);
 			kb_capture_new = 1;
 			return 1;
 		}
 
 		/* global cast mode cycle */
-		if (y_cast_mode >= 0 && in_rect(mx, my, lx + 80, py + y_cast_mode, 100, KB_BTN_H)) {
+		if (kb_hit(&kb_r.cast_mode, mx, my)) {
 			int next = (hotbar_cast_mode() + 1) % 4;
 			hotbar_set_cast_mode(next);
 			save_options();
@@ -504,7 +579,7 @@ int keybind_panel_click(int mx, int my)
 	}
 
 	/* ── Clear slot ────────────────────────────────────────────── */
-	if (in_rect(mx, my, lx, py + y_clear, 80, KB_BTN_H)) {
+	if (kb_hit(&kb_r.clear, mx, my)) {
 		hotbar_clear(kb_slot);
 		save_options();
 		keybind_panel_close();
@@ -512,7 +587,7 @@ int keybind_panel_click(int mx, int my)
 	}
 
 	/* ── Close button ──────────────────────────────────────────── */
-	if (in_rect(mx, my, rx - 44, py + y_clear, 44, KB_BTN_H)) {
+	if (kb_hit(&kb_r.close, mx, my)) {
 		keybind_panel_close();
 		return 1;
 	}
@@ -533,11 +608,9 @@ int keybind_panel_rclick(int mx, int my)
 	}
 
 	const HotbarSlot *hs = hotbar_get(kb_slot);
-	int lx = px + KB_PAD;
 
 	/* ── Primary target override cycle (right-click = backward) ── */
-	if (y_primary_tgt >= 0 && hs && hs->type == HOTBAR_SPELL &&
-	    in_rect(mx, my, lx + 56, py + y_primary_tgt, 120, KB_BTN_H)) {
+	if (kb_hit(&kb_r.primary_tgt, mx, my) && hs) {
 		HotbarTargetOverride prev = next_valid_target(hs->primary_target, kb_valid_tgts, 0);
 		hotbar_set_primary_target(kb_slot, prev);
 		save_options();
@@ -545,13 +618,9 @@ int keybind_panel_rclick(int mx, int my)
 	}
 
 	if (kb_has_extras && hs) {
-		int show_tgt = (kb_valid_tgts & (kb_valid_tgts - 1)) != 0;
-
-		for (int i = 0; i < hs->extra_bind_count; i++) {
-			int ry = py + y_extra[i];
-
+		for (int i = 0; i < kb_r.extra_count; i++) {
 			/* right-click cast = cycle backward */
-			if (kb_has_cast && in_rect(mx, my, lx + 76, ry, 60, KB_BTN_H)) {
+			if (kb_hit(&kb_r.extra_cast[i], mx, my)) {
 				int prev = ((int)hs->extra_binds[i].cast_override + cast_count - 1) % cast_count;
 				hotbar_set_bind_cast(kb_slot, i, (HotbarCastOverride)prev);
 				save_options();
@@ -559,7 +628,7 @@ int keybind_panel_rclick(int mx, int my)
 			}
 
 			/* right-click target = cycle backward through valid targets */
-			if (show_tgt && in_rect(mx, my, lx + 140, ry, 60, KB_BTN_H)) {
+			if (kb_hit(&kb_r.extra_tgt[i], mx, my)) {
 				HotbarTargetOverride prev = next_valid_target(hs->extra_binds[i].target_override, kb_valid_tgts, 0);
 				hotbar_set_bind_target(kb_slot, i, prev);
 				save_options();
@@ -568,7 +637,7 @@ int keybind_panel_rclick(int mx, int my)
 		}
 
 		/* right-click global cast mode = cycle backward */
-		if (y_cast_mode >= 0 && in_rect(mx, my, lx + 80, py + y_cast_mode, 100, KB_BTN_H)) {
+		if (kb_hit(&kb_r.cast_mode, mx, my)) {
 			int prev = (hotbar_cast_mode() + 3) % 4;
 			hotbar_set_cast_mode(prev);
 			save_options();

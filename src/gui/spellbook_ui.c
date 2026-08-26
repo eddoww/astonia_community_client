@@ -13,6 +13,7 @@
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/spellbook_ui.h"
+#include "gui/ui_draw.h"
 #include "client/client.h"
 #include "game/game.h"
 
@@ -132,7 +133,7 @@ void spellbook_display(void)
 	int panel_h = rows * SB_CELL + SB_PAD * 2;
 
 	/* background */
-	render_shaded_rect(ox, oy, ox + panel_w, oy + panel_h, 0, 160);
+	ui_panel(ox, oy, ox + panel_w, oy + panel_h);
 
 	/* each available spell */
 	int col = 0;
@@ -170,7 +171,14 @@ void spellbook_display(void)
 	if (hover_slot >= 0) {
 		const char *name = get_action_text(hover_slot);
 		if (name) {
-			render_text(mousex, mousey - 24, whitecolor, RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, name);
+			int tw = render_text_length(RENDER_TEXT_SMALL, name);
+			int tx1 = mousex - tw / 2 - UI_PAD_TIGHT;
+			int tx2 = mousex + tw / 2 + UI_PAD_TIGHT;
+			int ty1 = mousey - 24 - UI_PAD_TIGHT + 1;
+			int ty2 = mousey - 24 + 10 + UI_PAD_TIGHT - 1;
+			render_rounded_rect_filled_alpha(tx1, ty1, tx2, ty2, UI_R_CHIP, UI_BG_BASE, UI_A_TOOLTIP);
+			render_rounded_rect_alpha(tx1, ty1, tx2, ty2, UI_R_CHIP, UI_BORDER, UI_A_BORDER_HOV);
+			render_text(mousex, mousey - 24, UI_TEXT, UI_FONT_CENTER, name);
 		}
 	}
 

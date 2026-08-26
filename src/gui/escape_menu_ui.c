@@ -8,6 +8,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/escape_menu_ui.h"
+#include "gui/ui_draw.h"
 #include "gui/keybind_settings_ui.h"
 #include "gui/options_ui.h"
 #include "game/game.h"
@@ -17,14 +18,6 @@
 #define EM_BTN_PAD 6
 #define EM_PAD     12
 
-#define COL_BTN_TEXT  IRGB(29, 28, 26)
-#define COL_BTN_BG    IRGB(6, 6, 5)
-#define COL_BTN_HOV   IRGB(12, 11, 9)
-#define COL_TITLE     IRGB(28, 26, 22)
-#define COL_PANEL_TOP IRGB(9, 8, 7)
-#define COL_PANEL_BOT IRGB(3, 3, 3)
-#define COL_BORDER    IRGB(18, 16, 12)
-#define COL_ACCENT    IRGB(28, 22, 10)
 
 static int em_open;
 static int em_px, em_py, em_pw, em_ph;
@@ -74,14 +67,8 @@ void escape_menu_display(void)
 	em_compute_layout();
 
 	/* panel: same look as the Options window (gradient, rounded border, title strip) */
-	render_rounded_rect_filled_alpha(em_px, em_py, em_px + em_pw, em_py + em_ph, 6, COL_PANEL_BOT, 235);
-	render_gradient_rect_v(
-	    em_px + 1, em_py + 1, em_px + em_pw - 1, em_py + em_ph / 2, COL_PANEL_TOP, COL_PANEL_BOT, 200);
-	render_rounded_rect_alpha(em_px, em_py, em_px + em_pw, em_py + em_ph, 6, COL_BORDER, 200);
-	render_rect_alpha(em_px + 1, em_py + EM_PAD + 14, em_px + em_pw - 1, em_py + EM_PAD + 15, COL_BORDER, 120);
-
-	int cx = em_px + em_pw / 2;
-	render_text(cx, em_py + EM_PAD, COL_TITLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "Menu");
+	ui_panel(em_px, em_py, em_px + em_pw, em_py + em_ph);
+	ui_titlebar(em_px, em_py, em_px + em_pw, "Menu");
 
 	int bx = em_px + EM_PAD;
 	int bw = em_pw - EM_PAD * 2;
@@ -89,14 +76,11 @@ void escape_menu_display(void)
 	for (int i = 0; i < EM_COUNT; i++) {
 		int by = em_btn_y(i);
 		int hovered = (mousex >= bx && mousex < bx + bw && mousey >= by && mousey < by + EM_BTN_H);
-		render_rounded_rect_filled_alpha(bx, by, bx + bw, by + EM_BTN_H, 4, hovered ? COL_BTN_HOV : COL_BTN_BG, 210);
-		render_rounded_rect_alpha(
-		    bx, by, bx + bw, by + EM_BTN_H, 4, hovered ? COL_ACCENT : COL_BORDER, hovered ? 220 : 110);
+		int state = UI_BTN_REST;
 		if (hovered) {
-			render_rect_alpha(bx + 2, by + 2, bx + 4, by + EM_BTN_H - 2, COL_ACCENT, 230);
+			state = vk_lbut ? UI_BTN_PRESSED : UI_BTN_HOVER;
 		}
-		render_text(
-		    cx, by + 4, COL_BTN_TEXT, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, em_labels[i]);
+		ui_button(bx, by, bw, EM_BTN_H, em_labels[i], state);
 	}
 }
 

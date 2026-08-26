@@ -15,6 +15,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/ui_draw.h"
 #include "game/game.h"
 #include "client/client.h"
 #include "modder/modder.h"
@@ -634,29 +635,24 @@ void display_tutor(void)
 	}
 	bh = 102;
 
-	render_rect(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + bh, IRGB(24, 22, 16));
-
-	render_line(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT), IRGB(12, 10, 4));
-	render_line(dotx(DOT_TUT) + 410, doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + bh, IRGB(12, 10, 4));
-	render_line(dotx(DOT_TUT), doty(DOT_TUT) + bh, dotx(DOT_TUT) + 410, doty(DOT_TUT) + bh, IRGB(12, 10, 4));
-	render_line(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT), doty(DOT_TUT) + bh, IRGB(12, 10, 4));
+	ui_panel(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + bh);
 
 	/* close button */
 	{
 		int x1, y1, x2, y2;
 		tutor_close_rect(&x1, &y1, &x2, &y2);
 		int hov = (mousex >= x1 && mousex <= x2 && mousey >= y1 && mousey <= y2);
-		render_rect(x1, y1, x2, y2, hov ? IRGB(28, 22, 12) : IRGB(21, 19, 13));
-		render_line(x1, y1, x2, y1, IRGB(12, 10, 4));
-		render_line(x2, y1, x2, y2, IRGB(12, 10, 4));
-		render_line(x1, y2, x2, y2, IRGB(12, 10, 4));
-		render_line(x1, y1, x1, y2, IRGB(12, 10, 4));
-		render_text((x1 + x2) / 2 + 1, y1 + 2, IRGB(12, 10, 4), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER, "X");
+		int state = UI_BTN_REST;
+		if (hov) {
+			state = vk_lbut ? UI_BTN_PRESSED : UI_BTN_HOVER;
+		}
+		ui_button(x1, y1, x2 - x1, y2 - y1, "X", state);
 	}
 
 	/* dismissal hint below the server text */
-	render_line(dotx(DOT_TUT) + 4, doty(DOT_TUT) + 84, dotx(DOT_TUT) + 406, doty(DOT_TUT) + 84, IRGB(18, 16, 10));
-	render_text(dotx(DOT_TUT) + 6, doty(DOT_TUT) + 88, IRGB(12, 10, 4), RENDER_TEXT_SMALL | RENDER_TEXT_LEFT, hint1);
+	render_rect_alpha(
+	    dotx(DOT_TUT) + 4, doty(DOT_TUT) + 84, dotx(DOT_TUT) + 406, doty(DOT_TUT) + 85, UI_BORDER, UI_A_RULE);
+	render_text(dotx(DOT_TUT) + 6, doty(DOT_TUT) + 88, UI_TEXT_MUTED, RENDER_TEXT_SMALL | RENDER_TEXT_LEFT, hint1);
 
 	int x = dotx(DOT_TUT) + 6;
 	int y = doty(DOT_TUT) + 4;
@@ -688,7 +684,7 @@ void display_tutor(void)
 				break;
 			}
 		}
-		x = render_text(x, y, IRGB(12, 10, 4), RENDER_TEXT_LEFT | RENDER_TEXT_LARGE, buf) + 3;
+		x = render_text(x, y, UI_TEXT, RENDER_TEXT_LEFT | RENDER_TEXT_LARGE, buf) + 3;
 	}
 }
 

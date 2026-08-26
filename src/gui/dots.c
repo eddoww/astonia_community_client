@@ -198,12 +198,13 @@ void init_dots(void)
 
 	// hotbar — centered above the bottom panel
 	// DOT_HOTBAR marks the BOTTOM row (row 0). Additional rows stack upward.
+	// The slot-name labels draw inside the lower part of each slot, so
+	// toggling "Show Slot Names" must not move the bar (it used to jump
+	// up by 10 pixels).
 	{
-		int name_offset = hotbar_show_names() ? 10 : 0;
 		int shown_rows = hotbar_rows() > 0 ? hotbar_rows() : 1; /* 0 rows: keep a sane anchor */
 		int row_offset = (shown_rows - 1) * (FDX + 2); /* extra rows above */
-		set_dot(
-		    DOT_HOTBAR, (XRES - hotbar_visible_slots() * FDX) / 2, doty(DOT_BOT) - 15 - name_offset - row_offset, 0);
+		set_dot(DOT_HOTBAR, (XRES - hotbar_visible_slots() * FDX) / 2, doty(DOT_BOT) - 15 - row_offset, 0);
 	}
 
 	// tutor window

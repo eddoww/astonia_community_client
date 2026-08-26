@@ -34,6 +34,8 @@ static int ks_scroll;
 static int ks_capture_idx;
 static char ks_warn[80];
 static uint32_t ks_warn_time;
+static char ks_info[48];
+static uint32_t ks_info_time;
 
 static int ks_px, ks_py, ks_pw, ks_ph;
 static int ks_visible_rows;
@@ -118,9 +120,23 @@ void keybind_settings_display(void)
 	render_text(
 	    cx, ks_py + KS_PAD, COL_TITLE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "Keybindings");
 
+	/* preset buttons double as "reset to defaults" - hover highlight and a
+	 * confirmation line give them the button feedback players asked for */
 	int btn_y = ks_py + KS_TITLE_H + KS_PAD;
-	render_text(lx, btn_y, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Modern]");
-	render_text(lx + 60, btn_y, COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Legacy]");
+	int hov_m = in_rect(mousex, mousey, lx, btn_y, 105, KS_ROW);
+	int hov_l = in_rect(mousex, mousey, lx + 110, btn_y, 105, KS_ROW);
+	if (hov_m) {
+		render_rect_alpha(lx - 2, btn_y - 2, lx + 105, btn_y + KS_ROW - 2, COL_CAPTURE, 40);
+	}
+	if (hov_l) {
+		render_rect_alpha(lx + 108, btn_y - 2, lx + 215, btn_y + KS_ROW - 2, COL_CAPTURE, 40);
+	}
+	render_text(lx, btn_y, hov_m ? COL_VALUE : COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Modern Defaults]");
+	render_text(
+	    lx + 110, btn_y, hov_l ? COL_VALUE : COL_BUTTON, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "[Legacy Defaults]");
+	if (ks_info[0] && tick - ks_info_time < (uint32_t)(TICKS * 3)) {
+		render_text(rx, btn_y, COL_CAPTURE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_TEXT_RIGHT, ks_info);
+	}
 	render_rect_alpha(lx, btn_y + KS_ROW + 2, rx, btn_y + KS_ROW + 3, COL_HEADER, 100);
 
 	int content_y = btn_y + KS_ROW + KS_SEP + 2;
@@ -301,14 +317,18 @@ int keybind_settings_click(int mx, int my)
 		row++;
 	}
 
-	if (in_rect(mx, my, lx, btn_y, 55, KS_ROW)) {
+	if (in_rect(mx, my, lx, btn_y, 105, KS_ROW)) {
 		input_load_modern_defaults();
 		save_options();
+		snprintf(ks_info, sizeof(ks_info), "Modern defaults applied");
+		ks_info_time = tick;
 		return 1;
 	}
-	if (in_rect(mx, my, lx + 60, btn_y, 55, KS_ROW)) {
+	if (in_rect(mx, my, lx + 110, btn_y, 105, KS_ROW)) {
 		input_load_legacy_defaults();
 		save_options();
+		snprintf(ks_info, sizeof(ks_info), "Legacy defaults applied");
+		ks_info_time = tick;
 		return 1;
 	}
 

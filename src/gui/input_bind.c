@@ -19,6 +19,7 @@
 #include "gui/escape_menu_ui.h"
 #include "gui/keybind_settings_ui.h"
 #include "gui/options_ui.h"
+#include "gui/spellbook_ui.h"
 #include "lib/cjson/cJSON.h"
 
 /* ── Registry ──────────────────────────────────────────────────────────── */
@@ -86,6 +87,25 @@ DLL_EXPORT InputBinding *input_register(const char *id, const char *display_name
 static void on_escape(InputBinding *self)
 {
 	(void)self;
+	/* close windows first - in the legacy preset Escape is bound to this
+	 * handler (not on_menu), and players expect it to close whatever is
+	 * open before it starts cancelling actions */
+	if (keybind_settings_is_open()) {
+		keybind_settings_close();
+		return;
+	}
+	if (options_is_open()) {
+		options_close();
+		return;
+	}
+	if (escape_menu_is_open()) {
+		escape_menu_close();
+		return;
+	}
+	if (spellbook_is_open()) {
+		spellbook_toggle();
+		return;
+	}
 	cmd_stop();
 	context_stop();
 	show_look = 0;
@@ -110,7 +130,7 @@ static void on_escape(InputBinding *self)
 static int anything_to_cancel(void)
 {
 	return show_look || display_gfx || teleporter || show_tutor || display_help || display_quest || show_color ||
-	       cmd_is_active();
+	       cmd_is_active() || context_targeting_active() || spellbook_is_open() || action_ovr != ACTION_NONE;
 }
 
 static void on_menu(InputBinding *self)
@@ -286,6 +306,9 @@ static void on_chat_pagedown(InputBinding *self)
  */
 
 static int kmove_held[4]; /* KMOVE_UP / DOWN / LEFT / RIGHT */
+static int kmove_pending[4]; /* pressed since the last tick - a tap shorter
+                              * than one game tick must still move one step
+                              * instead of being swallowed */
 static int kmove_active;
 static int kmove_last_dir; /* last direction sent to server (1-8, or 0) */
 
@@ -324,19 +347,19 @@ static void kmove_compute_delta(int *dx, int *dy)
 	*dx = 0;
 	*dy = 0;
 
-	if (kmove_held[KMOVE_UP]) {
+	if (kmove_held[KMOVE_UP] || kmove_pending[KMOVE_UP]) {
 		*dx -= 1;
 		*dy -= 1;
 	}
-	if (kmove_held[KMOVE_DOWN]) {
+	if (kmove_held[KMOVE_DOWN] || kmove_pending[KMOVE_DOWN]) {
 		*dx += 1;
 		*dy += 1;
 	}
-	if (kmove_held[KMOVE_LEFT]) {
+	if (kmove_held[KMOVE_LEFT] || kmove_pending[KMOVE_LEFT]) {
 		*dx -= 1;
 		*dy += 1;
 	}
-	if (kmove_held[KMOVE_RIGHT]) {
+	if (kmove_held[KMOVE_RIGHT] || kmove_pending[KMOVE_RIGHT]) {
 		*dx += 1;
 		*dy -= 1;
 	}
@@ -361,6 +384,7 @@ void keyboard_move_press(int dir)
 		return;
 	}
 	kmove_held[dir] = 1;
+	kmove_pending[dir] = 1;
 	kmove_active = 1;
 }
 
@@ -389,6 +413,10 @@ void keyboard_move_tick(void)
 	kmove_compute_delta(&dx, &dy);
 
 	int dir = (dx || dy) ? kmove_delta_to_dir(dx, dy) : 0;
+
+	/* pending taps are consumed by this tick's direction computation;
+	 * anything still held keeps contributing through kmove_held */
+	memset(kmove_pending, 0, sizeof(kmove_pending));
 
 	if (dir != kmove_last_dir) {
 		if (dir) {
@@ -422,6 +450,9 @@ static int resolve_target_override(int action_slot, HotbarTargetOverride tgt);
 
 /* default key assignments for hotbar row 1 — shared between
  * register_all (binding registration) and hotbar_setup_defaults */
+/* Slots 7-10 sit on keys players can reach without leaving WASD (r/f/c/v);
+ * the number keys 7-0 stay as alternate binds for muscle memory. Use goes
+ * on E, look on the deliberately-far X (it is rarely needed in combat). */
 static const SDL_Keycode row1_keys[HOTBAR_SLOTS_PER_ROW] = {
     SDLK_1,
     SDLK_2,
@@ -429,15 +460,34 @@ static const SDL_Keycode row1_keys[HOTBAR_SLOTS_PER_ROW] = {
     SDLK_4,
     SDLK_5,
     SDLK_6,
+    'r', /* shield */
+    'f', /* heal */
+    'c', /* warcry */
+    'v', /* pulse */
+    'q', /* fire ring */
+    'z', /* potions (empty by default) */
+    'e', /* take/use/give/drop */
+    't', /* walk to */
+    'x', /* look */
+};
+
+/* number-key alternates for the slots that moved off 7-0 */
+static const SDL_Keycode row1_alt_keys[HOTBAR_SLOTS_PER_ROW] = {
+    SDLK_UNKNOWN,
+    SDLK_UNKNOWN,
+    SDLK_UNKNOWN,
+    SDLK_UNKNOWN,
+    SDLK_UNKNOWN,
+    SDLK_UNKNOWN,
     SDLK_7,
     SDLK_8,
     SDLK_9,
     SDLK_0,
-    'q',
-    'e',
-    'z',
-    'x',
-    'r',
+    SDLK_UNKNOWN,
+    SDLK_UNKNOWN,
+    SDLK_UNKNOWN,
+    SDLK_UNKNOWN,
+    SDLK_UNKNOWN,
 };
 
 /* ── Hotbar ─────────────────────────────────────────────────────────────
@@ -449,7 +499,7 @@ static const SDL_Keycode row1_keys[HOTBAR_SLOTS_PER_ROW] = {
 static HotbarSlot hotbar[HOTBAR_MAX_SLOTS];
 static int visible_slots = HOTBAR_DEFAULT_SLOTS;
 static int active_rows = 1; /* how many hotbar rows are visible (1-3) */
-static int cast_mode = CAST_NORMAL; /* how targeted spells are cast from hotkeys */
+static int cast_mode = CAST_SMART; /* how targeted spells are cast from hotkeys */
 
 DLL_EXPORT int hotbar_visible_slots(void)
 {
@@ -491,7 +541,7 @@ DLL_EXPORT int hotbar_cast_mode(void)
 
 DLL_EXPORT void hotbar_set_cast_mode(int mode)
 {
-	if (mode >= CAST_NORMAL && mode <= CAST_QUICK_INDICATOR) {
+	if (mode >= CAST_NORMAL && mode <= CAST_SMART) {
 		cast_mode = mode;
 	}
 }
@@ -590,15 +640,15 @@ void hotbar_setup_defaults(void)
 	    {ACTION_FLASH, HOTBAR_TGT_DEFAULT}, /* 4 — self-only */
 	    {ACTION_FREEZE, HOTBAR_TGT_DEFAULT}, /* 5 — self-only */
 	    {ACTION_BLESS, HOTBAR_TGT_SELF}, /* 6 — default to self */
-	    {ACTION_SHIELD, HOTBAR_TGT_DEFAULT}, /* 7 — self-only */
-	    {ACTION_HEAL, HOTBAR_TGT_SELF}, /* 8 — default to self */
-	    {ACTION_WARCRY, HOTBAR_TGT_DEFAULT}, /* 9 — self-only */
-	    {ACTION_PULSE, HOTBAR_TGT_DEFAULT}, /* 0 — self-only */
+	    {ACTION_SHIELD, HOTBAR_TGT_DEFAULT}, /* R (alt 7) — self-only */
+	    {ACTION_HEAL, HOTBAR_TGT_SELF}, /* F (alt 8) — default to self */
+	    {ACTION_WARCRY, HOTBAR_TGT_DEFAULT}, /* C (alt 9) — self-only */
+	    {ACTION_PULSE, HOTBAR_TGT_DEFAULT}, /* V (alt 0) — self-only */
 	    {ACTION_FIRERING, HOTBAR_TGT_DEFAULT}, /* Q — self-only */
-	    {-1, HOTBAR_TGT_DEFAULT}, /* W — empty (potions) */
+	    {-1, HOTBAR_TGT_DEFAULT}, /* Z — empty (potions) */
 	    {ACTION_TAKEGIVE, HOTBAR_TGT_DEFAULT}, /* E */
-	    {ACTION_MAP, HOTBAR_TGT_DEFAULT}, /* R */
-	    {ACTION_LOOK, HOTBAR_TGT_DEFAULT}, /* T */
+	    {ACTION_MAP, HOTBAR_TGT_DEFAULT}, /* T */
+	    {ACTION_LOOK, HOTBAR_TGT_DEFAULT}, /* X */
 	};
 
 	int num_defaults = (int)(sizeof(spell_defaults) / sizeof(spell_defaults[0]));
@@ -612,6 +662,11 @@ void hotbar_setup_defaults(void)
 
 		if (i >= HOTBAR_SLOTS_PER_ROW) {
 			continue;
+		}
+
+		/* number-key alternate for slots that moved off 7-0 */
+		if (row1_alt_keys[i] != SDLK_UNKNOWN) {
+			hotbar_add_bind(i, row1_alt_keys[i], INPUT_MOD_NONE, HOTBAR_CAST_DEFAULT, HOTBAR_TGT_DEFAULT);
 		}
 
 		int vtgt = hotbar_spell_valid_targets(action);
@@ -922,6 +977,14 @@ static void hotbar_cast_spell(int slot, int resolved, int mode)
 		hotbar_flash(slot);
 		context_execute_action(resolved);
 		break;
+	case CAST_SMART:
+		/* fire instantly when a valid target sits under the cursor,
+		 * otherwise fall back to targeting mode (click to confirm) */
+		hotbar_flash(slot);
+		if (!context_execute_action(resolved)) {
+			context_execute_action_normal(resolved);
+		}
+		break;
 	case CAST_QUICK_INDICATOR:
 		/* hold key → show targeting indicator → release key → cast.
 		 * don't flash on press (flash happens on release when the spell fires).
@@ -1128,6 +1191,8 @@ static int resolve_cast_override(HotbarCastOverride co)
 		return CAST_QUICK;
 	case HOTBAR_CAST_INDICATOR:
 		return CAST_QUICK_INDICATOR;
+	case HOTBAR_CAST_SMART:
+		return CAST_SMART;
 	default:
 		return cast_mode;
 	}
@@ -1242,7 +1307,7 @@ static void register_all(void)
 	reg("ui.toggle_quest", "Toggle Quest Log", INPUT_CAT_UI, SDLK_F9, 0, on_toggle_quest);
 	reg("ui.toggle_debug", "Toggle Debug Info", INPUT_CAT_UI, SDLK_F10, 0, on_toggle_debug);
 	reg("ui.toggle_help", "Toggle Help", INPUT_CAT_UI, SDLK_F11, 0, on_toggle_help);
-	reg("ui.toggle_minimap", "Toggle Minimap", INPUT_CAT_UI, 'm', INPUT_MOD_SHIFT | INPUT_MOD_CTRL, on_toggle_minimap);
+	reg("ui.toggle_minimap", "Toggle Minimap", INPUT_CAT_UI, 'm', 0, on_toggle_minimap);
 	reg("ui.toggle_hotbar_names", "Toggle Hotbar Names", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_names);
 	reg("ui.toggle_hotbar_keys", "Toggle Hotbar Key Labels", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_keys);
 	reg("ui.chat_pageup", "Chat Page Up", INPUT_CAT_UI, SDLK_PAGEUP, 0, on_chat_pageup);
@@ -1314,6 +1379,8 @@ void input_init(int sv_ver)
 
 	register_all();
 }
+
+static int preset_loading; /* silences per-bind conflict chat lines while a preset applies */
 
 static const char *undo_id;
 static SDL_Keycode undo_key;
@@ -1488,8 +1555,13 @@ DLL_EXPORT int input_rebind(const char *id, SDL_Keycode key, Uint8 modifiers)
 
 	InputBinding *conflict = input_find_conflict(key, modifiers, id);
 	if (conflict && conflict->rebindable) {
-		addline("Keybind conflict: '%s' unbound (was %s)", conflict->display_name,
-		    input_key_to_string(conflict->key, conflict->modifiers));
+		/* preset loaders rebind whole batches; the intermediate conflicts
+		 * they resolve are noise (and misleading - "'Open Menu' unbound"
+		 * printed one line before the preset re-bound it to F10) */
+		if (!preset_loading) {
+			addline("Keybind conflict: '%s' unbound (was %s)", conflict->display_name,
+			    input_key_to_string(conflict->key, conflict->modifiers));
+		}
 		undo_conflict_id = conflict->id;
 		undo_conflict_key = conflict->key;
 		undo_conflict_mods = conflict->modifiers;
@@ -1559,12 +1631,14 @@ DLL_EXPORT void input_reset_all(void)
 
 DLL_EXPORT void input_load_modern_defaults(void)
 {
+	preset_loading = 1;
 	input_reset_all();
 	input_rebind("ui.menu", SDLK_ESCAPE, INPUT_MOD_NONE);
 	input_rebind("ui.cancel", SDLK_UNKNOWN, INPUT_MOD_NONE);
 	hotbar_setup_defaults();
 	hotbar_filter_uncastable();
 	hotbar_add_default_items();
+	preset_loading = 0;
 }
 
 static void hotbar_setup_legacy_defaults(void)
@@ -1688,6 +1762,7 @@ static void hotbar_setup_legacy_defaults(void)
 
 DLL_EXPORT void input_load_legacy_defaults(void)
 {
+	preset_loading = 1;
 	input_reset_all();
 	input_rebind("ui.cancel", SDLK_ESCAPE, INPUT_MOD_NONE);
 	input_rebind("ui.menu", SDLK_F10, INPUT_MOD_NONE);
@@ -1698,6 +1773,7 @@ DLL_EXPORT void input_load_legacy_defaults(void)
 	hotbar_setup_legacy_defaults();
 	hotbar_filter_uncastable();
 	hotbar_add_default_items();
+	preset_loading = 0;
 }
 
 /* ── Action-bar compatibility (stubs — legacy action bar removed) ──── */

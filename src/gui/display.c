@@ -967,7 +967,7 @@ void display_selfspells(void)
 	}
 }
 
-/* What the experience / military bars print on top of themselves.
+/* What the experience / military bars print right below themselves.
  * Cycled by clicking the bar: nothing -> percent -> have/need -> to go. */
 #define BAR_INFO_NONE    0
 #define BAR_INFO_PERCENT 1
@@ -1080,7 +1080,9 @@ void display_exp(void)
 			exp_ticker--;
 		}
 
-		draw_bar_info(exp_info_mode, doty(DOT_TOP) + 6, have, total, step);
+		/* below the bar (the bar itself spans +7..+15) - players found
+		 * text drawn over the bar hard to read */
+		draw_bar_info(exp_info_mode, doty(DOT_TOP) + 15, have, total, step);
 
 		snprintf(hover_level_text, 200,
 		    "Level %d to %d: %s / %s (%lld%%)\n%s to go, total %s exp\n(click the bar to change the numbers shown)",
@@ -1185,7 +1187,8 @@ void display_military(void)
 			render_sprite(993, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 24, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 			render_pop_clip();
 
-			draw_bar_info(mil_info_mode, doty(DOT_TOP) + 23, step, total, total - step);
+			/* below the bar (the bar itself spans +24..+32) */
+			draw_bar_info(mil_info_mode, doty(DOT_TOP) + 32, step, total, total - step);
 
 			snprintf(hover_rank_text, 200,
 			    "Rank %d '%s' to %d '%s': %s / %s (%d%%)\n%s to go, total %s military points", rank,

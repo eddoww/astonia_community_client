@@ -151,10 +151,17 @@ void hotbar_display(void)
 		if (hotbar_show_names()) {
 			const char *name = hotbar_slot_name(i);
 			if (name) {
-				/* item names can be long ("Recall to Cameron"); cap them
-				 * near the longest spell name so neighbours stay legible */
+				/* names can be long ("Take/Use/Give/Drop", "Recall to
+				 * Cameron"); cap them near the longest spell name so
+				 * neighbours stay legible, and mark the cut with ".."
+				 * - the hover tooltip shows the full name */
 				char label[16];
-				snprintf(label, sizeof(label), "%s", name);
+				if (strlen(name) >= sizeof(label)) {
+					snprintf(label, sizeof(label) - 2, "%s", name);
+					strcat(label, "..");
+				} else {
+					snprintf(label, sizeof(label), "%s", name);
+				}
 				render_text(x, y + 10, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, label);
 			} else {
 				/* item names come from server look data; nothing else
@@ -184,15 +191,22 @@ void hotbar_display(void)
 			const char *desc = get_action_desc(hs->action_slot);
 			if (name || desc) {
 				int text_h = 0;
+				int half = 64; /* half-width of the tooltip box */
 				if (name) {
 					text_h += 15;
+					/* long names ("Take/Use/Give/Drop") must not stick
+					 * out of the box - widen it to fit */
+					int nw = render_text_length(RENDER_TEXT_BIG, name) / 2 + 8;
+					if (nw > half) {
+						half = nw;
+					}
 				}
 				if (desc) {
 					text_h += render_text_break_length(0, 0, 120, IRGB(31, 31, 31), 0, desc);
 				}
 				int pad = 6;
 				int sy = ty - text_h - pad * 2;
-				render_shaded_rect(tx - 64, sy, tx + 64, ty, 0, 150);
+				render_shaded_rect(tx - half, sy, tx + half, ty, 0, 150);
 				int text_y = sy + pad;
 				if (name) {
 					render_text(

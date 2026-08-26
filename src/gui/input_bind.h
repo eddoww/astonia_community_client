@@ -158,6 +158,7 @@ typedef enum {
 	HOTBAR_CAST_NORMAL,
 	HOTBAR_CAST_QUICK,
 	HOTBAR_CAST_INDICATOR,
+	HOTBAR_CAST_SMART,
 } HotbarCastOverride;
 
 typedef enum {
@@ -213,6 +214,7 @@ enum {
 	CAST_NORMAL, /* press key → cursor changes → click target → casts */
 	CAST_QUICK, /* press key → instantly casts at cursor position */
 	CAST_QUICK_INDICATOR, /* hold key → cursor changes → release key → casts */
+	CAST_SMART, /* press key → casts at cursor if a valid target is there, else targeting mode */
 };
 
 DLL_EXPORT int hotbar_cast_mode(void);

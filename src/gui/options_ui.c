@@ -108,7 +108,7 @@ static int opt_tab_total(void)
 	case 2:
 		return 5;
 	case 3:
-		return 11;
+		return 12;
 	case 4: {
 		int n = amod_options_count();
 		return n > 0 ? n : 1;
@@ -551,32 +551,38 @@ static void opt_display_ui(void)
 
 	ry = opt_row_y(5);
 	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Hotbar");
+		draw_checkbox(opt_lx, ry, !(game_options & GO_NOLAG), "Show Lag Warning");
 	}
 
 	ry = opt_row_y(6);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, hotbar_rows(), 0, 3, "Hotbar Rows");
+		draw_section_header(opt_lx, ry, opt_content_w, "Hotbar");
 	}
 
 	ry = opt_row_y(7);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, hotbar_visible_slots(), 1, 15, "Visible Slots");
+		draw_slider(opt_lx, ry, opt_content_w, hotbar_rows(), 0, 3, "Hotbar Rows");
 	}
 
 	ry = opt_row_y(8);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, hotbar_show_hotkeys(), "Show Hotkey Labels");
+		draw_slider(opt_lx, ry, opt_content_w, hotbar_visible_slots(), 1, 15, "Visible Slots");
 	}
 
 	ry = opt_row_y(9);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, hotbar_show_names(), "Show Slot Names");
+		draw_checkbox(opt_lx, ry, hotbar_show_hotkeys(), "Show Hotkey Labels");
 	}
 
 	ry = opt_row_y(10);
 	if (ry >= 0) {
-		const char *cast_names[] = {"Normal", "Quick Cast", "Quick Cast w/ Indicator"};
+		draw_checkbox(opt_lx, ry, hotbar_show_names(), "Show Slot Names");
+	}
+
+	ry = opt_row_y(11);
+	if (ry >= 0) {
+		const char *cast_names[] = {
+		    "Normal", "Quick Cast", "Quick Cast w/ Indicator", "Smart (quick if target under cursor)"};
 		int cm = hotbar_cast_mode();
 		render_text(opt_lx, ry, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Cast Mode:");
 		render_text(opt_lx + 100, ry, COL_VALUE, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, cast_names[cm]);
@@ -624,7 +630,16 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(6);
+	ry = opt_row_y(5);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
+		/* persisted via the extra-options file, not the keybind config
+		 * (game_options_record_override only knows the launcher bits) */
+		game_options ^= GO_NOLAG;
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(7);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		val = (mx - tx) * 3 / tw; /* 0 = hotbar off */
 		if (val < 0) {
@@ -639,7 +654,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(7);
+	ry = opt_row_y(8);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		val = 1 + (mx - tx) * (15 - 1) / tw;
 		if (val < 1) {
@@ -654,14 +669,14 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(8);
+	ry = opt_row_y(9);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		hotbar_set_show_hotkeys(!hotbar_show_hotkeys());
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(9);
+	ry = opt_row_y(10);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
 		hotbar_set_show_names(!hotbar_show_names());
 		init_dots();
@@ -669,9 +684,9 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(10);
+	ry = opt_row_y(11);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, OPT_ROW)) {
-		hotbar_set_cast_mode((hotbar_cast_mode() + 1) % 3);
+		hotbar_set_cast_mode((hotbar_cast_mode() + 1) % 4);
 		save_options();
 		return 1;
 	}

@@ -31,6 +31,7 @@
 #include "gui/loading_ui.h"
 #include "gui/input_bind.h"
 #include "client/client.h"
+#include "lib/cjson/cJSON.h"
 #include "modder/modder.h"
 
 // Forward declarations
@@ -497,11 +498,69 @@ static void get_legacy_config_path(char *buf, size_t bufsize)
 	}
 }
 
+/* ── Extra game-option persistence ──────────────────────────────────────
+ *
+ * The keybind config (input_bind.c) only persists the GO_ bits the
+ * launcher passes via -o (see GO_UI_MANAGED there). Newer UI-only toggles
+ * like GO_NOLAG live in a small side file instead, so they survive
+ * restarts without launcher or keybind-config changes. */
+
+static void get_extra_options_path(char *buf, size_t bufsize)
+{
+	if (localdata) {
+		snprintf(buf, bufsize, "%soptions_extra.json", localdata);
+	} else {
+		snprintf(buf, bufsize, "res/config/options_extra.json");
+	}
+}
+
+static void save_extra_options(void)
+{
+	char path[MAX_PATH];
+	FILE *fp;
+
+	get_extra_options_path(path, sizeof(path));
+	fp = fopen(path, "w");
+	if (!fp) {
+		return;
+	}
+	fprintf(fp, "{\n\t\"hide_lag_warning\": %s\n}\n", (game_options & GO_NOLAG) ? "true" : "false");
+	fclose(fp);
+}
+
+static void load_extra_options(void)
+{
+	char path[MAX_PATH];
+	char *json;
+	cJSON *root, *v;
+
+	get_extra_options_path(path, sizeof(path));
+	json = load_ascii_file(path, MEM_TEMP);
+	if (!json) {
+		return;
+	}
+	root = cJSON_Parse(json);
+	xfree(json);
+	if (!root) {
+		return;
+	}
+	v = cJSON_GetObjectItem(root, "hide_lag_warning");
+	if (v && cJSON_IsBool(v)) {
+		if (cJSON_IsTrue(v)) {
+			game_options |= GO_NOLAG;
+		} else {
+			game_options &= ~GO_NOLAG;
+		}
+	}
+	cJSON_Delete(root);
+}
+
 void save_options(void)
 {
 	char path[MAX_PATH];
 	get_config_path(path, sizeof(path));
 	input_save_config(path);
+	save_extra_options();
 }
 
 void load_options(void)
@@ -510,6 +569,7 @@ void load_options(void)
 
 	active_charname[0] = '\0';
 	input_init(sv_ver);
+	load_extra_options();
 
 	get_shared_config_path(path, sizeof(path));
 	if (input_load_config(path) == 0) {
@@ -537,6 +597,10 @@ static int char_options_pending;
 
 void load_character_options(void)
 {
+	/* every SV_LOGINDONE means we just (re)entered the game world - make
+	 * sure the chat window is not left scrolled up from the login flood */
+	render_text_jump_bottom();
+
 	/* The name comes from the login credentials, not from the map: with
 	 * the protocol v3 staggered login the center tile often has no
 	 * character yet when sv_logindone fires, and reading it here made
@@ -624,35 +688,16 @@ void init_logging(void)
 
 void determine_resolution(void)
 {
-	if (!want_height) {
-		if (want_width == 800) {
-			want_height = 600;
-		} else if (want_width == 1600) {
-			want_height = 1200;
-		} else if (want_width == 2400) {
-			want_height = 1800;
-		} else if (want_width == 3200) {
-			want_height = 2400;
-		} else if (want_width) {
-			want_height = want_width * 9 / 16;
-		}
+	/* When only one dimension is given, complete it to a 16:9 window: the
+	 * widescreen canvas is the intended default. The old 4:3 mappings
+	 * (800x600, 1600x1200, ...) are gone - anyone who wants those passes
+	 * both -w and -h explicitly, which is left untouched. With neither
+	 * given the client sizes itself to the monitor (see sdl_init()). */
+	if (!want_height && want_width) {
+		want_height = want_width * 9 / 16;
 	}
-	if (!want_width) {
-		if (want_height == 600) {
-			want_width = 800;
-		} else if (want_height == 1000) {
-			want_width = 1600;
-		} else if (want_height == 1200) {
-			want_width = 1600;
-		} else if (want_height == 1800) {
-			want_width = 2400;
-		} else if (want_height == 2000) {
-			want_width = 3200;
-		} else if (want_height == 2400) {
-			want_width = 3200;
-		} else if (want_height) {
-			want_width = want_height * 16 / 9;
-		}
+	if (!want_width && want_height) {
+		want_width = want_height * 16 / 9;
 	}
 }
 

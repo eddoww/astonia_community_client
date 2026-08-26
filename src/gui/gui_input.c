@@ -24,6 +24,10 @@
 #include "sdl/sdl.h"
 #include "modder/modder.h"
 
+/* set on right-button-down when the click cancelled target selection, so the
+ * matching button-up doesn't execute the look command on top of the cancel */
+static int rclick_cancelled_targeting;
+
 void gui_sdl_keyproc(SDL_Keycode key)
 {
 	if (keybind_settings_capturing()) {
@@ -201,8 +205,17 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			int cwx = (XRES / 2 + render_offset_x()) * sdl_scale;
 			int cwy = (YRES / 2 + render_offset_y()) * sdl_scale;
 			if (mousex != cwx || mousey != cwy) {
-				mousedx += (mousex - cwx) / sdl_scale;
-				mousedy += (mousey - cwy) / sdl_scale;
+				/* carry the sub-scale remainder between events - integer
+				 * division alone throws away 1-2 px deltas entirely at
+				 * sdl_scale>=2, which made slow scrollbar drags register
+				 * nothing and then jump */
+				static int capdx_rem, capdy_rem;
+				int rawx = mousex - cwx + capdx_rem;
+				int rawy = mousey - cwy + capdy_rem;
+				mousedx += rawx / sdl_scale;
+				mousedy += rawy / sdl_scale;
+				capdx_rem = rawx % sdl_scale;
+				capdy_rem = rawy % sdl_scale;
 				sdl_set_cursor_pos(cwx, cwy);
 			}
 		}
@@ -379,6 +392,18 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
+		/* right-click during target selection only cancels the cast - it
+		 * must not fall through to the look command, which popped the
+		 * character description window over the cancel */
+		if (context_targeting_active()) {
+			context_key_reset();
+			action_ovr = ACTION_NONE;
+			rclick_cancelled_targeting = 1;
+			hotbar_cancel_held();
+			hotbar_cancel_drag();
+			context_stop();
+			break;
+		}
 		hotbar_cancel_held();
 		hotbar_cancel_drag();
 		context_stop();
@@ -387,6 +412,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 	case SDL_MOUM_RUP:
 		vk_rbut = 0;
 		if (gui_is_loading()) {
+			break;
+		}
+		/* swallow the release of a right-click that cancelled targeting */
+		if (rclick_cancelled_targeting) {
+			rclick_cancelled_targeting = 0;
 			break;
 		}
 		if (amod_mouse_click(mousex, mousey, what)) {

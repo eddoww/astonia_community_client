@@ -535,6 +535,7 @@ int context_key_isset(void);
 int context_key_enabled(void);
 int context_key_set_cmd(void);
 void context_key_reset(void);
+int context_targeting_active(void);
 int context_key_click(void);
 
 /* hover.c accessors for hotbar */

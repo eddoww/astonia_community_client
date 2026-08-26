@@ -60,8 +60,8 @@ static uint32_t kb_warn_time;
 
 /* ── Cast/target label tables ───────────────────────────────────────── */
 
-static const char *cast_labels[] = {"Default", "Normal", "Quick", "Indicator"};
-static const int cast_count = 4;
+static const char *cast_labels[] = {"Default", "Normal", "Quick", "Indicator", "Smart"};
+static const int cast_count = 5;
 
 static const char *target_labels[] = {"Default", "Map", "Character", "Self"};
 
@@ -321,7 +321,7 @@ void keybind_panel_display(void)
 		render_rect_alpha(lx, py + y_cast_mode - 2, rx, py + y_cast_mode - 1, COL_HEADER, 100);
 		render_text(lx, py + y_cast_mode, COL_LABEL, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Cast Mode:");
 
-		static const char *mode_labels[] = {"Normal", "Quick", "Indicator"};
+		static const char *mode_labels[] = {"Normal", "Quick", "Indicator", "Smart"};
 		int mode = hotbar_cast_mode();
 		char mbuf[32];
 		snprintf(mbuf, sizeof(mbuf), "< %s >", mode_labels[mode]);
@@ -496,7 +496,7 @@ int keybind_panel_click(int mx, int my)
 
 		/* global cast mode cycle */
 		if (y_cast_mode >= 0 && in_rect(mx, my, lx + 80, py + y_cast_mode, 100, KB_BTN_H)) {
-			int next = (hotbar_cast_mode() + 1) % 3;
+			int next = (hotbar_cast_mode() + 1) % 4;
 			hotbar_set_cast_mode(next);
 			save_options();
 			return 1;
@@ -569,7 +569,7 @@ int keybind_panel_rclick(int mx, int my)
 
 		/* right-click global cast mode = cycle backward */
 		if (y_cast_mode >= 0 && in_rect(mx, my, lx + 80, py + y_cast_mode, 100, KB_BTN_H)) {
-			int prev = (hotbar_cast_mode() + 2) % 3;
+			int prev = (hotbar_cast_mode() + 3) % 4;
 			hotbar_set_cast_mode(prev);
 			save_options();
 			return 1;

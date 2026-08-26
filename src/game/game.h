@@ -217,6 +217,7 @@ DLL_EXPORT void render_clear_target(int target_id);
 void render_display_text(void);
 void render_text_pageup(void);
 void render_text_pagedown(void);
+void render_text_jump_bottom(void);
 void render_text_lineup(void);
 void render_text_linedown(void);
 int render_scantext(int x, int y, char *hit);

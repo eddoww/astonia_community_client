@@ -1867,6 +1867,20 @@ void render_text_linedown(void)
 	textdisplayline = (textdisplayline + 1) % MAXTEXTLINES;
 }
 
+/* Snap the chat window back to the newest line. Called on (re)entering
+ * the game world: the login flood can leave the view pinned to an older
+ * line when the window geometry changes mid-stream, so the chat sometimes
+ * appeared scrolled all the way up after login. */
+void render_text_jump_bottom(void)
+{
+	if (textlines <= TEXTDISPLAYLINES) {
+		/* everything fits: show from the oldest line */
+		textdisplayline = (textlines >= MAXTEXTLINES) ? textnextline : 0;
+	} else {
+		textdisplayline = (textnextline + MAXTEXTLINES - TEXTDISPLAYLINES) % MAXTEXTLINES;
+	}
+}
+
 void render_text_pageup(void)
 {
 	int n;

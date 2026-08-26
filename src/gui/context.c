@@ -496,6 +496,12 @@ void context_key_reset(void)
 	hotbar_targeting = 0;
 }
 
+/* true while a targeted cast is waiting for the player to pick a target */
+int context_targeting_active(void)
+{
+	return lcmd_override != CMD_NONE;
+}
+
 int context_key_click(void)
 {
 	if (lcmd_override == CMD_NONE) {

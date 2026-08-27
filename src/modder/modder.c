@@ -75,6 +75,7 @@ void (*_amod_option_set)(int index, int value) = NULL;
 int (*_amod_option_tab)(int index) = NULL;
 int (*_amod_escape)(void) = NULL;
 int (*_amod_has_open_window)(void) = NULL;
+int (*_amod_item_group_match)(int group, uint32_t sprite) = NULL;
 
 char *game_email_main = "<no one>";
 char *game_email_cash = "<no one>";
@@ -183,6 +184,9 @@ int amod_init(void)
 		}
 		if (!_amod_has_open_window && (tmp = SDL_LoadFunction(dll_instance, "amod_has_open_window"))) {
 			_amod_has_open_window = (int (*)(void))tmp;
+		}
+		if (!_amod_item_group_match && (tmp = SDL_LoadFunction(dll_instance, "amod_item_group_match"))) {
+			_amod_item_group_match = (int (*)(int, uint32_t))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_prefetch"))) {
 			_amod_prefetch = (int (*)(const unsigned char *))tmp;
@@ -592,4 +596,15 @@ int amod_has_open_window(void)
 		return _amod_has_open_window();
 	}
 	return 0;
+}
+
+// Does this item sprite belong to the given hotbar item group (potions,
+// recall scrolls, ...)? 1 = yes, 0 = no, -1 = no mod table (use the client's
+// builtin fallback). The mod owns the id sets since they ship with content.
+int amod_item_group_match(int group, uint32_t sprite)
+{
+	if (_amod_item_group_match) {
+		return _amod_item_group_match(group, sprite);
+	}
+	return -1;
 }

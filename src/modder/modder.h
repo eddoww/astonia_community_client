@@ -33,6 +33,7 @@ void amod_option_set(int index, int value);
 int amod_option_tab(int index);
 int amod_escape(void);
 int amod_has_open_window(void);
+int amod_item_group_match(int group, uint32_t sprite);
 int amod_main_loaded(void);
 void amod_note_unhandled(int type, int subtype);
 int amod_is_playersprite(int sprite);

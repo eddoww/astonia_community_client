@@ -153,6 +153,14 @@ typedef enum {
 
 #define HOTBAR_MAX_BINDS 4
 
+/* Generic item-slot groups: a group slot uses the FIRST inventory item its
+ * family matches (any potion regardless of size/kind, any recall scroll).
+ * Membership is owned by the mod's optional amod_item_group_match export
+ * (shipped with the content); a builtin fallback covers the base items. */
+#define HOTBAR_GROUP_NONE   0
+#define HOTBAR_GROUP_POTION 1
+#define HOTBAR_GROUP_RECALL 2
+
 typedef enum {
 	HOTBAR_CAST_DEFAULT, /* use global cast_mode setting */
 	HOTBAR_CAST_NORMAL,
@@ -189,7 +197,8 @@ typedef struct {
 
 	/* HOTBAR_ITEM fields */
 	int inv_index; /* inventory position (0 = none found yet) */
-	uint32_t item_type; /* item[] sprite ID for auto-refill */
+	uint32_t item_type; /* item[] sprite ID for auto-refill (for group slots: the fallback icon) */
+	uint8_t item_group; /* HOTBAR_GROUP_*: slot matches a whole item family instead of one sprite */
 	char item_name[24]; /* last known name, shown when look data is cold */
 
 	/* HOTBAR_SPELL fields */
@@ -238,6 +247,8 @@ DLL_EXPORT void hotbar_set_show_names(int on);
 /* slot management */
 DLL_EXPORT void hotbar_assign_item(int slot, int inventory_index);
 DLL_EXPORT void hotbar_assign_item_by_type(int slot, uint32_t item_type);
+/* how many usable inventory items the slot's sprite (or group) matches */
+DLL_EXPORT int hotbar_slot_count(int slot);
 DLL_EXPORT void hotbar_assign_spell(int slot, int action_slot);
 DLL_EXPORT void hotbar_clear(int slot);
 DLL_EXPORT void hotbar_clear_all(void);

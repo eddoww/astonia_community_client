@@ -284,17 +284,14 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		/* loading screen: only the escape menu and its windows are live */
 		if (gui_is_loading()) {
 			if (options_is_open()) {
-				if (!options_click(mousex, mousey)) {
-					options_close();
-				}
+				/* clicks outside are swallowed, not a close - see below */
+				options_click(mousex, mousey);
 			} else if (escape_menu_is_open()) {
 				if (!escape_menu_click(mousex, mousey)) {
 					escape_menu_close();
 				}
 			} else if (keybind_settings_is_open()) {
-				if (!keybind_settings_click(mousex, mousey)) {
-					keybind_settings_close();
-				}
+				keybind_settings_click(mousex, mousey);
 			}
 			break;
 		}
@@ -306,11 +303,12 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		/* Options and Keybindings swallow outside clicks instead of closing:
+		 * clicking the chat to answer someone used to dismiss the window and
+		 * lose the player's place. ESC and the X button close them; the
+		 * escape MENU below stays click-away-dismissable like any popup. */
 		if (options_is_open()) {
-			if (options_click(mousex, mousey)) {
-				break;
-			}
-			options_close();
+			options_click(mousex, mousey);
 			break;
 		}
 
@@ -323,10 +321,7 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		}
 
 		if (keybind_settings_is_open()) {
-			if (keybind_settings_click(mousex, mousey)) {
-				break;
-			}
-			keybind_settings_close();
+			keybind_settings_click(mousex, mousey);
 			break;
 		}
 

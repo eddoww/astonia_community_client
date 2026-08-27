@@ -125,6 +125,19 @@ void hotbar_display(void)
 			}
 		}
 
+		/* consumable count, top-right ("24 combo potions left"): always for
+		 * group slots (0 included - that IS the information), for plain item
+		 * slots only when there is a spare to report */
+		{
+			const HotbarSlot *hs = hotbar_get(i);
+			if (hs && hs->type == HOTBAR_ITEM && (hs->item_group || hotbar_slot_count(i) > 1)) {
+				char cbuf[8];
+				snprintf(cbuf, sizeof(cbuf), "%d", hotbar_slot_count(i));
+				render_text(
+				    x + 16, y - 16, whitecolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_TEXT_RIGHT, cbuf);
+			}
+		}
+
 		/* key label — show bound key in corner (toggle-able) */
 		if (hotbar_show_hotkeys()) {
 			InputBinding *b = NULL;

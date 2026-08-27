@@ -760,20 +760,29 @@ int hotbar_filter_uncastable(void)
  * a healing potion in the first free first-row slots. Items are stored by
  * type, so the slot lights up as soon as the character owns one and shows a
  * greyed-out icon until then. */
+static int hotbar_group_contains(int group, uint32_t sprite);
+static int hotbar_slot_find_item(const HotbarSlot *hs);
+
 void hotbar_add_default_items(void)
 {
+	/* group slots: the button drinks/reads whatever matching item the
+	 * character owns (any potion size or kind, any recall level) instead of
+	 * being welded to one sprite; item_type doubles as the greyed icon */
 	static const struct {
-		uint32_t item_type;
+		uint8_t group;
+		uint32_t icon;
 		const char *name;
 	} starter_items[] = {
-	    {50011, "Recall Scroll"},
-	    {10292, "Healing Potion"},
+	    {HOTBAR_GROUP_RECALL, 50011, "Recall Scroll"},
+	    {HOTBAR_GROUP_POTION, 10292, "Potion"},
 	};
 
 	for (size_t i = 0; i < sizeof(starter_items) / sizeof(starter_items[0]); i++) {
 		int already = 0;
 		for (int s = 0; s < HOTBAR_MAX_SLOTS; s++) {
-			if (hotbar[s].type == HOTBAR_ITEM && hotbar[s].item_type == starter_items[i].item_type) {
+			if (hotbar[s].type == HOTBAR_ITEM &&
+			    (hotbar[s].item_group == starter_items[i].group ||
+			        (hotbar[s].item_group == HOTBAR_GROUP_NONE && hotbar[s].item_type == starter_items[i].icon))) {
 				already = 1;
 				break;
 			}
@@ -783,7 +792,9 @@ void hotbar_add_default_items(void)
 		}
 		for (int s = 0; s < HOTBAR_SLOTS_PER_ROW; s++) {
 			if (hotbar[s].type == HOTBAR_EMPTY) {
-				hotbar_assign_item_by_type(s, starter_items[i].item_type);
+				hotbar_assign_item_by_type(s, starter_items[i].icon);
+				hotbar[s].item_group = starter_items[i].group;
+				hotbar[s].inv_index = hotbar_slot_find_item(&hotbar[s]);
 				snprintf(hotbar[s].item_name, sizeof(hotbar[s].item_name), "%s", starter_items[i].name);
 				break;
 			}
@@ -869,20 +880,78 @@ static int find_item_in_inventory(uint32_t item_type)
 	return 0;
 }
 
+/* Does this sprite belong to the item group? The mod's table is authoritative
+ * (it ships with the content and knows lab/gambler variants); the builtin
+ * fallback keeps the default buttons working without a mod. */
+static int hotbar_group_contains(int group, uint32_t sprite)
+{
+	int r = amod_item_group_match(group, sprite);
+	if (r >= 0) {
+		return r;
+	}
+	switch (group) {
+	case HOTBAR_GROUP_POTION:
+		return sprite == 10292 || sprite == 10296 || sprite == 10304 /* healing s/m/b */
+		       || sprite == 10291 || sprite == 10295 || sprite == 10303 /* mana s/m/b */
+		       || sprite == 10293 || sprite == 10297 || sprite == 10305; /* combo s/m/b */
+	case HOTBAR_GROUP_RECALL:
+		return sprite == 50011;
+	default:
+		return 0;
+	}
+}
+
+static int find_item_in_inventory_group(int group)
+{
+	for (int i = INVENTORY_EQUIP_SLOTS; i < _inventorysize; i++) {
+		if (item[i] && (item_flags[i] & IF_USE) && hotbar_group_contains(group, item[i])) {
+			return i;
+		}
+	}
+	return 0;
+}
+
+/* re-resolve a slot's inventory index, honoring its group if it has one */
+static int hotbar_slot_find_item(const HotbarSlot *hs)
+{
+	if (hs->item_group != HOTBAR_GROUP_NONE) {
+		return find_item_in_inventory_group(hs->item_group);
+	}
+	return find_item_in_inventory(hs->item_type);
+}
+
+DLL_EXPORT int hotbar_slot_count(int slot)
+{
+	if (slot < 0 || slot >= HOTBAR_MAX_SLOTS || hotbar[slot].type != HOTBAR_ITEM) {
+		return 0;
+	}
+	int cnt = 0;
+	for (int i = INVENTORY_EQUIP_SLOTS; i < _inventorysize; i++) {
+		if (!item[i] || !(item_flags[i] & IF_USE)) {
+			continue;
+		}
+		if (hotbar[slot].item_group != HOTBAR_GROUP_NONE ? hotbar_group_contains(hotbar[slot].item_group, item[i])
+		                                                 : item[i] == hotbar[slot].item_type) {
+			cnt++;
+		}
+	}
+	return cnt;
+}
+
 void hotbar_on_item_changed(int inventory_index)
 {
 	if (inventory_index < 0 || inventory_index >= _inventorysize) {
 		return;
 	}
 	for (int s = 0; s < HOTBAR_MAX_SLOTS; s++) {
-		if (hotbar[s].type != HOTBAR_ITEM || hotbar[s].item_type == 0) {
+		if (hotbar[s].type != HOTBAR_ITEM || (hotbar[s].item_type == 0 && hotbar[s].item_group == HOTBAR_GROUP_NONE)) {
 			continue;
 		}
 
 		/* slot has no inventory index yet (e.g. after loading config) —
 		 * try to resolve it now that an inventory slot was updated */
 		if (hotbar[s].inv_index <= 0) {
-			hotbar[s].inv_index = find_item_in_inventory(hotbar[s].item_type);
+			hotbar[s].inv_index = hotbar_slot_find_item(&hotbar[s]);
 			continue;
 		}
 
@@ -891,13 +960,15 @@ void hotbar_on_item_changed(int inventory_index)
 			continue;
 		}
 
-		/* still the same item type? nothing to do */
-		if (item[inventory_index] == hotbar[s].item_type) {
+		/* still a match? nothing to do */
+		if (hotbar[s].item_group != HOTBAR_GROUP_NONE
+		        ? hotbar_group_contains(hotbar[s].item_group, item[inventory_index])
+		        : item[inventory_index] == hotbar[s].item_type) {
 			continue;
 		}
 
-		/* item was consumed/removed — find the next one of the same type */
-		hotbar[s].inv_index = find_item_in_inventory(hotbar[s].item_type);
+		/* item was consumed/removed — find the next matching one */
+		hotbar[s].inv_index = hotbar_slot_find_item(&hotbar[s]);
 	}
 }
 
@@ -2033,6 +2104,14 @@ int input_load_config(const char *path)
 	}
 
 	/* load misc settings */
+	int file_version = 1;
+	{
+		cJSON *jver = cJSON_GetObjectItem(root, "version");
+		if (jver && cJSON_IsNumber(jver)) {
+			file_version = (int)cJSON_GetNumberValue(jver);
+		}
+	}
+
 	cJSON *jsettings = cJSON_GetObjectItem(root, "settings");
 	if (jsettings && cJSON_IsObject(jsettings)) {
 		cJSON *v;
@@ -2045,7 +2124,12 @@ int input_load_config(const char *path)
 			gear_lock = cJSON_IsTrue(v) ? 1 : 0;
 		}
 		v = cJSON_GetObjectItem(jsettings, "cast_mode");
-		if (v && cJSON_IsNumber(v)) {
+		if (v && cJSON_IsNumber(v) && file_version >= 2) {
+			/* v1 files ignore the stored cast_mode once: the shipped
+			 * res/config/keybinds.json wrote cast_mode 0 into every profile
+			 * before CAST_SMART became the default, so a v1 value was never
+			 * the player's own choice. Anything they pick from now on saves
+			 * as v2 and sticks. */
 			hotbar_set_cast_mode((int)cJSON_GetNumberValue(v));
 		}
 		v = cJSON_GetObjectItem(jsettings, "show_hotkeys");
@@ -2091,17 +2175,29 @@ int input_load_config(const char *path)
 				if (strcmp(tstr, "item") == 0) {
 					cJSON *jit = cJSON_GetObjectItem(jslot, "item_type");
 					uint32_t itype = (jit && cJSON_IsNumber(jit)) ? (uint32_t)jit->valueint : 0;
+					cJSON *jgroup = cJSON_GetObjectItem(jslot, "group");
 					cJSON *jname = cJSON_GetObjectItem(jslot, "name");
 					hotbar[slot].type = HOTBAR_ITEM;
 					hotbar[slot].item_type = itype;
-					hotbar[slot].inv_index = find_item_in_inventory(itype);
+					if (jgroup && cJSON_IsNumber(jgroup)) {
+						hotbar[slot].item_group = (uint8_t)jgroup->valueint;
+					} else if (itype == 10292) {
+						/* upgrade the auto-granted starter slots from older
+						 * configs: they were welded to one sprite, so the
+						 * button went dead the moment the player carried a
+						 * different potion size or recall level */
+						hotbar[slot].item_group = HOTBAR_GROUP_POTION;
+					} else if (itype == 50011) {
+						hotbar[slot].item_group = HOTBAR_GROUP_RECALL;
+					}
+					hotbar[slot].inv_index = hotbar_slot_find_item(&hotbar[slot]);
 					if (jname && cJSON_IsString(jname)) {
 						snprintf(hotbar[slot].item_name, sizeof(hotbar[slot].item_name), "%s", jname->valuestring);
 					} else if (itype == 50011) {
 						/* configs saved before the name cache existed */
 						snprintf(hotbar[slot].item_name, sizeof(hotbar[slot].item_name), "Recall Scroll");
 					} else if (itype == 10292) {
-						snprintf(hotbar[slot].item_name, sizeof(hotbar[slot].item_name), "Healing Potion");
+						snprintf(hotbar[slot].item_name, sizeof(hotbar[slot].item_name), "Potion");
 					}
 				} else if (strcmp(tstr, "spell") == 0) {
 					cJSON *jsp = cJSON_GetObjectItem(jslot, "spell");
@@ -2215,7 +2311,9 @@ int input_save_config(const char *path)
 		return -1;
 	}
 
-	cJSON_AddNumberToObject(root, "version", 1);
+	/* version 2: a stored cast_mode is honored (v1 files carried the shipped
+	 * config's cast_mode 0, which was never a player choice - see load) */
+	cJSON_AddNumberToObject(root, "version", 2);
 
 	/* only store bindings that differ from their defaults */
 	cJSON *jbinds = cJSON_CreateObject();
@@ -2253,6 +2351,9 @@ int input_save_config(const char *path)
 		case HOTBAR_ITEM:
 			cJSON_AddStringToObject(jslot, "type", "item");
 			cJSON_AddNumberToObject(jslot, "item_type", (double)hotbar[i].item_type);
+			if (hotbar[i].item_group != HOTBAR_GROUP_NONE) {
+				cJSON_AddNumberToObject(jslot, "group", hotbar[i].item_group);
+			}
 			if (hotbar[i].item_name[0]) {
 				cJSON_AddStringToObject(jslot, "name", hotbar[i].item_name);
 			}

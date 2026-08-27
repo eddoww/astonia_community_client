@@ -112,6 +112,8 @@ void keybind_settings_display(void)
 	int rx = ks_px + ks_pw - KS_PAD;
 
 	ui_titlebar(ks_px, ks_py, ks_px + ks_pw, "Keybindings");
+	ui_button(ks_px + ks_pw - KS_PAD - 12, ks_py + 2, 12, 12, "X",
+	    in_rect(mousex, mousey, ks_px + ks_pw - KS_PAD - 12, ks_py + 2, 12, 12) ? UI_BTN_HOVER : UI_BTN_REST);
 
 	/* preset buttons double as "reset to defaults" - hover highlight and a
 	 * confirmation line give them the button feedback players asked for */
@@ -265,6 +267,11 @@ int keybind_settings_click(int mx, int my)
 
 	if (!in_rect(mx, my, ks_px, ks_py, ks_pw, ks_ph)) {
 		return 0;
+	}
+
+	if (in_rect(mx, my, ks_px + ks_pw - KS_PAD - 12, ks_py + 2, 12, 12)) {
+		keybind_settings_close();
+		return 1;
 	}
 
 	int lx = ks_px + KS_PAD;

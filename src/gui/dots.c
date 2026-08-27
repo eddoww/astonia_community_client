@@ -270,11 +270,12 @@ void init_dots(void)
 			int col = i % cols;
 			int bx = dot[DOT_HOTBAR].x + col * FDX;
 			int by = dot[DOT_HOTBAR].y + row * (FDX + 2);
-			/* hitrad 40 like the inventory/equipment grids: the circles
-			 * overlap and get_near_button picks the nearest, so the whole
-			 * 32x32 pad is clickable - at FDX/2 (20) the pad corners and a
-			 * band between rows were dead */
-			set_but(BUT_HOTBAR_BEG + i, bx, by, 40, 0);
+			/* hitrad 23: just past the pad's half-diagonal (22.6), so the
+			 * whole 32x32 pad is clickable - at FDX/2 (20) the corners and a
+			 * band between rows were dead. NOT the inventory's 40: unlike
+			 * the inventory grid, the hotbar borders the open map, and a
+			 * 40-radius circle hovered slots from 24px above the pads. */
+			set_but(BUT_HOTBAR_BEG + i, bx, by, 23, 0);
 		}
 		/* disable hit testing on inactive slots */
 		for (i = total_active; i < HOTBAR_MAX_SLOTS; i++) {

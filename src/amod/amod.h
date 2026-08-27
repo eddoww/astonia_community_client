@@ -156,6 +156,10 @@ DLL_IMPORT void render_target_to_screen(int target_id, int x, int y, unsigned ch
 // --- Render: Text ---
 DLL_IMPORT int render_text_length(int flags, const char *text);
 DLL_IMPORT int render_text(int sx, int sy, unsigned short int color, int flags, const char *text);
+/* render_text with a draw-time opacity (0..255); shadow/frame underlays fade
+ * along. Resolve via dlsym/GetProcAddress when supporting clients < v1.2.35. */
+DLL_IMPORT int render_text_alpha(
+    int sx, int sy, unsigned short int color, int flags, unsigned char alpha, const char *text);
 DLL_IMPORT int render_text_fmt(int64_t sx, int64_t sy, unsigned short int color, int flags, const char *format, ...)
     __attribute__((format(printf, 5, 6)));
 DLL_IMPORT int render_text_break(int x, int y, int breakx, unsigned short color, int flags, const char *ptr);
@@ -211,6 +215,14 @@ DLL_IMPORT void sound_fade(int channel, float target, int duration);
 DLL_IMPORT float sound_get_master_volume(void);
 DLL_IMPORT int sound_is_playing(int channel);
 DLL_IMPORT int sound_is_enabled(void);
+/* Tag a playing channel with a volume category so the client's Options >
+ * Audio sliders (Sound Effects / Ambient / Interface) scale it alongside
+ * Master. Untagged channels scale with Master only. Resolve via dlsym/
+ * GetProcAddress when supporting clients older than v1.2.35. */
+#define SOUND_CAT_SFX     0
+#define SOUND_CAT_AMBIENT 1
+#define SOUND_CAT_UI      2
+DLL_IMPORT void sound_set_channel_category(int channel, int category);
 
 // --- Sprite Config ---
 DLL_IMPORT int sprite_config_load_characters(const char *path);

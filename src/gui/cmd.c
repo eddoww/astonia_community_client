@@ -117,6 +117,8 @@ static int client_cmd(char *buf)
 			new_sound_volume = 128;
 		}
 		sound_volume = new_sound_volume;
+		sound_refresh_gains(); /* running loops pick it up immediately */
+		save_options();
 		addline("Volume is now at %d", sound_volume);
 		return 1;
 	}

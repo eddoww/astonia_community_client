@@ -275,7 +275,10 @@ int context_open(int mx, int my)
 		return 0;
 	}
 
-	csel = get_near_char(mx, my, 1);
+	/* include the own character: makemenu() has always had self entries
+	 * (Inspect, Cast Flash/Warcry/...) but get_near_char's NEAR_NOTSELF made
+	 * them unreachable - right-clicking yourself examined the ground */
+	csel = get_near_ex(mx, my, NEAR_CHAR, 1);
 	isel = get_near_item(mx, my, CMF_USE | CMF_TAKE, 1);
 	msel = get_near_ground(mx, my);
 	ori_x = originx;
@@ -645,6 +648,12 @@ static int try_targeted_action(int action_slot, size_t csel, size_t isel, size_t
 			cmd_look_char(map[csel].cn);
 			return 1;
 		}
+		if (msel == MAPDX * MAPDY / 2U && map[msel].csprite) {
+			/* own tile: look at yourself - the target search excludes self
+			 * so attack/give can never pick you, but Look should */
+			cmd_look_char(map[msel].cn);
+			return 1;
+		}
 		if (msel != MAXMN) {
 			cmd_look_map(
 			    originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX), originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX));
@@ -666,8 +675,22 @@ static void resolve_cursor_targets(size_t *out_csel, size_t *out_isel, size_t *o
 		return;
 	}
 
-	*out_csel = get_near_char(mousex, mousey, 3);
-	*out_isel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, 3);
+	/* One combined search so the NEAREST thing under the cursor wins. Three
+	 * independent searches (each looksize 3) let any usable scenery within
+	 * three tiles outbid the character directly under the cursor - Look on an
+	 * NPC standing next to a door silently examined the door's tile instead
+	 * (and the server ignores a look at an empty tile: "nothing happens").
+	 * Same nearest-wins split as context_key_set_cmd. NEAR_NOTSELF stays so
+	 * attack/give/fireball can never resolve to yourself; ACTION_LOOK handles
+	 * the own tile separately. */
+	size_t tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR | NEAR_NOTSELF, 3);
+	if (tmp != MAXMN) {
+		if (map[tmp].csprite) {
+			*out_csel = tmp;
+		} else {
+			*out_isel = tmp;
+		}
+	}
 	*out_msel = get_near_ground(mousex, mousey);
 }
 

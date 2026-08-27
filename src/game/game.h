@@ -112,6 +112,8 @@ extern int x_offset, y_offset;
 DLL_EXPORT int render_text_length(int flags, const char *text);
 int render_text_len(int flags, const char *text, int n);
 DLL_EXPORT int render_text(int sx, int sy, unsigned short int color, int flags, const char *text);
+DLL_EXPORT int render_text_alpha(
+    int sx, int sy, unsigned short int color, int flags, unsigned char alpha, const char *text);
 DLL_EXPORT int render_text_fmt(int64_t sx, int64_t sy, unsigned short int color, int flags, const char *format, ...)
     __attribute__((format(printf, 5, 6)));
 DLL_EXPORT int render_text_break_fmt(int sx, int sy, int breakx, unsigned short int color, int flags,
@@ -241,6 +243,9 @@ DLL_EXPORT int _additional_sprite(unsigned int sprite, int attick);
 extern int (*get_player_sprite)(int nr, int zdir, int action, int step, int duration, int attick);
 DLL_EXPORT int _get_player_sprite(int nr, int zdir, int action, int step, int duration, int attick);
 void save_options(void);
+/* Options > Video window mode the user picked (0/1/2), -1 = never set; owned
+ * by main.c, persisted in options_extra.json, written by options_ui.c. */
+extern int saved_window_mode;
 void load_character_options(void);
 void finish_character_options(void);
 extern unsigned int (*opt_sprite)(unsigned int sprite);

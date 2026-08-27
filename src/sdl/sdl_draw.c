@@ -187,8 +187,8 @@ SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t co
 	return texture;
 }
 
-int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char *text, struct renderfont *font,
-    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, const char *text, struct renderfont *font,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset, unsigned char alpha)
 {
 	int dx, cache_index;
 	SDL_Texture *tex;
@@ -226,7 +226,15 @@ int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char
 			sx -= dx;
 		}
 
+		/* alpha is a draw-time texture mod, not part of the cache key; the
+		 * cached texture is shared, so always restore full opacity after */
+		if (alpha != 255) {
+			SDL_SetTextureAlphaMod(tex, alpha);
+		}
 		sdl_blit_tex(tex, sx, sy, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+		if (alpha != 255) {
+			SDL_SetTextureAlphaMod(tex, 255);
+		}
 
 		if (flags & RENDER_TEXT_NOCACHE) {
 			SDL_DestroyTexture(tex);
@@ -234,6 +242,13 @@ int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char
 	}
 
 	return sx + dx;
+}
+
+int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char *text, struct renderfont *font,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	return sdl_drawtext_alpha(
+	    sx, sy, color, flags, text, font, clipsx, clipsy, clipex, clipey, x_offset, y_offset, 255);
 }
 
 void sdl_rect(int sx, int sy, int ex, int ey, unsigned short int color, int clipsx, int clipsy, int clipex, int clipey,

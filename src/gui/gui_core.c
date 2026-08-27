@@ -379,6 +379,9 @@ int main_loop(void)
 				}
 				amod_tick();
 				keyboard_move_tick();
+				/* walk commands were just appended; poll_network() already ran
+				 * this iteration, so without a flush they'd wait a full frame */
+				client_flush_output();
 				finish_character_options();
 #ifdef ENABLE_SHAREDMEM
 				sharedmem_update();

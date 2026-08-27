@@ -94,6 +94,64 @@ void sdl_dump(FILE *fp)
 
 // #define GO_DEFAULTS (GO_CONTEXT|GO_ACTION|GO_BIGBAR|GO_PREDICT|GO_SHORT|GO_MAPSAVE|GO_NOMAP)
 
+/* Derive the logical canvas (XRES/YRES + centering offset) from a window size
+ * at the current sdl_scale. Split out of sdl_init so window-mode switches can
+ * re-run it; sdl_scale itself stays fixed after init because the sprite zip
+ * tier (gx2/gx3/gx4) is chosen by it. */
+static void sdl_derive_canvas(int width, int height)
+{
+	int off = 0;
+
+	XRES = width / sdl_scale;
+	if (XRES < XRES0) {
+		XRES = XRES0;
+	}
+	if (XRES > XRES1) {
+		XRES = XRES1;
+	}
+
+	YRES = height / sdl_scale;
+
+	if (game_options & GO_SMALLTOP) {
+		off += 40;
+	}
+	if (game_options & GO_SMALLBOT) {
+		off += 40;
+	}
+
+	if (YRES > YRES1 - off) {
+		YRES = YRES1 - off;
+	}
+
+	render_set_offset((width / sdl_scale - XRES) / 2, (height / sdl_scale - YRES) / 2);
+}
+
+/* Re-derive the canvas from the live window after a window-mode switch -
+ * without this, switching to borderless kept the old windowed canvas size.
+ * Callers must follow up with init_dots(). */
+void sdl_recompute_canvas(void)
+{
+	int w = 0, h = 0;
+
+	if (!sdlwnd) {
+		return;
+	}
+#ifdef __APPLE__
+	/* match sdl_init: the Metal renderer only draws the usable area */
+	if (!SDL_GetRenderOutputSize(sdlren, &w, &h)) {
+		SDL_GetWindowSizeInPixels(sdlwnd, &w, &h);
+	}
+#else
+	/* logical units, same as the width/height sdl_init derived from */
+	SDL_GetWindowSize(sdlwnd, &w, &h);
+#endif
+	if (w <= 0 || h <= 0) {
+		return;
+	}
+	sdl_derive_canvas(w, h);
+	note("SDL canvas recomputed: %dx%d scale %d", XRES, YRES, sdl_scale);
+}
+
 int sdl_init(int width, int height, char *title, int monitor)
 {
 	int i;
@@ -276,40 +334,15 @@ int sdl_init(int width, int height, char *title, int monitor)
 	// still yields at least the classic XRES0 x YRES3 canvas, then let the
 	// canvas fill the window at that scale (clamped): the map viewport and
 	// right-anchored UI grow into what used to be black side bars.
-	{
-		int off = 0;
-
-		sdl_scale = 1;
-		for (int probe = 4; probe >= 2; probe--) {
-			if (width / probe >= XRES0 && height / probe >= YRES3) {
-				sdl_scale = probe;
-				break;
-			}
+	sdl_scale = 1;
+	for (int probe = 4; probe >= 2; probe--) {
+		if (width / probe >= XRES0 && height / probe >= YRES3) {
+			sdl_scale = probe;
+			break;
 		}
-
-		XRES = width / sdl_scale;
-		if (XRES < XRES0) {
-			XRES = XRES0;
-		}
-		if (XRES > XRES1) {
-			XRES = XRES1;
-		}
-
-		YRES = height / sdl_scale;
-
-		if (game_options & GO_SMALLTOP) {
-			off += 40;
-		}
-		if (game_options & GO_SMALLBOT) {
-			off += 40;
-		}
-
-		if (YRES > YRES1 - off) {
-			YRES = YRES1 - off;
-		}
-
-		render_set_offset((width / sdl_scale - XRES) / 2, (height / sdl_scale - YRES) / 2);
 	}
+
+	sdl_derive_canvas(width, height);
 	if (game_options & GO_NOTSET) {
 		if (YRES >= 620) {
 			game_options = GO_DEFAULTS;
@@ -671,9 +704,18 @@ void sdl_loop(void)
 		case SDL_EVENT_QUIT:
 			quit = 1;
 			break;
-		case SDL_EVENT_KEY_DOWN:
+		case SDL_EVENT_KEY_DOWN: {
+			/* OS auto-repeat must not re-enter binding dispatch: held state
+			 * (WASD) is edge-driven, and repeats made the most recent key
+			 * "win" over other held keys. Chat editing keeps repeats so a
+			 * held backspace still deletes. */
+			int cmd_is_active(void); /* gui_private.h */
+			if (event.key.repeat && !cmd_is_active()) {
+				break;
+			}
 			gui_sdl_keyproc(event.key.key);
 			break;
+		}
 		case SDL_EVENT_KEY_UP:
 			input_keyup(event.key.key);
 			context_keyup(event.key.key);

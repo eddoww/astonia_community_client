@@ -1,14 +1,5 @@
 {
  "version": 1,
- "bindings": {},
- "settings": {
-  "action_enabled": true,
-  "gear_lock": false,
-  "cast_mode": 0,
-  "show_hotkeys": true,
-  "show_names": true,
-  "hotbar_rows": 1
- },
  "hotbar": [
   {
    "type": "spell",

@@ -195,6 +195,11 @@ void spellbook_display(void)
 
 /* ── Toggle / state ──────────────────────────────────────────────────── */
 
+int spellbook_over(int mx, int my)
+{
+	return spellbook_is_open() && sb_inside(mx, my);
+}
+
 int spellbook_is_open(void)
 {
 	return sb_open;

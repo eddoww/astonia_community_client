@@ -78,6 +78,14 @@ DLL_EXPORT void sound_set_volume(int channel, float volume);
 DLL_EXPORT void sound_fade(int channel, float target, int duration);
 DLL_EXPORT float sound_get_master_volume(void);
 
+/* Volume categories for sound_set_channel_category: a tagged channel scales
+ * with the matching Options > Audio slider on top of Master. Untagged
+ * channels (older mods) scale with Master only. */
+#define SOUND_CAT_SFX     0
+#define SOUND_CAT_AMBIENT 1
+#define SOUND_CAT_UI      2
+DLL_EXPORT void sound_set_channel_category(int channel, int category);
+
 /* Query */
 DLL_EXPORT int sound_is_playing(int channel);
 DLL_EXPORT int sound_is_enabled(void);
@@ -85,11 +93,17 @@ DLL_EXPORT int sound_is_enabled(void);
 /* Internal - called by game tick */
 void sound_fade_tick(void);
 void sound_cleanup_mod_sounds(void);
+/* Internal - re-apply master/category volume to running channels (volume slider changed) */
+void sound_refresh_gains(void);
 
 void sdl_bargraph_add(int dx, unsigned char *data, int val);
 void sdl_bargraph(int sx, int sy, int dx, unsigned char *data, int x_offset, int y_offset);
 bool sdl_has_focus(void);
 bool sdl_is_shown(void);
+// Drop all idle sprite entries (bake-time option like Brightness changed)
+void sdl_texture_flush_sprites(void);
+// Re-derive XRES/YRES + centering from the current window size (window mode changed)
+void sdl_recompute_canvas(void);
 // Texture preload progress since the last mark (login / area change)
 void sdl_tex_jobs_mark(void);
 void sdl_tex_jobs_progress(int *done, int *total);
@@ -109,6 +123,8 @@ int sdlt_xres(int cache_index);
 int sdlt_yres(int cache_index);
 void sdl_blit(
     int cache_index, int sx, int sy, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset);
+int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, const char *text, struct renderfont *font,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset, unsigned char alpha);
 int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char *text, struct renderfont *font,
     int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset);
 // Basic drawing primitives

@@ -510,6 +510,8 @@ int cmd_is_active(void);
 
 /* hotbar_ui.c */
 int hotbar_toggle_hit(int mx, int my);
+int hotbar_toggle_over(int mx, int my);
+int spellbook_over(int mx, int my);
 
 #define NEAR_ITEM    1024
 #define NEAR_CHAR    2048

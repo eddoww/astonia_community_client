@@ -72,6 +72,9 @@ int (*_amod_prefetch)(const unsigned char *buf) = NULL;
 int (*_amod_options_count)(void) = NULL;
 int (*_amod_option_get)(int index, struct amod_option *out) = NULL;
 void (*_amod_option_set)(int index, int value) = NULL;
+int (*_amod_option_tab)(int index) = NULL;
+int (*_amod_escape)(void) = NULL;
+int (*_amod_has_open_window)(void) = NULL;
 
 char *game_email_main = "<no one>";
 char *game_email_cash = "<no one>";
@@ -171,6 +174,15 @@ int amod_init(void)
 		}
 		if (!_amod_option_set && (tmp = SDL_LoadFunction(dll_instance, "amod_option_set"))) {
 			_amod_option_set = (void (*)(int, int))tmp;
+		}
+		if (!_amod_option_tab && (tmp = SDL_LoadFunction(dll_instance, "amod_option_tab"))) {
+			_amod_option_tab = (int (*)(int))tmp;
+		}
+		if (!_amod_escape && (tmp = SDL_LoadFunction(dll_instance, "amod_escape"))) {
+			_amod_escape = (int (*)(void))tmp;
+		}
+		if (!_amod_has_open_window && (tmp = SDL_LoadFunction(dll_instance, "amod_has_open_window"))) {
+			_amod_has_open_window = (int (*)(void))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_prefetch"))) {
 			_amod_prefetch = (int (*)(const unsigned char *))tmp;
@@ -548,4 +560,36 @@ void amod_option_set(int index, int value)
 	if (_amod_option_set) {
 		_amod_option_set(index, value);
 	}
+}
+
+int amod_option_tab(int index)
+{
+	if (_amod_option_tab) {
+		int tab = _amod_option_tab(index);
+		if (tab >= AMOD_TAB_GAMEPLAY && tab <= AMOD_TAB_UI) {
+			return tab;
+		}
+	}
+	return AMOD_TAB_GAMEPLAY;
+}
+
+// ESC pressed: give the mod a chance to close its topmost window. Returns 1
+// if the mod consumed the key. Optional export - older mods simply never see
+// ESC, as before.
+int amod_escape(void)
+{
+	if (_amod_escape) {
+		return _amod_escape();
+	}
+	return 0;
+}
+
+// True if the mod currently shows a window ESC should close (journal, auction
+// house, ...). Feeds the client's anything_to_cancel().
+int amod_has_open_window(void)
+{
+	if (_amod_has_open_window) {
+		return _amod_has_open_window();
+	}
+	return 0;
 }

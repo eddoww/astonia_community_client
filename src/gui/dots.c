@@ -270,7 +270,11 @@ void init_dots(void)
 			int col = i % cols;
 			int bx = dot[DOT_HOTBAR].x + col * FDX;
 			int by = dot[DOT_HOTBAR].y + row * (FDX + 2);
-			set_but(BUT_HOTBAR_BEG + i, bx, by, FDX / 2, 0);
+			/* hitrad 40 like the inventory/equipment grids: the circles
+			 * overlap and get_near_button picks the nearest, so the whole
+			 * 32x32 pad is clickable - at FDX/2 (20) the pad corners and a
+			 * band between rows were dead */
+			set_but(BUT_HOTBAR_BEG + i, bx, by, 40, 0);
 		}
 		/* disable hit testing on inactive slots */
 		for (i = total_active; i < HOTBAR_MAX_SLOTS; i++) {

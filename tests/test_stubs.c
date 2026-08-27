@@ -96,6 +96,11 @@ void context_keyup(SDL_Keycode key __attribute__((unused))) {}
 
 void input_keyup(SDL_Keycode key __attribute__((unused))) {}
 
+int cmd_is_active(void)
+{
+	return 0;
+}
+
 void gamepad_init(void) {}
 
 void gamepad_shutdown(void) {}

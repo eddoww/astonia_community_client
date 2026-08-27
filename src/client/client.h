@@ -581,6 +581,7 @@ void cmd_con_fast(int pos);
 void cmd_teleport(int nr);
 
 int poll_network(void);
+int client_flush_output(void);
 tick_t next_tick(void);
 int do_tick(void);
 void cl_client_info(struct client_info *ci);

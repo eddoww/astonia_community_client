@@ -20,6 +20,17 @@ static SDL_JoystickID pad_id = 0;
 static int lt_held = 0;
 static int rt_held = 0;
 
+/* A pressed with no trigger held acts as a left click at the virtual cursor;
+ * the latch makes sure the matching LUP is only sent when the LDOWN was
+ * (releasing a trigger mid-press must not emit a stray click). */
+static int south_is_click = 0;
+
+/* whether the left stick currently owns keyboard-move directions - only then
+ * may the centered-stick check release them, otherwise a connected but idle
+ * controller wipes kmove_held[] every frame and breaks WASD (lost taps,
+ * single-key diagonals, walk/stop packet churn) */
+static int pad_move_active = 0;
+
 static int16_t left_x = 0;
 static int16_t left_y = 0;
 static int16_t right_x = 0;
@@ -141,6 +152,15 @@ void gamepad_button_down(SDL_GamepadButton button)
 		break;
 
 	case SDL_GAMEPAD_BUTTON_SOUTH:
+		if (!lt_held && !rt_held) {
+			/* unmodified A = normal left click at the cursor */
+			south_is_click = 1;
+			gui_sdl_mouseproc(pad_window_x(), pad_window_y(), SDL_MOUM_LDOWN);
+			break;
+		}
+		pad_hotbar_press(button);
+		break;
+
 	case SDL_GAMEPAD_BUTTON_EAST:
 	case SDL_GAMEPAD_BUTTON_WEST:
 	case SDL_GAMEPAD_BUTTON_NORTH:
@@ -164,6 +184,12 @@ void gamepad_button_up(SDL_GamepadButton button)
 		break;
 	case SDL_GAMEPAD_BUTTON_RIGHT_STICK:
 		gui_sdl_mouseproc(pad_window_x(), pad_window_y(), SDL_MOUM_LUP);
+		break;
+	case SDL_GAMEPAD_BUTTON_SOUTH:
+		if (south_is_click) {
+			south_is_click = 0;
+			gui_sdl_mouseproc(pad_window_x(), pad_window_y(), SDL_MOUM_LUP);
+		}
 		break;
 	default:
 		break;
@@ -286,16 +312,20 @@ void gamepad_tick(void)
 			if (dx > 0) {
 				keyboard_move_press(KMOVE_RIGHT);
 			}
+			pad_move_active = 1;
 			move_last_ms = now;
 		}
 	}
 
-	if ((int)left_x > -STICK_DEADZONE && (int)left_x < STICK_DEADZONE && (int)left_y > -STICK_DEADZONE &&
-	    (int)left_y < STICK_DEADZONE) {
+	/* only undo what the stick itself pressed - keyboard-held directions
+	 * must survive an idle controller */
+	if (pad_move_active && (int)left_x > -STICK_DEADZONE && (int)left_x < STICK_DEADZONE &&
+	    (int)left_y > -STICK_DEADZONE && (int)left_y < STICK_DEADZONE) {
 		keyboard_move_release(KMOVE_UP);
 		keyboard_move_release(KMOVE_DOWN);
 		keyboard_move_release(KMOVE_LEFT);
 		keyboard_move_release(KMOVE_RIGHT);
+		pad_move_active = 0;
 	}
 
 	ax = abs((int)right_x);

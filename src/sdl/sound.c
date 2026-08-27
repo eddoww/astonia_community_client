@@ -54,6 +54,8 @@ typedef struct {
 	int in_use; // Is this channel currently playing?
 	int sound_handle; // Which sound handle is playing (0 = built-in, >0 = mod sound)
 	int looping; // Is this channel looping?
+	int category; // SOUND_CAT_* volume category, or -1 for master-only (mods that never call sound_set_channel_category
+	              // keep the old gain math)
 	float volume; // Current volume (0.0 - 1.0)
 	float fade_target; // Target volume for fade
 	float fade_step; // Volume change per tick
@@ -177,22 +179,31 @@ static SoundCategory sound_category(unsigned int nr)
 	}
 }
 
+static float category_multiplier(int cat)
+{
+	switch (cat) {
+	case SNDCAT_AMBIENT:
+		return (float)sound_volume_ambient / 128.0f;
+	case SNDCAT_UI:
+		return (float)sound_volume_ui / 128.0f;
+	case SNDCAT_SFX:
+		return (float)sound_volume_sfx / 128.0f;
+	default:
+		return 1.0f; // uncategorized (mod channels that never opted in): master only
+	}
+}
+
 static float sound_category_volume(unsigned int nr)
 {
 	float master = (float)sound_volume / 128.0f;
-	float cat;
-	switch (sound_category(nr)) {
-	case SNDCAT_AMBIENT:
-		cat = (float)sound_volume_ambient / 128.0f;
-		break;
-	case SNDCAT_UI:
-		cat = (float)sound_volume_ui / 128.0f;
-		break;
-	default:
-		cat = (float)sound_volume_sfx / 128.0f;
-		break;
-	}
-	return master * cat;
+	return master * category_multiplier((int)sound_category(nr));
+}
+
+/* Effective gain for a mod channel: per-play volume x master x category slider. */
+static float channel_effective_gain(int ch_idx)
+{
+	return channel_states[ch_idx].volume * sound_get_master_volume() *
+	       category_multiplier(channel_states[ch_idx].category);
 }
 
 static uint64_t time_play_sound = 0;
@@ -566,13 +577,17 @@ static void play_sdl_sound(unsigned int nr, int distance, int angle)
 	}
 
 	// Convert angle/distance to 3D position for SDL3_mixer
-	// SDL2_mixer used angle (degrees) and distance (0-255)
-	// SDL3_mixer uses 3D coordinates via MIX_Point3D struct
+	// SDL2_mixer used angle (degrees: 0 = front, +90 = right, -90 = left) and
+	// distance (0-255). SDL3_mixer uses right-handed 3D coordinates
+	// (MIX_Point3D: +x = right, +y = up, -z = forward), so the polar
+	// convention maps as x = sin(angle), z = -cos(angle). cos() for x would
+	// erase the left/right sign entirely (cos is even) and park every sound
+	// in the right ear.
 	const float radians = (float)angle * (SDL_PI_F / 180.0f);
 	const float f_dist = (float)distance / 255.0f; // Normalize to 0.0-1.0
-	MIX_Point3D position = {.x = SDL_cosf(radians) * f_dist,
+	MIX_Point3D position = {.x = SDL_sinf(radians) * f_dist,
 	    .y = 0.0f, // Keep vertically centered
-	    .z = SDL_sinf(radians) * f_dist};
+	    .z = -SDL_cosf(radians) * f_dist};
 
 	// Set 3D position
 	MIX_SetTrack3DPosition(track, &position);
@@ -602,9 +617,22 @@ static void play_sdl_sound(unsigned int nr, int distance, int angle)
  */
 void play_sound(unsigned int nr, int vol, int p)
 {
+	static uint32_t last_play_ms[MAX_SOUND_ID];
 	int dist, angle;
 	if (!(game_options & GO_SOUND)) {
 		return;
+	}
+
+	// Drop identical sound ids arriving nearly at once: after a stall the
+	// tick queue drains at up to 4x speed and replays buffered sound cues
+	// compressed (alt-tab thunder bursts); stacking the same sample within
+	// 100ms is never audibly intended.
+	if (nr < MAX_SOUND_ID) {
+		uint32_t now = (uint32_t)SDL_GetTicks();
+		if (last_play_ms[nr] && now - last_play_ms[nr] < 100) {
+			return;
+		}
+		last_play_ms[nr] = now;
 	}
 
 	// force volume and pan to sane values
@@ -830,12 +858,14 @@ static int sound_play_internal(int handle, float volume, int loop)
 		volume = 1.0f;
 	}
 
-	// Apply master volume
-	float master = sound_get_master_volume();
-	float final_volume = volume * master;
+	// Update channel state before computing the gain so master and category
+	// sliders factor in (category is reset to master-only until the caller
+	// tags the channel via sound_set_channel_category)
+	channel_states[channel].category = -1;
+	channel_states[channel].volume = volume;
 
 	// Set track properties
-	MIX_SetTrackGain(track, final_volume);
+	MIX_SetTrackGain(track, channel_effective_gain(channel));
 	MIX_SetTrackAudio(track, audio);
 
 	// Set looping: -1 = infinite loop, 0 = play once. MIX_SetTrackLoops on a
@@ -861,7 +891,6 @@ static int sound_play_internal(int handle, float volume, int loop)
 	channel_states[channel].in_use = 1;
 	channel_states[channel].sound_handle = handle;
 	channel_states[channel].looping = (loop != 0);
-	channel_states[channel].volume = volume;
 	channel_states[channel].fade_target = volume;
 	channel_states[channel].fade_step = 0.0f;
 	channel_states[channel].fade_ticks_left = 0;
@@ -953,13 +982,60 @@ DLL_EXPORT void sound_set_volume(int channel, float volume)
 
 	MIX_Track *track = sdl_tracks[ch_idx];
 	if (track) {
-		float master = sound_get_master_volume();
-		MIX_SetTrackGain(track, volume * master);
 		channel_states[ch_idx].volume = volume;
+		MIX_SetTrackGain(track, channel_effective_gain(ch_idx));
 		// Cancel any ongoing fade
 		channel_states[ch_idx].fade_target = volume;
 		channel_states[ch_idx].fade_step = 0.0f;
 		channel_states[ch_idx].fade_ticks_left = 0;
+	}
+}
+
+/**
+ * Assign a volume category to a playing channel so the matching Options >
+ * Audio slider (Sound Effects / Ambient / Interface) scales it alongside
+ * Master. Channels default to master-only until tagged, which keeps older
+ * mods' gain math unchanged.
+ * @param channel  Channel ID from sound_play() / sound_play_loop()
+ * @param category SOUND_CAT_SFX / SOUND_CAT_AMBIENT / SOUND_CAT_UI, or -1 for master-only
+ */
+DLL_EXPORT void sound_set_channel_category(int channel, int category)
+{
+	int ch_idx = channel - 1;
+
+	if (ch_idx < 0 || ch_idx >= MAX_SOUND_CHANNELS) {
+		return;
+	}
+	if (!channel_states[ch_idx].in_use) {
+		return;
+	}
+	if (category < -1 || category > SNDCAT_UI) {
+		category = -1;
+	}
+
+	channel_states[ch_idx].category = category;
+
+	MIX_Track *track = sdl_tracks[ch_idx];
+	if (track) {
+		MIX_SetTrackGain(track, channel_effective_gain(ch_idx));
+	}
+}
+
+/**
+ * Re-apply master + category volume to every playing mod channel. Called when
+ * a volume slider changes so running loops (rain, wind, music) pick up the
+ * new setting immediately instead of at their next restart.
+ */
+void sound_refresh_gains(void)
+{
+	for (int i = 0; i < MAX_SOUND_CHANNELS; i++) {
+		if (!channel_states[i].in_use) {
+			continue;
+		}
+		MIX_Track *track = sdl_tracks[i];
+		if (track) {
+			MIX_SetTrackGain(track, channel_effective_gain(i));
+		}
 	}
 }
 
@@ -1041,8 +1117,7 @@ void sound_fade_tick(void)
 			// Apply to track
 			MIX_Track *track = sdl_tracks[i];
 			if (track) {
-				float master = sound_get_master_volume();
-				MIX_SetTrackGain(track, new_vol * master);
+				MIX_SetTrackGain(track, channel_effective_gain(i));
 			}
 
 			// A completed fade to zero stops the channel, looping or not:

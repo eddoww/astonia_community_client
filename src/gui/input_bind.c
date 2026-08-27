@@ -106,8 +106,12 @@ static void on_escape(InputBinding *self)
 		spellbook_toggle();
 		return;
 	}
+	if (amod_escape()) {
+		return; /* the mod closed one of its windows (journal, auction house, ...) */
+	}
 	cmd_stop();
 	context_stop();
+	hotbar_cancel_held();
 	show_look = 0;
 	display_gfx = 0;
 	teleporter = 0;
@@ -130,15 +134,27 @@ static void on_escape(InputBinding *self)
 static int anything_to_cancel(void)
 {
 	return show_look || display_gfx || teleporter || show_tutor || display_help || display_quest || show_color ||
-	       cmd_is_active() || context_targeting_active() || spellbook_is_open() || action_ovr != ACTION_NONE;
+	       cmd_is_active() || context_targeting_active() || spellbook_is_open() || action_ovr != ACTION_NONE ||
+	       amod_has_open_window();
 }
 
 static void on_menu(InputBinding *self)
 {
+	/* Escape is the universal cancel: stop walking and break any repeated
+	 * cast/attack before dealing with windows. Those states are invisible to
+	 * anything_to_cancel() (an issued walk or cast loop leaves no client-side
+	 * flag), so without this Escape opened the menu while the character kept
+	 * running or throwing fireballs. Sending CL_STOP while idle is harmless. */
+	cmd_stop();
+	context_stop();
+	hotbar_cancel_held();
+
 	if (keybind_settings_is_open()) {
 		keybind_settings_close();
 	} else if (options_is_open()) {
 		options_close();
+	} else if (amod_escape()) {
+		/* the mod closed one of its windows (journal, auction house, ...) */
 	} else if (anything_to_cancel()) {
 		on_escape(self);
 	} else {
@@ -219,7 +235,7 @@ static int show_names = 1;
  * override is dropped. */
 #define GO_UI_MANAGED                                                                                                  \
 	((uint32_t)(GO_SOUND | GO_LOWLIGHT | GO_LARGE | GO_DARK | GO_BIGBAR | GO_SMALLTOP | GO_SMALLBOT | GO_NOMAP |       \
-	            GO_PREDICT | GO_SHORT | GO_MAPSAVE | GO_CONTEXT | GO_WHEELSPEED))
+	            GO_PREDICT | GO_SHORT | GO_MAPSAVE | GO_CONTEXT | GO_WHEELSPEED | GO_LIGHTER | GO_LIGHTER2 | GO_FULL))
 
 static uint32_t go_override_mask; /* which bits the player changed in-game */
 static uint32_t go_override_value; /* the values those bits were set to */
@@ -389,6 +405,20 @@ void keyboard_move_press(int dir)
 	kmove_held[dir] = 1;
 	kmove_pending[dir] = 1;
 	kmove_active = 1;
+
+	/* First press from a standstill: send right away instead of waiting for
+	 * the next game tick - saves up to one tick (~41ms) of start latency.
+	 * While already moving, direction changes stay tick-sampled so two keys
+	 * pressed in quick succession still combine into one diagonal. */
+	if (kmove_last_dir == 0) {
+		int dx, dy;
+		kmove_compute_delta(&dx, &dy);
+		int d = (dx || dy) ? kmove_delta_to_dir(dx, dy) : 0;
+		if (d) {
+			cmd_walk_dir(d);
+			kmove_last_dir = d;
+		}
+	}
 }
 
 void keyboard_move_release(int dir)
@@ -398,15 +428,21 @@ void keyboard_move_release(int dir)
 	}
 	kmove_held[dir] = 0;
 
-	int dx, dy;
-	kmove_compute_delta(&dx, &dy);
-
-	if (!dx && !dy) {
-		if (kmove_active) {
-			cmd_walk_dir(0);
-			kmove_active = 0;
-			kmove_last_dir = 0;
-		}
+	/* Stop only when nothing is held AND no tap still owes a step. The old
+	 * check included kmove_pending in the delta, so releasing a tapped key
+	 * opposite to a held one summed to zero and killed the walk while a key
+	 * was still physically down. The tick owns latch consumption. */
+	if (kmove_held[KMOVE_UP] || kmove_held[KMOVE_DOWN] || kmove_held[KMOVE_LEFT] || kmove_held[KMOVE_RIGHT]) {
+		return;
+	}
+	if (kmove_pending[KMOVE_UP] || kmove_pending[KMOVE_DOWN] || kmove_pending[KMOVE_LEFT] ||
+	    kmove_pending[KMOVE_RIGHT]) {
+		return;
+	}
+	if (kmove_active) {
+		cmd_walk_dir(0);
+		kmove_active = 0;
+		kmove_last_dir = 0;
 	}
 }
 
@@ -2123,6 +2159,8 @@ int input_load_config(const char *path)
 								co = HOTBAR_CAST_QUICK;
 							} else if (strcmp(cs, "indicator") == 0) {
 								co = HOTBAR_CAST_INDICATOR;
+							} else if (strcmp(cs, "smart") == 0) {
+								co = HOTBAR_CAST_SMART;
 							}
 						}
 
@@ -2157,6 +2195,12 @@ int input_load_config(const char *path)
 	}
 
 	cJSON_Delete(root);
+
+	/* the loaded profile may change hotbar rows/slots (and this runs on every
+	 * login and area transfer) - rebuild the button geometry or clicks land
+	 * on the previous layout: slots drew where nothing was clickable */
+	init_dots();
+
 	return 0;
 }
 
@@ -2228,7 +2272,9 @@ int input_save_config(const char *path)
 		}
 		/* save extra binds if any */
 		if (hotbar[i].extra_bind_count > 0) {
-			static const char *cast_names[] = {"default", "normal", "quick", "indicator"};
+			/* one entry per HotbarCastOverride value - the keybind panel can
+			 * set HOTBAR_CAST_SMART (4), which used to read past this array */
+			static const char *cast_names[] = {"default", "normal", "quick", "indicator", "smart"};
 			static const char *tgt_names[] = {"default", "map", "chr", "self"};
 			cJSON *jbinds_arr = cJSON_CreateArray();
 			for (int b = 0; b < hotbar[i].extra_bind_count; b++) {

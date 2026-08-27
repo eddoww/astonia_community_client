@@ -269,6 +269,35 @@ static void send_info(astonia_sock *s)
 	(void)astonia_net_send(s, buf, 12);
 }
 
+/* Push buffered client->server bytes out now. poll_network() runs at the top
+ * of the main loop, BEFORE the tick handlers append commands - without this
+ * extra flush a walk command sat in outbuf for a whole additional frame. */
+int client_flush_output(void)
+{
+	int n;
+
+	if (!outused || sockstate != 4 || !sock) {
+		return 0;
+	}
+	n = (int)astonia_net_send(sock, outbuf, outused);
+	if (n == 0) {
+		addline("connection lost during write\n");
+		if (loading_active()) {
+			loading_notice("Connection to the server was lost - reconnecting...");
+		}
+		sockstate = 0;
+		socktimeout = time(NULL);
+		return -1;
+	}
+	if (n < 0) {
+		return 0; /* would-block -> no progress this frame */
+	}
+	memmove(outbuf, outbuf + n, outused - (size_t)n);
+	outused -= (size_t)n;
+	sent_bytes += n;
+	return n;
+}
+
 int poll_network(void)
 {
 	int n;
@@ -451,24 +480,8 @@ int poll_network(void)
 	}
 
 	// send
-	if (outused && sockstate == 4 && sock) {
-		n = (int)astonia_net_send(sock, outbuf, outused);
-		if (n == 0) {
-			addline("connection lost during write\n");
-			if (loading_active()) {
-				loading_notice("Connection to the server was lost - reconnecting...");
-			}
-			sockstate = 0;
-			socktimeout = time(NULL);
-			return -1;
-		} else if (n < 0) {
-			// would-block -> no progress this frame
-			n = 0;
-		} else {
-			memmove(outbuf, outbuf + n, outused - (size_t)n);
-			outused -= (size_t)n;
-			sent_bytes += n;
-		}
+	if (client_flush_output() < 0) {
+		return -1;
 	}
 
 	// recv

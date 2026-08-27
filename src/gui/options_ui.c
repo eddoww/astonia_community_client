@@ -83,21 +83,48 @@ static int opt_row_y(int row)
 
 extern SDL_Window *sdlwnd;
 
+/* Native row counts per tab; mod rows tagged for the tab are appended below
+ * them (see amod_option_tab). The Gameplay tab always shows its native Combat
+ * rows, mod or not. */
+#define OPT_AUDIO_NATIVE    6
+#define OPT_UI_NATIVE       11
+#define OPT_GAMEPLAY_NATIVE 2
+
+#define OPT_MAX_MOD_ROWS 64
+
+/* Collect the mod option indices shown in the given AMOD_TAB_* tab. */
+static int opt_mod_rows(int amod_tab, int *map)
+{
+	int n = amod_options_count();
+	int cnt = 0;
+
+	for (int i = 0; i < n && cnt < OPT_MAX_MOD_ROWS; i++) {
+		if (amod_option_tab(i) == amod_tab) {
+			map[cnt++] = i;
+		}
+	}
+	return cnt;
+}
+
+static int opt_mod_row_count(int amod_tab)
+{
+	int map[OPT_MAX_MOD_ROWS];
+	return opt_mod_rows(amod_tab, map);
+}
+
 static int opt_tab_total(void)
 {
 	switch (opt_tab) {
 	case 0:
-		return 6;
+		return OPT_AUDIO_NATIVE + opt_mod_row_count(AMOD_TAB_AUDIO);
 	case 1:
 		return 4;
 	case 2:
 		return 5;
 	case 3:
-		return 12;
-	case 4: {
-		int n = amod_options_count();
-		return n > 0 ? n : 1;
-	}
+		return OPT_UI_NATIVE + opt_mod_row_count(AMOD_TAB_UI);
+	case 4:
+		return OPT_GAMEPLAY_NATIVE + opt_mod_row_count(AMOD_TAB_GAMEPLAY);
 	case 5:
 		return 10;
 	case 6:
@@ -208,6 +235,115 @@ static void draw_scrollbar(int total)
 	render_rounded_rect_filled_alpha(sx, thumb_y, sx + 4, thumb_y + thumb_h, 2, UI_ACCENT, 220);
 }
 
+/* Draw one mod-provided option at the given row y. */
+static void draw_mod_option_row(int ry, int idx)
+{
+	struct amod_option o;
+
+	if (!amod_option_get(idx, &o)) {
+		return;
+	}
+	o.label[sizeof(o.label) - 1] = 0;
+	switch (o.type) {
+	case AMOD_OPT_TOGGLE:
+		draw_checkbox(opt_lx, ry, o.value != 0, o.label);
+		break;
+	case AMOD_OPT_SLIDER:
+		draw_slider(opt_lx, ry, opt_content_w, o.value, o.min_val, o.max_val, o.label);
+		break;
+	default:
+		draw_section_header(opt_lx, ry, opt_content_w, o.label);
+		break;
+	}
+}
+
+/* Handle a click that already hit the given mod option's row. */
+static int click_mod_option_row(int mx, int idx)
+{
+	struct amod_option o;
+	int tx = opt_lx + OPT_SLIDER_LBL;
+	int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+	int val;
+
+	if (!amod_option_get(idx, &o)) {
+		return 0;
+	}
+	if (o.type == AMOD_OPT_TOGGLE) {
+		amod_option_set(idx, !o.value);
+		return 1;
+	}
+	if (o.type == AMOD_OPT_SLIDER && o.max_val > o.min_val) {
+		if (tw < 10) {
+			tw = 10;
+		}
+		val = o.min_val + (mx - tx) * (o.max_val - o.min_val) / tw;
+		if (val < o.min_val) {
+			val = o.min_val;
+		}
+		if (val > o.max_val) {
+			val = o.max_val;
+		}
+		amod_option_set(idx, val);
+		return 1;
+	}
+	return 0;
+}
+
+/* Mod rows tagged for this tab, appended after the native rows. */
+static void draw_mod_tab_rows(int amod_tab, int first_row)
+{
+	int map[OPT_MAX_MOD_ROWS];
+	int cnt = opt_mod_rows(amod_tab, map);
+
+	for (int i = 0; i < cnt; i++) {
+		int ry = opt_row_y(first_row + i);
+		if (ry >= 0) {
+			draw_mod_option_row(ry, map[i]);
+		}
+	}
+}
+
+static int click_mod_tab_rows(int amod_tab, int first_row, int mx, int my)
+{
+	int map[OPT_MAX_MOD_ROWS];
+	int cnt = opt_mod_rows(amod_tab, map);
+
+	for (int i = 0; i < cnt; i++) {
+		int ry = opt_row_y(first_row + i);
+		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+			return click_mod_option_row(mx, map[i]);
+		}
+	}
+	return 0;
+}
+
+/* The user-facing volume sliders show 0-100; the sound_volume_* variables
+ * stay in the historical 0-128 range (sound.c divides by 128, the #volume
+ * chat command clamps to it). */
+static int vol_to_pct(int vol)
+{
+	return (vol * 100 + 64) / 128;
+}
+
+static int pct_from_click(int mx)
+{
+	int tx = opt_lx + OPT_SLIDER_LBL;
+	int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+	int pct;
+
+	if (tw < 10) {
+		tw = 10;
+	}
+	pct = (mx - tx) * 100 / tw;
+	if (pct < 0) {
+		pct = 0;
+	}
+	if (pct > 100) {
+		pct = 100;
+	}
+	return pct;
+}
+
 static void opt_display_audio(void)
 {
 	int ry;
@@ -219,89 +355,56 @@ static void opt_display_audio(void)
 
 	ry = opt_row_y(1);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, sound_volume, 0, 128, "Master");
+		draw_slider(opt_lx, ry, opt_content_w, vol_to_pct(sound_volume), 0, 100, "Master");
 	}
 
 	ry = opt_row_y(2);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, sound_volume_sfx, 0, 128, "Sound Effects");
+		draw_slider(opt_lx, ry, opt_content_w, vol_to_pct(sound_volume_sfx), 0, 100, "Sound Effects");
 	}
 
 	ry = opt_row_y(3);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, sound_volume_ambient, 0, 128, "Ambient");
+		draw_slider(opt_lx, ry, opt_content_w, vol_to_pct(sound_volume_ambient), 0, 100, "Ambient");
 	}
 
 	ry = opt_row_y(4);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, sound_volume_ui, 0, 128, "Interface");
+		draw_slider(opt_lx, ry, opt_content_w, vol_to_pct(sound_volume_ui), 0, 100, "Interface");
 	}
 
 	ry = opt_row_y(5);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, (game_options & GO_SOUND) != 0, "Sound Enabled");
 	}
+
+	draw_mod_tab_rows(AMOD_TAB_AUDIO, OPT_AUDIO_NATIVE);
 }
 
 static int opt_click_audio(int mx, int my)
 {
 	int ry;
-	int tx = opt_lx + OPT_SLIDER_LBL;
-	int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
-	int val;
+	int *target = NULL;
 
 	ry = opt_row_y(1);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		val = 0 + (mx - tx) * (128 - 0) / tw;
-		if (val < 0) {
-			val = 0;
-		}
-		if (val > 128) {
-			val = 128;
-		}
-		sound_volume = val;
-		save_options();
-		return 1;
+		target = &sound_volume;
 	}
-
 	ry = opt_row_y(2);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		val = 0 + (mx - tx) * (128 - 0) / tw;
-		if (val < 0) {
-			val = 0;
-		}
-		if (val > 128) {
-			val = 128;
-		}
-		sound_volume_sfx = val;
-		save_options();
-		return 1;
+	if (!target && ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		target = &sound_volume_sfx;
 	}
-
 	ry = opt_row_y(3);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		val = 0 + (mx - tx) * (128 - 0) / tw;
-		if (val < 0) {
-			val = 0;
-		}
-		if (val > 128) {
-			val = 128;
-		}
-		sound_volume_ambient = val;
-		save_options();
-		return 1;
+	if (!target && ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		target = &sound_volume_ambient;
 	}
-
 	ry = opt_row_y(4);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		val = 0 + (mx - tx) * (128 - 0) / tw;
-		if (val < 0) {
-			val = 0;
-		}
-		if (val > 128) {
-			val = 128;
-		}
-		sound_volume_ui = val;
+	if (!target && ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		target = &sound_volume_ui;
+	}
+	if (target) {
+		*target = pct_from_click(mx) * 128 / 100;
+		sound_refresh_gains(); /* running loops (rain, music) pick it up now, not at their next restart */
 		save_options();
 		return 1;
 	}
@@ -309,12 +412,15 @@ static int opt_click_audio(int mx, int my)
 	ry = opt_row_y(5);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		game_options ^= GO_SOUND;
+		if (!(game_options & GO_SOUND)) {
+			sound_stop_all(); /* silence running loops too - play paths only gate new sounds */
+		}
 		game_options_record_override(GO_SOUND);
 		save_options();
 		return 1;
 	}
 
-	return 0;
+	return click_mod_tab_rows(AMOD_TAB_AUDIO, OPT_AUDIO_NATIVE, mx, my);
 }
 
 static int opt_video_mode(void)
@@ -329,6 +435,34 @@ static int opt_video_mode(void)
 		return 1;
 	}
 	return 0;
+}
+
+/* Switch the window mode (0 windowed, 1 borderless, 2 exclusive) and re-derive
+ * the canvas from the new window size - without this, going borderless kept
+ * the old windowed resolution. Shared by the Options click and the startup
+ * restore of a saved mode. */
+void options_apply_window_mode(int mode)
+{
+	switch (mode) {
+	case 0:
+		SDL_SetWindowFullscreen(sdlwnd, false);
+		game_options &= ~GO_FULL;
+		break;
+	case 1:
+		SDL_SetWindowFullscreenMode(sdlwnd, NULL);
+		SDL_SetWindowFullscreen(sdlwnd, true);
+		game_options &= ~GO_FULL;
+		break;
+	case 2:
+		game_options |= GO_FULL;
+		SDL_SetWindowFullscreen(sdlwnd, true);
+		break;
+	default:
+		return;
+	}
+	SDL_SyncWindow(sdlwnd);
+	sdl_recompute_canvas();
+	init_dots();
 }
 
 static void opt_display_video(void)
@@ -365,24 +499,9 @@ static int opt_click_video(int mx, int my)
 
 	ry = opt_row_y(1);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		int mode = (opt_video_mode() + 1) % 3;
-		switch (mode) {
-		case 0:
-			SDL_SetWindowFullscreen(sdlwnd, false);
-			game_options &= ~GO_FULL;
-			break;
-		case 1:
-			SDL_SetWindowFullscreenMode(sdlwnd, NULL);
-			SDL_SetWindowFullscreen(sdlwnd, true);
-			game_options &= ~GO_FULL;
-			break;
-		case 2:
-			game_options |= GO_FULL;
-			SDL_SetWindowFullscreen(sdlwnd, true);
-			break;
-		}
-		SDL_SyncWindow(sdlwnd);
-		init_dots();
+		options_apply_window_mode((opt_video_mode() + 1) % 3);
+		saved_window_mode = opt_video_mode();
+		game_options_record_override(GO_FULL);
 		save_options();
 		return 1;
 	}
@@ -470,6 +589,10 @@ static int opt_click_display(int mx, int my)
 		} else if (bv == 2) {
 			game_options |= GO_LIGHTER | GO_LIGHTER2;
 		}
+		game_options_record_override(GO_LIGHTER | GO_LIGHTER2);
+		/* brightness is baked into sprites at texture build time - drop the
+		 * cache or the change is invisible until textures happen to evict */
+		sdl_texture_flush_sprites();
 		save_options();
 		return 1;
 	}
@@ -478,6 +601,7 @@ static int opt_click_display(int mx, int my)
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		game_options ^= GO_LOWLIGHT;
 		game_options_record_override(GO_LOWLIGHT);
+		sdl_texture_flush_sprites(); /* baked at texture build time, like brightness */
 		save_options();
 		return 1;
 	}
@@ -560,14 +684,7 @@ static void opt_display_ui(void)
 		draw_checkbox(opt_lx, ry, hotbar_show_names(), "Show Slot Names");
 	}
 
-	ry = opt_row_y(11);
-	if (ry >= 0) {
-		const char *cast_names[] = {
-		    "Normal", "Quick Cast", "Quick Cast w/ Indicator", "Smart (quick if target under cursor)"};
-		int cm = hotbar_cast_mode();
-		render_text(opt_lx, ry, UI_TEXT_LABEL, UI_FONT_BODY, "Cast Mode:");
-		render_text(opt_lx + 100, ry, UI_TEXT, UI_FONT_BODY, cast_names[cm]);
-	}
+	draw_mod_tab_rows(AMOD_TAB_UI, OPT_UI_NATIVE);
 }
 
 static int opt_click_ui(int mx, int my)
@@ -665,14 +782,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(11);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		hotbar_set_cast_mode((hotbar_cast_mode() + 1) % 4);
-		save_options();
-		return 1;
-	}
-
-	return 0;
+	return click_mod_tab_rows(AMOD_TAB_UI, OPT_UI_NATIVE, mx, my);
 }
 
 static void opt_display_advanced(void)
@@ -894,6 +1004,11 @@ static void opt_display_gamepad(void)
 		render_text(opt_lx, ry, UI_TEXT_LABEL, UI_FONT_BODY, "Back/Select:");
 		render_text(opt_lx + 80, ry, UI_TEXT, UI_FONT_BODY, "Cancel All");
 	}
+	ry = opt_row_y(18);
+	if (ry >= 0) {
+		render_text(opt_lx, ry, UI_TEXT_LABEL, UI_FONT_BODY, "A (alone):");
+		render_text(opt_lx + 80, ry, UI_TEXT, UI_FONT_BODY, "Left Click");
+	}
 
 	ry = opt_row_y(19);
 	if (ry >= 0) {
@@ -908,75 +1023,41 @@ static int opt_click_gamepad(int mx, int my)
 	return 0;
 }
 
-/* Gameplay tab: options provided by the loaded mod (see amod_option in amod_structs.h) */
+/* Gameplay tab: native combat rows first, then options provided by the loaded
+ * mod (see amod_option in amod_structs.h) */
 static void opt_display_gameplay(void)
 {
-	int n = amod_options_count();
-	int i, ry;
-	struct amod_option o;
+	int ry;
 
-	if (n <= 0) {
-		ry = opt_row_y(0);
-		if (ry >= 0) {
-			render_text(opt_lx, ry, UI_TEXT_LABEL, UI_FONT_BODY,
-			    amod_main_loaded() ? "The loaded mod has no options." : "No gameplay mod loaded.");
-		}
-		return;
+	ry = opt_row_y(0);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Combat");
 	}
-	for (i = 0; i < n; i++) {
-		ry = opt_row_y(i);
-		if (ry < 0 || !amod_option_get(i, &o)) {
-			continue;
-		}
-		o.label[sizeof(o.label) - 1] = 0;
-		switch (o.type) {
-		case AMOD_OPT_TOGGLE:
-			draw_checkbox(opt_lx, ry, o.value != 0, o.label);
-			break;
-		case AMOD_OPT_SLIDER:
-			draw_slider(opt_lx, ry, opt_content_w, o.value, o.min_val, o.max_val, o.label);
-			break;
-		default:
-			draw_section_header(opt_lx, ry, opt_content_w, o.label);
-			break;
-		}
+
+	ry = opt_row_y(1);
+	if (ry >= 0) {
+		const char *cast_names[] = {
+		    "Normal", "Quick Cast", "Quick Cast w/ Indicator", "Smart (quick if target under cursor)"};
+		int cm = hotbar_cast_mode();
+		render_text(opt_lx, ry, UI_TEXT_LABEL, UI_FONT_BODY, "Cast Mode:");
+		render_text(opt_lx + 100, ry, UI_TEXT, UI_FONT_BODY, cast_names[cm]);
 	}
+
+	draw_mod_tab_rows(AMOD_TAB_GAMEPLAY, OPT_GAMEPLAY_NATIVE);
 }
 
 static int opt_click_gameplay(int mx, int my)
 {
-	int n = amod_options_count();
-	int i, ry, val;
-	int tx = opt_lx + OPT_SLIDER_LBL;
-	int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
-	struct amod_option o;
+	int ry;
 
-	for (i = 0; i < n; i++) {
-		ry = opt_row_y(i);
-		if (ry < 0 || !in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H) || !amod_option_get(i, &o)) {
-			continue;
-		}
-		if (o.type == AMOD_OPT_TOGGLE) {
-			amod_option_set(i, !o.value);
-			return 1;
-		}
-		if (o.type == AMOD_OPT_SLIDER && o.max_val > o.min_val) {
-			if (tw < 10) {
-				tw = 10;
-			}
-			val = o.min_val + (mx - tx) * (o.max_val - o.min_val) / tw;
-			if (val < o.min_val) {
-				val = o.min_val;
-			}
-			if (val > o.max_val) {
-				val = o.max_val;
-			}
-			amod_option_set(i, val);
-			return 1;
-		}
-		return 0;
+	ry = opt_row_y(1);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		hotbar_set_cast_mode((hotbar_cast_mode() + 1) % 4);
+		save_options();
+		return 1;
 	}
-	return 0;
+
+	return click_mod_tab_rows(AMOD_TAB_GAMEPLAY, OPT_GAMEPLAY_NATIVE, mx, my);
 }
 
 void options_display(void)
@@ -1009,8 +1090,8 @@ void options_display(void)
 
 	cx = opt_px + opt_pw / 2;
 	render_text(cx, opt_py + UI_PAD, UI_TEXT_TITLE, UI_FONT_CENTER, "Options");
-	render_text(opt_px + opt_pw - UI_PAD - render_text_length(RENDER_TEXT_SMALL, "Esc closes"), opt_py + UI_PAD,
-	    UI_TEXT_MUTED, UI_FONT_BODY, "Esc closes");
+	ui_button(opt_px + opt_pw - UI_PAD - 12, opt_py + 2, 12, 12, "X",
+	    in_rect(mousex, mousey, opt_px + opt_pw - UI_PAD - 12, opt_py + 2, 12, 12) ? UI_BTN_HOVER : UI_BTN_REST);
 	draw_scrollbar(total);
 
 	tab_w = opt_pw / OPT_NTABS;
@@ -1103,6 +1184,11 @@ int options_click(int mx, int my)
 
 	if (!in_rect(mx, my, opt_px, opt_py, opt_pw, opt_ph)) {
 		return 0;
+	}
+
+	if (in_rect(mx, my, opt_px + opt_pw - UI_PAD - 12, opt_py + 2, 12, 12)) {
+		options_close();
+		return 1;
 	}
 
 	if (in_rect(mx, my, opt_px, opt_tab_bar_y, opt_pw, OPT_TAB_H)) {

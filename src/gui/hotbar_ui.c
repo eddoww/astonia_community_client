@@ -355,7 +355,7 @@ int hotbar_is_dragging(void)
 	return hb_drag_active();
 }
 
-int hotbar_toggle_hit(int mx, int my)
+int hotbar_toggle_over(int mx, int my)
 {
 	if (hotbar_rows() <= 0) {
 		return 0; /* hotbar disabled - no toggle button to hit */
@@ -365,7 +365,15 @@ int hotbar_toggle_hit(int mx, int my)
 	int ry = buty(BUT_HOTBAR_BEG);
 	int dx = mx - rx;
 	int dy = my - ry;
-	if (dx >= -18 && dx <= 18 && dy >= -18 && dy <= 18) {
+	/* match the drawn chevron (sprite 852/853 at 80% sits in the bottom strip
+	 * of its canvas: ~24x8px starting a few px below the anchor) instead of
+	 * the old 37x37 box that mostly covered empty space above it */
+	return dx >= -13 && dx <= 13 && dy >= 2 && dy <= 17;
+}
+
+int hotbar_toggle_hit(int mx, int my)
+{
+	if (hotbar_toggle_over(mx, my)) {
 		spellbook_toggle();
 		return 1;
 	}

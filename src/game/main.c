@@ -30,6 +30,7 @@
 #include "gui/gui.h"
 #include "gui/loading_ui.h"
 #include "gui/input_bind.h"
+#include "gui/options_ui.h"
 #include "client/client.h"
 #include "lib/cjson/cJSON.h"
 #include "modder/modder.h"
@@ -514,18 +515,63 @@ static void get_extra_options_path(char *buf, size_t bufsize)
 	}
 }
 
+/* Window mode (0 windowed / 1 borderless / 2 exclusive) the user picked in
+ * Options > Video; -1 until they ever touch it. Re-applied after sdl_init. */
+int saved_window_mode = -1;
+/* VSync from the extra-options file; applied after sdl_init (which forces 1). */
+static int saved_vsync = -1;
+
 static void save_extra_options(void)
 {
 	char path[MAX_PATH];
 	FILE *fp;
+	cJSON *root;
+	char *json;
 
 	get_extra_options_path(path, sizeof(path));
-	fp = fopen(path, "w");
-	if (!fp) {
+	root = cJSON_CreateObject();
+	if (!root) {
 		return;
 	}
-	fprintf(fp, "{\n\t\"hide_lag_warning\": %s\n}\n", (game_options & GO_NOLAG) ? "true" : "false");
-	fclose(fp);
+	cJSON_AddBoolToObject(root, "hide_lag_warning", (game_options & GO_NOLAG) != 0);
+	cJSON_AddNumberToObject(root, "master_volume", sound_volume);
+	cJSON_AddNumberToObject(root, "sfx_volume", sound_volume_sfx);
+	cJSON_AddNumberToObject(root, "ambient_volume", sound_volume_ambient);
+	cJSON_AddNumberToObject(root, "ui_volume", sound_volume_ui);
+	cJSON_AddNumberToObject(root, "fps_limit", frames_per_second);
+	cJSON_AddNumberToObject(root, "vsync", sdl_vsync);
+	cJSON_AddNumberToObject(root, "texture_cache", sdl_cache_size);
+	cJSON_AddNumberToObject(root, "worker_threads", sdl_multi);
+	cJSON_AddNumberToObject(root, "window_mode", saved_window_mode);
+
+	json = cJSON_Print(root);
+	cJSON_Delete(root);
+	if (!json) {
+		return;
+	}
+	fp = fopen(path, "w");
+	if (fp) {
+		fputs(json, fp);
+		fputc('\n', fp);
+		fclose(fp);
+	}
+	cJSON_free(json);
+}
+
+static int extra_int(cJSON *root, const char *key, int fallback, int min_val, int max_val)
+{
+	cJSON *v = cJSON_GetObjectItem(root, key);
+
+	if (!v || !cJSON_IsNumber(v)) {
+		return fallback;
+	}
+	if (v->valueint < min_val) {
+		return min_val;
+	}
+	if (v->valueint > max_val) {
+		return max_val;
+	}
+	return v->valueint;
 }
 
 static void load_extra_options(void)
@@ -536,6 +582,11 @@ static void load_extra_options(void)
 
 	get_extra_options_path(path, sizeof(path));
 	json = load_ascii_file(path, MEM_TEMP);
+	if (!json && localdata) {
+		/* one-time migration: earlier builds (launcher without GO_APPDATA)
+		 * kept this file inside the install dir */
+		json = load_ascii_file("res/config/options_extra.json", MEM_TEMP);
+	}
 	if (!json) {
 		return;
 	}
@@ -552,6 +603,15 @@ static void load_extra_options(void)
 			game_options &= ~GO_NOLAG;
 		}
 	}
+	sound_volume = extra_int(root, "master_volume", sound_volume, 0, 128);
+	sound_volume_sfx = extra_int(root, "sfx_volume", sound_volume_sfx, 0, 128);
+	sound_volume_ambient = extra_int(root, "ambient_volume", sound_volume_ambient, 0, 128);
+	sound_volume_ui = extra_int(root, "ui_volume", sound_volume_ui, 0, 128);
+	frames_per_second = extra_int(root, "fps_limit", frames_per_second, 24, 244);
+	saved_vsync = extra_int(root, "vsync", -1, 0, 1);
+	sdl_cache_size = extra_int(root, "texture_cache", sdl_cache_size, 1000, 8000);
+	sdl_multi = extra_int(root, "worker_threads", sdl_multi, 1, 8);
+	saved_window_mode = extra_int(root, "window_mode", -1, -1, 2);
 	cJSON_Delete(root);
 }
 
@@ -573,6 +633,14 @@ void load_options(void)
 
 	get_shared_config_path(path, sizeof(path));
 	if (input_load_config(path) == 0) {
+		return;
+	}
+
+	/* One-time migration: earlier builds (launcher without GO_APPDATA) kept
+	 * configs inside the install dir, where Steam updates could wipe them.
+	 * Pull an existing install-dir config into the pref path once. */
+	if (localdata && input_load_config("res/config/keybinds.json") == 0) {
+		input_save_config(path);
 		return;
 	}
 
@@ -618,6 +686,24 @@ void load_character_options(void)
 	get_shared_config_path(shared, sizeof(shared));
 	if (strcmp(path, shared) == 0) {
 		return;
+	}
+
+	/* migrate a per-character profile out of the install dir (see load_options) */
+	if (localdata) {
+		char oldpath[MAX_PATH];
+		snprintf(oldpath, sizeof(oldpath), "res/config/keybinds_%s.json", active_charname);
+		FILE *probe = fopen(path, "r");
+		if (probe) {
+			fclose(probe);
+		} else {
+			FILE *oldfp = fopen(oldpath, "r");
+			if (oldfp) {
+				fclose(oldfp);
+				if (input_load_config(oldpath) == 0) {
+					input_save_config(path);
+				}
+			}
+		}
 	}
 
 	if (input_load_config(path) == 0) {
@@ -799,6 +885,15 @@ int main(int argc, char *argv[])
 	main_init();
 	help_init();
 	update_user_keys();
+
+	/* settings sdl_init cannot honor itself: it forces vsync on and creates
+	 * the window from the launcher geometry */
+	if (saved_vsync >= 0 && saved_vsync != sdl_vsync) {
+		sdl_set_vsync(saved_vsync);
+	}
+	if (saved_window_mode >= 0) {
+		options_apply_window_mode(saved_window_mode);
+	}
 
 	loading_step(LS_MODS);
 	loading_present();

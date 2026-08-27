@@ -331,6 +331,12 @@ static void detect_hover_target(void)
 		return;
 	}
 
+	/* the spellbook toggle chevron and the open spellbook panel are not but[]
+	 * entries - without this the red map-tile cursor kept drawing under them */
+	if (hotbar_toggle_over(mousex, mousey) || spellbook_over(mousex, mousey)) {
+		return;
+	}
+
 	if ((display_help || display_quest) && mousex >= dotx(DOT_HLP) && mousex <= dotx(DOT_HL2) - 40 &&
 	    mousey >= doty(DOT_HLP) && mousey <= doty(DOT_HLP) + 12) {
 		butsel = BUT_HELP_DRAG;

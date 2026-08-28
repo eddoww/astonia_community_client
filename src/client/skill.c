@@ -18,7 +18,9 @@
 int _game_v_profbase = V3_PROFBASE;
 int *game_v_profbase = &_game_v_profbase;
 
-int _game_v_max = 43 + 20;
+// 43 real skills + 20 professions (wire 43..62) + 21 reserved slots for
+// new-class skills (wire 63..83, mapped from server indices 43..63)
+int _game_v_max = 43 + 20 + 21;
 int *game_v_max = &_game_v_max;
 
 struct skill v3_game_skill[V_MAX] = {
@@ -103,8 +105,16 @@ struct skill v3_game_skill[V_MAX] = {
     {"empty", -1, -1, -1, 0, 1}, // 16
     {"empty", -1, -1, -1, 0, 1}, // 17
     {"empty", -1, -1, -1, 0, 1}, // 18
-    {"empty", -1, -1, -1, 0, 1} // 19
-};
+    {"empty", -1, -1, -1, 0, 1}, // 19
+
+    // wire 63..83: new-class skills (server indices 43..63); rows are
+    // claimed by classes (or overridden by the mod) as they ship
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}};
 
 struct skill v35_game_skill[V_MAX] = {
     //  Bases          Cost W M (0=not raisable, 1=skill, 2=attribute, 3=power)
@@ -301,7 +311,9 @@ char *v3_game_skilldesc[] = {
     "Capable of picking a flower/berry/mushroom every 4-12 hours (depending on profession level attained); all "
     "classes, base cost 10, maxes at 30.",
     "Demon, non-player prof.", "prof13: write me!", "prof14: write me!", "prof15: write me!", "prof16: write me!",
-    "prof17: write me!", "prof18: write me!", "prof19: write me!", "prof20: write me!"};
+    "prof17: write me!", "prof18: write me!", "prof19: write me!", "prof20: write me!",
+    // wire 63..83: new-class skills, descriptions land with the classes
+    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
 
 char *v35_game_skilldesc[] = {
     "Hitpoints ('life force') are reduced as you battle and sustain injury. The top red line above your head shows "

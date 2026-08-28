@@ -1346,8 +1346,14 @@ static char *v3_action_desc[MAXACTIONSLOT] = {"Attacks another character using y
     "cursor.",
     "Cycles between the minimap, the big map and no map.", "Look at characters or items in the world."};
 
+/* Skill gate per action: -1 = always available (look/map), -2 = never
+ * (reserved/disabled). The tails MUST be explicit -2: an implicit 0 would
+ * read as "requires skill index 0" (Hitpoints), making every reserved slot
+ * look like an owned spell with a NULL name. */
 static int v3_action_skill[MAXACTIONSLOT] = {V3_PERCEPT, V3_FIREBALL, V3_FLASH, V3_FLASH, V3_FREEZE, V3_MAGICSHIELD,
-    V3_BLESS, V3_HEAL, V3_WARCRY, V3_PULSE, V3_FIREBALL, V3_PERCEPT, -1, -1};
+    V3_BLESS, V3_HEAL, V3_WARCRY, V3_PULSE, V3_FIREBALL, V3_PERCEPT, -1, -1,
+    /* 14-23: reserved for new class actions */
+    -2, -2, -2, -2, -2, -2, -2, -2, -2, -2};
 
 char v35_action_row[2][MAXACTIONSLOT] = {{'a', 's', 'd', ' ', ' ', ' ', ' ', 'b', ' ', ' ', ' ', 'g', ' ', 'l'},
     {' ', 'q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', ' ', 'm', ' '}};
@@ -1370,7 +1376,9 @@ static char *v35_action_desc[MAXACTIONSLOT] = {"Attacks another character using 
     "Cycles between the minimap, the big map and no map.", "Look at characters or items in the world."};
 
 static int v35_action_skill[MAXACTIONSLOT] = {V35_PERCEPT, V35_FIRE, V35_FLASH, V35_FLASH, V35_FREEZE, V35_MAGICSHIELD,
-    V35_BLESS, V35_HEAL, V35_WARCRY, -2, V35_FIRE, V35_PERCEPT, -1, -1};
+    V35_BLESS, V35_HEAL, V35_WARCRY, -2, V35_FIRE, V35_PERCEPT, -1, -1,
+    /* 14-23: reserved for new class actions */
+    -2, -2, -2, -2, -2, -2, -2, -2, -2, -2};
 
 char (*action_row)[MAXACTIONSLOT] = v3_action_row;
 static char **action_text = v3_action_text;

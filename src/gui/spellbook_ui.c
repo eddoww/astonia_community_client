@@ -160,7 +160,7 @@ void spellbook_display(void)
 
 		/* spell icon (sprites 800 + action_slot) */
 		bzero(&fx, sizeof(fx));
-		fx.sprite = (unsigned int)(800 + i);
+		fx.sprite = (unsigned int)(SPELL_ICON_SPRITE_BASE + i);
 		fx.scale = 80;
 		fx.sat = 14;
 		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = (i == hover_slot) ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT;
@@ -185,7 +185,7 @@ void spellbook_display(void)
 	/* draw spell on cursor if dragging */
 	if (sb_dragging >= 0) {
 		bzero(&fx, sizeof(fx));
-		fx.sprite = (unsigned int)(800 + sb_dragging);
+		fx.sprite = (unsigned int)(SPELL_ICON_SPRITE_BASE + sb_dragging);
 		fx.scale = 80;
 		fx.sat = 14;
 		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = RENDERFX_BRIGHT;

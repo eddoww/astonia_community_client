@@ -974,12 +974,13 @@ void hotbar_on_item_changed(int inventory_index)
 
 /* ── Per-spell capability table ─────────────────────────────────────── */
 
-#define ACTION_COUNT 14
 
 static const struct {
 	int valid_targets;
 	int has_cast_modes;
-} spell_caps[ACTION_COUNT] = {
+} spell_caps[MAXACTIONSLOT] = {
+    /* designated init: reserved slots 14-23 default to {0,0} = no valid
+     * targets, no cast modes - inert until a new action claims them */
     [ACTION_ATTACK] = {HOTBAR_VTGT_CHR, 1},
     [ACTION_FIREBALL] = {HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP, 1},
     [ACTION_LBALL] = {HOTBAR_VTGT_CHR | HOTBAR_VTGT_MAP, 1},
@@ -998,7 +999,7 @@ static const struct {
 
 DLL_EXPORT int hotbar_spell_valid_targets(int action_slot)
 {
-	if (action_slot < 0 || action_slot >= ACTION_COUNT) {
+	if (action_slot < 0 || action_slot >= MAXACTIONSLOT) {
 		return 0;
 	}
 	return spell_caps[action_slot].valid_targets;
@@ -1006,7 +1007,7 @@ DLL_EXPORT int hotbar_spell_valid_targets(int action_slot)
 
 DLL_EXPORT int hotbar_spell_has_cast_modes(int action_slot)
 {
-	if (action_slot < 0 || action_slot >= ACTION_COUNT) {
+	if (action_slot < 0 || action_slot >= MAXACTIONSLOT) {
 		return 0;
 	}
 	return spell_caps[action_slot].has_cast_modes;
@@ -2202,7 +2203,7 @@ int input_load_config(const char *path)
 				} else if (strcmp(tstr, "spell") == 0) {
 					cJSON *jsp = cJSON_GetObjectItem(jslot, "spell");
 					int asp = (jsp && cJSON_IsNumber(jsp)) ? jsp->valueint : -1;
-					if (asp < 0 || asp >= ACTION_COUNT) {
+					if (asp < 0 || asp >= MAXACTIONSLOT) {
 						addline("keybinds: hotbar slot %d has invalid spell %d, skipping", slot, asp);
 						slot++;
 						continue;
@@ -2423,7 +2424,10 @@ int input_migrate_binary_config(const char *path)
 	}
 
 	SDL_Keycode old_user_keys[10];
-	char old_action_row[2][MAXACTIONSLOT];
+	/* the binary layout predates the widened action space - its array was
+	 * written with the historical 14 slots; MAXACTIONSLOT would change the
+	 * fread size and break parsing of every existing moac.dat */
+	char old_action_row[2][LEGACY_ACTIONBAR_SLOTS];
 	int old_action_enabled, old_gear_lock;
 
 	if (fread(&old_user_keys, sizeof(old_user_keys), 1, fp) != 1 ||

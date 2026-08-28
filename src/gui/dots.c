@@ -194,7 +194,8 @@ void init_dots(void)
 	set_dot(DOT_COL, 340, 210, 0);
 
 	// action bar (kept for BUT_ACT_* hit testing, but no longer rendered)
-	set_dot(DOT_ACT, XRES - MAXACTIONSLOT * 40 - (XRES - MAXACTIONSLOT * 40) / 2, doty(DOT_BOT) - 12, 0);
+	set_dot(
+	    DOT_ACT, XRES - LEGACY_ACTIONBAR_SLOTS * 40 - (XRES - LEGACY_ACTIONBAR_SLOTS * 40) / 2, doty(DOT_BOT) - 12, 0);
 
 	// hotbar — centered above the bottom panel
 	// DOT_HOTBAR marks the BOTTOM row (row 0). Additional rows stack upward.
@@ -230,7 +231,7 @@ void init_dots(void)
 	for (i = 0; i < 16; i++) {
 		set_but(BUT_SKL_BEG + i, dot[DOT_SKL].x, dot[DOT_SKL].y + i * LINEHEIGHT, 10, 0);
 	}
-	for (i = 0; i < MAXACTIONSLOT; i++) {
+	for (i = 0; i < LEGACY_ACTIONBAR_SLOTS; i++) {
 		set_but(BUT_ACT_BEG + i, dot[DOT_ACT].x + i * 40, dot[DOT_ACT].y, 18, 0);
 	}
 
@@ -238,7 +239,7 @@ void init_dots(void)
 	 * did on the classic 800px bar - not floating after the equipment row */
 	set_but(BUT_WEA_LCK, XRES - XRES0 + 648, dot[DOT_WEA].y + 4, 18, !stop ? 0 : BUTF_TOPOFF);
 	set_but(BUT_ACT_LCK, dot[DOT_ACT].x - 40, dot[DOT_ACT].y, 18, 0);
-	set_but(BUT_ACT_OPN, dot[DOT_ACT].x + MAXACTIONSLOT * 40, dot[DOT_ACT].y, 18, 0);
+	set_but(BUT_ACT_OPN, dot[DOT_ACT].x + LEGACY_ACTIONBAR_SLOTS * 40, dot[DOT_ACT].y, 18, 0);
 
 	set_but(BUT_SCL_UP, dot[DOT_SCL].x + 0, dot[DOT_SCU].y + 0, 30, 0);
 	set_but(BUT_SCL_TR, dot[DOT_SCL].x + 0, dot[DOT_SCU].y + 10, 40, BUTF_CAPTURE | BUTF_MOVEEXEC);

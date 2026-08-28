@@ -202,7 +202,7 @@ typedef struct {
 	char item_name[24]; /* last known name, shown when look data is cold */
 
 	/* HOTBAR_SPELL fields */
-	int action_slot; /* ACTION_* index (0-13) */
+	int action_slot; /* ACTION_* index (0..MAXACTIONSLOT-1) */
 	HotbarTargetOverride primary_target; /* target override for the primary key */
 
 	/* additional keybindings with per-bind cast/target overrides */

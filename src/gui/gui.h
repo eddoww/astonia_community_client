@@ -7,7 +7,18 @@
 #include <SDL3/SDL_stdinc.h>
 #include "dll.h"
 
-#define MAXACTIONSLOT 14
+/* Total castable action ids. ACTION_* ids are append-only (saved configs
+ * store them numerically) and MUST stay below 100: the context system
+ * encodes "self/map variant" as 100+id. Ids 14+ are reserved capacity for
+ * new class spells; a new action needs rows in the four v3/v35 action
+ * tables and spell_caps (display.c/input_bind.c) plus its context.c
+ * dispatch cases. */
+#define MAXACTIONSLOT 24
+/* The legacy invisible action bar (BUT_ACT_BEG..BUT_ACT_END is a packed,
+ * 14-wide button-id range) only ever covers the original actions; new
+ * actions are hotbar/spellbook-only. Also the fread size of the old
+ * moac.dat binary-config layout. */
+#define LEGACY_ACTIONBAR_SLOTS 14
 
 struct quicks {
 	map_index_t mn[9]; // 0 for invalid neighbours

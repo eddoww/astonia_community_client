@@ -568,7 +568,12 @@ typedef enum {
 	HOTBAR_CAST_NORMAL,
 	HOTBAR_CAST_QUICK,
 	HOTBAR_CAST_INDICATOR,
+	HOTBAR_CAST_SMART,
 } HotbarCastOverride;
+
+#define HOTBAR_GROUP_NONE   0
+#define HOTBAR_GROUP_POTION 1
+#define HOTBAR_GROUP_RECALL 2
 
 typedef enum {
 	HOTBAR_TGT_DEFAULT,
@@ -594,10 +599,15 @@ typedef struct {
 	HotbarTargetOverride target_override;
 } HotbarBind;
 
+/* MUST mirror src/gui/input_bind.h's HotbarSlot exactly - this had drifted
+ * (missing item_group/item_name and HOTBAR_CAST_SMART above), misaligning
+ * every field after item_type for mods built against it. */
 typedef struct {
 	HotbarSlotType type;
 	int inv_index;
 	uint32_t item_type;
+	uint8_t item_group;
+	char item_name[24];
 	int action_slot;
 	HotbarTargetOverride primary_target;
 	HotbarBind extra_binds[HOTBAR_MAX_BINDS];

@@ -1380,10 +1380,23 @@ static int v35_action_skill[MAXACTIONSLOT] = {V35_PERCEPT, V35_FIRE, V35_FLASH, 
     /* 14-23: reserved for new class actions */
     -2, -2, -2, -2, -2, -2, -2, -2, -2, -2};
 
+/* CAST_ID_* wire id per action for the generic CL_CAST path (protocol v4+),
+ * -1 = none: the original actions keep their dedicated legacy opcodes via
+ * the context.c dispatch, so a new castable action only needs its cast_id
+ * here (plus text/desc/skill/spell_caps rows) to become fully usable. */
+static int v3_action_cast_id[MAXACTIONSLOT] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    /* 14-23: reserved for new class actions */
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+
+static int v35_action_cast_id[MAXACTIONSLOT] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    /* 14-23: reserved for new class actions */
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+
 char (*action_row)[MAXACTIONSLOT] = v3_action_row;
 static char **action_text = v3_action_text;
 static char **action_desc = v3_action_desc;
 int *action_skill = v3_action_skill;
+static int *action_cast_id = v3_action_cast_id;
 
 void set_v35_actions(void)
 {
@@ -1391,6 +1404,15 @@ void set_v35_actions(void)
 	action_text = v35_action_text;
 	action_desc = v35_action_desc;
 	action_skill = v35_action_skill;
+	action_cast_id = v35_action_cast_id;
+}
+
+int get_action_cast_id(int slot)
+{
+	if (slot < 0 || slot >= MAXACTIONSLOT) {
+		return -1;
+	}
+	return action_cast_id[slot];
 }
 
 void actions_loaded(void)

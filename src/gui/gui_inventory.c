@@ -94,6 +94,8 @@ DLL_EXPORT int _get_skltab_index(int n)
 	    42, // profession
 	    43, 44, 45, 46, 47, 48, 49, 50, 51, 52, // professions 1-10
 	    53, 54, 55, 56, 57, 58, 59, 60, 61, 62, // professions 11-20
+	    63, 64, 65, 66, 67, 68, 69, 70, 71, 72, // new-class skills (wire 63..83)
+	    73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83,
 	    -2 // end marker
 	};
 
@@ -189,7 +191,9 @@ void set_skltab(void)
 			}
 
 
-			if (value[1][i] && i != sv_val(V_DEMON) && i != sv_val(V_COLD) && i < V_PROFBASE) {
+			if (value[1][i] && i != sv_val(V_DEMON) && i != sv_val(V_COLD) &&
+			    (i < V_PROFBASE ||
+			        i >= V_PROFBASE + 20)) { // professions are never raisable; new-class skills (wire >= 63) are
 				skltab[use].button = 1;
 			} else {
 				skltab[use].button = 0;

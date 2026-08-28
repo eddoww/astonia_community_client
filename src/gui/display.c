@@ -566,7 +566,8 @@ void display_skill(void)
 				break;
 			default:
 				if (!amod_display_skill_line(skltab[i].v, skltab[i].base, skltab[i].curr, cn, buf)) {
-					if (skltab[i].v >= V_PROFBASE) {
+					if (skltab[i].v >= V_PROFBASE &&
+					    skltab[i].v < V_PROFBASE + 20) { // base-only render is a profession thing
 						sprintf(buf, "%d", skltab[i].base);
 					} else {
 						sprintf(buf, "%2d/%2d", skltab[i].base, skltab[i].curr);

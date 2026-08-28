@@ -2,7 +2,8 @@
  * Example of modding the skill table (using vanilla data for easy editing)
  */
 
-#define MOD_V_MAX      63
+// 43 skills + 20 professions + 21 reserved new-class slots (wire 63..83)
+#define MOD_V_MAX      84
 #define MOD_V_PROFBASE 43
 
 DLL_EXPORT int game_v_max = MOD_V_MAX;
@@ -90,8 +91,15 @@ DLL_EXPORT struct skill game_skill[MOD_V_MAX] = {
     {"empty", -1, -1, -1, 0, 1}, // 16
     {"empty", -1, -1, -1, 0, 1}, // 17
     {"empty", -1, -1, -1, 0, 1}, // 18
-    {"empty", -1, -1, -1, 0, 1} // 19
-};
+    {"empty", -1, -1, -1, 0, 1}, // 19
+
+    // wire 63..83: new-class skills, claimed as classes ship
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1}, {"empty", -1, -1, -1, 0, 1},
+    {"empty", -1, -1, -1, 0, 1}};
 
 DLL_EXPORT char *game_skilldesc[] = {
     "Hitpoints ('life force') are reduced as you battle and sustain injury. The top red line above your head shows "
@@ -190,7 +198,9 @@ DLL_EXPORT char *game_skilldesc[] = {
     "Capable of picking a flower/berry/mushroom every 4-12 hours (depending on profession level attained); all "
     "classes, base cost 10, maxes at 30.",
     "Demon, non-player prof.", "prof13: write me!", "prof14: write me!", "prof15: write me!", "prof16: write me!",
-    "prof17: write me!", "prof18: write me!", "prof19: write me!", "prof20: write me!"};
+    "prof17: write me!", "prof18: write me!", "prof19: write me!", "prof20: write me!",
+    // wire 63..83: new-class skills
+    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
 
 DLL_EXPORT int get_skltab_index(int n)
 {
@@ -205,6 +215,8 @@ DLL_EXPORT int get_skltab_index(int n)
 	    42, // profession
 	    43, 44, 45, 46, 47, 48, 49, 50, 51, 52, // professions 1-10
 	    53, 54, 55, 56, 57, 58, 59, 60, 61, 62, // professions 11-20
+	    63, 64, 65, 66, 67, 68, 69, 70, 71, 72, // new-class skills (wire 63..83)
+	    73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83,
 	    -2 // end marker
 	};
 

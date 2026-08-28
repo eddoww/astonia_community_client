@@ -16,6 +16,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -557,6 +558,16 @@ static int try_self_cast(int action_slot)
 			return 1;
 		}
 	}
+
+	/* generic path for new actions (protocol v4+): anything with a wire
+	 * cast id self-casts through CL_CAST instead of a dedicated opcode */
+	if (action_slot >= 100 && action_slot < 100 + MAXACTIONSLOT) {
+		int cid = get_action_cast_id(action_slot - 100);
+		if (cid >= 0 && protocol_version >= 4) {
+			cmd_cast(cid, CAST_TGT_SELF, 0, 0);
+			return 1;
+		}
+	}
 	return 0;
 }
 
@@ -660,6 +671,26 @@ static int try_targeted_action(int action_slot, size_t csel, size_t isel, size_t
 			return 1;
 		}
 		break;
+	}
+
+	/* generic path for new actions (protocol v4+): slot < 100 targets the
+	 * character under the cursor, 100+slot targets the map tile, matching
+	 * the two-row semantics of the legacy actions above */
+	{
+		int n = (action_slot >= 100) ? action_slot - 100 : action_slot;
+		int cid = get_action_cast_id(n);
+		if (cid >= 0 && protocol_version >= 4) {
+			int vt = hotbar_spell_valid_targets(n);
+			if (action_slot < 100 && (vt & HOTBAR_VTGT_CHR) && csel != MAXMN) {
+				cmd_cast(cid, CAST_TGT_CHAR, (int)map[csel].cn, 0);
+				return 1;
+			}
+			if (action_slot >= 100 && (vt & HOTBAR_VTGT_MAP) && msel != MAXMN) {
+				cmd_cast(cid, CAST_TGT_MAP, originx - (int)(MAPDX / 2U) + (int)(msel % MAPDX),
+				    originy - (int)(MAPDY / 2U) + (int)(msel / MAPDX));
+				return 1;
+			}
+		}
 	}
 	return 0;
 }

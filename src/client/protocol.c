@@ -1822,6 +1822,32 @@ void cmd_some_spell(int spell, int x, int y, unsigned int chr)
 	client_send(buf, (size_t)len);
 }
 
+/* Generic cast (protocol v4+). One packet shape for every new castable
+ * skill; the nine legacy spells keep their per-spell opcodes above for
+ * compatibility with v3 servers. */
+DLL_EXPORT void cmd_cast(int cast_id, int target_kind, int a, int b)
+{
+	unsigned char buf[8];
+
+	if (protocol_version < 4) {
+		/* an old server trashes its whole input buffer on an unknown
+		 * opcode - never emit CL_CAST below the negotiated version */
+		addline("WARNING: server too old for cast %d\n", cast_id);
+		return;
+	}
+	if (cast_id < 1 || cast_id > 255 || target_kind < 0 || target_kind > 2) {
+		addline("WARNING: bad cast %d/%d\n", cast_id, target_kind);
+		return;
+	}
+
+	buf[0] = CL_CAST;
+	buf[1] = (unsigned char)cast_id;
+	buf[2] = (unsigned char)target_kind;
+	store_u16(buf + 3, (a < 0) ? 0 : ((a > UINT16_MAX) ? UINT16_MAX : (uint16_t)a));
+	store_u16(buf + 5, (b < 0) ? 0 : ((b > UINT16_MAX) ? UINT16_MAX : (uint16_t)b));
+	client_send(buf, 7);
+}
+
 void cmd_raise(int vn)
 {
 	unsigned char buf[16];

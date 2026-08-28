@@ -1052,6 +1052,18 @@ static int resolve_spell_action(int action_slot)
 
 	/* everything else (attack, take/give, look, map) — no alternative */
 	default:
+		/* new actions (14+) derive their row from spell_caps instead of a
+		 * hardcoded case: no char target = always the self/map row; dual
+		 * target = shift toggles, matching the legacy dual-mode spells */
+		if (action_slot >= LEGACY_ACTIONBAR_SLOTS && action_slot < MAXACTIONSLOT) {
+			int vt = hotbar_spell_valid_targets(action_slot);
+			if (!(vt & HOTBAR_VTGT_CHR)) {
+				return 100 + action_slot;
+			}
+			if ((vt & (HOTBAR_VTGT_SELF | HOTBAR_VTGT_MAP)) && shift) {
+				return 100 + action_slot;
+			}
+		}
 		return action_slot;
 	}
 }

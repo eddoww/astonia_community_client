@@ -497,6 +497,7 @@ void display_selfbars(void);
 
 const char *get_action_text(int slot);
 const char *get_action_desc(int slot);
+int get_action_cast_id(int slot);
 
 void display_teleport(void);
 int get_teleport(int x, int y);

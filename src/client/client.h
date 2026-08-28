@@ -118,6 +118,32 @@ typedef enum {
 #define CL_REOPENQUEST    41
 #define CL_WALK_DIR       42
 
+/* Generic cast (protocol v4+): fixed 7 bytes
+ * [op][cast_id:u8][target_kind:u8][a:u16][b:u16], unused fields zero.
+ * Only sent when the negotiated protocol_version is >= 4 - older servers
+ * trash their input buffer on unknown opcodes. Mirrors the server's
+ * src/common/client.h by hand (core protocol has no shared header);
+ * CAST_ID_* values are append-only and are NOT V_* skill indices. */
+#define CL_CAST 43
+
+#define CAST_TGT_SELF 0
+#define CAST_TGT_CHAR 1
+#define CAST_TGT_MAP  2
+
+#define CAST_ID_NONE        0
+#define CAST_ID_BLESS       1
+#define CAST_ID_HEAL        2
+#define CAST_ID_FREEZE      3
+#define CAST_ID_MAGICSHIELD 4
+#define CAST_ID_FLASH       5
+#define CAST_ID_FIREBALL    6
+#define CAST_ID_BALL        7
+#define CAST_ID_WARCRY      8
+#define CAST_ID_PULSE       9
+/* next free: 10 (new class casts append here) */
+
+DLL_EXPORT void cmd_cast(int cast_id, int target_kind, int a, int b);
+
 #define PAC_IDLE        0
 #define PAC_MOVE        1
 #define PAC_TAKE        2

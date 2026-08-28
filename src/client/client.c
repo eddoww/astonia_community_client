@@ -27,7 +27,10 @@
 #include "modder/modder.h"
 #include "protocol.h"
 
-#define CLIENT_PROTOCOL_VERSION 3
+// Advertised in the login vendor field; the server replies SV_PROTOCOL with
+// min(this, its own version), so a v3 server keeps this client on v3
+// behavior. 4 adds CL_CAST (generic cast routing for action slots 14+).
+#define CLIENT_PROTOCOL_VERSION 4
 
 unsigned int display_gfx = 0;
 uint32_t display_time = 0;

@@ -15,7 +15,11 @@
 #include "client/client.h"
 
 /* Hash table sizes (power of 2 for fast modulo) */
-#define CHAR_TABLE_SIZE 512 /* For ~320 character variants */
+#define CHAR_TABLE_SIZE                                                                                                \
+	2048 /* Base game ships ~330 variants; leave room for                                                              \
+	      * mod-loaded tables (sprite_config_load_characters                                                           \
+	      * is a public export) without hitting the 75%                                                                \
+	      * load cutoff. Matches ANIM/META table sizing. */
 #define ANIM_TABLE_SIZE 2048 /* For ~1092 animated variants */
 #define META_TABLE_SIZE 2048 /* For ~900 metadata entries */
 

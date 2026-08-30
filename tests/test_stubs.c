@@ -177,3 +177,116 @@ int sprite_config_drop_alpha(unsigned int sprite __attribute__((unused)))
 {
 	return 0; /* No drop_alpha */
 }
+
+// ============================================================================
+// SDL_GPU stubs - the tests exercise the SDL_Renderer path only; the GPU
+// path is opt-in (gpu_rendering_requested, default off) and never entered
+// here, so all gpu_* entry points are inert.
+// ============================================================================
+
+#include "sdl/sdl_gpu.h"
+#include "sdl/sdl_gpu_draw.h"
+#include "sdl/sdl_gpu_post.h"
+#include "sdl/sdl_gpu_batch.h"
+
+bool use_gpu_rendering = false;
+bool gpu_rendering_requested = false;
+SDL_GPUDevice *sdlgpu = NULL;
+
+bool gpu_init(SDL_Window *window __attribute__((unused)))
+{
+	return false;
+}
+
+void gpu_shutdown(void) {}
+
+bool gpu_is_active(void)
+{
+	return false;
+}
+
+bool gpu_frame_begin(void)
+{
+	return false;
+}
+
+void gpu_frame_end(void) {}
+
+void gpu_dump(FILE *fp __attribute__((unused))) {}
+
+SDL_GPUTexture *gpu_texture_create(
+    const uint32_t *pixels __attribute__((unused)), int width __attribute__((unused)),
+    int height __attribute__((unused)))
+{
+	return NULL;
+}
+
+void gpu_texture_destroy(SDL_GPUTexture *texture __attribute__((unused))) {}
+
+bool gpu_draw_init(int screen_width __attribute__((unused)), int screen_height __attribute__((unused)))
+{
+	return false;
+}
+
+void gpu_draw_shutdown(void) {}
+
+bool gpu_draw_is_available(void)
+{
+	return false;
+}
+
+bool gpu_draw_prim_is_available(void)
+{
+	return false;
+}
+
+bool gpu_draw_line_is_available(void)
+{
+	return false;
+}
+
+void gpu_draw_texture(SDL_GPUTexture *texture __attribute__((unused)),
+    const SDL_FRect *dest __attribute__((unused)), const SDL_FRect *src __attribute__((unused)),
+    int tex_width __attribute__((unused)), int tex_height __attribute__((unused)),
+    const float *color_mod __attribute__((unused)), int alpha __attribute__((unused)))
+{
+}
+
+void gpu_draw_rect(float x __attribute__((unused)), float y __attribute__((unused)),
+    float w __attribute__((unused)), float h __attribute__((unused)), float r __attribute__((unused)),
+    float g __attribute__((unused)), float b __attribute__((unused)), float a __attribute__((unused)))
+{
+}
+
+void gpu_draw_line(float x1 __attribute__((unused)), float y1 __attribute__((unused)),
+    float x2 __attribute__((unused)), float y2 __attribute__((unused)), float r __attribute__((unused)),
+    float g __attribute__((unused)), float b __attribute__((unused)), float a __attribute__((unused)))
+{
+}
+
+bool gpu_postfx_init(int screen_width __attribute__((unused)), int screen_height __attribute__((unused)))
+{
+	return false;
+}
+
+void gpu_postfx_shutdown(void) {}
+
+bool gpu_batch_init(int screen_width __attribute__((unused)), int screen_height __attribute__((unused)))
+{
+	return false;
+}
+
+void gpu_batch_shutdown(void) {}
+
+SDL_GPUTexture *gpu_render_target_create(int width __attribute__((unused)), int height __attribute__((unused)))
+{
+	return NULL;
+}
+
+bool gpu_set_render_target(SDL_GPUTexture *target __attribute__((unused)), int width __attribute__((unused)),
+    int height __attribute__((unused)), bool clear __attribute__((unused)))
+{
+	return false;
+}
+
+void gpu_draw_set_blend_mode(int mode __attribute__((unused))) {}

@@ -14,8 +14,16 @@
 #include <stdint.h>
 #include <SDL3/SDL.h>
 
+// Number of blend-mode pipeline variants (indices mirror sdl_set_blend_mode:
+// 0=BLEND 1=ADD 2=MOD 3=MUL 4=NONE)
+#define GPU_DRAW_BLEND_MODES 5
+
 // Initialize simple GPU drawing
 bool gpu_draw_init(int screen_width, int screen_height);
+
+// Select the blend mode used by subsequent sprite/primitive/line draws
+// (mode indices as above; out-of-range values fall back to 0/BLEND)
+void gpu_draw_set_blend_mode(int mode);
 
 // Shutdown
 void gpu_draw_shutdown(void);

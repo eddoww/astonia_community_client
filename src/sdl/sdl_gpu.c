@@ -24,6 +24,11 @@
 // GPU rendering mode flag
 bool use_gpu_rendering = false;
 
+// Opt-in gate: the GPU path is EXPERIMENTAL and default-off. sdl_init only
+// attempts gpu_init() when this was set (from the gpu_rendering extra option
+// or the GO_GPU -o bit) before sdl_init runs. SDL_Renderer is the default.
+bool gpu_rendering_requested = false;
+
 // GPU device handle
 SDL_GPUDevice *sdlgpu = NULL;
 
@@ -37,6 +42,13 @@ static SDL_GPURenderPass *current_render_pass = NULL;
 static bool using_postfx_this_frame = false;
 static uint32_t current_swapchain_width = 0;
 static uint32_t current_swapchain_height = 0;
+
+// Offscreen render target currently bound as the pass target (NULL = screen).
+// When set, gpu_get_swapchain_size() reports the target's size so the draw
+// helpers map coordinates onto the offscreen texture instead of the screen.
+static SDL_GPUTexture *current_offscreen_target = NULL;
+static int current_offscreen_width = 0;
+static int current_offscreen_height = 0;
 
 // Debug counters
 static int gpu_debug_frame_count = 0;
@@ -146,6 +158,7 @@ bool gpu_frame_begin(void)
 
 	// Reset frame state
 	using_postfx_this_frame = false;
+	current_offscreen_target = NULL;
 	gpu_debug_draw_count = 0;
 
 	// Acquire command buffer
@@ -263,6 +276,7 @@ void gpu_frame_end(void)
 	current_cmd_buffer = NULL;
 	current_swapchain_texture = NULL;
 	using_postfx_this_frame = false;
+	current_offscreen_target = NULL;
 }
 
 SDL_GPUCommandBuffer *gpu_get_command_buffer(void)
@@ -282,12 +296,82 @@ SDL_GPURenderPass *gpu_get_render_pass(void)
 
 void gpu_get_swapchain_size(int *width, int *height)
 {
+	if (current_offscreen_target) {
+		if (width) {
+			*width = current_offscreen_width;
+		}
+		if (height) {
+			*height = current_offscreen_height;
+		}
+		return;
+	}
 	if (width) {
 		*width = (int)current_swapchain_width;
 	}
 	if (height) {
 		*height = (int)current_swapchain_height;
 	}
+}
+
+bool gpu_set_render_target(SDL_GPUTexture *target, int width, int height, bool clear)
+{
+	if (!current_cmd_buffer) {
+		return false; // only valid between gpu_frame_begin and gpu_frame_end
+	}
+
+	SDL_GPUTexture *tex;
+	float vw, vh;
+
+	if (target) {
+		tex = target;
+		vw = (float)width;
+		vh = (float)height;
+	} else {
+		// Back to the screen: the post-fx scene texture when active,
+		// otherwise the swapchain
+		tex = using_postfx_this_frame ? gpu_postfx_get_scene_texture() : current_swapchain_texture;
+		vw = (float)current_swapchain_width;
+		vh = (float)current_swapchain_height;
+	}
+	if (!tex) {
+		return false;
+	}
+
+	// End the current pass and open a new one aimed at the requested target.
+	// The screen target resumes with LOADOP_LOAD so earlier drawing survives.
+	if (current_render_pass) {
+		SDL_EndGPURenderPass(current_render_pass);
+		current_render_pass = NULL;
+	}
+
+	SDL_GPUColorTargetInfo color_target = {.texture = tex,
+	    .mip_level = 0,
+	    .layer_or_depth_plane = 0,
+	    .clear_color = {0.0f, 0.0f, 0.0f, 0.0f},
+	    .load_op = (target && clear) ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD,
+	    .store_op = SDL_GPU_STOREOP_STORE,
+	    .resolve_texture = NULL,
+	    .resolve_mip_level = 0,
+	    .resolve_layer = 0,
+	    .cycle = false,
+	    .cycle_resolve_texture = false};
+
+	current_render_pass = SDL_BeginGPURenderPass(current_cmd_buffer, &color_target, 1, NULL);
+	if (!current_render_pass) {
+		note("gpu_set_render_target: SDL_BeginGPURenderPass failed: %s", SDL_GetError());
+		current_offscreen_target = NULL;
+		return false;
+	}
+
+	SDL_GPUViewport viewport = {.x = 0.0f, .y = 0.0f, .w = vw, .h = vh, .min_depth = 0.0f, .max_depth = 1.0f};
+	SDL_SetGPUViewport(current_render_pass, &viewport);
+
+	gpu_batch_set_context(current_cmd_buffer, current_render_pass);
+
+	current_offscreen_target = target;
+	current_offscreen_width = width;
+	current_offscreen_height = height;
+	return true;
 }
 
 void gpu_debug_increment_draw_count(void)

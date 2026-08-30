@@ -27,6 +27,11 @@ extern "C" {
 // When true, use SDL_GPU path; when false, use SDL_Renderer fallback
 extern bool use_gpu_rendering;
 
+// Opt-in gate (experimental, default off): set before sdl_init() to request
+// the SDL_GPU path. When false, gpu_init() is never attempted and the client
+// uses SDL_Renderer exactly as before.
+extern bool gpu_rendering_requested;
+
 // SDL GPU device handle (NULL if GPU rendering not available)
 extern SDL_GPUDevice *sdlgpu;
 
@@ -132,6 +137,27 @@ void gpu_get_swapchain_size(int *width, int *height);
  * Increment the draw call counter (for debugging).
  */
 void gpu_debug_increment_draw_count(void);
+
+// ============================================================================
+// Offscreen Render Targets
+// ============================================================================
+
+/**
+ * Redirect drawing to an offscreen target (or back to the screen).
+ * (Create the target with gpu_render_target_create, declared below.)
+ *
+ * Ends the current render pass and begins a new one aimed at `target`.
+ * Pass NULL to resume drawing to the screen (the post-fx scene texture when
+ * post-processing is active, the swapchain otherwise); earlier screen content
+ * is preserved. Only valid between gpu_frame_begin() and gpu_frame_end().
+ *
+ * @param target The offscreen texture (from gpu_render_target_create), or NULL
+ * @param width Target width in pixels (ignored when target is NULL)
+ * @param height Target height in pixels (ignored when target is NULL)
+ * @param clear Clear the target to transparent black when binding it
+ * @return true on success
+ */
+bool gpu_set_render_target(SDL_GPUTexture *target, int width, int height, bool clear);
 
 // ============================================================================
 // Pipeline Management

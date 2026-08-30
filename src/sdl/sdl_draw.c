@@ -328,11 +328,12 @@ SDL_GPUTexture *sdl_maketext_gpu(
 					ttf_tex = gpu_texture_create((const uint32_t *)argb->pixels, tw, th);
 				} else {
 					/* gpu_texture_create expects tightly packed rows */
-					uint32_t *tight = malloc((size_t)tw * th * sizeof(uint32_t));
+					uint32_t *tight = malloc((size_t)tw * (size_t)th * sizeof(uint32_t));
 
 					if (tight) {
 						for (int row = 0; row < th; row++) {
-							memcpy(tight + (size_t)row * tw, (const uint8_t *)argb->pixels + (size_t)row * argb->pitch,
+							memcpy(tight + (size_t)row * (size_t)tw,
+							    (const uint8_t *)argb->pixels + (size_t)row * (size_t)argb->pitch,
 							    (size_t)tw * sizeof(uint32_t));
 						}
 						ttf_tex = gpu_texture_create(tight, tw, th);
@@ -1359,8 +1360,10 @@ void sdl_set_blend_mode(int mode)
 		current_blend_mode = SDL_BLENDMODE_BLEND;
 		break;
 	}
-	// GPU path: track blend mode but don't call SDL_Renderer
-	if (!use_gpu_rendering) {
+	if (use_gpu_rendering) {
+		// GPU path: select the matching blend pipeline variant
+		gpu_draw_set_blend_mode((mode >= 0 && mode < GPU_DRAW_BLEND_MODES) ? mode : 0);
+	} else {
 		SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 	}
 }
@@ -1386,8 +1389,9 @@ int sdl_get_blend_mode(void)
 void sdl_reset_blend_mode(void)
 {
 	current_blend_mode = SDL_BLENDMODE_BLEND;
-	// GPU path: track blend mode but don't call SDL_Renderer
-	if (!use_gpu_rendering) {
+	if (use_gpu_rendering) {
+		gpu_draw_set_blend_mode(0);
+	} else {
 		SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 	}
 }
@@ -1399,7 +1403,8 @@ void sdl_reset_blend_mode(void)
 #define MAX_MOD_TEXTURES 256
 
 struct mod_texture {
-	SDL_Texture *tex;
+	SDL_Texture *tex; // SDL_Renderer path
+	SDL_GPUTexture *gpu_tex; // SDL_GPU path
 	int width;
 	int height;
 	int used;
@@ -1428,8 +1433,12 @@ void sdl_cleanup_mod_textures(void)
 		if (mod_textures[i].used && mod_textures[i].tex) {
 			SDL_DestroyTexture(mod_textures[i].tex);
 			mod_textures[i].tex = NULL;
-			mod_textures[i].used = 0;
 		}
+		if (mod_textures[i].used && mod_textures[i].gpu_tex) {
+			gpu_texture_destroy(mod_textures[i].gpu_tex);
+			mod_textures[i].gpu_tex = NULL;
+		}
+		mod_textures[i].used = 0;
 	}
 	mod_textures_initialized = 0;
 #endif
@@ -1502,13 +1511,9 @@ int sdl_load_mod_texture(const char *path)
 {
 	int dx, dy;
 	uint32_t *pixel;
-	SDL_Texture *tex;
+	SDL_Texture *tex = NULL;
+	SDL_GPUTexture *gpu_tex = NULL;
 	int i;
-
-	// GPU path: mod textures require SDL_Renderer (TODO: implement GPU mod textures)
-	if (use_gpu_rendering) {
-		return -1;
-	}
 
 	init_mod_textures();
 
@@ -1537,20 +1542,34 @@ int sdl_load_mod_texture(const char *path)
 		return -1;
 	}
 
-	// Create SDL texture
-	tex = SDL_CreateTexture(sdlren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, dx, dy);
-	if (!tex) {
-		warn("failed to create SDL texture: %s", SDL_GetError());
+	if (use_gpu_rendering) {
+		// GPU path: upload directly as a GPU texture
+		gpu_tex = gpu_texture_create(pixel, dx, dy);
+		if (!gpu_tex) {
+			warn("failed to create GPU mod texture: %s", path);
 #ifdef SDL_FAST_MALLOC
-		FREE(pixel);
+			FREE(pixel);
 #else
-		xfree(pixel);
+			xfree(pixel);
 #endif
-		return -1;
-	}
+			return -1;
+		}
+	} else {
+		// Create SDL texture
+		tex = SDL_CreateTexture(sdlren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, dx, dy);
+		if (!tex) {
+			warn("failed to create SDL texture: %s", SDL_GetError());
+#ifdef SDL_FAST_MALLOC
+			FREE(pixel);
+#else
+			xfree(pixel);
+#endif
+			return -1;
+		}
 
-	SDL_UpdateTexture(tex, NULL, pixel, dx * (int)sizeof(uint32_t));
-	SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+		SDL_UpdateTexture(tex, NULL, pixel, dx * (int)sizeof(uint32_t));
+		SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+	}
 
 #ifdef SDL_FAST_MALLOC
 	FREE(pixel);
@@ -1559,6 +1578,7 @@ int sdl_load_mod_texture(const char *path)
 #endif
 
 	mod_textures[i].tex = tex;
+	mod_textures[i].gpu_tex = gpu_tex;
 	mod_textures[i].width = dx;
 	mod_textures[i].height = dy;
 	mod_textures[i].used = 1;
@@ -1578,7 +1598,11 @@ void sdl_unload_mod_texture(int tex_id)
 	if (mod_textures[tex_id].tex) {
 		SDL_DestroyTexture(mod_textures[tex_id].tex);
 	}
+	if (mod_textures[tex_id].gpu_tex) {
+		gpu_texture_destroy(mod_textures[tex_id].gpu_tex);
+	}
 	mod_textures[tex_id].tex = NULL;
+	mod_textures[tex_id].gpu_tex = NULL;
 	mod_textures[tex_id].width = 0;
 	mod_textures[tex_id].height = 0;
 	mod_textures[tex_id].used = 0;
@@ -1590,15 +1614,13 @@ void sdl_render_mod_texture(int tex_id, int x, int y, unsigned char alpha, int c
 	SDL_FRect dr, sr;
 	int dx, dy, addx = 0, addy = 0;
 
-	// GPU path: mod textures require SDL_Renderer (TODO: implement GPU mod textures)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	if (tex_id < 0 || tex_id >= MAX_MOD_TEXTURES) {
 		return;
 	}
-	if (!mod_textures[tex_id].used || !mod_textures[tex_id].tex) {
+	if (!mod_textures[tex_id].used) {
+		return;
+	}
+	if (use_gpu_rendering ? !mod_textures[tex_id].gpu_tex : !mod_textures[tex_id].tex) {
 		return;
 	}
 
@@ -1636,6 +1658,14 @@ void sdl_render_mod_texture(int tex_id, int x, int y, unsigned char alpha, int c
 	dr.w = (float)(dx * sdl_scale);
 	dr.h = (float)(dy * sdl_scale);
 
+	if (use_gpu_rendering) {
+		if (gpu_draw_is_available()) {
+			gpu_draw_texture(mod_textures[tex_id].gpu_tex, &dr, &sr, mod_textures[tex_id].width,
+			    mod_textures[tex_id].height, NULL, alpha);
+		}
+		return;
+	}
+
 	SDL_SetTextureAlphaMod(mod_textures[tex_id].tex, alpha);
 	SDL_RenderTexture(sdlren, mod_textures[tex_id].tex, &sr, &dr);
 }
@@ -1646,15 +1676,13 @@ void sdl_render_mod_texture_scaled(int tex_id, int x, int y, float scale, unsign
 	SDL_FRect dr, sr;
 	int dx, dy, scaled_dx, scaled_dy;
 
-	// GPU path: mod textures require SDL_Renderer (TODO: implement GPU mod textures)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	if (tex_id < 0 || tex_id >= MAX_MOD_TEXTURES) {
 		return;
 	}
-	if (!mod_textures[tex_id].used || !mod_textures[tex_id].tex) {
+	if (!mod_textures[tex_id].used) {
+		return;
+	}
+	if (use_gpu_rendering ? !mod_textures[tex_id].gpu_tex : !mod_textures[tex_id].tex) {
 		return;
 	}
 	// Security: validate scale to prevent integer overflow
@@ -1682,6 +1710,14 @@ void sdl_render_mod_texture_scaled(int tex_id, int x, int y, float scale, unsign
 	dr.y = (float)((y + y_offset) * sdl_scale);
 	dr.w = (float)(scaled_dx * sdl_scale);
 	dr.h = (float)(scaled_dy * sdl_scale);
+
+	if (use_gpu_rendering) {
+		if (gpu_draw_is_available()) {
+			gpu_draw_texture(mod_textures[tex_id].gpu_tex, &dr, &sr, mod_textures[tex_id].width,
+			    mod_textures[tex_id].height, NULL, alpha);
+		}
+		return;
+	}
 
 	SDL_SetTextureAlphaMod(mod_textures[tex_id].tex, alpha);
 	SDL_RenderTexture(sdlren, mod_textures[tex_id].tex, &sr, &dr);
@@ -1711,7 +1747,8 @@ int sdl_get_mod_texture_height(int tex_id)
 #define MAX_RENDER_TARGET_DIM 4096 // Maximum dimension to prevent memory exhaustion
 
 struct render_target {
-	SDL_Texture *tex;
+	SDL_Texture *tex; // SDL_Renderer path
+	SDL_GPUTexture *gpu_tex; // SDL_GPU path
 	int width;
 	int height;
 	int used;
@@ -1731,13 +1768,9 @@ static void init_render_targets(void)
 
 int sdl_create_render_target(int width, int height)
 {
-	SDL_Texture *tex;
+	SDL_Texture *tex = NULL;
+	SDL_GPUTexture *gpu_tex = NULL;
 	int i;
-
-	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
-	if (use_gpu_rendering) {
-		return -1;
-	}
 
 	init_render_targets();
 
@@ -1762,17 +1795,28 @@ int sdl_create_render_target(int width, int height)
 		return -1;
 	}
 
-	// Create render target texture
-	tex = SDL_CreateTexture(
-	    sdlren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, width * sdl_scale, height * sdl_scale);
-	if (!tex) {
-		warn("failed to create render target: %s", SDL_GetError());
-		return -1;
+	if (use_gpu_rendering) {
+		// GPU path: offscreen color target (content starts undefined - use
+		// sdl_clear_render_target before first use, as with SDL_Renderer)
+		gpu_tex = gpu_render_target_create(width * sdl_scale, height * sdl_scale);
+		if (!gpu_tex) {
+			warn("failed to create GPU render target");
+			return -1;
+		}
+	} else {
+		// Create render target texture
+		tex = SDL_CreateTexture(
+		    sdlren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, width * sdl_scale, height * sdl_scale);
+		if (!tex) {
+			warn("failed to create render target: %s", SDL_GetError());
+			return -1;
+		}
+
+		SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
 	}
 
-	SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
-
 	render_targets[i].tex = tex;
+	render_targets[i].gpu_tex = gpu_tex;
 	render_targets[i].width = width;
 	render_targets[i].height = height;
 	render_targets[i].used = 1;
@@ -1782,11 +1826,6 @@ int sdl_create_render_target(int width, int height)
 
 void sdl_destroy_render_target(int target_id)
 {
-	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	if (target_id < 0 || target_id >= MAX_RENDER_TARGETS) {
 		return;
 	}
@@ -1796,14 +1835,22 @@ void sdl_destroy_render_target(int target_id)
 
 	// Reset to screen if we're destroying the current target
 	if (current_render_target == target_id) {
-		SDL_SetRenderTarget(sdlren, NULL);
+		if (use_gpu_rendering) {
+			gpu_set_render_target(NULL, 0, 0, false);
+		} else {
+			SDL_SetRenderTarget(sdlren, NULL);
+		}
 		current_render_target = -1;
 	}
 
 	if (render_targets[target_id].tex) {
 		SDL_DestroyTexture(render_targets[target_id].tex);
 	}
+	if (render_targets[target_id].gpu_tex) {
+		gpu_texture_destroy(render_targets[target_id].gpu_tex);
+	}
 	render_targets[target_id].tex = NULL;
+	render_targets[target_id].gpu_tex = NULL;
 	render_targets[target_id].width = 0;
 	render_targets[target_id].height = 0;
 	render_targets[target_id].used = 0;
@@ -1811,14 +1858,15 @@ void sdl_destroy_render_target(int target_id)
 
 int sdl_set_render_target(int target_id)
 {
-	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
-	if (use_gpu_rendering) {
-		return -1;
-	}
-
 	if (target_id < 0) {
 		// Reset to screen
-		SDL_SetRenderTarget(sdlren, NULL);
+		if (use_gpu_rendering) {
+			if (!gpu_set_render_target(NULL, 0, 0, false)) {
+				return -1;
+			}
+		} else {
+			SDL_SetRenderTarget(sdlren, NULL);
+		}
 		current_render_target = -1;
 		return 0;
 	}
@@ -1827,7 +1875,15 @@ int sdl_set_render_target(int target_id)
 		return -1;
 	}
 
-	SDL_SetRenderTarget(sdlren, render_targets[target_id].tex);
+	if (use_gpu_rendering) {
+		if (!render_targets[target_id].gpu_tex ||
+		    !gpu_set_render_target(render_targets[target_id].gpu_tex, render_targets[target_id].width * sdl_scale,
+		        render_targets[target_id].height * sdl_scale, false)) {
+			return -1;
+		}
+	} else {
+		SDL_SetRenderTarget(sdlren, render_targets[target_id].tex);
+	}
 	current_render_target = target_id;
 	return 0;
 }
@@ -1836,15 +1892,39 @@ void sdl_render_target_to_screen(int target_id, int x, int y, unsigned char alph
 {
 	SDL_FRect dr;
 
-	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	if (target_id < 0 || target_id >= MAX_RENDER_TARGETS) {
 		return;
 	}
-	if (!render_targets[target_id].used || !render_targets[target_id].tex) {
+	if (!render_targets[target_id].used) {
+		return;
+	}
+	if (use_gpu_rendering ? !render_targets[target_id].gpu_tex : !render_targets[target_id].tex) {
+		return;
+	}
+
+	dr.x = (float)(x * sdl_scale);
+	dr.y = (float)(y * sdl_scale);
+	dr.w = (float)(render_targets[target_id].width * sdl_scale);
+	dr.h = (float)(render_targets[target_id].height * sdl_scale);
+
+	if (use_gpu_rendering) {
+		if (!gpu_draw_is_available()) {
+			return;
+		}
+		// Make sure we're rendering to the screen
+		if (current_render_target >= 0 && !gpu_set_render_target(NULL, 0, 0, false)) {
+			return;
+		}
+
+		gpu_draw_texture(render_targets[target_id].gpu_tex, &dr, NULL, render_targets[target_id].width * sdl_scale,
+		    render_targets[target_id].height * sdl_scale, NULL, alpha);
+
+		// Restore previous render target
+		if (current_render_target >= 0) {
+			gpu_set_render_target(render_targets[current_render_target].gpu_tex,
+			    render_targets[current_render_target].width * sdl_scale,
+			    render_targets[current_render_target].height * sdl_scale, false);
+		}
 		return;
 	}
 
@@ -1852,11 +1932,6 @@ void sdl_render_target_to_screen(int target_id, int x, int y, unsigned char alph
 	if (current_render_target >= 0) {
 		SDL_SetRenderTarget(sdlren, NULL);
 	}
-
-	dr.x = (float)(x * sdl_scale);
-	dr.y = (float)(y * sdl_scale);
-	dr.w = (float)(render_targets[target_id].width * sdl_scale);
-	dr.h = (float)(render_targets[target_id].height * sdl_scale);
 
 	SDL_SetTextureAlphaMod(render_targets[target_id].tex, alpha);
 	SDL_RenderTexture(sdlren, render_targets[target_id].tex, NULL, &dr);
@@ -1871,15 +1946,28 @@ void sdl_clear_render_target(int target_id)
 {
 	int prev_target = current_render_target;
 
-	// GPU path: render targets require SDL_Renderer (TODO: implement GPU render targets)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	if (target_id < 0 || target_id >= MAX_RENDER_TARGETS) {
 		return;
 	}
-	if (!render_targets[target_id].used || !render_targets[target_id].tex) {
+	if (!render_targets[target_id].used) {
+		return;
+	}
+	if (use_gpu_rendering ? !render_targets[target_id].gpu_tex : !render_targets[target_id].tex) {
+		return;
+	}
+
+	if (use_gpu_rendering) {
+		// Bind the target with a clear load-op, then restore the previous one
+		if (!gpu_set_render_target(render_targets[target_id].gpu_tex, render_targets[target_id].width * sdl_scale,
+		        render_targets[target_id].height * sdl_scale, true)) {
+			return;
+		}
+		if (prev_target >= 0 && prev_target != target_id && render_targets[prev_target].gpu_tex) {
+			gpu_set_render_target(render_targets[prev_target].gpu_tex, render_targets[prev_target].width * sdl_scale,
+			    render_targets[prev_target].height * sdl_scale, false);
+		} else if (prev_target < 0) {
+			gpu_set_render_target(NULL, 0, 0, false);
+		}
 		return;
 	}
 
@@ -1897,8 +1985,8 @@ void sdl_clear_render_target(int target_id)
 
 void sdl_render_circle(int32_t centreX, int32_t centreY, int32_t radius, uint32_t color)
 {
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
+	// GPU path draws the same midpoint-circle points as 1x1 rects below
+	if (use_gpu_rendering && !gpu_draw_prim_is_available()) {
 		return;
 	}
 
@@ -1960,6 +2048,18 @@ void sdl_render_circle(int32_t centreX, int32_t centreY, int32_t radius, uint32_
 			tx += 2;
 			error += (tx - diameter);
 		}
+	}
+
+	if (use_gpu_rendering) {
+		float nr = (float)IGET_R(color) / 255.0f;
+		float ng = (float)IGET_G(color) / 255.0f;
+		float nb = (float)IGET_B(color) / 255.0f;
+		float na = (float)IGET_A(color) / 255.0f;
+
+		for (int32_t i = 0; i < dC; i++) {
+			gpu_draw_rect(pts[i].x, pts[i].y, 1.0f, 1.0f, nr, ng, nb, na);
+		}
+		return;
 	}
 
 	SDL_SetRenderDrawColor(
@@ -2095,10 +2195,10 @@ void sdl_circle_filled_alpha(
 
 	// GPU path: use horizontal rectangles (scanlines) for filled circle
 	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
-		float nr = (float)r / 255.0f;
-		float ng = (float)g / 255.0f;
-		float nb = (float)b / 255.0f;
-		float na = (float)alpha / 255.0f;
+		float nr = fr;
+		float ng = fg;
+		float nb = fb;
+		float na = fa;
 
 		// Scale center and radius
 		int scx = (cx + x_offset) * sdl_scale;
@@ -2305,10 +2405,10 @@ void sdl_ellipse_filled_alpha(
 
 	// GPU path: use horizontal rectangles for filled ellipse
 	if (use_gpu_rendering && gpu_draw_prim_is_available()) {
-		float nr = (float)r / 255.0f;
-		float ng = (float)g / 255.0f;
-		float nb = (float)b / 255.0f;
-		float na = (float)alpha / 255.0f;
+		float nr = fr;
+		float ng = fg;
+		float nb = fb;
+		float na = fa;
 
 		int scx = (cx + x_offset) * sdl_scale;
 		int scy = (cy + y_offset) * sdl_scale;

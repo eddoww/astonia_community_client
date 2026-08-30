@@ -22,10 +22,10 @@ jobs:
 
       - name: Cache SDL3 libraries
         id: cache-sdl3
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/sdl3-install
-          key: sdl3-linux-${{ steps.week.outputs.week }}
+          key: sdl3-linux-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
 
       - name: Install build dependencies
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
@@ -65,7 +65,7 @@ jobs:
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
         run: |
           cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git
+          git clone --depth 1 --branch release-3.4.14 https://github.com/libsdl-org/SDL.git
           cmake -S SDL -B SDL-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
@@ -77,7 +77,7 @@ jobs:
       - name: Build SDL3_mixer from source
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
         env:
-          SDL3_MIXER_VERSION: prerelease-3.1.2
+          SDL3_MIXER_VERSION: release-3.2.4
         run: |
           cd /tmp
           curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
@@ -117,10 +117,10 @@ jobs:
 
       - name: Cache SDL3 libraries
         id: cache-sdl3
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: D:\a\_temp\msys64\sdl3-tmp
-          key: sdl3-windows-${{ steps.week.outputs.week }}
+          key: sdl3-windows-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
 
       - name: Create SDL3 install directory
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
@@ -130,7 +130,7 @@ jobs:
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
         run: |
           cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git
+          git clone --depth 1 --branch release-3.4.14 https://github.com/libsdl-org/SDL.git
           cmake -S SDL -B SDL-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/sdl3-tmp \
@@ -142,7 +142,7 @@ jobs:
       - name: Build SDL3_mixer from source
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
         env:
-          SDL3_MIXER_VERSION: prerelease-3.1.2
+          SDL3_MIXER_VERSION: release-3.2.4
         run: |
           cd /tmp
           curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz --exclude='*/Xcode'
@@ -162,7 +162,9 @@ jobs:
 
     steps:
       - name: Install build dependencies
-        run: brew install cmake ninja
+        run: |
+          brew untap aws/tap 2>/dev/null || true
+          brew install cmake ninja
 
       - name: Get week of year
         id: week
@@ -170,7 +172,7 @@ jobs:
 
       - name: Cache SDL3 libraries
         id: cache-sdl3
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /opt/homebrew/lib/libSDL3*
@@ -182,13 +184,13 @@ jobs:
             /opt/homebrew/lib/cmake/SDL3_mixer
             /opt/homebrew/share/licenses/SDL3
             /opt/homebrew/share/licenses/SDL3_mixer
-          key: sdl3-macos-${{ steps.week.outputs.week }}
+          key: sdl3-macos-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
 
       - name: Build SDL3 from source
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
         run: |
           cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git
+          git clone --depth 1 --branch release-3.4.14 https://github.com/libsdl-org/SDL.git
           cmake -S SDL -B SDL-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/opt/homebrew \
@@ -202,7 +204,7 @@ jobs:
       - name: Build SDL3_mixer from source
         if: steps.cache-sdl3.outputs.cache-hit != 'true'
         env:
-          SDL3_MIXER_VERSION: prerelease-3.1.2
+          SDL3_MIXER_VERSION: release-3.2.4
         run: |
           cd /tmp
           curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
@@ -224,7 +226,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
@@ -233,10 +235,10 @@ jobs:
         run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
 
       - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: /tmp/sdl3-install
-          key: sdl3-linux-${{ steps.week.outputs.week }}
+          key: sdl3-linux-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
           fail-on-cache-miss: true
 
       - name: Install SDL3 libraries
@@ -274,7 +276,7 @@ jobs:
         run: make distrib-stage
 
       - name: Upload Binaries (Linux)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-binaries
           path: distrib/linux_client/bin/
@@ -292,7 +294,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
@@ -328,10 +330,10 @@ jobs:
         id: week
 
       - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: D:\a\_temp\msys64\sdl3-tmp
-          key: sdl3-windows-${{ steps.week.outputs.week }}
+          key: sdl3-windows-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
           fail-on-cache-miss: true
 
       - name: Install SDL3 libraries
@@ -352,7 +354,7 @@ jobs:
         run: make distrib-stage
 
       - name: Upload Binaries (Windows)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-binaries
           path: distrib/windows_client/bin/
@@ -360,7 +362,7 @@ jobs:
           overwrite: true
 
       - name: Upload Mod SDK (Windows)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mod-sdk-windows
           path: |
@@ -388,12 +390,13 @@ jobs:
           CERT: ${{ secrets.APPLE_CERT_P12 }}
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
       - name: Install dependencies
         run: |
+          brew untap aws/tap 2>/dev/null || true
           brew install libzip zlib mimalloc imagemagick
 
       - name: Get week of year
@@ -401,7 +404,7 @@ jobs:
         run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
 
       - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             /opt/homebrew/lib/libSDL3*
@@ -413,7 +416,7 @@ jobs:
             /opt/homebrew/lib/cmake/SDL3_mixer
             /opt/homebrew/share/licenses/SDL3
             /opt/homebrew/share/licenses/SDL3_mixer
-          key: sdl3-macos-${{ steps.week.outputs.week }}
+          key: sdl3-macos-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
           fail-on-cache-miss: true
 
       - name: Setup Rust
@@ -443,7 +446,7 @@ jobs:
           ls -la binaries/
 
       - name: Upload Binaries (macOS)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-binaries
           path: binaries/
@@ -531,7 +534,7 @@ jobs:
 
       - name: Upload signed DMG
         if: steps.signing.outputs.available == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-dmg
           path: distrib/Astonia-macOS.dmg
@@ -545,7 +548,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
@@ -553,7 +556,7 @@ jobs:
         run: make appimage
 
       - name: Upload AppImage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: appimage-release
           path: astonia-client.AppImage
@@ -580,42 +583,42 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
       - name: Download Linux Binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: linux-binaries
           path: linux_client/bin
 
       - name: Download Windows Binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: windows-binaries
           path: windows_client/bin
 
       - name: Download macOS DMG
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: macos-dmg
           path: .
 
       - name: Download AppImage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: appimage-release
 
       - name: Download Mod SDK (Windows)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mod-sdk-windows
           path: mod-sdk
 
       - name: Download macOS Binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: macos-binaries
@@ -660,7 +663,7 @@ jobs:
           [ -f client-macos-binaries.tar.gz ] && sha256sum client-macos-binaries.tar.gz >> checksums.txt || true
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             client-linux.tar.gz

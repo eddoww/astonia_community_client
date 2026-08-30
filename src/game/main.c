@@ -866,6 +866,10 @@ int main(int argc, char *argv[])
 	 * a chance to override them (see game_options_record_override) */
 	game_options_note_launch();
 
+	/* an explicit -o GO_GPU bit is a launch-time request that must survive
+	 * the saved extra option (which load_options may set to off) */
+	int launch_gpu = (!(game_options & GO_NOTSET) && (game_options & GO_GPU)) ? 1 : 0;
+
 	load_options();
 
 	// set some stuff
@@ -901,7 +905,7 @@ int main(int argc, char *argv[])
 	 * the GO_GPU -o bit; when neither is set, no GPU code runs at all.
 	 * sdl_init falls back to SDL_Renderer when the GPU path is requested but
 	 * not usable (no device, missing shader pipelines). */
-	gpu_rendering_requested = (saved_gpu_rendering > 0) || ((game_options & GO_GPU) != 0);
+	gpu_rendering_requested = launch_gpu || (saved_gpu_rendering > 0) || ((game_options & GO_GPU) != 0);
 
 	if (!sdl_init(want_width, want_height, buf, want_monitor)) {
 		render_exit();

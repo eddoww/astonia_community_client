@@ -694,6 +694,7 @@ void sdl_exit(void)
 
 void cmd_proc(int key);
 void context_keyup(SDL_Keycode key);
+int amod_textinput(SDL_Keycode key); /* modder.h */
 
 void sdl_loop(void)
 {
@@ -721,7 +722,11 @@ void sdl_loop(void)
 			context_keyup(event.key.key);
 			break;
 		case SDL_EVENT_TEXT_INPUT:
-			cmd_proc(event.text.text[0]);
+			/* mods with focused input fields take the real character first
+			 * (shift/layout-correct, unlike the raw keycodes of amod_keydown) */
+			if (!amod_textinput((SDL_Keycode)(unsigned char)event.text.text[0])) {
+				cmd_proc(event.text.text[0]);
+			}
 			break;
 		case SDL_EVENT_MOUSE_MOTION:
 			gui_sdl_mouseproc(event.motion.x, event.motion.y, SDL_MOUM_NONE);

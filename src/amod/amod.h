@@ -51,6 +51,17 @@ DLL_EXPORT int amod_hotbar_activate(int slot, int mode);
  * will not appear in the classic chat), -1 to consume it while letting later
  * mods observe it too, 0 to leave it alone. */
 DLL_EXPORT int amod_text_line(const char *line);
+/* Real text input (shift/layout-correct character), dispatched before the
+ * classic command line sees it. amod_keydown only carries raw unshifted SDL
+ * keycodes, so input fields needing '#', '!', uppercase etc. must implement
+ * this. key 0 is a one-time capability probe sent after mod loading: ignore
+ * it (return 0), but remember that this client delivers text through this
+ * hook - and stop inserting printable keycodes from amod_keydown (still
+ * CONSUME them there while an input field is focused so client keybindings
+ * do not fire; the same keystroke's character arrives here right after).
+ * Return 1 to consume, -1 to consume but let later mods see it, 0 to pass
+ * it to the classic command line. */
+DLL_EXPORT int amod_textinput(SDL_Keycode key);
 
 // Main mod only:
 DLL_EXPORT int amod_process(const unsigned char *buf);

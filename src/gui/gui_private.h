@@ -7,10 +7,23 @@
 #include "../dll.h"
 #include "../astonia.h"
 
-#define INVDX      4
+/* inventory grid density is a runtime setting (items per row / visible
+ * rows); the container grid stays fixed at the classic 4-wide layout */
+#define INV_GRID_MIN_COLS  4
+#define INV_GRID_MAX_COLS  8
+#define INV_GRID_MAX_ROWS  6
+#define INV_GRID_MAX_SLOTS (INV_GRID_MAX_COLS * INV_GRID_MAX_ROWS)
+
+DLL_EXPORT int inv_grid_cols(void); /* items per row (4..8) */
+DLL_EXPORT int inv_grid_rows(void); /* visible rows setting; 0 = auto (classic 4/3) */
+DLL_EXPORT void inv_grid_set_cols(int n);
+DLL_EXPORT void inv_grid_set_rows(int n);
+int inv_grid_is_classic(void); /* grid matches the classic bar art layout */
+
+#define INVDX      (inv_grid_cols())
 #define INVDY      (__invdy)
 #define CONDX      4
-#define CONDY      (__invdy)
+#define CONDY      (__condy)
 #define SKLDY      (__skldy)
 #define SKLWIDTH   145
 #define LINEHEIGHT 10
@@ -23,66 +36,69 @@
 #define BUT_WEA_BEG   1
 #define BUT_WEA_END   12
 #define BUT_INV_BEG   13
-#define BUT_INV_END   28
-#define BUT_CON_BEG   29
-#define BUT_CON_END   44
-#define BUT_SCL_UP    45
-#define BUT_SCL_TR    46
-#define BUT_SCL_DW    47
-#define BUT_SCR_UP    48
-#define BUT_SCR_TR    49
-#define BUT_SCR_DW    50
-#define BUT_SKL_BEG   51
-#define BUT_SKL_END   66
-#define BUT_GLD       67
-#define BUT_JNK       68
-#define BUT_MOD_WALK0 69
-#define BUT_MOD_WALK1 70
-#define BUT_MOD_WALK2 71
+#define BUT_INV_END   60 /* INV_GRID_MAX_SLOTS (8×6) button ids: 13..60 */
+#define BUT_CON_BEG   61
+#define BUT_CON_END   76
+#define BUT_SCL_UP    77
+#define BUT_SCL_TR    78
+#define BUT_SCL_DW    79
+#define BUT_SCR_UP    80
+#define BUT_SCR_TR    81
+#define BUT_SCR_DW    82
+#define BUT_SKL_BEG   83
+#define BUT_SKL_END   98
+#define BUT_GLD       99
+#define BUT_JNK       100
+#define BUT_MOD_WALK0 101
+#define BUT_MOD_WALK1 102
+#define BUT_MOD_WALK2 103
 
-#define BUT_TEL        72
-#define BUT_HELP_NEXT  73
-#define BUT_HELP_PREV  74
-#define BUT_HELP_MISC  75
-#define BUT_HELP_CLOSE 76
-#define BUT_HELP_INDEX 102
-#define BUT_EXPBAR     150 /* above BUT_HOTBAR_END (147) */
-#define BUT_MILBAR     151
-#define BUT_EXIT       77
-#define BUT_HELP       78
-#define BUT_NOLOOK     79
-#define BUT_COLOR      80
-#define BUT_SKL_LOOK   81
-#define BUT_QUEST      82
-#define BUT_HELP_DRAG  83
+#define BUT_TEL        104
+#define BUT_HELP_NEXT  105
+#define BUT_HELP_PREV  106
+#define BUT_HELP_MISC  107
+#define BUT_HELP_CLOSE 108
+#define BUT_HELP_INDEX 134
+#define BUT_EXPBAR     182 /* above BUT_HOTBAR_END (179) */
+#define BUT_MILBAR     183
+#define BUT_EXIT       109
+#define BUT_HELP       110
+#define BUT_NOLOOK     111
+#define BUT_COLOR      112
+#define BUT_SKL_LOOK   113
+#define BUT_QUEST      114
+#define BUT_HELP_DRAG  115
 
-#define BUT_TEL_MISC 84
+#define BUT_TEL_MISC 116
 
-#define BUT_ACT_LCK 85
-#define BUT_ACT_OPN 86
-#define BUT_ACT_BEG 87
-#define BUT_ACT_END 100
+#define BUT_ACT_LCK 117
+#define BUT_ACT_OPN 118
+#define BUT_ACT_BEG 119
+#define BUT_ACT_END 132
 
-#define BUT_WEA_LCK 101
-// BUT_HELP_INDEX is 102
+#define BUT_WEA_LCK 133
+// BUT_HELP_INDEX is 134
 
-#define BUT_HOTBAR_BEG 103
-#define BUT_HOTBAR_END 147 /* 45 slots (3×15): 103..147 */
+#define BUT_HOTBAR_BEG 135
+#define BUT_HOTBAR_END 179 /* 45 slots (3×15): 135..179 */
 
 /* panel drag handles - one per panel, in PANEL_* enum order (panels.h):
  * BUT_DRAG_BEG + PANEL_x must be that panel's drag button */
-#define BUT_DRAG_BEG       152
-#define BUT_DRAG_SKILLS    152
-#define BUT_DRAG_CHAT      153
-#define BUT_DRAG_INV       154
-#define BUT_DRAG_GOLD      155
-#define BUT_DRAG_SPEED     156
-#define BUT_DRAG_BUFFS     157
-#define BUT_DRAG_HOTBAR    158
-#define BUT_DRAG_EQUIPMENT 159
-#define BUT_DRAG_END       159
+#define BUT_DRAG_BEG       184
+#define BUT_DRAG_SKILLS    184
+#define BUT_DRAG_CHAT      185
+#define BUT_DRAG_INV       186
+#define BUT_DRAG_GOLD      187
+#define BUT_DRAG_SPEED     188
+#define BUT_DRAG_BUFFS     189
+#define BUT_DRAG_HOTBAR    190
+#define BUT_DRAG_EQUIPMENT 191
+#define BUT_DRAG_END       191
 
-#define MAX_BUT 160 /* keep > the highest BUT_* id (BUT_DRAG_END 159) */
+#define MAX_BUT 192 /* keep > the highest BUT_* id (BUT_DRAG_END 191) */
+
+_Static_assert(
+    BUT_INV_END - BUT_INV_BEG + 1 == INV_GRID_MAX_SLOTS, "inventory button range must hold the densest possible grid");
 _Static_assert(BUT_MILBAR < MAX_BUT && BUT_EXPBAR < MAX_BUT && BUT_HOTBAR_END < MAX_BUT && BUT_DRAG_END < MAX_BUT,
     "MAX_BUT must exceed every BUT_* id (but[] is indexed by id)");
 _Static_assert(
@@ -345,6 +361,7 @@ extern int conoff, max_conoff;
 extern int skloff, max_skloff;
 extern int __skldy;
 extern int __invdy;
+extern int __condy;
 
 extern int fkeyitem[4];
 

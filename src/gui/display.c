@@ -246,8 +246,30 @@ void display_inventory(void)
 
 	// fkey[0]=fkey[1]=fkey[2]=fkey[3]=0;
 
+	/* non-classic grids don't match the bar art's recess: back the tiled
+	 * slot cells (and the scrollbar rail) with a plain panel instead */
+	if (!inv_grid_is_classic()) {
+		int y1 = doty(DOT_IN1);
+		int y2 = doty(DOT_IN2);
+
+		if (buty(BUT_SCR_UP) - 12 < y1) {
+			y1 = buty(BUT_SCR_UP) - 12;
+		}
+		if (buty(BUT_SCR_DW) + 12 > y2) {
+			y2 = buty(BUT_SCR_DW) + 12;
+		}
+		ui_panel(butx(BUT_SCR_UP) - 10, y1, dotx(DOT_IN2), y2);
+	}
+
 	for (b = BUT_INV_BEG; b <= BUT_INV_END; b++) {
-		int i = 30 + invoff * INVDX + b - BUT_INV_BEG;
+		int i;
+		if (but[b].flags & BUTF_NOHIT) {
+			continue; /* beyond the active rows*cols grid */
+		}
+		i = 30 + invoff * INVDX + b - BUT_INV_BEG;
+		if (i >= _inventorysize) {
+			continue; /* partial last row: no slot behind this cell */
+		}
 		int c = (i - 2) % 4;
 		int x = butx(b);
 		int y = buty(b);
@@ -900,6 +922,11 @@ void display_screen(void)
 			int dx, dy;
 
 			if (!panel_shown(slice[i].panel)) {
+				continue;
+			}
+			/* a non-classic inventory grid doesn't fit the art's 4-wide
+			 * recess; display_inventory() draws its own panel instead */
+			if (slice[i].panel == PANEL_INVENTORY && !inv_grid_is_classic()) {
 				continue;
 			}
 			dx = panel_dx(slice[i].panel);

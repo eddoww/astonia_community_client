@@ -553,6 +553,55 @@ static int visible_slots = HOTBAR_DEFAULT_SLOTS;
 static int active_rows = 1; /* how many hotbar rows are visible (1-3) */
 static int cast_mode = CAST_SMART; /* how targeted spells are cast from hotkeys */
 
+/* ── Inventory grid density ─────────────────────────────────────────────
+ *
+ * Items per row and visible rows of the main inventory grid. The classic
+ * layout (4 wide, 4 rows / 3 with the small bottom window) keeps the
+ * original right-anchored bar art; any other grid draws tiled slot cells
+ * on a plain panel instead. Rows 0 = auto (the classic count). */
+
+static int inv_cols = INV_GRID_MIN_COLS;
+static int inv_rows = 0;
+
+DLL_EXPORT int inv_grid_cols(void)
+{
+	return inv_cols;
+}
+
+DLL_EXPORT int inv_grid_rows(void)
+{
+	return inv_rows;
+}
+
+DLL_EXPORT void inv_grid_set_cols(int n)
+{
+	if (n < INV_GRID_MIN_COLS) {
+		n = INV_GRID_MIN_COLS;
+	}
+	if (n > INV_GRID_MAX_COLS) {
+		n = INV_GRID_MAX_COLS;
+	}
+	inv_cols = n;
+}
+
+DLL_EXPORT void inv_grid_set_rows(int n)
+{
+	if (n < 0) {
+		n = 0; /* 0 = auto */
+	}
+	if (n > INV_GRID_MAX_ROWS) {
+		n = INV_GRID_MAX_ROWS;
+	}
+	inv_rows = n;
+}
+
+int inv_grid_is_classic(void)
+{
+	int auto_rows = (game_options & GO_SMALLBOT) ? 3 : 4;
+
+	return inv_cols == 4 && (inv_rows == 0 || inv_rows == auto_rows);
+}
+
 DLL_EXPORT int hotbar_visible_slots(void)
 {
 	return visible_slots;
@@ -2185,6 +2234,14 @@ int input_load_config(const char *path)
 		if (v && cJSON_IsNumber(v)) {
 			hotbar_set_rows((int)cJSON_GetNumberValue(v));
 		}
+		v = cJSON_GetObjectItem(jsettings, "inv_cols");
+		if (v && cJSON_IsNumber(v)) {
+			inv_grid_set_cols((int)cJSON_GetNumberValue(v));
+		}
+		v = cJSON_GetObjectItem(jsettings, "inv_rows");
+		if (v && cJSON_IsNumber(v)) {
+			inv_grid_set_rows((int)cJSON_GetNumberValue(v));
+		}
 		v = cJSON_GetObjectItem(jsettings, "go_override_mask");
 		if (v && cJSON_IsNumber(v)) {
 			go_override_mask = (uint32_t)cJSON_GetNumberValue(v);
@@ -2380,6 +2437,8 @@ int input_save_config(const char *path)
 	cJSON_AddBoolToObject(jsettings, "show_hotkeys", show_hotkeys);
 	cJSON_AddBoolToObject(jsettings, "show_names", show_names);
 	cJSON_AddNumberToObject(jsettings, "hotbar_rows", active_rows);
+	cJSON_AddNumberToObject(jsettings, "inv_cols", inv_cols);
+	cJSON_AddNumberToObject(jsettings, "inv_rows", inv_rows);
 	if (go_override_mask) {
 		cJSON_AddNumberToObject(jsettings, "go_override_mask", go_override_mask);
 		cJSON_AddNumberToObject(jsettings, "go_override_value", go_override_value);

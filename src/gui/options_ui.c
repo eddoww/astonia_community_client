@@ -9,6 +9,7 @@
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/options_ui.h"
+#include "gui/panels.h"
 #include "gui/ui_draw.h"
 #include "client/client.h"
 #include "game/game.h"
@@ -87,7 +88,7 @@ extern SDL_Window *sdlwnd;
  * them (see amod_option_tab). The Gameplay tab always shows its native Combat
  * rows, mod or not. */
 #define OPT_AUDIO_NATIVE    6
-#define OPT_UI_NATIVE       11
+#define OPT_UI_NATIVE       (14 + MAX_PANEL) /* rows 0..10 classic, 11..13+MAX_PANEL panels */
 #define OPT_GAMEPLAY_NATIVE 2
 
 #define OPT_MAX_MOD_ROWS 64
@@ -684,6 +685,31 @@ static void opt_display_ui(void)
 		draw_checkbox(opt_lx, ry, hotbar_show_names(), "Show Slot Names");
 	}
 
+	ry = opt_row_y(11);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Panels & World");
+	}
+
+	ry = opt_row_y(12);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, panels_fullscreen_world(), "Fullscreen World View");
+	}
+
+	for (int p = 0; p < MAX_PANEL; p++) {
+		char label[48];
+
+		ry = opt_row_y(13 + p);
+		if (ry >= 0) {
+			snprintf(label, sizeof(label), "Show %s", panel_name(p));
+			draw_checkbox(opt_lx, ry, panel_visible(p), label);
+		}
+	}
+
+	ry = opt_row_y(13 + MAX_PANEL);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, 0, "Reset Panel Layout");
+	}
+
 	draw_mod_tab_rows(AMOD_TAB_UI, OPT_UI_NATIVE);
 }
 
@@ -777,6 +803,34 @@ static int opt_click_ui(int mx, int my)
 	ry = opt_row_y(10);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		hotbar_set_show_names(!hotbar_show_names());
+		init_dots();
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(12);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		panels_set_fullscreen_world(!panels_fullscreen_world());
+		init_dots();
+		/* the world projection centers on DOT_MCT, which just moved */
+		init_game(dotx(DOT_MCT), doty(DOT_MCT));
+		minimap_reanchor();
+		save_options();
+		return 1;
+	}
+
+	for (int p = 0; p < MAX_PANEL; p++) {
+		ry = opt_row_y(13 + p);
+		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+			panel_toggle(p);
+			save_options();
+			return 1;
+		}
+	}
+
+	ry = opt_row_y(13 + MAX_PANEL);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		panels_reset_layout();
 		init_dots();
 		save_options();
 		return 1;

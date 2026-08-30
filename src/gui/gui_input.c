@@ -14,6 +14,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/panels.h"
 #include "gui/spellbook_ui.h"
 #include "gui/keybind_ui.h"
 #include "gui/keybind_settings_ui.h"
@@ -339,7 +340,7 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		}
 
 		/* spellbook toggle button */
-		if (hotbar_toggle_hit(mousex, mousey)) {
+		if (panel_shown(PANEL_HOTBAR) && hotbar_toggle_hit(mousex, mousey)) {
 			break;
 		}
 
@@ -356,7 +357,7 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		}
 
 		/* spellbook panel clicks (pick up spell, or cancel drag) */
-		if (spellbook_click(mousex, mousey)) {
+		if (panel_shown(PANEL_HOTBAR) && spellbook_click(mousex, mousey)) {
 			break;
 		}
 
@@ -368,6 +369,9 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			amod_mouse_capture(0);
 			if (!(but[capbut].flags & BUTF_MOVEEXEC)) {
 				exec_cmd(lcmd, 0);
+			}
+			if (capbut >= BUT_DRAG_BEG && capbut <= BUT_DRAG_END) {
+				panels_drag_finished(); /* persist the moved layout */
 			}
 			capbut = -1;
 		} else {

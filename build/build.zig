@@ -63,6 +63,7 @@ pub fn build(b: *std.Build) void {
         "src/gui/loading_ui.c",
         "src/gui/options_ui.c",
         "src/gui/ui_draw.c",
+        "src/gui/panels.c",
 
         // CLIENT
         "src/client/client.c",

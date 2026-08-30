@@ -46,6 +46,11 @@ DLL_EXPORT int amod_keydown(SDL_Keycode key);
 DLL_EXPORT int amod_keyup(SDL_Keycode key);
 DLL_EXPORT int amod_client_cmd(const char *buf);
 DLL_EXPORT int amod_hotbar_activate(int slot, int mode);
+/* Called for every chat/system text line (SV_TEXT, color codes included) just
+ * before the classic chat window renders it. Return 1 to consume the line (it
+ * will not appear in the classic chat), -1 to consume it while letting later
+ * mods observe it too, 0 to leave it alone. */
+DLL_EXPORT int amod_text_line(const char *line);
 
 // Main mod only:
 DLL_EXPORT int amod_process(const unsigned char *buf);

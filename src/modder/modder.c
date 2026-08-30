@@ -40,6 +40,7 @@ struct mod {
 	void (*_amod_update_hover_texts)(void);
 	int (*_amod_client_cmd)(const char *buf);
 	int (*_amod_hotbar_activate)(int slot, int mode);
+	int (*_amod_text_line)(const char *line);
 	char *(*_amod_version)(void);
 	int loaded;
 };
@@ -61,6 +62,7 @@ struct mod mod[MAXMOD] = {{
     NULL, // _amod_update_hover_texts
     NULL, // _amod_client_cmd
     NULL, // _amod_hotbar_activate
+    NULL, // _amod_text_line
     NULL, // _amod_version
     0 // loaded
 }};
@@ -156,6 +158,9 @@ int amod_init(void)
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_hotbar_activate"))) {
 			mod[i]._amod_hotbar_activate = (int (*)(int, int))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_text_line"))) {
+			mod[i]._amod_text_line = (int (*)(const char *))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_version"))) {
 			mod[i]._amod_version = (char *(*)(void))tmp;
@@ -446,6 +451,26 @@ int amod_client_cmd(const char *buf)
 	int ret = 0, tmp;
 	for (int i = 0; i < MAXMOD; i++) {
 		if (mod[i]._amod_client_cmd && (tmp = mod[i]._amod_client_cmd(buf))) {
+			if (tmp > 0) {
+				return 1;
+			} else {
+				ret = 1;
+			}
+		}
+	}
+	return ret;
+}
+
+// Called for every chat/system text line just before the classic chat window
+// renders it. Any mod may consume the line (e.g. to show it in its own chat
+// UI); consumed lines are not added to the classic scrollback. Same return
+// convention as the other event handlers: 1 = consumed, stop; -1 = consumed
+// but let later mods observe it too; 0 = not handled.
+int amod_text_line(const char *line)
+{
+	int ret = 0, tmp;
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_text_line && (tmp = mod[i]._amod_text_line(line))) {
 			if (tmp > 0) {
 				return 1;
 			} else {

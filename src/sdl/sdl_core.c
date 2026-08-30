@@ -254,31 +254,49 @@ int sdl_init(int width, int height, char *title, int monitor)
 	const char *renderers_to_try[] = {"metal", NULL};
 #endif
 
-	// Try GPU rendering first (SDL_GPUDevice and SDL_Renderer are mutually exclusive for a window)
-	// If GPU init succeeds, we'll use the GPU path. Otherwise, fall back to SDL_Renderer.
-	if (gpu_init(sdlwnd)) {
-		note("GPU rendering enabled - shaders will be loaded when available");
+	// SDL_GPU path (EXPERIMENTAL, opt-in, default off): only attempted when
+	// explicitly requested via the gpu_rendering extra option / GO_GPU -o bit.
+	// SDL_GPUDevice and SDL_Renderer are mutually exclusive for a window, so
+	// the GPU device is claimed before any SDL_Renderer is created. The
+	// direct-draw pipelines (sprite/primitive/line) are what actually put the
+	// game on screen - if the device or ANY of those pipelines is unavailable
+	// (e.g. no shaders for this backend), everything GPU is torn down again
+	// and the client falls back to the standard SDL_Renderer instead of
+	// presenting a black window.
+	bool gpu_ready = false;
+
+	if (gpu_rendering_requested) {
+		if (gpu_init(sdlwnd)) {
+			if (gpu_draw_init(width, height) && gpu_draw_is_available() && gpu_draw_prim_is_available() &&
+			    gpu_draw_line_is_available()) {
+				gpu_ready = true;
+			} else {
+				gpu_draw_shutdown();
+				gpu_shutdown();
+			}
+		}
+		if (!gpu_ready) {
+			warn("SDL_GPU renderer requested but not usable on this system (no device or shader pipelines missing) - "
+			     "falling back to the standard SDL renderer");
+		}
+	}
+
+	if (gpu_ready) {
+		note("SDL_GPU rendering enabled (experimental)");
 		// GPU path: sdlren will remain NULL, all rendering goes through GPU API
 		sdlren = NULL;
 
-		// Initialize post-processing system (may fail if shaders not compiled yet)
+		// Initialize post-processing system (optional)
 		if (!gpu_postfx_init(width, height)) {
-			note("Post-processing not available - shaders may need to be compiled");
+			note("SDL_GPU: post-processing not available");
 		}
 
-		// Initialize simple GPU drawing (may fail if shaders not compiled yet)
-		if (!gpu_draw_init(width, height)) {
-			note("GPU drawing not available - shaders may need to be compiled");
-		}
-
-		// Initialize sprite batching system for performance
+		// Initialize sprite batching system (optional, currently bypassed)
 		if (!gpu_batch_init(width, height)) {
-			note("Sprite batching not available - shaders may need to be compiled");
+			note("SDL_GPU: sprite batching not available");
 		}
 	} else {
-		note("GPU rendering not available - using SDL_Renderer fallback");
-
-		// CPU fallback: Create SDL_Renderer
+		// Default path: Create SDL_Renderer
 		for (int i = 0; renderers_to_try[i] != NULL; i++) {
 			SDL_PropertiesID renderer_props_create = SDL_CreateProperties();
 			if (renderer_props_create != 0) {
@@ -620,9 +638,8 @@ int sdl_clear(void)
 
 	// Reset blend mode to default at start of each frame to prevent mods from
 	// accidentally leaving non-default blend modes that affect subsequent rendering
-	if (!use_gpu_rendering) {
-		sdl_reset_blend_mode();
-	}
+	// (handles both the SDL_Renderer and the GPU pipeline-variant path)
+	sdl_reset_blend_mode();
 
 	return 1;
 }

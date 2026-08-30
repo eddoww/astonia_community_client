@@ -22,6 +22,7 @@
 #include "game/game_private.h"
 #include "client/client.h"
 #include "sdl/sdl.h"
+#include "sdl/font_manager.h"
 
 static RenderFont fonta_shaded_storage[128];
 RenderFont *fonta_shaded = fonta_shaded_storage;
@@ -449,6 +450,12 @@ DLL_EXPORT int render_text_length(int flags, const char *text)
 	int x;
 	const char *c;
 
+	if (fm_active()) {
+		/* TTF measurement mirrors the bitmap loop below: it stops at the
+		 * inline color-code terminator too */
+		return fm_text_width(flags, text, -1);
+	}
+
 	if (flags & RENDER_TEXT_SMALL) {
 		font = fontb;
 	} else if (flags & RENDER_TEXT_BIG) {
@@ -472,6 +479,10 @@ int render_text_len(int flags, const char *text, int n)
 
 	if (n < 0) {
 		return render_text_length(flags, text);
+	}
+
+	if (fm_active()) {
+		return fm_text_width(flags, text, n);
 	}
 
 	if (flags & RENDER_TEXT_SMALL) {
@@ -581,6 +592,12 @@ DLL_EXPORT int render_text_break(int x, int y, int breakx, unsigned short color,
 	char buf[256];
 	int xp, n;
 	int size;
+	int line_height = 10, space_width = 4;
+
+	if (fm_active()) {
+		line_height = fm_line_height(flags);
+		space_width = fm_space_width(flags);
+	}
 
 	xp = x;
 
@@ -594,20 +611,27 @@ DLL_EXPORT int render_text_break(int x, int y, int breakx, unsigned short color,
 		buf[n] = 0;
 
 		size = render_text_length(flags, buf);
-		if (xp + size > breakx) {
+		if (xp + size > breakx && xp != x) { /* never break at the start of a line */
 			xp = x;
-			y += 10;
+			y += line_height;
 		}
 		render_text(xp, y, color, flags, buf);
-		xp += size + 4;
+		xp += size + space_width;
 	}
-	return y + 10;
+	return y + line_height;
 }
 
 DLL_EXPORT int render_text_nl(int x, int y, int unsigned short color, int flags, const char *ptr)
 {
 	char buf[256];
 	int n;
+	int line_height;
+
+	if (fm_active()) {
+		line_height = fm_line_height(flags);
+	} else {
+		line_height = (flags & RENDER_TEXT_BIG) ? 12 : 10;
+	}
 
 	while (*ptr) {
 		while (*ptr == '\n') {
@@ -618,13 +642,9 @@ DLL_EXPORT int render_text_nl(int x, int y, int unsigned short color, int flags,
 			;
 		buf[n] = 0;
 		render_text(x, y, color, flags, buf);
-		if (flags & RENDER_TEXT_BIG) {
-			y += 12;
-		} else {
-			y += 10;
-		}
+		y += line_height;
 	}
-	return y + 10;
+	return y + (fm_active() ? line_height : 10);
 }
 
 DLL_EXPORT int render_text_break_length(int x, int y, int breakx, unsigned short color, int flags, const char *ptr)
@@ -633,6 +653,12 @@ DLL_EXPORT int render_text_break_length(int x, int y, int breakx, unsigned short
 	char buf[256];
 	int xp, n;
 	int size;
+	int line_height = 10, space_width = 4;
+
+	if (fm_active()) {
+		line_height = fm_line_height(flags);
+		space_width = fm_space_width(flags);
+	}
 
 	xp = x;
 
@@ -646,13 +672,13 @@ DLL_EXPORT int render_text_break_length(int x, int y, int breakx, unsigned short
 		buf[n] = 0;
 
 		size = render_text_length(flags, buf);
-		if (xp + size > breakx) {
+		if (xp + size > breakx && xp != x) { /* keep in sync with render_text_break */
 			xp = x;
-			y += 10;
+			y += line_height;
 		}
-		xp += size + 4;
+		xp += size + space_width;
 	}
-	return y + 10;
+	return y + line_height;
 }
 
 /**
@@ -1485,13 +1511,29 @@ void render_create_font(void)
 RenderFont *textfont = fonta;
 int textdisplay_dy = 10;
 
+/* Flag equivalent of the current chat textfont (0 = fonta, RENDER_TEXT_BIG =
+ * fontc) so the TTF path can pick the matching size. */
+static int textfont_flags = 0;
+
+/* Advance of one chat character in game pixels - TTF metrics when the TTF
+ * path is active, bitmap font dims otherwise. Keeps chat wrapping, number
+ * alignment and link hit-testing in sync with what is actually drawn. */
+static int text_char_dim(unsigned char c)
+{
+	if (fm_active()) {
+		return fm_char_width(textfont_flags, c);
+	}
+	return textfont[c].dim;
+}
+
 int render_text_char(int sx, int sy, int c, unsigned short int color)
 {
 	if (c > 127 || c < 0) {
 		return 0;
 	}
 
-	return sdl_drawtext(sx, sy, color, 0, (char *)&c, textfont, clipsx, clipsy, clipex, clipey, x_offset, y_offset) -
+	return sdl_drawtext(sx, sy, color, fm_active() ? textfont_flags : 0, (char *)&c, textfont, clipsx, clipsy, clipex,
+	           clipey, x_offset, y_offset) -
 	       sx;
 }
 
@@ -1501,15 +1543,15 @@ static int render_text_len_internal(const char *text)
 	const char *c;
 
 	for (x = 0, c = text; *c; c++) {
-		x += textfont[(unsigned char)*c].dim;
+		x += text_char_dim((unsigned char)*c);
 	}
 
-	return (int)((float)x + 0.5f);
+	return x;
 }
 
 int render_char_len(char c)
 {
-	return textfont[(unsigned char)c].dim;
+	return text_char_dim((unsigned char)c);
 }
 
 // ---------------------> Chat Window <-----------------------------
@@ -1569,10 +1611,12 @@ void render_set_textfont(int nr)
 	switch (nr) {
 	case 0:
 		textfont = fonta;
+		textfont_flags = 0;
 		textdisplay_dy = 10;
 		break;
 	case 1:
 		textfont = fontc;
+		textfont_flags = RENDER_TEXT_BIG;
 		textdisplay_dy = 12;
 		break;
 	}
@@ -1623,7 +1667,7 @@ void render_display_text(void)
 
 				// better display for numbers
 				for (i = pos + 1; isdigit(text[i].c) || text[i].c == '-'; i++) {
-					x -= textfont[(unsigned char)text[i].c].dim;
+					x -= text_char_dim((unsigned char)text[i].c);
 				}
 				continue;
 			}
@@ -1708,7 +1752,7 @@ void render_add_text(char *ptr)
 
 			for (m = 0; m < 2; m++) {
 				text[pos].c = 32;
-				x += textfont[32].dim;
+				x += text_char_dim(32);
 				text[pos].color = (unsigned char)color;
 				text[pos].link = (unsigned char)link;
 				pos++;
@@ -1724,7 +1768,7 @@ void render_add_text(char *ptr)
 			text[pos].link = (unsigned char)link;
 		}
 		text[pos].c = 32;
-		x += textfont[32].dim;
+		x += text_char_dim(32);
 		text[pos].color = (unsigned char)color;
 		text[pos].link = (unsigned char)link;
 
@@ -1781,12 +1825,12 @@ int render_scantext(int x, int y, char *hit)
 		if (text[pos].c > 0 && text[pos].c < 32) {
 			dx = ((int)text[pos].c) * 12;
 			for (int i = pos + 1; isdigit(text[i].c) || text[i].c == '-'; i++) {
-				dx -= textfont[(unsigned char)text[i].c].dim;
+				dx -= text_char_dim((unsigned char)text[i].c);
 			}
 			continue;
 		}
 
-		dx += textfont[(unsigned char)text[pos].c].dim;
+		dx += text_char_dim((unsigned char)text[pos].c);
 
 		if (dx + dotx(DOT_TXT) > x) {
 			if ((link = text[pos].link)) { // link palette color

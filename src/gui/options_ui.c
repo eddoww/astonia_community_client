@@ -14,6 +14,7 @@
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
+#include "sdl/font_manager.h"
 #include "sdl/gamepad.h"
 #include "modder/modder.h"
 #include "amod/amod_options.h"
@@ -121,7 +122,7 @@ static int opt_tab_total(void)
 	case 1:
 		return 4;
 	case 2:
-		return 5;
+		return 6;
 	case 3:
 		return OPT_UI_NATIVE + opt_mod_row_count(AMOD_TAB_UI);
 	case 4:
@@ -569,6 +570,12 @@ static void opt_display_display(void)
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, (game_options & GO_DARK) != 0, "Dark Theme");
 	}
+
+	ry = opt_row_y(5);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, (game_options & GO_TTF) != 0,
+		    fm_available() ? "TTF Text (experimental)" : "TTF Text (unavailable)");
+	}
 }
 
 static int opt_click_display(int mx, int my)
@@ -619,6 +626,17 @@ static int opt_click_display(int mx, int my)
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		game_options ^= GO_DARK;
 		game_options_record_override(GO_DARK);
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(5);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		/* persisted via the extra-options file (like GO_NOLAG) - the
+		 * launcher does not know this bit. The text texture cache needs no
+		 * flush: the TTF cache generation is part of the cache key. */
+		game_options ^= GO_TTF;
+		fm_set_enabled((game_options & GO_TTF) != 0);
 		save_options();
 		return 1;
 	}

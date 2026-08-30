@@ -18,6 +18,7 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "sdl/font_manager.h"
 #ifdef DEVELOPER
 extern int sockstate; // Declare early for use in wait logging
 #endif
@@ -180,7 +181,7 @@ static inline unsigned int hashfunc(unsigned int sprite, int ml, int ll, int rl,
 	return hash % (unsigned int)MAX_TEXHASH;
 }
 
-static inline unsigned int hashfunc_text(const char *text, int color, int flags)
+static inline unsigned int hashfunc_text(const char *text, int color, int flags, uint32_t font_gen)
 {
 	// FNV-1a hash for better distribution
 	// Old approach only used first 4 chars -> poor mixing, edge bucket clustering
@@ -193,9 +194,12 @@ static inline unsigned int hashfunc_text(const char *text, int color, int flags)
 		p++;
 	}
 
-	// Mix in color and flags
+	// Mix in color, flags and the TTF font generation (0 = bitmap fonts).
+	// Without the generation, switching the TTF face/size or toggling the
+	// TTF option would serve stale textures rendered with the old font.
 	hash = (hash ^ (uint32_t)color) * 16777619u;
 	hash = (hash ^ (uint32_t)flags) * 16777619u;
+	hash = (hash ^ font_gen) * 16777619u;
 
 	return hash % (unsigned int)MAX_TEXHASH;
 }
@@ -204,7 +208,7 @@ static inline unsigned int hashfunc_text(const char *text, int color, int flags)
 // Test-only wrapper to expose hashfunc_text for distribution testing
 unsigned int test_hashfunc_text(const char *text, int color, int flags)
 {
-	return hashfunc_text(text, color, flags);
+	return hashfunc_text(text, color, flags, 0u);
 }
 #endif
 
@@ -291,6 +295,7 @@ struct tex_request {
 	int shine;
 	int text_color;
 	int text_flags;
+	uint32_t text_font_gen; /* fm_cache_generation() at request time (0 = bitmap) */
 	int checkonly;
 	int preload;
 
@@ -313,6 +318,7 @@ static struct tex_request tex_request_from_args(uint32_t sprite, signed char sin
 
 	r.text = text;
 	r.text_font = text_font;
+	r.text_font_gen = text ? fm_cache_generation() : 0;
 
 	r.sprite = sprite;
 	r.c1 = c1;
@@ -345,7 +351,7 @@ static struct tex_request tex_request_from_args(uint32_t sprite, signed char sin
 static int tex_request_hash(const struct tex_request *r)
 {
 	if (r->text) {
-		return (int)hashfunc_text(r->text, r->text_color, r->text_flags);
+		return (int)hashfunc_text(r->text, r->text_color, r->text_flags, r->text_font_gen);
 	} else {
 		return (int)hashfunc(r->sprite, r->ml, r->ll, r->rl, r->ul, r->dl);
 	}
@@ -373,6 +379,9 @@ static int tex_entry_matches_request(int idx, const struct tex_request *r)
 			return 0;
 		}
 		if (sdlt[idx].text_font != r->text_font) {
+			return 0;
+		}
+		if (sdlt[idx].text_font_gen != r->text_font_gen) {
 			return 0;
 		}
 		return 1;
@@ -485,6 +494,7 @@ static int tex_entry_build_text(int cache_index, const struct tex_request *r, in
 	sdlt[cache_index].text_color = (uint32_t)r->text_color;
 	sdlt[cache_index].text_flags = (uint16_t)r->text_flags;
 	sdlt[cache_index].text_font = r->text_font;
+	sdlt[cache_index].text_font_gen = r->text_font_gen;
 #ifdef SDL_FAST_MALLOC
 	sdlt[cache_index].text = STRDUP(r->text);
 #else
@@ -630,8 +640,8 @@ static int texcache_acquire_slot(void)
 			hash2 = (int)hashfunc(sdlt[cache_index].sprite, sdlt[cache_index].ml, sdlt[cache_index].ll,
 			    sdlt[cache_index].rl, sdlt[cache_index].ul, sdlt[cache_index].dl);
 		} else if (flags & SF_TEXT) {
-			hash2 = (int)hashfunc_text(
-			    sdlt[cache_index].text, (int)sdlt[cache_index].text_color, sdlt[cache_index].text_flags);
+			hash2 = (int)hashfunc_text(sdlt[cache_index].text, (int)sdlt[cache_index].text_color,
+			    sdlt[cache_index].text_flags, sdlt[cache_index].text_font_gen);
 		} else {
 			hash2 = 0;
 			warn("weird entry in texture cache!");

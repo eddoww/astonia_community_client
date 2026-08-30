@@ -78,6 +78,7 @@ struct sdl_texture {
 	uint32_t text_color;
 	char *text;
 	void *text_font;
+	uint32_t text_font_gen; // fm_cache_generation() the texture was built with (0 = bitmap)
 };
 
 struct sdl_image {

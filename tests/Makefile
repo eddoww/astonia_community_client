@@ -27,12 +27,15 @@ endif
 
 # SDL source files needed for testing
 # Note: We use REAL I/O (sdl_image.c included) and only stub GPU operations
+# font_manager.c builds as inert stubs here (no HAVE_SDL3_TTF), so the tests
+# exercise the classic bitmap text path without needing SDL3_ttf installed
 SDL_SRCS = ../src/sdl/sdl_test.c \
            ../src/sdl/sdl_core.c \
            ../src/sdl/sdl_texture.c \
            ../src/sdl/sdl_image.c \
            ../src/sdl/sdl_effects.c \
-           ../src/sdl/sdl_draw.c
+           ../src/sdl/sdl_draw.c \
+           ../src/sdl/font_manager.c
 
 # Helper source files
 HELPER_SRCS = ../src/game/memory.c \

@@ -45,6 +45,14 @@ static int map_managed = 0; // map managed 0 = we're guessing. map managed 1 = t
 static int map_area = 0;
 static int map_server = 0;
 
+/* Current area id as last announced by the server (SV_AREAINFO / AIC_SETID),
+ * 0 until the first area info arrives. Exported for mods, which otherwise
+ * have no way to tell which area the player is in. */
+DLL_EXPORT int client_area_id(void)
+{
+	return map_area;
+}
+
 static int map_poi_load(void);
 static void map_update_poi(void);
 static uint32_t map_poi_col(int x, int y);

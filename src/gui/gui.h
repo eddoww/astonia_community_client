@@ -109,6 +109,7 @@ void actions_loaded(void);
 void minimap_clear(void);
 void minimap_compact(void);
 void minimap_areainfo(int cmd, int areaID, int server_key);
+int client_area_id(void);
 
 struct questlog {
 	char *name;

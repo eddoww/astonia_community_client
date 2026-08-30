@@ -64,3 +64,6 @@ ubsan-report.txt.*
 # Distribution packages
 windows_client.zip
 linux_client.tar.gz
+# Mod SDK staging tree (scripts/stage-mod-sdk.sh) and its release zip
+/mod-sdk/
+mod-sdk.zip

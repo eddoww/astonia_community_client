@@ -1,4 +1,4 @@
-.PHONY: all debug release windows linux macos build-sdl3 build-sdl3-mixer macos-appbundle macos-bundle-libs macos-signed-bundle clean distrib distrib-stage amod convert anicopy zig-build docker-linux docker-linux-debug docker-linux-dev docker-distrib-linux appimage zen4-appimage sanitizer coverage test
+.PHONY: all debug release windows linux macos build-sdl3 build-sdl3-mixer macos-appbundle macos-bundle-libs macos-signed-bundle clean distrib distrib-stage amod convert anicopy zig-build docker-linux docker-linux-debug docker-linux-dev docker-distrib-linux appimage zen4-appimage sanitizer coverage test mod-sdk-stage
 
 # Root Makefile - Platform dispatcher
 #
@@ -15,6 +15,7 @@
 #   make appimage       - Build Linux AppImage (portable, all distros)
 #   make clean          - Clean all platforms
 #   make distrib        - Create distribution package
+#   make mod-sdk-stage  - Stage the self-contained mod SDK in mod-sdk/
 #
 # Build types can also be passed to platform targets:
 #   make linux BUILD_TYPE=debug
@@ -131,6 +132,10 @@ clean:
 distrib-stage:
 	@echo "Preparing distribution staging for $(PLATFORM)..."
 	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) distrib-stage
+
+# Stage the self-contained mod SDK (headers + README + SDL3 shim + import libs)
+mod-sdk-stage:
+	@scripts/stage-mod-sdk.sh
 
 # Distribution target (delegates to platform-specific Makefile)
 distrib:

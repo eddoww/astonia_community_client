@@ -200,6 +200,8 @@ DLL_IMPORT void client_send(void *buf, size_t len);
 /* Directory the client stores user settings in (trailing slash, user-writable). Mods should
  * keep their settings here instead of next to the game files. */
 DLL_IMPORT const char *client_config_dir(void);
+/* Current area id as announced by the server (0 = unknown yet). client >= 1.2.40 */
+DLL_IMPORT int client_area_id(void);
 
 // --- Sound ---
 // Sounds loaded from: sx_mod.zip > sx_patch.zip > sx.zip

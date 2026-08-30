@@ -113,7 +113,9 @@ pub fn build(b: *std.Build) void {
         "src/game/memory_macos.c",
     };
 
-    const base_cflags = &.{
+    // Shared strict warning set - the single source for all first-party C flags
+    // (version.c and cJSON.c below intentionally use relaxed flags instead).
+    const warn_cflags = .{
         "-O3",
         "-gdwarf-4",
         "-Wall",
@@ -134,39 +136,21 @@ pub fn build(b: *std.Build) void {
         "-Werror",
         "-fno-omit-frame-pointer",
         "-fvisibility=hidden",
+    };
+    const common_defines = .{
         "-DUSE_MIMALLOC=1",
         "-DSDL_FUNCTION_POINTER_IS_VOID_POINTER",
     };
 
-    const win_cflags = &.{
-        "-O3",
-        "-gdwarf-4",
-        "-Wall",
-        "-Wextra",
-        "-Wpedantic",
-        "-Wformat=2",
-        "-Wnull-dereference",
-        "-Wdouble-promotion",
-        "-Wcast-align",
-        "-Wcast-qual",
-        "-Wconversion",
-        "-Wsign-conversion",
-        "-Wmissing-prototypes",
-        "-Wstrict-prototypes",
-        "-Wvla",
-        "-Wfloat-equal",
-        "-Wnewline-eof",
-        "-Werror",
-        "-fno-omit-frame-pointer",
-        "-fvisibility=hidden",
+    const base_cflags = &(warn_cflags ++ common_defines);
+
+    const win_cflags = &(warn_cflags ++ .{
         "-Dmain=SDL_main",
         "-DSTORE_UNIQUE",
         "-DENABLE_CRASH_HANDLER",
         "-DENABLE_SHAREDMEM",
         "-DENABLE_DRAGHACK",
-        "-DUSE_MIMALLOC=1",
-        "-DSDL_FUNCTION_POINTER_IS_VOID_POINTER",
-    };
+    } ++ common_defines);
 
     const exe = b.addExecutable(.{
         .name = "moac",
@@ -196,31 +180,7 @@ pub fn build(b: *std.Build) void {
         exe.root_module.addCSourceFiles(.{ .files = common_sources, .flags = base_cflags });
     }
 
-    const pic_cflags = &.{
-        "-O3",
-        "-gdwarf-4",
-        "-Wall",
-        "-Wextra",
-        "-Wpedantic",
-        "-Wformat=2",
-        "-Wnull-dereference",
-        "-Wdouble-promotion",
-        "-Wcast-align",
-        "-Wcast-qual",
-        "-Wconversion",
-        "-Wsign-conversion",
-        "-Wmissing-prototypes",
-        "-Wstrict-prototypes",
-        "-Wvla",
-        "-Wfloat-equal",
-        "-Wnewline-eof",
-        "-Werror",
-        "-fPIC",
-        "-fno-omit-frame-pointer",
-        "-fvisibility=hidden",
-        "-DUSE_MIMALLOC=1",
-        "-DSDL_FUNCTION_POINTER_IS_VOID_POINTER",
-    };
+    const pic_cflags = &(warn_cflags ++ .{"-fPIC"} ++ common_defines);
 
     if (tgt.os.tag == .linux) {
         exe.root_module.addCSourceFiles(.{
@@ -252,7 +212,7 @@ pub fn build(b: *std.Build) void {
         exe.root_module.addCMacro("DEVELOPER", "1");
     }
 
-    // Link libs (Makefile equivalent: -lwsock32 -lws2_32 -lz -lpng -lzip -ldwarfstack $(SDL_LIBS) -lSDL2_mixer)
+    // Link libs (Makefile equivalent: -lwsock32 -lws2_32 -lz -lpng -lzip -ldwarfstack $(SDL_LIBS) -lSDL3_mixer)
     linkCommonLibs(b, exe, tgt);
 
     exe.step.dependOn(&cargo.step);

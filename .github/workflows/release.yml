@@ -16,207 +16,13 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
+      - name: Checkout code
+        uses: actions/checkout@v7
 
-      - name: Cache SDL3 libraries
-        id: cache-sdl3
-        uses: actions/cache@v6
+      - name: Build SDL3 + SDL3_mixer (cached)
+        uses: ./.github/actions/setup-sdl3-linux
         with:
-          path: /tmp/sdl3-install
-          key: sdl3-linux-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
-
-      - name: Install build dependencies
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            libasound2-dev \
-            libpulse-dev \
-            libaudio-dev \
-            libfribidi-dev \
-            libjack-dev \
-            libsndio-dev \
-            libusb-1.0-0-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxcursor-dev \
-            libxfixes-dev \
-            libxi-dev \
-            libxss-dev \
-            libxtst-dev \
-            libwayland-dev \
-            libxkbcommon-dev \
-            libdrm-dev \
-            libgbm-dev \
-            libgl1-mesa-dev \
-            libgles2-mesa-dev \
-            libegl1-mesa-dev \
-            libdbus-1-dev \
-            libibus-1.0-dev \
-            libudev-dev \
-            libthai-dev
-
-      - name: Build SDL3 from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          cd /tmp
-          git clone --depth 1 --branch release-3.4.14 https://github.com/libsdl-org/SDL.git
-          cmake -S SDL -B SDL-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
-            -DSDL_STATIC=OFF
-          cmake --build SDL-build
-          cmake --install SDL-build
-          rm -rf SDL SDL-build
-
-      - name: Build SDL3_mixer from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        env:
-          SDL3_MIXER_VERSION: release-3.2.4
-        run: |
-          cd /tmp
-          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
-          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
-            -DCMAKE_PREFIX_PATH=/tmp/sdl3-install \
-            -DSDL3MIXER_VENDORED=ON
-          cmake --build SDL_mixer-build
-          cmake --install SDL_mixer-build
-          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
-
-  build-sdl3-windows:
-    name: Build SDL3 for Windows
-    runs-on: windows-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        shell: msys2 {0}
-
-    steps:
-      - name: Setup MSYS2 (clang64)
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: clang64
-          path-type: inherit
-          update: true
-          install: >
-            mingw-w64-clang-x86_64-cmake
-            mingw-w64-clang-x86_64-ninja
-            git
-
-      - name: Get week of year
-        shell: bash
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-        id: week
-
-      - name: Cache SDL3 libraries
-        id: cache-sdl3
-        uses: actions/cache@v6
-        with:
-          path: D:\a\_temp\msys64\sdl3-tmp
-          key: sdl3-windows-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
-
-      - name: Create SDL3 install directory
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: mkdir -p /sdl3-tmp
-
-      - name: Build SDL3 from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          cd /tmp
-          git clone --depth 1 --branch release-3.4.14 https://github.com/libsdl-org/SDL.git
-          cmake -S SDL -B SDL-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/sdl3-tmp \
-            -DSDL_STATIC=OFF
-          cmake --build SDL-build
-          cmake --install SDL-build
-          rm -rf SDL SDL-build
-
-      - name: Build SDL3_mixer from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        env:
-          SDL3_MIXER_VERSION: release-3.2.4
-        run: |
-          cd /tmp
-          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz --exclude='*/Xcode'
-          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/sdl3-tmp \
-            -DCMAKE_PREFIX_PATH=/sdl3-tmp \
-            -DSDL3MIXER_VENDORED=ON
-          cmake --build SDL_mixer-build
-          cmake --install SDL_mixer-build
-          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
-
-  build-sdl3-macos:
-    name: Build SDL3 for macOS
-    runs-on: macos-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Install build dependencies
-        run: |
-          brew untap aws/tap 2>/dev/null || true
-          brew install cmake ninja
-
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-
-      - name: Cache SDL3 libraries
-        id: cache-sdl3
-        uses: actions/cache@v6
-        with:
-          path: |
-            /opt/homebrew/lib/libSDL3*
-            /opt/homebrew/lib/pkgconfig/sdl3.pc
-            /opt/homebrew/lib/pkgconfig/sdl3-mixer.pc
-            /opt/homebrew/include/SDL3
-            /opt/homebrew/include/SDL3_mixer
-            /opt/homebrew/lib/cmake/SDL3
-            /opt/homebrew/lib/cmake/SDL3_mixer
-            /opt/homebrew/share/licenses/SDL3
-            /opt/homebrew/share/licenses/SDL3_mixer
-          key: sdl3-macos-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
-
-      - name: Build SDL3 from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          cd /tmp
-          git clone --depth 1 --branch release-3.4.14 https://github.com/libsdl-org/SDL.git
-          cmake -S SDL -B SDL-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/homebrew \
-            -DCMAKE_INSTALL_NAME_DIR=/opt/homebrew/lib \
-            -DSDL_STATIC=OFF \
-            -DSDL_RPATH=OFF
-          cmake --build SDL-build
-          sudo cmake --install SDL-build
-          rm -rf SDL SDL-build
-
-      - name: Build SDL3_mixer from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        env:
-          SDL3_MIXER_VERSION: release-3.2.4
-        run: |
-          cd /tmp
-          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
-          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/homebrew \
-            -DCMAKE_INSTALL_NAME_DIR=/opt/homebrew/lib \
-            -DCMAKE_PREFIX_PATH=/opt/homebrew \
-            -DSDL3MIXER_VENDORED=ON
-          cmake --build SDL_mixer-build
-          sudo cmake --install SDL_mixer-build
-          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
+          build-on-miss: 'true'
 
   build-linux-release:
     needs: [build-sdl3-linux]
@@ -230,28 +36,21 @@ jobs:
         with:
           lfs: true
 
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
+      - name: Setup SDL3 (cached)
+        uses: ./.github/actions/setup-sdl3-linux
 
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v6
+      - name: Install LLVM toolchain
+        uses: ./.github/actions/setup-llvm-toolchain
         with:
-          path: /tmp/sdl3-install
-          key: sdl3-linux-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
-
-      - name: Install SDL3 libraries
-        run: |
-          sudo cp -r /tmp/sdl3-install/* /usr/local/
-          sudo ldconfig
+          llvm-version: "21"
+          packages: clang-21
+          create-alternatives: "true"
 
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
-            clang \
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
@@ -284,7 +83,6 @@ jobs:
           overwrite: true
 
   build-windows-release:
-    needs: build-sdl3-windows
     name: Build Windows Release
     runs-on: windows-latest
     timeout-minutes: 20
@@ -317,27 +115,14 @@ jobs:
           update: true
           install: >
             mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-sdl3-mixer
             mingw-w64-clang-x86_64-libpng
             mingw-w64-clang-x86_64-libzip
             mingw-w64-clang-x86_64-dwarfstack
             mingw-w64-clang-x86_64-mimalloc
             make
             git
-
-      - name: Get week of year
-        shell: bash
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-        id: week
-
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v6
-        with:
-          path: D:\a\_temp\msys64\sdl3-tmp
-          key: sdl3-windows-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
-
-      - name: Install SDL3 libraries
-        run: cp -r /sdl3-tmp/* /clang64/
 
       - name: Build release
         run: make windows
@@ -376,7 +161,6 @@ jobs:
           if-no-files-found: error
 
   build-macos-release:
-    needs: build-sdl3-macos
     name: Build MacOS Release
     runs-on: macos-latest
     timeout-minutes: 30
@@ -397,27 +181,7 @@ jobs:
       - name: Install dependencies
         run: |
           brew untap aws/tap 2>/dev/null || true
-          brew install libzip zlib mimalloc imagemagick
-
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            /opt/homebrew/lib/libSDL3*
-            /opt/homebrew/lib/pkgconfig/sdl3.pc
-            /opt/homebrew/lib/pkgconfig/sdl3-mixer.pc
-            /opt/homebrew/include/SDL3
-            /opt/homebrew/include/SDL3_mixer
-            /opt/homebrew/lib/cmake/SDL3
-            /opt/homebrew/lib/cmake/SDL3_mixer
-            /opt/homebrew/share/licenses/SDL3
-            /opt/homebrew/share/licenses/SDL3_mixer
-          key: sdl3-macos-3.4.14-mix3.2.4-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
+          brew install sdl3 sdl3_mixer libzip zlib mimalloc imagemagick
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1

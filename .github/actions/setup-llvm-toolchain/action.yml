@@ -49,6 +49,10 @@ runs:
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${{ inputs.llvm-version }} 100
         fi
 
+        if command -v clang++-${{ inputs.llvm-version }} &> /dev/null; then
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${{ inputs.llvm-version }} 100
+        fi
+
         if command -v clang-tidy-${{ inputs.llvm-version }} &> /dev/null; then
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${{ inputs.llvm-version }} 100
         fi

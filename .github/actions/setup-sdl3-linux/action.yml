@@ -1,0 +1,104 @@
+name: 'Setup SDL3 (Linux)'
+description: 'Provide the pinned SDL3 + SDL3_mixer in /usr/local: restore from cache, or build from source on miss (builder mode)'
+inputs:
+  build-on-miss:
+    description: 'true = build SDL from source when the cache misses (builder job); false = fail on cache miss (consumer jobs)'
+    required: false
+    default: 'false'
+  sdl3-version:
+    description: 'SDL release tag'
+    required: false
+    default: 'release-3.4.14'
+  sdl3-mixer-version:
+    description: 'SDL_mixer release tag'
+    required: false
+    default: 'release-3.2.4'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache SDL3 libraries (build on miss)
+      if: inputs.build-on-miss == 'true'
+      id: cache-sdl3
+      uses: actions/cache@v6
+      with:
+        path: /tmp/sdl3-install
+        key: sdl3-linux-${{ inputs.sdl3-version }}-${{ inputs.sdl3-mixer-version }}
+
+    - name: Restore SDL3 libraries from cache
+      if: inputs.build-on-miss != 'true'
+      uses: actions/cache/restore@v6
+      with:
+        path: /tmp/sdl3-install
+        key: sdl3-linux-${{ inputs.sdl3-version }}-${{ inputs.sdl3-mixer-version }}
+        fail-on-cache-miss: true
+
+    - name: Install SDL build dependencies
+      if: inputs.build-on-miss == 'true' && steps.cache-sdl3.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          ninja-build \
+          libasound2-dev \
+          libpulse-dev \
+          libaudio-dev \
+          libfribidi-dev \
+          libjack-dev \
+          libsndio-dev \
+          libusb-1.0-0-dev \
+          libx11-dev \
+          libxext-dev \
+          libxrandr-dev \
+          libxcursor-dev \
+          libxfixes-dev \
+          libxi-dev \
+          libxss-dev \
+          libxtst-dev \
+          libwayland-dev \
+          libxkbcommon-dev \
+          libdrm-dev \
+          libgbm-dev \
+          libgl1-mesa-dev \
+          libgles2-mesa-dev \
+          libegl1-mesa-dev \
+          libdbus-1-dev \
+          libibus-1.0-dev \
+          libudev-dev \
+          libthai-dev
+
+    - name: Build SDL3 from source
+      if: inputs.build-on-miss == 'true' && steps.cache-sdl3.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        cd /tmp
+        git clone --depth 1 --branch ${{ inputs.sdl3-version }} https://github.com/libsdl-org/SDL.git
+        cmake -S SDL -B SDL-build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
+          -DSDL_STATIC=OFF
+        cmake --build SDL-build
+        cmake --install SDL-build
+        rm -rf SDL SDL-build
+
+    - name: Build SDL3_mixer from source
+      if: inputs.build-on-miss == 'true' && steps.cache-sdl3.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        cd /tmp
+        curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${{ inputs.sdl3-mixer-version }}.tar.gz | tar xz
+        cmake -S SDL_mixer-${{ inputs.sdl3-mixer-version }} -B SDL_mixer-build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
+          -DCMAKE_PREFIX_PATH=/tmp/sdl3-install \
+          -DSDL3MIXER_VENDORED=ON
+        cmake --build SDL_mixer-build
+        cmake --install SDL_mixer-build
+        rm -rf SDL_mixer-${{ inputs.sdl3-mixer-version }} SDL_mixer-build
+
+    - name: Install SDL3 into /usr/local
+      shell: bash
+      run: |
+        sudo cp -r /tmp/sdl3-install/* /usr/local/
+        sudo ldconfig

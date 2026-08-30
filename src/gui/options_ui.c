@@ -14,6 +14,7 @@
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
+#include "sdl/sdl_gpu.h"
 #include "sdl/font_manager.h"
 #include "sdl/gamepad.h"
 #include "modder/modder.h"
@@ -122,7 +123,7 @@ static int opt_tab_total(void)
 	case 1:
 		return 4;
 	case 2:
-		return 6;
+		return 7;
 	case 3:
 		return OPT_UI_NATIVE + opt_mod_row_count(AMOD_TAB_UI);
 	case 4:
@@ -576,6 +577,20 @@ static void opt_display_display(void)
 		draw_checkbox(opt_lx, ry, (game_options & GO_TTF) != 0,
 		    fm_available() ? "TTF Text (experimental)" : "TTF Text (unavailable)");
 	}
+
+	ry = opt_row_y(6);
+	if (ry >= 0) {
+		const char *label;
+
+		if (use_gpu_rendering) {
+			label = "GPU Renderer (experimental)";
+		} else if (game_options & GO_GPU) {
+			label = "GPU Renderer (unavailable - using fallback)";
+		} else {
+			label = "GPU Renderer (experimental, needs restart)";
+		}
+		draw_checkbox(opt_lx, ry, (game_options & GO_GPU) != 0, label);
+	}
 }
 
 static int opt_click_display(int mx, int my)
@@ -637,6 +652,17 @@ static int opt_click_display(int mx, int my)
 		 * flush: the TTF cache generation is part of the cache key. */
 		game_options ^= GO_TTF;
 		fm_set_enabled((game_options & GO_TTF) != 0);
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(6);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		/* persisted via the extra-options file, like the TTF toggle. The
+		 * renderer cannot be swapped at runtime - the choice takes effect on
+		 * the next start (and silently falls back to SDL_Renderer when the
+		 * GPU path is not usable on this system). */
+		game_options ^= GO_GPU;
 		save_options();
 		return 1;
 	}

@@ -27,6 +27,7 @@
 #include "game/game_private.h"
 #include "game/sprite_config.h"
 #include "sdl/sdl.h"
+#include "sdl/sdl_gpu.h"
 #include "sdl/font_manager.h"
 #include "gui/gui.h"
 #include "gui/loading_ui.h"
@@ -524,6 +525,10 @@ static int saved_vsync = -1;
 /* TTF text from the extra-options file; re-applied after sdl_init because
  * sdl_init resets game_options to GO_DEFAULTS when no -o was given. */
 static int saved_ttf_text = -1;
+/* SDL_GPU renderer (experimental, opt-in) from the extra-options file; must
+ * be known BEFORE sdl_init (renderer creation), re-applied to game_options
+ * after it (same GO_DEFAULTS reset as the TTF option). */
+static int saved_gpu_rendering = -1;
 
 static void save_extra_options(void)
 {
@@ -539,6 +544,7 @@ static void save_extra_options(void)
 	}
 	cJSON_AddBoolToObject(root, "hide_lag_warning", (game_options & GO_NOLAG) != 0);
 	cJSON_AddBoolToObject(root, "ttf_text", (game_options & GO_TTF) != 0);
+	cJSON_AddBoolToObject(root, "gpu_rendering", (game_options & GO_GPU) != 0);
 	cJSON_AddNumberToObject(root, "master_volume", sound_volume);
 	cJSON_AddNumberToObject(root, "sfx_volume", sound_volume_sfx);
 	cJSON_AddNumberToObject(root, "ambient_volume", sound_volume_ambient);
@@ -615,6 +621,15 @@ static void load_extra_options(void)
 			game_options |= GO_TTF;
 		} else {
 			game_options &= ~GO_TTF;
+		}
+	}
+	v = cJSON_GetObjectItem(root, "gpu_rendering");
+	if (v && cJSON_IsBool(v)) {
+		saved_gpu_rendering = cJSON_IsTrue(v) ? 1 : 0;
+		if (saved_gpu_rendering) {
+			game_options |= GO_GPU;
+		} else {
+			game_options &= ~GO_GPU;
 		}
 	}
 	sound_volume = extra_int(root, "master_volume", sound_volume, 0, 128);
@@ -881,6 +896,13 @@ int main(int argc, char *argv[])
 	determine_resolution();
 
 	sprintf(buf, "Astonia 3 v%d.%d.%d", (VERSION >> 16) & 255, (VERSION >> 8) & 255, (VERSION) & 255);
+	/* SDL_GPU renderer (experimental, opt-in, default OFF): decide BEFORE
+	 * sdl_init creates the renderer. Requested via the saved extra option or
+	 * the GO_GPU -o bit; when neither is set, no GPU code runs at all.
+	 * sdl_init falls back to SDL_Renderer when the GPU path is requested but
+	 * not usable (no device, missing shader pipelines). */
+	gpu_rendering_requested = (saved_gpu_rendering > 0) || ((game_options & GO_GPU) != 0);
+
 	if (!sdl_init(want_width, want_height, buf, want_monitor)) {
 		render_exit();
 		return -1;
@@ -898,6 +920,15 @@ int main(int argc, char *argv[])
 	}
 	fm_init();
 	fm_set_enabled((game_options & GO_TTF) != 0);
+
+	/* re-apply the GPU renderer preference for the same GO_DEFAULTS reason -
+	 * the bit reflects the user's saved choice (shown in Options), while
+	 * use_gpu_rendering reflects what sdl_init actually managed to set up */
+	if (gpu_rendering_requested) {
+		game_options |= GO_GPU;
+	} else {
+		game_options &= ~GO_GPU;
+	}
 
 	render_init();
 	loading_step(LS_SOUND);

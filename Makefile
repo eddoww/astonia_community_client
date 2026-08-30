@@ -1,4 +1,4 @@
-.PHONY: all debug release windows linux macos macos-appbundle macos-signed-bundle clean distrib distrib-stage amod convert anicopy zig-build docker-linux docker-linux-debug docker-linux-dev docker-distrib-linux appimage zen4-appimage sanitizer coverage test
+.PHONY: all debug release windows linux macos build-sdl3 build-sdl3-mixer macos-appbundle macos-signed-bundle clean distrib distrib-stage amod convert anicopy zig-build docker-linux docker-linux-debug docker-linux-dev docker-distrib-linux appimage zen4-appimage sanitizer coverage test
 
 # Root Makefile - Platform dispatcher
 #
@@ -30,6 +30,9 @@ else
     PLATFORM := windows
 endif
 
+# Parallel job count for sub-makes (override with make JOBS=1 ... for serial builds)
+JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+
 # ============================================================================
 # Configuration Variables
 # ============================================================================
@@ -55,10 +58,8 @@ DOCKER_RUN_FLAGS_INTERACTIVE := --rm -it -e HOST_UID=$(shell id -u) -e HOST_GID=
 #   $4 = Optional build arguments (e.g., --build-arg ZEN4=1)
 define docker-build-and-run
 	@echo "Building Docker image: $(2)..."
-	cp $(DOCKER_CONTAINER_DIR)/$(1) .
-	docker build -f $(1) -t $(2) $(4) .
+	docker build -f $(DOCKER_CONTAINER_DIR)/$(1) -t $(2) $(4) .
 	docker run $(3) $(2)
-	rm -f $(1)
 endef
 
 # Function: docker-build-and-run-appimage
@@ -69,9 +70,7 @@ endef
 #   $3 = Optional build arguments (e.g., --build-arg ZEN4=1)
 define docker-build-and-run-appimage
 	@echo "Building Linux AppImage..."
-	cp $(DOCKER_CONTAINER_DIR)/Dockerfile.appimage .
-	docker build -f Dockerfile.appimage -t $(1) $(3) .
-	rm -f Dockerfile.appimage
+	docker build -f $(DOCKER_CONTAINER_DIR)/Dockerfile.appimage -t $(1) $(3) .
 	docker run --rm -e HOST_UID=$(shell id -u) -e HOST_GID=$(shell id -g) -v "$(PWD):/output" $(1)
 	mv astonia-client-*.AppImage $(2)
 	@echo ""
@@ -85,37 +84,37 @@ endef
 # Default target - build for detected platform (release mode)
 all:
 	@echo "Building for $(PLATFORM)..."
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM)
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM)
 
 # Build type targets (pass through to platform makefiles)
 debug:
 	@echo "Building DEBUG for $(PLATFORM)..."
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) BUILD_TYPE=debug
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) BUILD_TYPE=debug
 
 release:
 	@echo "Building RELEASE for $(PLATFORM)..."
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) BUILD_TYPE=release
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) BUILD_TYPE=release
 
 # Platform-specific targets
 windows:
 	@echo "Building for Windows..."
-	@$(MAKE) -f build/make/Makefile.windows
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.windows
 
 linux:
 	@echo "Building for Linux..."
-	@$(MAKE) -f build/make/Makefile.linux
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.linux
 
 macos:
 	@echo "Building for macOS..."
-	@$(MAKE) -f build/make/Makefile.macos
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.macos
 
 macos-appbundle:
 	@echo "Building for macOS..."
-	@$(MAKE) -f build/make/Makefile.macos appbundle
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.macos appbundle
 
 macos-signed-bundle:
 	@echo "Building (locally) signing bundle for macOS..."
-	@$(MAKE) -f build/make/Makefile.macos sign
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.macos sign
 
 # Clean for all platforms
 clean:
@@ -127,37 +126,37 @@ clean:
 # Distribution staging target (delegates to platform-specific Makefile)
 distrib-stage:
 	@echo "Preparing distribution staging for $(PLATFORM)..."
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) distrib-stage
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) distrib-stage
 
 # Distribution target (delegates to platform-specific Makefile)
 distrib:
 	@echo "Creating distribution for $(PLATFORM)..."
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) distrib
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) distrib
 
 # Helper targets (delegates to platform-specific Makefile)
 amod:
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) amod
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) amod
 
 convert:
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) convert
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) convert
 
 anicopy:
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) anicopy
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) anicopy
 
 build-sdl3:
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) build-sdl3
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) build-sdl3
 
 build-sdl3-mixer:
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) build-sdl3-mixer
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) build-sdl3-mixer
 
 # Code quality targets
 sanitizer:
 	@echo "Building with AddressSanitizer/UBSan for $(PLATFORM)..."
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) sanitizer
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) sanitizer
 
 coverage:
 	@echo "Building with coverage instrumentation for $(PLATFORM)..."
-	@$(MAKE) -f build/make/Makefile.$(PLATFORM) coverage
+	@$(MAKE) -j$(JOBS) -f build/make/Makefile.$(PLATFORM) coverage
 
 # Zig build target
 zig-build:
@@ -177,10 +176,8 @@ docker-linux:
 # Docker build for Linux (debug mode with DEVELOPER enabled)
 docker-linux-debug:
 	@echo "Building Linux DEBUG in Docker (with DEVELOPER enabled)..."
-	cp $(DOCKER_CONTAINER_DIR)/Dockerfile.linux .
-	docker build -f Dockerfile.linux -t astonia-linux-build .
+	docker build -f $(DOCKER_CONTAINER_DIR)/Dockerfile.linux -t astonia-linux-build .
 	docker run $(DOCKER_RUN_FLAGS) astonia-linux-build -Ddeveloper=true
-	rm -f Dockerfile.linux
 
 # Docker development environment for Linux (interactive)
 docker-linux-dev:
@@ -198,10 +195,7 @@ docker-distrib-linux:
 	@echo "Building Linux distribution package in Docker..."
 	$(call docker-build-and-run,Dockerfile.linux,astonia-linux-build,$(DOCKER_RUN_FLAGS))
 	@echo "Creating distribution package..."
-	@cp $(DOCKER_CONTAINER_DIR)/Dockerfile.linux .
-	@docker build -f Dockerfile.linux -t astonia-linux-build . > /dev/null 2>&1
 	@docker run --rm -v "$(PWD):/app" -w /app --entrypoint make astonia-linux-build -f build/make/Makefile.linux distrib
-	@rm -f Dockerfile.linux
 	@echo "Linux distribution created: linux_client.tar.gz"
 	@ls -lh linux_client.tar.gz
 
@@ -210,4 +204,5 @@ include build/make/Makefile.quality
 
 # Run unit tests
 test:
-	@$(MAKE) -C tests run
+	@$(MAKE) -j$(JOBS) -C tests all
+	@$(MAKE) -j1 -C tests run

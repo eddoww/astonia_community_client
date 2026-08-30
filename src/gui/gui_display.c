@@ -346,7 +346,9 @@ void display(void)
 		if (game_options & GO_WHEEL) {
 			display_wheel();
 		}
-		display_wear();
+		if (panel_shown(PANEL_EQUIPMENT)) {
+			display_wear();
+		}
 		display_exp();
 		display_military();
 		display_selfbars();

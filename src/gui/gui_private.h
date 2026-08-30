@@ -71,17 +71,18 @@
 
 /* panel drag handles - one per panel, in PANEL_* enum order (panels.h):
  * BUT_DRAG_BEG + PANEL_x must be that panel's drag button */
-#define BUT_DRAG_BEG    152
-#define BUT_DRAG_SKILLS 152
-#define BUT_DRAG_CHAT   153
-#define BUT_DRAG_INV    154
-#define BUT_DRAG_GOLD   155
-#define BUT_DRAG_SPEED  156
-#define BUT_DRAG_BUFFS  157
-#define BUT_DRAG_HOTBAR 158
-#define BUT_DRAG_END    158
+#define BUT_DRAG_BEG       152
+#define BUT_DRAG_SKILLS    152
+#define BUT_DRAG_CHAT      153
+#define BUT_DRAG_INV       154
+#define BUT_DRAG_GOLD      155
+#define BUT_DRAG_SPEED     156
+#define BUT_DRAG_BUFFS     157
+#define BUT_DRAG_HOTBAR    158
+#define BUT_DRAG_EQUIPMENT 159
+#define BUT_DRAG_END       159
 
-#define MAX_BUT 159 /* keep > the highest BUT_* id (BUT_DRAG_END 158) */
+#define MAX_BUT 160 /* keep > the highest BUT_* id (BUT_DRAG_END 159) */
 _Static_assert(BUT_MILBAR < MAX_BUT && BUT_EXPBAR < MAX_BUT && BUT_HOTBAR_END < MAX_BUT && BUT_DRAG_END < MAX_BUT,
     "MAX_BUT must exceed every BUT_* id (but[] is indexed by id)");
 _Static_assert(

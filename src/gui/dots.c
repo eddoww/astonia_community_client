@@ -310,6 +310,10 @@ void init_dots(void)
 	} else {
 		set_but(BUT_DRAG_HOTBAR, 0, 0, 0, BUTF_NOHIT);
 	}
+	/* equipment drag handle sits left of the first worn slot; it needs the
+	 * same TOPOFF flag as the slots so it slides with the small top bar */
+	set_but(BUT_DRAG_EQUIPMENT, dot[DOT_WEA].x - FDX / 2 - 8, dot[DOT_WEA].y, 12,
+	    BUTF_CAPTURE | BUTF_MOVEEXEC | (!stop ? 0 : BUTF_TOPOFF));
 
 	// shift every panel by its stored drag offset - must stay the last
 	// step so it sees the complete default layout

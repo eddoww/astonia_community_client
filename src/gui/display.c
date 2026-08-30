@@ -130,7 +130,12 @@ void display_wear(void)
 		}
 
 		if (i == 2 && item[weatab[1]] && (item_flags[weatab[1]] & IF_WNTWOHANDED)) {
+			/* left hand blocked by a two-handed weapon in the right hand:
+			 * red-tinted pad with a cross so the dead slot reads at a glance */
 			render_sprite(5, x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+			render_shaded_rect(x - 16, y - 16, x + 16, y + 16, IRGB(25, 6, 6), 100);
+			render_line(x - 11, y - 11, x + 11, y + 11, IRGB(31, 0, 0));
+			render_line(x + 11, y - 11, x - 11, y + 11, IRGB(31, 0, 0));
 		}
 
 		if (con_cnt && con_type == 2 && itemprice[weatab[i]]) {
@@ -719,30 +724,43 @@ static void draw_bar_region(unsigned int sprite, int by, int sx0, int sx1, int a
  * between the ornament and the control cluster); the remaining stretches
  * use a plain plate-free slice of the art (plate-interior rock between
  * the rails, art columns 212-228). Art geometry: left ornament [0,160), 12 plates
- * [160,640), right controls [640,800). At XRES0 this degenerates to the
- * original single blit. */
+ * [160,640), right controls [640,800). At XRES0 with the panel in its home
+ * position this reproduces the original single blit exactly.
+ *
+ * The plate band is the equipment panel's slice of the bar art: it follows
+ * the panel's drag offset and hides with it, mirroring how the bottom bar
+ * art is cut into per-panel slices. While the panel sits in its home spot
+ * the band is left out of the filler pass so transparent plate pixels never
+ * show filler behind them (keeps the default pixel-identical). */
 static void render_top_bar(unsigned int sprite, int bx, int by)
 {
-	if (XRES <= XRES0) {
-		render_sprite(sprite, bx, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-		return;
-	}
-
-	int wea_left = bx + (XRES - 480) / 2; /* matches DOT_WEA - 20 */
+	int wea_left = bx + (XRES - 480) / 2; /* home plate band (matches DOT_WEA - 20) */
 	int right_x = bx + XRES - 160;
+	int eq_home = panel_shown(PANEL_EQUIPMENT) && !panel_dx(PANEL_EQUIPMENT) && !panel_dy(PANEL_EQUIPMENT);
 	int x, e;
 
 	draw_bar_region(sprite, by, bx, bx + 160, 0); /* ornament + exp bars */
-	draw_bar_region(sprite, by, wea_left, wea_left + 480, 160); /* equipment plates */
 	draw_bar_region(sprite, by, right_x, bx + XRES, 640); /* gear lock + menu + clock */
 
-	for (x = bx + 160; x < wea_left; x += 16) { /* plain filler, left of the slots */
-		e = (x + 16 < wea_left) ? x + 16 : wea_left;
-		draw_bar_region(sprite, by, x, e, 212);
+	if (eq_home) {
+		for (x = bx + 160; x < wea_left; x += 16) { /* plain filler, left of the slots */
+			e = (x + 16 < wea_left) ? x + 16 : wea_left;
+			draw_bar_region(sprite, by, x, e, 212);
+		}
+		for (x = wea_left + 480; x < right_x; x += 16) { /* plain filler, right of the slots */
+			e = (x + 16 < right_x) ? x + 16 : right_x;
+			draw_bar_region(sprite, by, x, e, 212);
+		}
+	} else {
+		for (x = bx + 160; x < right_x; x += 16) { /* the panel left home: filler all across */
+			e = (x + 16 < right_x) ? x + 16 : right_x;
+			draw_bar_region(sprite, by, x, e, 212);
+		}
 	}
-	for (x = wea_left + 480; x < right_x; x += 16) { /* plain filler, right of the slots */
-		e = (x + 16 < right_x) ? x + 16 : right_x;
-		draw_bar_region(sprite, by, x, e, 212);
+
+	/* equipment plates at the (possibly dragged) panel position */
+	if (panel_shown(PANEL_EQUIPMENT)) {
+		draw_bar_region(sprite, doty(DOT_WEA) - 20, dotx(DOT_WEA) - 20, dotx(DOT_WEA) - 20 + 480, 160);
 	}
 }
 

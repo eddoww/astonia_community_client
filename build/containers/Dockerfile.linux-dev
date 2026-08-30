@@ -53,7 +53,7 @@ RUN pip install --break-system-packages --no-cache-dir gcovr && \
 
 # Build SDL3_mixer from source (not yet available in official repos)
 # Using tagged release instead of AUR to avoid sdl3-git conflicts
-ARG SDL3_MIXER_VERSION=prerelease-3.1.2
+ARG SDL3_MIXER_VERSION=release-3.2.4
 RUN cd /tmp && \
     curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz && \
     cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \

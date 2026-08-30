@@ -102,9 +102,7 @@ src/client/protocol.o: src/client/protocol.c src/astonia.h src/client/client.h s
 
 src/game/render.o:		src/game/render.c src/astonia.h src/game/game.h src/game/game_private.h src/client/client.h src/sdl/sdl.h
 src/game/font.o:	src/game/font.c src/game/game.h src/game/game_private.h
-src/game/game.o:    	src/game/game.c src/astonia.h src/game/game.h src/game/game_private.h src/client/client.h src/gui/gui.h
 src/game/main.o:	src/game/main.c src/astonia.h src/game/game.h src/game/game_private.h src/client/client.h src/gui/gui.h src/gui/input_bind.h src/sdl/sdl.h src/modder/modder.h
-src/game/skill.o:      	src/game/skill.c src/astonia.h src/game/game.h src/game/game_private.h src/client/client.h
 src/game/sprite.o:	src/game/sprite.c src/astonia.h src/game/game.h src/game/game_private.h src/client/client.h src/gui/gui.h src/game/sprite_config.h
 src/game/sprite_config.o:	src/game/sprite_config.c src/game/sprite_config.h src/lib/cjson/cJSON.h src/astonia.h
 
@@ -117,7 +115,6 @@ src/gui/context.o:	src/gui/context.c src/astonia.h src/gui/gui.h src/gui/gui_pri
 src/gui/cmd.o:		src/gui/cmd.c src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h src/sdl/sdl.h src/modder/modder.h
 src/gui/dots.o:		src/gui/dots.c src/astonia.h src/gui/gui.h src/gui/gui_private.h
 src/gui/display.o:	src/gui/display.c src/astonia.h src/gui/gui.h src/gui/gui_private.h src/gui/input_bind.h src/client/client.h src/game/game.h src/gui/ui_draw.h src/gui/ui_tokens.h
-src/gui/gui.o:		src/gui/gui.c src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h  src/sdl/sdl.h src/modder/modder.h
 src/gui/hover.o:	src/gui/hover.c src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/gui/gui.h src/game/game.h src/sdl/sdl.h src/modder/modder.h
 src/gui/minimap.o:	src/gui/minimap.c src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/sdl/sdl.h src/game/game.h
 src/gui/teleport.o:	src/gui/teleport.c src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h
@@ -159,7 +156,6 @@ src/helper/convert.o:	src/helper/convert.c src/astonia.h src/sdl/sdl.h src/sdl/s
 
 src/modder/modder.o:	src/modder/modder.c src/astonia.h src/modder/modder.h src/modder/modder_private.h src/client/client.h
 
-src/sdl/sdl.o:		src/sdl/sdl.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h
 src/sdl/sound.o:      	src/sdl/sound.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h
 
 src/game/memory.o: src/game/memory.c src/game/memory.h src/astonia.h src/sdl/sdl.h
@@ -299,7 +295,7 @@ build-sdl3:
 	BUILD_DIR=$$([ -d "$$TMP_DIR" ] && echo "$$TMP_DIR" || echo "/tmp"); \
 	cd "$$BUILD_DIR" && \
 		rm -rf SDL SDL-build && \
-		git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git SDL && \
+		git clone --depth 1 --branch release-3.4.14 https://github.com/libsdl-org/SDL.git SDL && \
 		cmake -S SDL -B SDL-build \
 			-DCMAKE_BUILD_TYPE=Release \
 			-DCMAKE_INSTALL_PREFIX=/usr/local \
@@ -314,7 +310,7 @@ build-sdl3:
 # Build SDL3_mixer from source (always builds, no detection)
 # Note: SDL3 must be installed first
 # Installs to /usr/local (standard for Linux source builds)
-SDL3_MIXER_VERSION ?= prerelease-3.1.2
+SDL3_MIXER_VERSION ?= release-3.2.4
 build-sdl3-mixer: verify-sdl3
 	@echo "Building SDL3_mixer $(SDL3_MIXER_VERSION) from source..."
 	@TMP_DIR=$${TMPDIR:-$${TMP:-/tmp}}; \

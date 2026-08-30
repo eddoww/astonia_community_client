@@ -244,7 +244,7 @@ build-sdl3:
 	BUILD_DIR=$$([ -d "$$TMP_DIR" ] && echo "$$TMP_DIR" || echo "/tmp"); \
 	cd "$$BUILD_DIR" && \
 		rm -rf SDL SDL-build && \
-		git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git SDL && \
+		git clone --depth 1 --branch release-3.4.14 https://github.com/libsdl-org/SDL.git SDL && \
 		cmake -S SDL -B SDL-build \
 			-DCMAKE_BUILD_TYPE=Release \
 			-DCMAKE_INSTALL_PREFIX=$(BREW_PREFIX) \
@@ -265,7 +265,7 @@ build-sdl3-mixer: verify-sdl3
 	BUILD_DIR=$$([ -d "$$TMP_DIR" ] && echo "$$TMP_DIR" || echo "/tmp"); \
 	cd "$$BUILD_DIR" && \
 		rm -rf SDL_mixer SDL_mixer-build && \
-		git clone --depth 1 --branch main https://github.com/libsdl-org/SDL_mixer.git SDL_mixer && \
+		git clone --depth 1 --branch release-3.2.4 https://github.com/libsdl-org/SDL_mixer.git SDL_mixer && \
 		cmake -S SDL_mixer -B SDL_mixer-build \
 			-DCMAKE_BUILD_TYPE=Release \
 			-DCMAKE_INSTALL_PREFIX=$(BREW_PREFIX) \

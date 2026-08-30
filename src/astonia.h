@@ -171,6 +171,7 @@ extern char *localdata;
 #define GO_NOMAP      (1ull << 18) // Disable minimap completely
 #define GO_WHEELSPEED (1ull << 19) // Mouse wheel toggles movement speed (fast/normal/stealth)
 #define GO_NOLAG      (1ull << 20) // Hide the lag warning overlay
+#define GO_TTF        (1ull << 21) // TTF text rendering (experimental, needs SDL3_ttf)
 
 #define GO_NOTSET (1ull << 63) // No -o given on command line
 

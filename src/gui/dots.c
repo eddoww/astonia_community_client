@@ -109,23 +109,25 @@ void init_dots(void)
 	/* equipment row is centered between the top bar's left ornament and
 	 * the right control cluster (== 180 on the classic 800px bar) */
 	set_dot(DOT_WEA, (XRES - 480) / 2 + 20, 20, !stop ? 0 : DOTF_TOPOFF);
-	// inventory cluster is anchored to the right edge (art columns 645-795
-	// of the XRES0-wide bottom bar, which is drawn right-anchored too)
-	set_dot(DOT_INV, XRES - 140, doty(DOT_BOT) + 27, 0);
+	// inventory cluster is anchored to the bottom-right corner (the classic
+	// grid lives in art columns 645-795 of the XRES0-wide bottom bar, which
+	// is drawn right-anchored too); the container keeps the classic 4-wide
+	// count regardless of the inventory grid setting
+	__condy = !sbot ? 4 : 3;
+	__invdy = inv_grid_rows() ? inv_grid_rows() : __condy;
+
+	// last row's bottom edge stays flush with the classic bar bottom; extra
+	// rows and columns grow up/left from there. At 4 cols and auto rows this
+	// reproduces the classic positions exactly (XRES-140, BOT+27).
+	set_dot(DOT_IN2, XRES - 5, doty(DOT_BO2) - 2, 0);
+	set_dot(DOT_INV, XRES - 20 - (inv_grid_cols() - 1) * FDX, doty(DOT_IN2) - 1 - __invdy * FDX + FDX / 2, 0);
+	set_dot(DOT_IN1, dotx(DOT_INV) - 15, doty(DOT_INV) - 25, 0);
 	set_dot(DOT_CON, 20, doty(DOT_BOT) + 27, 0);
 
-	// inventory top left and bottom right
-	set_dot(DOT_IN1, XRES - 155, doty(DOT_BOT) + 2, 0);
-	set_dot(DOT_IN2, XRES - 5, doty(DOT_BO2) - 2, 0);
-	if (!sbot) {
-		__invdy = 4;
-	} else {
-		__invdy = 3;
-	}
-
-	// scroll bars
+	// scroll bars (the right rail hugs the inventory grid's left edge:
+	// XRES-165 for the classic grid, further left for denser grids)
 	set_dot(DOT_SCL, 160 + 5, 0, 0);
-	set_dot(DOT_SCR, XRES - 160 - 5, 0, 0);
+	set_dot(DOT_SCR, dotx(DOT_IN1) - 10, 0, 0);
 	set_dot(DOT_SCU, 0, doty(DOT_BOT) + 15, 0);
 	if (!sbot) {
 		set_dot(DOT_SCD, 0, doty(DOT_BOT) + 160, 0);
@@ -231,9 +233,22 @@ void init_dots(void)
 	for (i = 0; i < 12; i++) {
 		set_but(BUT_WEA_BEG + i, dot[DOT_WEA].x + i * FDX, dot[DOT_WEA].y + 0, 40, !stop ? 0 : BUTF_TOPOFF);
 	}
-	for (x = 0; x < 4; x++) {
-		for (y = 0; y < 4; y++) {
-			set_but(BUT_INV_BEG + x + y * 4, dot[DOT_INV].x + x * FDX, dot[DOT_INV].y + y * FDX, 40, 0);
+	{
+		int cols = inv_grid_cols();
+		/* the classic grid sits inside the bar art, so its generous radius-40
+		 * hit circles only overreach onto chrome; denser grids border the
+		 * open map and use the hotbar's pad-sized radius instead so slots
+		 * don't grab hovers from map tiles above the grid */
+		int hitrad = inv_grid_is_classic() ? 40 : 23;
+
+		for (x = 0; x < cols; x++) {
+			for (y = 0; y < __invdy; y++) {
+				set_but(BUT_INV_BEG + x + y * cols, dot[DOT_INV].x + x * FDX, dot[DOT_INV].y + y * FDX, hitrad, 0);
+			}
+		}
+		/* disable hit testing on the unused part of the button range */
+		for (i = cols * __invdy; i <= BUT_INV_END - BUT_INV_BEG; i++) {
+			set_but(BUT_INV_BEG + i, 0, 0, 0, BUTF_NOHIT);
 		}
 	}
 	for (x = 0; x < 4; x++) {

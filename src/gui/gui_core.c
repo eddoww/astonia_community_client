@@ -214,6 +214,7 @@ int conoff, max_conoff;
 int skloff, max_skloff;
 int __skldy;
 int __invdy;
+int __condy;
 
 int lcmd;
 int rcmd;

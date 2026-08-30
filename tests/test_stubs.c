@@ -122,6 +122,12 @@ void cmd_proc(int key __attribute__((unused)))
 	// No-op in tests
 }
 
+int amod_textinput(int key __attribute__((unused)))
+{
+	// No mods in tests - never consume
+	return 0;
+}
+
 void display_messagebox(const char *title __attribute__((unused)), const char *msg __attribute__((unused)))
 {
 	fprintf(stderr, "MessageBox: %s - %s\n", title ? title : "(no title)", msg ? msg : "(no message)");

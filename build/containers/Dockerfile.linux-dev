@@ -10,8 +10,7 @@ RUN pacman-key --init && \
     pacman -Syyu --noconfirm --needed --ask=4 --overwrite="*"
 
 # Install basic dependencies and development tools
-# Note: sdl3 and mimalloc are now available in the official Arch repos
-# Note: libvorbis and libogg are required so SDL3_mixer builds with OGG support
+# Note: sdl3, sdl3_mixer and mimalloc come from the official Arch repos
 RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
     curl \
     wget \
@@ -24,9 +23,8 @@ RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
     unzip \
     cmake \
     ninja \
-    libvorbis \
-    libogg \
     sdl3 \
+    sdl3_mixer \
     mimalloc \
     && pacman -Scc --noconfirm
 
@@ -50,19 +48,6 @@ RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
 RUN pip install --break-system-packages --no-cache-dir gcovr && \
     pacman -S --noconfirm --needed --ask=4 --overwrite="*" lcov && \
     pacman -Scc --noconfirm
-
-# Build SDL3_mixer from source (not yet available in official repos)
-# Using tagged release instead of AUR to avoid sdl3-git conflicts
-ARG SDL3_MIXER_VERSION=release-3.2.4
-RUN cd /tmp && \
-    curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz && \
-    cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=/usr \
-        -DSDL3MIXER_VENDORED=ON && \
-    cmake --build SDL_mixer-build && \
-    cmake --install SDL_mixer-build && \
-    rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable

@@ -423,7 +423,9 @@ static size_t sv_text(unsigned char *buf)
 			}
 		} else {
 			if (!hover_capture_text(line)) {
-				addline("%s", line);
+				if (!amod_text_line(line)) {
+					addline("%s", line);
+				}
 			}
 		}
 	}

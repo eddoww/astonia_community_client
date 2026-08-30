@@ -45,6 +45,14 @@ static int map_managed = 0; // map managed 0 = we're guessing. map managed 1 = t
 static int map_area = 0;
 static int map_server = 0;
 
+/* Big-map magnification. The big map always fills a MAXMAP x MAXMAP
+ * viewport; zoom selects how large a source window of the explored-map
+ * texture is scaled into it (1x = whole map, 4x = MAXMAP/4 window around
+ * the player). 3 matches the fixed 3x big-map view this replaces. */
+#define MINIMAP_ZOOM_MIN 1
+#define MINIMAP_ZOOM_MAX 4
+static int minimap_zoom = 3;
+
 /* Current area id as last announced by the server (SV_AREAINFO / AIC_SETID),
  * 0 until the first area info arrives. Exported for mods, which otherwise
  * have no way to tell which area the player is in. */
@@ -241,7 +249,9 @@ void display_minimap(void)
 		return;
 	}
 
-	if (visible & 2) { // display big map
+	if (visible == 2) { // display big map
+		int src_size;
+
 		if (update1) {
 			for (y = 0; y < MAXMAP; y++) {
 				for (x = 0; x < MAXMAP; x++) {
@@ -257,36 +267,42 @@ void display_minimap(void)
 		dr.y = (float)((sy + y_offset) * sdl_scale);
 		dr.h = (float)(MAXMAP * sdl_scale);
 
-		if (visible & 1) {
-			sr.x = 0.0f;
-			sr.w = (float)MAXMAP;
-			sr.y = 0.0f;
-			sr.h = (float)MAXMAP;
-			sdl_render_copy(maptex1, &sr, &dr);
+		/* a MAXMAP/zoom source window centered on the player, clamped to
+		 * the map borders (never letting it slide off the texture), scaled
+		 * up to the full viewport. Zoom 1x shows the whole map. */
+		src_size = MAXMAP / minimap_zoom;
+
+		x = originx - src_size / 2;
+		y = originy - src_size / 2;
+		if (x < 0) {
+			x = 0;
+		}
+		if (x > MAXMAP - src_size) {
+			x = MAXMAP - src_size;
+		}
+		if (y < 0) {
+			y = 0;
+		}
+		if (y > MAXMAP - src_size) {
+			y = MAXMAP - src_size;
+		}
+
+		sr.x = (float)x;
+		sr.w = (float)src_size;
+		sr.y = (float)y;
+		sr.h = (float)src_size;
+
+		sdl_render_copy(maptex1, &sr, &dr);
+
+		/* player marker: transform the map position through the same
+		 * (clamped) source window - marker = anchor + (origin - sr.xy)
+		 * * scale + half a cell, done in exact integer math so it stays
+		 * on the player even when the window is pinned at a map border */
+		if (minimap_zoom == 1) {
 			draw_center(sx + originx, sy + originy);
 		} else {
-			x = originx - MAXMAP / 6;
-			y = originy - MAXMAP / 6;
-			if (x < 0) {
-				x = 0;
-			}
-			if (x > MAXMAP - MAXMAP / 3) {
-				x = MAXMAP - MAXMAP / 3;
-			}
-			if (y < 0) {
-				y = 0;
-			}
-			if (y > MAXMAP - MAXMAP / 3) {
-				y = MAXMAP - MAXMAP / 3;
-			}
-
-			sr.x = (float)x;
-			sr.w = (float)(MAXMAP / 3);
-			sr.y = (float)y;
-			sr.h = (float)(MAXMAP / 3);
-
-			sdl_render_copy(maptex1, &sr, &dr);
-			draw_center2(sx + (originx - x) * 3 + 2, sy + (originy - y) * 3 + 2);
+			draw_center2(sx + ((originx - x) * MAXMAP + MAXMAP / 2) / src_size,
+			    sy + ((originy - y) * MAXMAP + MAXMAP / 2) / src_size);
 		}
 
 		render_line(sx, sy, sx, sy + MAXMAP, 0xffff);
@@ -295,6 +311,12 @@ void display_minimap(void)
 		render_line(sx + MAXMAP, sy, sx, sy, 0xffff);
 
 		render_text(sx + 6, sy + 6, 0xffff, 0, "N");
+
+		{
+			char zoombuf[8];
+			sprintf(zoombuf, "%dx", minimap_zoom);
+			render_text(sx + MAXMAP - render_text_length(0, zoombuf) - 6, sy + 6, 0xffff, 0, zoombuf);
+		}
 	}
 
 	if (orx != originx || ory != originy) {
@@ -377,7 +399,8 @@ static void minimap_reveal(int x, int y)
 
 void minimap_toggle(void)
 {
-	visible = (visible + 1) % 4;
+	/* hidden -> small round map -> big map (zoomable) -> hidden */
+	visible = (visible + 1) % 3;
 }
 
 void minimap_hide(void)
@@ -385,6 +408,50 @@ void minimap_hide(void)
 	if (visible) {
 		visible = 1;
 	}
+}
+
+void minimap_zoom_in(void)
+{
+	if (minimap_zoom < MINIMAP_ZOOM_MAX) {
+		minimap_zoom++;
+	}
+}
+
+void minimap_zoom_out(void)
+{
+	if (minimap_zoom > MINIMAP_ZOOM_MIN) {
+		minimap_zoom--;
+	}
+}
+
+void minimap_zoom_reset(void)
+{
+	minimap_zoom = MINIMAP_ZOOM_MIN;
+}
+
+/* mouse-wheel zoom while hovering the big map; returns 1 when the wheel
+ * event was consumed (big map visible and the cursor is over it) */
+int minimap_wheel_zoom(int x, int y, int delta)
+{
+	if (game_options & GO_NOMAP) {
+		return 0;
+	}
+	if (visible != 2) {
+		return 0;
+	}
+	if (x < sx || x >= sx + MAXMAP || y < sy || y >= sy + MAXMAP) {
+		return 0;
+	}
+
+	while (delta > 0) {
+		minimap_zoom_in();
+		delta--;
+	}
+	while (delta < 0) {
+		minimap_zoom_out();
+		delta++;
+	}
+	return 1;
 }
 
 static char *mapname(int i)
@@ -867,33 +934,34 @@ void minimap_display_hover(int hx, int hy)
 
 		x += originx;
 		y += originy;
-	} else if (visible == 2) { // big scaled up map
-		int ox, oy;
+	} else if (visible == 2) { // big zoomable map
+		int ox, oy, src_size;
 
-		ox = originx - MAXMAP / 6;
-		oy = originy - MAXMAP / 6;
+		if (hx < sx || hx >= sx + MAXMAP || hy < sy || hy >= sy + MAXMAP) {
+			return;
+		}
+
+		/* same clamped source window as display_minimap, inverted:
+		 * screen offset -> source cell */
+		src_size = MAXMAP / minimap_zoom;
+
+		ox = originx - src_size / 2;
+		oy = originy - src_size / 2;
 		if (ox < 0) {
 			ox = 0;
 		}
-		if (ox > MAXMAP - MAXMAP / 3) {
-			ox = MAXMAP - MAXMAP / 3;
+		if (ox > MAXMAP - src_size) {
+			ox = MAXMAP - src_size;
 		}
 		if (oy < 0) {
 			oy = 0;
 		}
-		if (oy > MAXMAP - MAXMAP / 3) {
-			oy = MAXMAP - MAXMAP / 3;
+		if (oy > MAXMAP - src_size) {
+			oy = MAXMAP - src_size;
 		}
 
-		x = hx - sx;
-		y = hy - sy;
-
-		x = x / 3 + ox;
-		y = y / 3 + oy;
-
-	} else if (visible == 3) { // big full map
-		x = hx - sx;
-		y = hy - sy;
+		x = (hx - sx) * src_size / MAXMAP + ox;
+		y = (hy - sy) * src_size / MAXMAP + oy;
 	} else {
 		return;
 	}

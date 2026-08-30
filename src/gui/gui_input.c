@@ -466,6 +466,12 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		/* big-map zoom - the big map draws on top of the side panels
+		 * (display_minimap runs after them), so it gets the wheel first */
+		if (minimap_wheel_zoom(mousex, mousey, delta)) {
+			break;
+		}
+
 		if (mousex >= dotx(DOT_SKL) && mousex < dotx(DOT_SK2) && mousey >= doty(DOT_SKL) &&
 		    mousey < doty(DOT_SK2)) { // skill / depot / merchant
 			while (delta > 0) {

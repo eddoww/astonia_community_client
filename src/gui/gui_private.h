@@ -69,11 +69,24 @@
 #define BUT_HOTBAR_BEG 103
 #define BUT_HOTBAR_END 147 /* 45 slots (3×15): 103..147 */
 
-#define MAX_BUT 152 /* keep > the highest BUT_* id (BUT_MILBAR 151) */
-_Static_assert(BUT_MILBAR < MAX_BUT && BUT_EXPBAR < MAX_BUT && BUT_HOTBAR_END < MAX_BUT,
+/* panel drag handles - one per panel, in PANEL_* enum order (panels.h):
+ * BUT_DRAG_BEG + PANEL_x must be that panel's drag button */
+#define BUT_DRAG_BEG    152
+#define BUT_DRAG_SKILLS 152
+#define BUT_DRAG_CHAT   153
+#define BUT_DRAG_INV    154
+#define BUT_DRAG_GOLD   155
+#define BUT_DRAG_SPEED  156
+#define BUT_DRAG_BUFFS  157
+#define BUT_DRAG_HOTBAR 158
+#define BUT_DRAG_END    158
+
+#define MAX_BUT 159 /* keep > the highest BUT_* id (BUT_DRAG_END 158) */
+_Static_assert(BUT_MILBAR < MAX_BUT && BUT_EXPBAR < MAX_BUT && BUT_HOTBAR_END < MAX_BUT && BUT_DRAG_END < MAX_BUT,
     "MAX_BUT must exceed every BUT_* id (but[] is indexed by id)");
 _Static_assert(
     BUT_EXPBAR > BUT_HOTBAR_END && BUT_MILBAR > BUT_HOTBAR_END, "bar button ids must not fall into the hotbar range");
+_Static_assert(BUT_DRAG_BEG > BUT_MILBAR, "drag handle ids must not collide with the bar button ids");
 
 #define BUTF_NOHIT    (1 << 1) // button is ignored int hit processing
 #define BUTF_CAPTURE  (1 << 2) // button captures mouse on lclick
@@ -197,6 +210,7 @@ _Static_assert(
 #define CMD_HELP_INDEX 82
 #define CMD_EXPBAR     83 /* cycle the numbers printed on the experience bar */
 #define CMD_MILBAR     84 /* cycle the numbers printed on the military bar */
+#define CMD_DRAG_PANEL 85 /* move the panel whose drag handle captured the mouse */
 
 #define STV_EMPTYLINE  -1
 #define STV_JUSTAVALUE -2 // value is in curr
@@ -474,6 +488,8 @@ void display_inventory(void);
 void display_keys(void);
 void display_skill(void);
 void display_scrollbars(void);
+void display_scrollbar_left(void);
+void display_scrollbar_right(void);
 void display_tutor(void);
 int tutor_click(int x, int y);
 void display_screen(void);
@@ -560,6 +576,7 @@ int16_t has_action_skill(int i);
 void context_action_enable(int onoff);
 
 void minimap_init(void);
+void minimap_reanchor(void);
 void minimap_toggle(void);
 void minimap_hide(void);
 void display_minimap(void);

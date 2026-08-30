@@ -111,7 +111,7 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 			src/sdl/sdl_core.o src/sdl/sdl_texture.o src/sdl/sdl_image.o src/sdl/sdl_effects.o src/sdl/sdl_draw.o src/sdl/gamepad.o src/sdl/sound.o\
 			src/helper/helper.o\
 			src/gui/dots.o src/gui/display.o src/gui/teleport.o src/gui/color.o src/gui/cmd.o\
-			src/gui/questlog.o src/gui/context.o src/gui/hover.o src/gui/minimap.o src/gui/input_bind.o src/gui/hotbar_ui.o src/gui/spellbook_ui.o src/gui/keybind_ui.o src/gui/keybind_settings_ui.o src/gui/escape_menu_ui.o src/gui/options_ui.o src/gui/loading_ui.o src/gui/ui_draw.o\
+			src/gui/questlog.o src/gui/context.o src/gui/hover.o src/gui/minimap.o src/gui/input_bind.o src/gui/hotbar_ui.o src/gui/spellbook_ui.o src/gui/keybind_ui.o src/gui/keybind_settings_ui.o src/gui/escape_menu_ui.o src/gui/options_ui.o src/gui/loading_ui.o src/gui/ui_draw.o src/gui/panels.o\
 			src/game/memory_macos.o\
 			src/lib/cjson/cJSON.o
 
@@ -173,6 +173,7 @@ src/gui/keybind_settings_ui.o:	src/gui/keybind_settings_ui.c src/gui/keybind_set
 src/gui/escape_menu_ui.o:	src/gui/escape_menu_ui.c src/gui/escape_menu_ui.h src/gui/keybind_settings_ui.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/game/game.h src/gui/ui_draw.h src/gui/ui_tokens.h
 src/gui/loading_ui.o:	src/gui/loading_ui.c src/gui/loading_ui.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/game/game.h
 src/gui/ui_draw.o:	src/gui/ui_draw.c src/gui/ui_draw.h src/gui/ui_tokens.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/game/game.h
+src/gui/panels.o:	src/gui/panels.c src/gui/panels.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/gui/ui_tokens.h src/client/client.h src/game/game.h
 src/gui/options_ui.o:	src/gui/options_ui.c src/gui/options_ui.h src/gui/input_bind.h src/astonia.h src/gui/gui.h src/gui/gui_private.h src/client/client.h src/game/game.h src/sdl/sdl.h src/gui/ui_draw.h src/gui/ui_tokens.h
 
 # Refactored GUI modules

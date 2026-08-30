@@ -15,6 +15,7 @@
 #include "gui/loading_ui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/panels.h"
 #include "gui/spellbook_ui.h"
 #include "gui/keybind_ui.h"
 #include "gui/keybind_settings_ui.h"
@@ -336,39 +337,63 @@ void display(void)
 	display_game();
 	render_pop_clip();
 
-	display_screen();
+	/* GUI chrome - the master overlay toggle hides all of it for an
+	 * unobstructed view of the world */
+	if (gui_overlay_visible) {
+		display_screen();
 
-	display_keys();
-	if (game_options & GO_WHEEL) {
-		display_wheel();
+		display_keys();
+		if (game_options & GO_WHEEL) {
+			display_wheel();
+		}
+		display_wear();
+		display_exp();
+		display_military();
+		display_selfbars();
+
+		if (panel_shown(PANEL_SKILLS)) {
+			if (con_cnt) {
+				display_container();
+			} else {
+				display_skill();
+			}
+			display_scrollbar_left();
+		}
+		if (panel_shown(PANEL_CHAT)) {
+			display_text();
+		}
+		if (panel_shown(PANEL_INVENTORY)) {
+			display_inventory();
+			display_scrollbar_right();
+		}
+		if (panel_shown(PANEL_GOLD)) {
+			display_gold();
+		}
+		if (panel_shown(PANEL_SPEED)) {
+			display_mode();
+		}
+		if (panel_shown(PANEL_BUFFS)) {
+			display_selfspells();
+			display_rage();
+		}
+		if (panel_shown(PANEL_HOTBAR)) {
+			hotbar_display();
+			spellbook_display();
+		}
+		display_minimap();
+		panels_display_handles();
 	}
+
+	/* interaction windows and transient overlays only appear on demand, so
+	 * they stay usable even with the GUI overlay hidden */
 	if (show_look) {
 		display_look();
 	}
-	display_wear();
-	display_inventory();
-	hotbar_display();
-	spellbook_display();
 	keybind_panel_display();
-	if (con_cnt) {
-		display_container();
-	} else {
-		display_skill();
-	}
-	display_scrollbars();
-	display_text();
-	display_gold();
-	display_mode();
-	display_selfspells();
-	display_exp();
-	display_military();
 	display_teleport();
 	display_color();
-	display_rage();
 	display_game_special();
 	display_tutor();
-	display_selfbars();
-	display_minimap();
 	display_citem();
 	context_display(mousex, mousey);
 	display_helpandquest();

@@ -13,6 +13,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/panels.h"
 #include "gui/escape_menu_ui.h"
 #include "client/client.h"
 #include "game/game.h"
@@ -36,8 +37,20 @@ int get_near_button(int x, int y)
 		return -1;
 	}
 
+	/* GUI overlay hidden: no button is visible, clicks go to the map */
+	if (!gui_overlay_visible) {
+		return -1;
+	}
+
 	for (b = 0; b < MAX_BUT; b++) {
+		int p;
+
 		if (but[b].flags & BUTF_NOHIT) {
+			continue;
+		}
+		/* buttons of hidden panels are not there to be hit */
+		p = panel_owns_button(b);
+		if (p != -1 && !panel_shown(p)) {
 			continue;
 		}
 
@@ -333,7 +346,7 @@ static void detect_hover_target(void)
 
 	/* the spellbook toggle chevron and the open spellbook panel are not but[]
 	 * entries - without this the red map-tile cursor kept drawing under them */
-	if (hotbar_toggle_over(mousex, mousey) || spellbook_over(mousex, mousey)) {
+	if (panel_shown(PANEL_HOTBAR) && (hotbar_toggle_over(mousex, mousey) || spellbook_over(mousex, mousey))) {
 		return;
 	}
 
@@ -421,9 +434,10 @@ static void detect_hover_target(void)
 		}
 	}
 
-	/* Exit/Help/Question live in the right-anchored section of the top
-	 * bar art, so their hit boxes shift with the canvas width */
-	{
+	/* top bar hit boxes only exist while the GUI overlay is up */
+	if (gui_overlay_visible) {
+		/* Exit/Help/Question live in the right-anchored section of the top
+		 * bar art, so their hit boxes shift with the canvas width */
 		int rx = dotx(DOT_TOP) + XRES - XRES0;
 
 		if (mousex >= rx + 704 && mousex <= rx + 739 && mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
@@ -435,14 +449,15 @@ static void detect_hover_target(void)
 		if (mousex >= rx + 704 && mousex <= rx + 723 && mousey >= doty(DOT_TOP) + 7 && mousey <= doty(DOT_TOP) + 18) {
 			butsel = BUT_EXIT;
 		}
-	}
-	/* experience / military bars (top left): click cycles the numbers shown on them */
-	if (mousex >= dotx(DOT_BOT) + 25 && mousex <= dotx(DOT_BOT) + 135) {
-		if (mousey >= doty(DOT_TOP) + 5 && mousey <= doty(DOT_TOP) + 13) {
-			butsel = BUT_EXPBAR;
-		}
-		if (mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
-			butsel = BUT_MILBAR;
+
+		/* experience / military bars (top left): click cycles the numbers shown on them */
+		if (mousex >= dotx(DOT_BOT) + 25 && mousex <= dotx(DOT_BOT) + 135) {
+			if (mousey >= doty(DOT_TOP) + 5 && mousey <= doty(DOT_TOP) + 13) {
+				butsel = BUT_EXPBAR;
+			}
+			if (mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
+				butsel = BUT_MILBAR;
+			}
 		}
 	}
 
@@ -490,6 +505,34 @@ static void detect_hover_target(void)
 			else {
 				butsel = -1;
 			}
+		}
+	}
+
+	// skill text lines for hover text
+	if (!hitsel[0] && butsel == -1 && !con_cnt && panel_shown(PANEL_SKILLS)) {
+		for (i = 0; i <= BUT_SKL_END - BUT_SKL_BEG; i++) {
+			x = butx(i + BUT_SKL_BEG);
+			y = buty(i + BUT_SKL_BEG);
+			if (mousex > x + 10 && mousex < x + SKLWIDTH && mousey > y - 5 && mousey < y + 5) {
+				sklsel2 = i;
+				break;
+			}
+		}
+	}
+
+	// buttons - before the map so GUI elements win over the full-screen world
+	if (!hitsel[0] && butsel == -1) {
+		butsel = get_near_button(mousex, mousey);
+
+		// translate button
+		if (butsel >= BUT_INV_BEG && butsel <= BUT_INV_END) {
+			invsel = 30 + invoff * INVDX + butsel - BUT_INV_BEG;
+		} else if (butsel >= BUT_WEA_BEG && butsel <= BUT_WEA_END) {
+			weasel = butsel - BUT_WEA_BEG;
+		} else if (butsel >= BUT_CON_BEG && butsel <= BUT_CON_END) {
+			consel = conoff * CONDX + butsel - BUT_CON_BEG;
+		} else if (butsel >= BUT_SKL_BEG && butsel <= BUT_SKL_END) {
+			sklsel = skloff + butsel - BUT_SKL_BEG;
 		}
 	}
 
@@ -557,34 +600,6 @@ static void detect_hover_target(void)
 			if (mapsel != MAXMN || itmsel != MAXMN || chrsel != MAXMN) {
 				butsel = BUT_MAP;
 			}
-		}
-	}
-
-	// skill text lines for hover text
-	if (!hitsel[0] && butsel == -1 && !con_cnt) {
-		for (i = 0; i <= BUT_SKL_END - BUT_SKL_BEG; i++) {
-			x = butx(i + BUT_SKL_BEG);
-			y = buty(i + BUT_SKL_BEG);
-			if (mousex > x + 10 && mousex < x + SKLWIDTH && mousey > y - 5 && mousey < y + 5) {
-				sklsel2 = i;
-				break;
-			}
-		}
-	}
-
-	// buttons
-	if (!hitsel[0] && butsel == -1) {
-		butsel = get_near_button(mousex, mousey);
-
-		// translate button
-		if (butsel >= BUT_INV_BEG && butsel <= BUT_INV_END) {
-			invsel = 30 + invoff * INVDX + butsel - BUT_INV_BEG;
-		} else if (butsel >= BUT_WEA_BEG && butsel <= BUT_WEA_END) {
-			weasel = butsel - BUT_WEA_BEG;
-		} else if (butsel >= BUT_CON_BEG && butsel <= BUT_CON_END) {
-			consel = conoff * CONDX + butsel - BUT_CON_BEG;
-		} else if (butsel >= BUT_SKL_BEG && butsel <= BUT_SKL_END) {
-			sklsel = skloff + butsel - BUT_SKL_BEG;
 		}
 	}
 }
@@ -881,6 +896,12 @@ void exec_cmd(int cmd, int a)
 		return;
 	case CMD_HELP_DRAG:
 		help_drag();
+		return;
+	case CMD_DRAG_PANEL:
+		/* the drag handle owns the mouse capture; its id maps 1:1 to the panel */
+		if (capbut >= BUT_DRAG_BEG && capbut <= BUT_DRAG_END) {
+			panels_drag(capbut - BUT_DRAG_BEG);
+		}
 		return;
 	case CMD_HELP:
 		if (display_help) {
@@ -1235,6 +1256,9 @@ void handle_special_buttons_logic(void)
 		}
 		if (butsel == BUT_HELP_DRAG) {
 			lcmd = CMD_HELP_DRAG;
+		}
+		if (butsel >= BUT_DRAG_BEG && butsel <= BUT_DRAG_END) {
+			lcmd = CMD_DRAG_PANEL;
 		}
 		if (butsel == BUT_EXIT) {
 			lcmd = CMD_EXIT;

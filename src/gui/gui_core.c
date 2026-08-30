@@ -15,6 +15,7 @@
 #include "gui/loading_ui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/panels.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -410,7 +411,9 @@ int main_loop(void)
 				 * have no place on top of a loading screen */
 				if (!gui_is_loading()) {
 					amod_frame();
-					display_mouseover();
+					if (gui_overlay_visible) {
+						display_mouseover();
+					}
 				}
 				minimap_update();
 			}

@@ -13,6 +13,7 @@
 #include "gui/input_bind.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/panels.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "modder/modder.h"
@@ -179,6 +180,18 @@ static void on_toggle_nocut(InputBinding *self)
 {
 	(void)self;
 	nocut ^= 1;
+}
+
+static void on_toggle_overlay(InputBinding *self)
+{
+	(void)self;
+	gui_overlay_visible ^= 1;
+}
+
+static void on_toggle_panel(InputBinding *self)
+{
+	panel_toggle(self->param);
+	save_options();
 }
 
 static void on_toggle_quest(InputBinding *self)
@@ -1433,6 +1446,21 @@ static void register_all(void)
 	reg("ui.toggle_minimap", "Toggle Minimap", INPUT_CAT_UI, 'm', 0, on_toggle_minimap);
 	reg("ui.toggle_hotbar_names", "Toggle Hotbar Names", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_names);
 	reg("ui.toggle_hotbar_keys", "Toggle Hotbar Key Labels", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_keys);
+
+	/* master GUI overlay + per-panel visibility (panels toggles unbound by
+	 * default - bind them in Settings / Keybindings) */
+	reg("ui.toggle_overlay", "Toggle GUI Overlay", INPUT_CAT_UI, 'z', INPUT_MOD_ALT, on_toggle_overlay);
+	for (int p = 0; p < MAX_PANEL; p++) {
+		static char panel_bind_ids[MAX_PANEL][32];
+		static char panel_bind_names[MAX_PANEL][40];
+
+		snprintf(panel_bind_ids[p], sizeof(panel_bind_ids[p]), "ui.panel_%s", panel_id(p));
+		snprintf(panel_bind_names[p], sizeof(panel_bind_names[p]), "Toggle %s", panel_name(p));
+		b = reg(panel_bind_ids[p], panel_bind_names[p], INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_panel);
+		if (b) {
+			b->param = p;
+		}
+	}
 	reg("ui.chat_pageup", "Chat Page Up", INPUT_CAT_UI, SDLK_PAGEUP, 0, on_chat_pageup);
 	reg("ui.chat_pagedown", "Chat Page Down", INPUT_CAT_UI, SDLK_PAGEDOWN, 0, on_chat_pagedown);
 
@@ -2303,6 +2331,9 @@ int input_load_config(const char *path)
 		}
 	}
 
+	/* panel layout (visibility, drag offsets, fullscreen world) */
+	panels_load_json(root);
+
 	cJSON_Delete(root);
 
 	/* the loaded profile may change hotbar rows/slots (and this runs on every
@@ -2355,6 +2386,9 @@ int input_save_config(const char *path)
 		cJSON_AddNumberToObject(jsettings, "go_override_base", go_override_base);
 	}
 	cJSON_AddItemToObject(root, "settings", jsettings);
+
+	/* save panel layout (visibility, drag offsets, fullscreen world) */
+	panels_save_json(root);
 
 	/* save hotbar slots */
 	cJSON *jhotbar = cJSON_CreateArray();

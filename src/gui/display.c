@@ -15,6 +15,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/panels.h"
 #include "gui/ui_draw.h"
 #include "game/game.h"
 #include "client/client.h"
@@ -441,7 +442,7 @@ void display_citem(void)
 	render_pop_clip();
 }
 
-void display_scrollbars(void)
+void display_scrollbar_left(void)
 {
 	render_sprite(SPR_SCRUP, but[BUT_SCL_UP].x, but[BUT_SCL_UP].y, butsel == BUT_SCL_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
 	    RENDER_ALIGN_OFFSET);
@@ -449,13 +450,22 @@ void display_scrollbars(void)
 	    RENDER_ALIGN_OFFSET);
 	render_sprite(SPR_SCRDW, but[BUT_SCL_DW].x, but[BUT_SCL_DW].y, butsel == BUT_SCL_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
 	    RENDER_ALIGN_OFFSET);
+}
 
+void display_scrollbar_right(void)
+{
 	render_sprite(SPR_SCRUP, but[BUT_SCR_UP].x, but[BUT_SCR_UP].y, butsel == BUT_SCR_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
 	    RENDER_ALIGN_OFFSET);
 	render_sprite(SPR_SCRRT, but[BUT_SCR_TR].x, but[BUT_SCR_TR].y, butsel == BUT_SCR_TR ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
 	    RENDER_ALIGN_OFFSET);
 	render_sprite(SPR_SCRDW, but[BUT_SCR_DW].x, but[BUT_SCR_DW].y, butsel == BUT_SCR_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
 	    RENDER_ALIGN_OFFSET);
+}
+
+void display_scrollbars(void)
+{
+	display_scrollbar_left();
+	display_scrollbar_right();
 }
 
 void display_skill(void)
@@ -832,10 +842,55 @@ void display_screen(void)
 
 	sprintf(hover_time_text, "%02d:%02d Astonia Standard Time", h, m);
 
-	if (game_options & GO_SMALLBOT) {
-		render_bar_tiled(opt_sprite(991), dotx(DOT_BOT), doty(DOT_BOT), 222, 629, 232, 620);
-	} else {
-		render_bar_tiled(opt_sprite(998), dotx(DOT_BOT), doty(DOT_BOT), 222, 629, 232, 620);
+	/* Bottom bar art in independently moveable slices, one per panel. Each
+	 * slice draws the whole bar shifted by its panel's drag offset, clipped
+	 * to the slice's rectangle, so the art follows the panel and hidden
+	 * slices leave the world visible.
+	 *
+	 * Slice map (art columns of the XRES0-wide bar):
+	 *   [0 .. 173)    skills list + left scrollbar rails
+	 *   [173 .. 222)  the framed column, cut into three bands:
+	 *                   top    (.. BOT+38)     speed-mode inset box
+	 *                   middle (.. BO2-32)     buff-bar tubes
+	 *                   bottom                 gold readout rock
+	 *   [222 .. -173) chat (tiled rock)
+	 *   [-173 .. end) inventory + right scrollbar (right-anchored)
+	 * All boundaries are computed from non-panel dots so they describe the
+	 * default layout even while panels are moved. */
+	{
+		unsigned int spr = opt_sprite((game_options & GO_SMALLBOT) ? 991 : 998);
+		int bx = dotx(DOT_BOT), by = doty(DOT_BOT), bot = doty(DOT_BO2);
+		int split_l = dotx(DOT_SCL) + 8;
+		int col_r = bx + 222;
+		int split_r = dotx(DOT_SCR) - 8;
+		int speed_cut = by + 38;
+		int gold_cut = bot - 32;
+
+		struct {
+			int panel;
+			int x1, y1, x2, y2;
+		} slice[] = {
+		    {PANEL_SKILLS, bx, by, split_l, bot},
+		    {PANEL_SPEED, split_l, by, col_r, speed_cut},
+		    {PANEL_BUFFS, split_l, speed_cut, col_r, gold_cut},
+		    {PANEL_GOLD, split_l, gold_cut, col_r, bot},
+		    {PANEL_CHAT, col_r, by, split_r, bot},
+		    {PANEL_INVENTORY, split_r, by, bx + XRES, bot},
+		};
+
+		for (int i = 0; i < (int)ARRAYSIZE(slice); i++) {
+			int dx, dy;
+
+			if (!panel_shown(slice[i].panel)) {
+				continue;
+			}
+			dx = panel_dx(slice[i].panel);
+			dy = panel_dy(slice[i].panel);
+			render_push_clip();
+			render_more_clip(slice[i].x1 + dx, slice[i].y1 + dy, slice[i].x2 + dx, slice[i].y2 + dy);
+			render_bar_tiled(spr, bx + dx, by + dy, 222, 629, 232, 620);
+			render_pop_clip();
+		}
 	}
 }
 
@@ -1537,8 +1592,10 @@ void display_selfbars(void)
 		return;
 	}
 
+	/* below the top bar - with the fullscreen world view DOT_MTL is the
+	 * screen corner, which the top bar art covers */
 	x = dotx(DOT_MTL) + 7;
-	y = doty(DOT_MTL) + 7;
+	y = max(doty(DOT_MTL), 40) + 7;
 
 	lifep = map[plrmn].health;
 	shieldp = map[plrmn].shield;

@@ -16,6 +16,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
+#include "gui/panels.h"
 
 extern int __textdisplay_sy;
 
@@ -80,7 +81,11 @@ DLL_EXPORT int buty(int bidx)
 
 void dots_update(void)
 {
-	set_dot(DOT_TUT, (XRES - 410) / 2, doty(DOT_MBR) - 122 - (context_action_enabled() ? 30 : 0), 0);
+	/* anchor the tutorial popup above the bottom bar, not the map bottom -
+	 * with the fullscreen world view DOT_MBR is the bottom of the screen */
+	int base = min(doty(DOT_MBR), doty(DOT_BOT) + 4);
+
+	set_dot(DOT_TUT, (XRES - 410) / 2, base - 122 - (context_action_enabled() ? 30 : 0), 0);
 }
 
 void init_dots(void)
@@ -164,19 +169,27 @@ void init_dots(void)
 	set_dot(DOT_MOD, 181, doty(DOT_BOT) + 24, 0);
 
 	// map top left, bottom right, center
-	set_dot(DOT_MTL, 0, 40, !stop ? 0 : DOTF_TOPOFF);
-	set_dot(DOT_MBR, XRES, min(doty(DOT_MTL) + 450 - (!stop ? 0 : 40), doty(DOT_BOT) + 4), 0);
-	x = dotx(DOT_MBR) - dotx(DOT_MTL);
-	y = doty(DOT_MBR) - doty(DOT_MTL) + (!stop ? 0 : 40);
-	xc = x / 2;
-	if (y < 430) {
-		yc = y / 2 + 20;
-	} else if (y < 450) {
-		yc = y / 2 + 20 - y + 430;
+	if (panels_fullscreen_world()) {
+		// fullscreen world view: the map spans the whole canvas, the GUI
+		// overlays it, and the player character sits at the true center
+		set_dot(DOT_MTL, 0, 0, 0);
+		set_dot(DOT_MBR, XRES, YRES, 0);
+		set_dot(DOT_MCT, XRES / 2, YRES / 2, 0);
 	} else {
-		yc = y / 2;
+		set_dot(DOT_MTL, 0, 40, !stop ? 0 : DOTF_TOPOFF);
+		set_dot(DOT_MBR, XRES, min(doty(DOT_MTL) + 450 - (!stop ? 0 : 40), doty(DOT_BOT) + 4), 0);
+		x = dotx(DOT_MBR) - dotx(DOT_MTL);
+		y = doty(DOT_MBR) - doty(DOT_MTL) + (!stop ? 0 : 40);
+		xc = x / 2;
+		if (y < 430) {
+			yc = y / 2 + 20;
+		} else if (y < 450) {
+			yc = y / 2 + 20 - y + 430;
+		} else {
+			yc = y / 2;
+		}
+		set_dot(DOT_MCT, dotx(DOT_MTL) + xc, doty(DOT_MTL) - (!stop ? 0 : 40) + yc, 0);
 	}
-	set_dot(DOT_MCT, dotx(DOT_MTL) + xc, doty(DOT_MTL) - (!stop ? 0 : 40) + yc, 0);
 	// note("map: %dx%d, center: %d,%d, origin: %d,%d,
 	// (%d,%d)",x,y,dotx(DOT_MCT),doty(DOT_MCT),dotx(DOT_MTL),doty(DOT_MTL),dotx(DOT_MBR),doty(DOT_MBR));
 
@@ -283,4 +296,22 @@ void init_dots(void)
 			set_but(BUT_HOTBAR_BEG + i, 0, 0, 0, BUTF_NOHIT);
 		}
 	}
+
+	// panel drag handles (small hit radius, mouse-capture drag)
+	set_but(
+	    BUT_DRAG_SKILLS, (dot[DOT_SKL].x + dot[DOT_SK2].x) / 2, dot[DOT_SKL].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	set_but(BUT_DRAG_CHAT, (dot[DOT_TXT].x + dot[DOT_TX2].x) / 2, dot[DOT_TXT].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	set_but(BUT_DRAG_INV, (dot[DOT_IN1].x + dot[DOT_IN2].x) / 2, dot[DOT_IN1].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	set_but(BUT_DRAG_GOLD, dot[DOT_GLD].x, dot[DOT_GLD].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	set_but(BUT_DRAG_SPEED, dot[DOT_MOD].x + 14, dot[DOT_MOD].y - 16, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	set_but(BUT_DRAG_BUFFS, dot[DOT_SSP].x + 15, dot[DOT_SSP].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	if (hotbar_rows() > 0) {
+		set_but(BUT_DRAG_HOTBAR, dot[DOT_HOTBAR].x - FDX / 2 - 8, dot[DOT_HOTBAR].y, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	} else {
+		set_but(BUT_DRAG_HOTBAR, 0, 0, 0, BUTF_NOHIT);
+	}
+
+	// shift every panel by its stored drag offset - must stay the last
+	// step so it sees the complete default layout
+	panels_apply_offsets();
 }

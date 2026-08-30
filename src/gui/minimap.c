@@ -59,17 +59,24 @@ static uint32_t map_poi_col(int x, int y);
 
 SDL_Texture *maptex1 = NULL, *maptex2 = NULL;
 
+/* (re)compute the screen anchors from the current layout; kept below the
+ * top bar - with the fullscreen world view DOT_MTL is the screen corner */
+void minimap_reanchor(void)
+{
+	sx = dotx(DOT_MBR) - MAXMAP - 6;
+	sy = max(doty(DOT_MTL), 40) + 6;
+
+	mx = dotx(DOT_MBR) - MINIMAP * 2 - 6;
+	my = max(doty(DOT_MTL), 40) + 6;
+}
+
 void minimap_init(void)
 {
 	if (game_options & GO_NOMAP) {
 		return;
 	}
 
-	sx = dotx(DOT_MBR) - MAXMAP - 6;
-	sy = doty(DOT_MTL) + 6;
-
-	mx = dotx(DOT_MBR) - MINIMAP * 2 - 6;
-	my = doty(DOT_MTL) + 6;
+	minimap_reanchor();
 
 	memset(_mmap, 0, sizeof(_mmap));
 	visible = 1;

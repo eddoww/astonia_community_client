@@ -27,6 +27,7 @@
 #include "game/game_private.h"
 #include "game/sprite_config.h"
 #include "sdl/sdl.h"
+#include "sdl/font_manager.h"
 #include "gui/gui.h"
 #include "gui/loading_ui.h"
 #include "gui/input_bind.h"
@@ -520,6 +521,9 @@ static void get_extra_options_path(char *buf, size_t bufsize)
 int saved_window_mode = -1;
 /* VSync from the extra-options file; applied after sdl_init (which forces 1). */
 static int saved_vsync = -1;
+/* TTF text from the extra-options file; re-applied after sdl_init because
+ * sdl_init resets game_options to GO_DEFAULTS when no -o was given. */
+static int saved_ttf_text = -1;
 
 static void save_extra_options(void)
 {
@@ -534,6 +538,7 @@ static void save_extra_options(void)
 		return;
 	}
 	cJSON_AddBoolToObject(root, "hide_lag_warning", (game_options & GO_NOLAG) != 0);
+	cJSON_AddBoolToObject(root, "ttf_text", (game_options & GO_TTF) != 0);
 	cJSON_AddNumberToObject(root, "master_volume", sound_volume);
 	cJSON_AddNumberToObject(root, "sfx_volume", sound_volume_sfx);
 	cJSON_AddNumberToObject(root, "ambient_volume", sound_volume_ambient);
@@ -601,6 +606,15 @@ static void load_extra_options(void)
 			game_options |= GO_NOLAG;
 		} else {
 			game_options &= ~GO_NOLAG;
+		}
+	}
+	v = cJSON_GetObjectItem(root, "ttf_text");
+	if (v && cJSON_IsBool(v)) {
+		saved_ttf_text = cJSON_IsTrue(v) ? 1 : 0;
+		if (saved_ttf_text) {
+			game_options |= GO_TTF;
+		} else {
+			game_options &= ~GO_TTF;
 		}
 	}
 	sound_volume = extra_int(root, "master_volume", sound_volume, 0, 128);
@@ -872,6 +886,19 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	/* TTF text (experimental): needs sdl_scale, which is fixed by sdl_init.
+	 * Re-apply the saved toggle first - sdl_init resets game_options to
+	 * GO_DEFAULTS when the launcher passed no -o. fm_init is harmless when
+	 * SDL3_ttf or the bundled fonts are missing - the option then simply
+	 * stays without effect. */
+	if (saved_ttf_text > 0) {
+		game_options |= GO_TTF;
+	} else if (saved_ttf_text == 0) {
+		game_options &= ~GO_TTF;
+	}
+	fm_init();
+	fm_set_enabled((game_options & GO_TTF) != 0);
+
 	render_init();
 	loading_step(LS_SOUND);
 	loading_present();
@@ -906,6 +933,7 @@ int main(int argc, char *argv[])
 	main_exit();
 	sound_exit();
 	render_exit();
+	fm_cleanup();
 	sdl_exit();
 
 	list_mem();

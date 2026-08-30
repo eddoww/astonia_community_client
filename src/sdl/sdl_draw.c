@@ -17,6 +17,7 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "sdl/font_manager.h"
 
 #define RENDER_TEXT_LEFT    0
 #define RENDER_ALIGN_CENTER 1
@@ -103,6 +104,24 @@ SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t co
 	int x, y = 0, sizex, sizey = 0, sx = 0;
 	const char *c, *otext = text;
 	Uint64 start = SDL_GetTicks();
+
+	/* TTF path (experimental, opt-in): render via SDL_ttf at device
+	 * resolution. On failure fall through to the classic bitmap raster. */
+	if (fm_active()) {
+		SDL_Surface *surface = fm_render_text_surface(text, color, flags);
+
+		if (surface) {
+			SDL_Texture *ttf_tex = SDL_CreateTextureFromSurface(sdlren, surface);
+
+			SDL_DestroySurface(surface);
+			sdl_time_text += (long long)(SDL_GetTicks() - start);
+			if (ttf_tex) {
+				SDL_SetTextureBlendMode(ttf_tex, SDL_BLENDMODE_BLEND);
+				return ttf_tex;
+			}
+			warn("SDL_texture Error: %s maketext ttf (%s)", SDL_GetError(), otext);
+		}
+	}
 
 	for (sizex = 0, c = text; *c && *c != RENDER_TEXT_TERMINATOR; c++) {
 		if (*c < 0) {
@@ -212,11 +231,16 @@ int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, cons
 		tex = (cache_index != STX_NONE) ? sdlt[cache_index].tex : NULL;
 	}
 
-	for (dx = 0, c = text; *c && *c != RENDER_TEXT_TERMINATOR; c++) {
-		if (*c < 0) {
-			continue;
+	if (fm_active()) {
+		/* keep layout advance and alignment in sync with the TTF glyphs */
+		dx = fm_text_width(flags, text, -1);
+	} else {
+		for (dx = 0, c = text; *c && *c != RENDER_TEXT_TERMINATOR; c++) {
+			if (*c < 0) {
+				continue;
+			}
+			dx += font[(unsigned char)*c].dim;
 		}
-		dx += font[(unsigned char)*c].dim;
 	}
 
 	if (tex) {

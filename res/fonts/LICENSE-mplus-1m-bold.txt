@@ -1,0 +1,12 @@
+M+ FONTS (mplus-1m-bold.ttf)
+
+Copyright (C) 2002-2017 M+ FONTS PROJECT
+
+M+ FONTS LICENSE
+
+These fonts are free software.
+Unlimited permission is granted to use, copy, and distribute them, with
+or without modification, either commercially or noncommercially.
+THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.
+
+https://mplus-fonts.osdn.jp/about-en.html

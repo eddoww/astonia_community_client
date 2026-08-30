@@ -16,21 +16,25 @@
 
 // State
 static struct {
-	// Sprite pipeline
-	SDL_GPUGraphicsPipeline *sprite_pipeline;
+	// Sprite pipelines (one per blend mode, see GPU_DRAW_BLEND_MODES)
+	SDL_GPUGraphicsPipeline *sprite_pipelines[GPU_DRAW_BLEND_MODES];
 	SDL_GPUShader *sprite_vs;
 	SDL_GPUShader *sprite_fs;
 
-	// Primitive pipeline
-	SDL_GPUGraphicsPipeline *prim_pipeline;
+	// Primitive pipelines (one per blend mode)
+	SDL_GPUGraphicsPipeline *prim_pipelines[GPU_DRAW_BLEND_MODES];
 	SDL_GPUShader *prim_vs;
 	SDL_GPUShader *prim_fs;
 
-	// Line pipeline
-	SDL_GPUGraphicsPipeline *line_pipeline;
+	// Line pipelines (one per blend mode)
+	SDL_GPUGraphicsPipeline *line_pipelines[GPU_DRAW_BLEND_MODES];
 	SDL_GPUShader *line_vs;
 	SDL_GPUShader *line_fs;
 	SDL_GPUBuffer *line_vbo;
+
+	// Current blend mode index (0=BLEND 1=ADD 2=MOD 3=MUL 4=NONE),
+	// mirrors sdl_set_blend_mode's mode values
+	int blend_mode;
 
 	// Shared resources
 	SDL_GPUBuffer *quad_vbo;
@@ -233,6 +237,54 @@ static bool create_sampler(void)
 	return draw_state.sampler != NULL;
 }
 
+/* Blend state per mode, matching the SDL_Renderer path's SDL_BLENDMODE_*
+ * semantics (mode indices mirror sdl_set_blend_mode):
+ * 0 BLEND: dst = src*srcA + dst*(1-srcA)
+ * 1 ADD:   dstRGB = srcRGB*srcA + dstRGB          (dstA unchanged)
+ * 2 MOD:   dstRGB = srcRGB*dstRGB                 (dstA unchanged)
+ * 3 MUL:   dstRGB = srcRGB*dstRGB + dstRGB*(1-srcA) (dstA unchanged)
+ * 4 NONE:  dst = src */
+static SDL_GPUColorTargetBlendState gpu_blend_state(int mode)
+{
+	SDL_GPUColorTargetBlendState bs;
+
+	memset(&bs, 0, sizeof(bs));
+	bs.color_blend_op = SDL_GPU_BLENDOP_ADD;
+	bs.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+	bs.enable_blend = true;
+
+	switch (mode) {
+	case 1: // ADD
+		bs.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+		bs.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		bs.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+		bs.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		break;
+	case 2: // MOD
+		bs.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+		bs.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_COLOR;
+		bs.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+		bs.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		break;
+	case 3: // MUL
+		bs.src_color_blendfactor = SDL_GPU_BLENDFACTOR_DST_COLOR;
+		bs.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+		bs.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+		bs.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		break;
+	case 4: // NONE
+		bs.enable_blend = false;
+		break;
+	default: // BLEND
+		bs.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+		bs.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+		bs.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		bs.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+		break;
+	}
+	return bs;
+}
+
 static bool create_sprite_pipeline(void)
 {
 	const char *ext = (get_shader_format() == SDL_GPU_SHADERFORMAT_SPIRV) ? "spv" : "dxil";
@@ -276,40 +328,36 @@ static bool create_sprite_pipeline(void)
 	    .num_vertex_attributes = 2,
 	};
 
-	// Use swapchain format (B8G8R8A8) for direct rendering
-	SDL_GPUColorTargetDescription color_desc = {
-	    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-	    .blend_state =
-	        {
-	            .src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA,
-	            .dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-	            .color_blend_op = SDL_GPU_BLENDOP_ADD,
-	            .src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
-	            .dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-	            .alpha_blend_op = SDL_GPU_BLENDOP_ADD,
-	            .enable_blend = true,
-	        },
-	};
+	// Use swapchain format (B8G8R8A8) for direct rendering; one pipeline
+	// per blend mode (blend state is baked into GPU pipelines)
+	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
+		SDL_GPUColorTargetDescription color_desc = {
+		    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
+		    .blend_state = gpu_blend_state(mode),
+		};
 
-	SDL_GPUGraphicsPipelineTargetInfo target_info = {
-	    .color_target_descriptions = &color_desc,
-	    .num_color_targets = 1,
-	};
+		SDL_GPUGraphicsPipelineTargetInfo target_info = {
+		    .color_target_descriptions = &color_desc,
+		    .num_color_targets = 1,
+		};
 
-	SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
-	    .vertex_shader = draw_state.sprite_vs,
-	    .fragment_shader = draw_state.sprite_fs,
-	    .vertex_input_state = vertex_input,
-	    .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-	    .rasterizer_state = {.fill_mode = SDL_GPU_FILLMODE_FILL, .cull_mode = SDL_GPU_CULLMODE_NONE},
-	    .multisample_state = {.sample_count = SDL_GPU_SAMPLECOUNT_1, .sample_mask = 0xFFFFFFFF},
-	    .target_info = target_info,
-	};
+		SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
+		    .vertex_shader = draw_state.sprite_vs,
+		    .fragment_shader = draw_state.sprite_fs,
+		    .vertex_input_state = vertex_input,
+		    .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+		    .rasterizer_state = {.fill_mode = SDL_GPU_FILLMODE_FILL, .cull_mode = SDL_GPU_CULLMODE_NONE},
+		    .multisample_state = {.sample_count = SDL_GPU_SAMPLECOUNT_1, .sample_mask = 0xFFFFFFFF},
+		    .target_info = target_info,
+		};
 
-	draw_state.sprite_pipeline = SDL_CreateGPUGraphicsPipeline(sdlgpu, &pipeline_info);
-	if (!draw_state.sprite_pipeline) {
-		note("gpu_draw: Sprite pipeline failed: %s", SDL_GetError());
-		return false;
+		draw_state.sprite_pipelines[mode] = SDL_CreateGPUGraphicsPipeline(sdlgpu, &pipeline_info);
+		if (!draw_state.sprite_pipelines[mode]) {
+			note("gpu_draw: Sprite pipeline (blend %d) failed: %s", mode, SDL_GetError());
+			if (mode == 0) {
+				return false; // default blend is mandatory
+			}
+		}
 	}
 
 	return true;
@@ -356,39 +404,34 @@ static bool create_primitive_pipeline(void)
 	    .num_vertex_attributes = 1,
 	};
 
-	SDL_GPUColorTargetDescription color_desc = {
-	    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-	    .blend_state =
-	        {
-	            .src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA,
-	            .dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-	            .color_blend_op = SDL_GPU_BLENDOP_ADD,
-	            .src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
-	            .dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-	            .alpha_blend_op = SDL_GPU_BLENDOP_ADD,
-	            .enable_blend = true,
-	        },
-	};
+	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
+		SDL_GPUColorTargetDescription color_desc = {
+		    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
+		    .blend_state = gpu_blend_state(mode),
+		};
 
-	SDL_GPUGraphicsPipelineTargetInfo target_info = {
-	    .color_target_descriptions = &color_desc,
-	    .num_color_targets = 1,
-	};
+		SDL_GPUGraphicsPipelineTargetInfo target_info = {
+		    .color_target_descriptions = &color_desc,
+		    .num_color_targets = 1,
+		};
 
-	SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
-	    .vertex_shader = draw_state.prim_vs,
-	    .fragment_shader = draw_state.prim_fs,
-	    .vertex_input_state = vertex_input,
-	    .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-	    .rasterizer_state = {.fill_mode = SDL_GPU_FILLMODE_FILL, .cull_mode = SDL_GPU_CULLMODE_NONE},
-	    .multisample_state = {.sample_count = SDL_GPU_SAMPLECOUNT_1, .sample_mask = 0xFFFFFFFF},
-	    .target_info = target_info,
-	};
+		SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
+		    .vertex_shader = draw_state.prim_vs,
+		    .fragment_shader = draw_state.prim_fs,
+		    .vertex_input_state = vertex_input,
+		    .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+		    .rasterizer_state = {.fill_mode = SDL_GPU_FILLMODE_FILL, .cull_mode = SDL_GPU_CULLMODE_NONE},
+		    .multisample_state = {.sample_count = SDL_GPU_SAMPLECOUNT_1, .sample_mask = 0xFFFFFFFF},
+		    .target_info = target_info,
+		};
 
-	draw_state.prim_pipeline = SDL_CreateGPUGraphicsPipeline(sdlgpu, &pipeline_info);
-	if (!draw_state.prim_pipeline) {
-		note("gpu_draw: Primitive pipeline failed: %s", SDL_GetError());
-		return false;
+		draw_state.prim_pipelines[mode] = SDL_CreateGPUGraphicsPipeline(sdlgpu, &pipeline_info);
+		if (!draw_state.prim_pipelines[mode]) {
+			note("gpu_draw: Primitive pipeline (blend %d) failed: %s", mode, SDL_GetError());
+			if (mode == 0) {
+				return false; // default blend is mandatory
+			}
+		}
 	}
 
 	return true;
@@ -486,39 +529,34 @@ static bool create_line_pipeline(void)
 	    .num_vertex_attributes = 1,
 	};
 
-	SDL_GPUColorTargetDescription color_desc = {
-	    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-	    .blend_state =
-	        {
-	            .src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA,
-	            .dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-	            .color_blend_op = SDL_GPU_BLENDOP_ADD,
-	            .src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
-	            .dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-	            .alpha_blend_op = SDL_GPU_BLENDOP_ADD,
-	            .enable_blend = true,
-	        },
-	};
+	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
+		SDL_GPUColorTargetDescription color_desc = {
+		    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
+		    .blend_state = gpu_blend_state(mode),
+		};
 
-	SDL_GPUGraphicsPipelineTargetInfo target_info = {
-	    .color_target_descriptions = &color_desc,
-	    .num_color_targets = 1,
-	};
+		SDL_GPUGraphicsPipelineTargetInfo target_info = {
+		    .color_target_descriptions = &color_desc,
+		    .num_color_targets = 1,
+		};
 
-	SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
-	    .vertex_shader = draw_state.line_vs,
-	    .fragment_shader = draw_state.line_fs,
-	    .vertex_input_state = vertex_input,
-	    .primitive_type = SDL_GPU_PRIMITIVETYPE_LINELIST,
-	    .rasterizer_state = {.fill_mode = SDL_GPU_FILLMODE_FILL, .cull_mode = SDL_GPU_CULLMODE_NONE},
-	    .multisample_state = {.sample_count = SDL_GPU_SAMPLECOUNT_1, .sample_mask = 0xFFFFFFFF},
-	    .target_info = target_info,
-	};
+		SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
+		    .vertex_shader = draw_state.line_vs,
+		    .fragment_shader = draw_state.line_fs,
+		    .vertex_input_state = vertex_input,
+		    .primitive_type = SDL_GPU_PRIMITIVETYPE_LINELIST,
+		    .rasterizer_state = {.fill_mode = SDL_GPU_FILLMODE_FILL, .cull_mode = SDL_GPU_CULLMODE_NONE},
+		    .multisample_state = {.sample_count = SDL_GPU_SAMPLECOUNT_1, .sample_mask = 0xFFFFFFFF},
+		    .target_info = target_info,
+		};
 
-	draw_state.line_pipeline = SDL_CreateGPUGraphicsPipeline(sdlgpu, &pipeline_info);
-	if (!draw_state.line_pipeline) {
-		note("gpu_draw: Line pipeline failed: %s", SDL_GetError());
-		return false;
+		draw_state.line_pipelines[mode] = SDL_CreateGPUGraphicsPipeline(sdlgpu, &pipeline_info);
+		if (!draw_state.line_pipelines[mode]) {
+			note("gpu_draw: Line pipeline (blend %d) failed: %s", mode, SDL_GetError());
+			if (mode == 0) {
+				return false; // default blend is mandatory
+			}
+		}
 	}
 
 	return true;
@@ -585,8 +623,11 @@ void gpu_draw_shutdown(void)
 		return;
 	}
 
-	if (draw_state.sprite_pipeline) {
-		SDL_ReleaseGPUGraphicsPipeline(sdlgpu, draw_state.sprite_pipeline);
+	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
+		if (draw_state.sprite_pipelines[mode]) {
+			SDL_ReleaseGPUGraphicsPipeline(sdlgpu, draw_state.sprite_pipelines[mode]);
+			draw_state.sprite_pipelines[mode] = NULL;
+		}
 	}
 	if (draw_state.sprite_vs) {
 		SDL_ReleaseGPUShader(sdlgpu, draw_state.sprite_vs);
@@ -594,8 +635,11 @@ void gpu_draw_shutdown(void)
 	if (draw_state.sprite_fs) {
 		SDL_ReleaseGPUShader(sdlgpu, draw_state.sprite_fs);
 	}
-	if (draw_state.prim_pipeline) {
-		SDL_ReleaseGPUGraphicsPipeline(sdlgpu, draw_state.prim_pipeline);
+	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
+		if (draw_state.prim_pipelines[mode]) {
+			SDL_ReleaseGPUGraphicsPipeline(sdlgpu, draw_state.prim_pipelines[mode]);
+			draw_state.prim_pipelines[mode] = NULL;
+		}
 	}
 	if (draw_state.prim_vs) {
 		SDL_ReleaseGPUShader(sdlgpu, draw_state.prim_vs);
@@ -603,8 +647,11 @@ void gpu_draw_shutdown(void)
 	if (draw_state.prim_fs) {
 		SDL_ReleaseGPUShader(sdlgpu, draw_state.prim_fs);
 	}
-	if (draw_state.line_pipeline) {
-		SDL_ReleaseGPUGraphicsPipeline(sdlgpu, draw_state.line_pipeline);
+	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
+		if (draw_state.line_pipelines[mode]) {
+			SDL_ReleaseGPUGraphicsPipeline(sdlgpu, draw_state.line_pipelines[mode]);
+			draw_state.line_pipelines[mode] = NULL;
+		}
 	}
 	if (draw_state.line_vs) {
 		SDL_ReleaseGPUShader(sdlgpu, draw_state.line_vs);
@@ -631,6 +678,26 @@ void gpu_draw_resize(int new_width, int new_height)
 	draw_state.screen_height = (float)new_height;
 }
 
+/* Pick the pipeline for the current blend mode, falling back to the default
+ * blend when that variant failed to build. */
+static SDL_GPUGraphicsPipeline *pick_pipeline(SDL_GPUGraphicsPipeline *const pipelines[GPU_DRAW_BLEND_MODES])
+{
+	int mode = draw_state.blend_mode;
+
+	if (mode < 0 || mode >= GPU_DRAW_BLEND_MODES || !pipelines[mode]) {
+		mode = 0;
+	}
+	return pipelines[mode];
+}
+
+void gpu_draw_set_blend_mode(int mode)
+{
+	if (mode < 0 || mode >= GPU_DRAW_BLEND_MODES) {
+		mode = 0;
+	}
+	draw_state.blend_mode = mode;
+}
+
 bool gpu_draw_is_available(void)
 {
 	return draw_state.initialized && draw_state.sprite_ready;
@@ -649,8 +716,8 @@ void gpu_draw_texture(SDL_GPUTexture *texture, const SDL_FRect *dest, const SDL_
 		return;
 	}
 
-	// Bind pipeline
-	SDL_BindGPUGraphicsPipeline(pass, draw_state.sprite_pipeline);
+	// Bind pipeline (variant for the current blend mode)
+	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.sprite_pipelines));
 
 	// Bind vertex buffer
 	SDL_GPUBufferBinding vb_binding = {.buffer = draw_state.quad_vbo, .offset = 0};
@@ -704,7 +771,7 @@ void gpu_draw_texture(SDL_GPUTexture *texture, const SDL_FRect *dest, const SDL_
 
 void gpu_draw_rect(float x, float y, float w, float h, float r, float g, float b, float a)
 {
-	if (!draw_state.prim_ready || !draw_state.prim_pipeline) {
+	if (!draw_state.prim_ready || !draw_state.prim_pipelines[0]) {
 		return;
 	}
 
@@ -715,7 +782,7 @@ void gpu_draw_rect(float x, float y, float w, float h, float r, float g, float b
 	}
 
 	// Bind primitive pipeline
-	SDL_BindGPUGraphicsPipeline(pass, draw_state.prim_pipeline);
+	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.prim_pipelines));
 
 	// Bind vertex buffer
 	SDL_GPUBufferBinding vb_bind = {.buffer = draw_state.quad_vbo, .offset = 0};
@@ -765,7 +832,7 @@ bool gpu_draw_line_is_available(void)
 // Draw a line
 void gpu_draw_line(float x1, float y1, float x2, float y2, float r, float g, float b, float a)
 {
-	if (!draw_state.line_ready || !draw_state.line_pipeline) {
+	if (!draw_state.line_ready || !draw_state.line_pipelines[0]) {
 		return;
 	}
 
@@ -776,7 +843,7 @@ void gpu_draw_line(float x1, float y1, float x2, float y2, float r, float g, flo
 	}
 
 	// Bind line pipeline
-	SDL_BindGPUGraphicsPipeline(pass, draw_state.line_pipeline);
+	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.line_pipelines));
 
 	// Bind vertex buffer
 	SDL_GPUBufferBinding vb_bind = {.buffer = draw_state.line_vbo, .offset = 0};

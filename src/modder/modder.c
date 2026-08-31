@@ -373,6 +373,7 @@ void amod_tick(void)
 	}
 #ifdef USE_LUAJIT
 	lua_scripting_tick();
+	lua_scripting_check_reload(); // no-op unless -dev; self-throttled to ~1/sec
 #endif
 }
 

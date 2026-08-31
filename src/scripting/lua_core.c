@@ -28,6 +28,9 @@ void lua_api_register(lua_State *L);
 // Global Lua state
 static lua_State *L = NULL;
 
+// Developer mode (-dev command line flag): enables mtime-based auto-reload
+static bool dev_mode = false;
+
 // Mods subdirectory name (within SDL user data path)
 static const char *MODS_SUBDIR = "mods";
 
@@ -951,12 +954,29 @@ const char *lua_scripting_version(void)
 	return lua_version_str;
 }
 
-// Check for hot-reload (can be called periodically)
+void lua_scripting_set_dev_mode(bool enabled)
+{
+	dev_mode = enabled;
+	if (enabled) {
+		note("Lua developer mode enabled: scripts auto-reload on file change");
+	}
+}
+
+// Check for hot-reload. Safe to call every tick: it only does work in
+// developer mode (-dev) and self-throttles to about one stat() pass per second.
 void lua_scripting_check_reload(void)
 {
-	if (!L) {
+	static uint64_t last_check_ms = 0;
+
+	if (!L || !dev_mode) {
 		return;
 	}
+
+	uint64_t now = SDL_GetTicks();
+	if (now - last_check_ms < 1000) {
+		return;
+	}
+	last_check_ms = now;
 
 	for (int i = 0; i < loaded_script_count; i++) {
 		time_t current_mtime = get_file_mtime(loaded_scripts[i].path);

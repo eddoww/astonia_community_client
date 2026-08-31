@@ -28,6 +28,7 @@
 #include "game/sprite_config.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_gpu.h"
+#include "sdl/sdl_gpu_shaderfx.h"
 #include "sdl/font_manager.h"
 #include "gui/gui.h"
 #include "gui/loading_ui.h"
@@ -529,6 +530,9 @@ static int saved_ttf_text = -1;
  * be known BEFORE sdl_init (renderer creation), re-applied to game_options
  * after it (same GO_DEFAULTS reset as the TTF option). */
 static int saved_gpu_rendering = -1;
+/* GPU shader effects sub-flag (experimental, opt-in, needs gpu_rendering):
+ * base textures + per-draw effects in the fragment shader. */
+static int saved_gpu_shaderfx = -1;
 
 static void save_extra_options(void)
 {
@@ -545,6 +549,7 @@ static void save_extra_options(void)
 	cJSON_AddBoolToObject(root, "hide_lag_warning", (game_options & GO_NOLAG) != 0);
 	cJSON_AddBoolToObject(root, "ttf_text", (game_options & GO_TTF) != 0);
 	cJSON_AddBoolToObject(root, "gpu_rendering", (game_options & GO_GPU) != 0);
+	cJSON_AddBoolToObject(root, "gpu_shader_effects", (game_options & GO_SHADERFX) != 0);
 	cJSON_AddNumberToObject(root, "master_volume", sound_volume);
 	cJSON_AddNumberToObject(root, "sfx_volume", sound_volume_sfx);
 	cJSON_AddNumberToObject(root, "ambient_volume", sound_volume_ambient);
@@ -630,6 +635,15 @@ static void load_extra_options(void)
 			game_options |= GO_GPU;
 		} else {
 			game_options &= ~GO_GPU;
+		}
+	}
+	v = cJSON_GetObjectItem(root, "gpu_shader_effects");
+	if (v && cJSON_IsBool(v)) {
+		saved_gpu_shaderfx = cJSON_IsTrue(v) ? 1 : 0;
+		if (saved_gpu_shaderfx) {
+			game_options |= GO_SHADERFX;
+		} else {
+			game_options &= ~GO_SHADERFX;
 		}
 	}
 	sound_volume = extra_int(root, "master_volume", sound_volume, 0, 128);
@@ -906,6 +920,10 @@ int main(int argc, char *argv[])
 	 * sdl_init falls back to SDL_Renderer when the GPU path is requested but
 	 * not usable (no device, missing shader pipelines). */
 	gpu_rendering_requested = launch_gpu || (saved_gpu_rendering > 0) || ((game_options & GO_GPU) != 0);
+	/* shader-effects sub-flag: only meaningful when the GPU renderer comes
+	 * up; sdl_init ignores it otherwise */
+	gpu_shaderfx_requested =
+	    gpu_rendering_requested && ((saved_gpu_shaderfx > 0) || ((game_options & GO_SHADERFX) != 0));
 
 	if (!sdl_init(want_width, want_height, buf, want_monitor)) {
 		render_exit();
@@ -932,6 +950,11 @@ int main(int argc, char *argv[])
 		game_options |= GO_GPU;
 	} else {
 		game_options &= ~GO_GPU;
+	}
+	if (gpu_shaderfx_requested) {
+		game_options |= GO_SHADERFX;
+	} else {
+		game_options &= ~GO_SHADERFX;
 	}
 
 	render_init();

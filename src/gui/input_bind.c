@@ -233,6 +233,24 @@ static void on_toggle_minimap(InputBinding *self)
 	minimap_toggle();
 }
 
+static void on_minimap_zoom_in(InputBinding *self)
+{
+	(void)self;
+	minimap_zoom_in();
+}
+
+static void on_minimap_zoom_out(InputBinding *self)
+{
+	(void)self;
+	minimap_zoom_out();
+}
+
+static void on_minimap_zoom_reset(InputBinding *self)
+{
+	(void)self;
+	minimap_zoom_reset();
+}
+
 /* hotbar display settings — defined here so toggle callbacks can access them */
 static int show_hotkeys = 1;
 static int show_names = 1;
@@ -1493,6 +1511,11 @@ static void register_all(void)
 	reg("ui.toggle_debug", "Toggle Debug Info", INPUT_CAT_UI, SDLK_F10, 0, on_toggle_debug);
 	reg("ui.toggle_help", "Toggle Help", INPUT_CAT_UI, SDLK_F11, 0, on_toggle_help);
 	reg("ui.toggle_minimap", "Toggle Minimap", INPUT_CAT_UI, 'm', 0, on_toggle_minimap);
+	/* map zoom on ,/. ('<'/'>' mnemonic) - free in both keybind presets;
+	 * deliberately NOT +/-, those are the classic context-action keys */
+	reg("ui.minimap_zoom_in", "Map Zoom In", INPUT_CAT_UI, '.', 0, on_minimap_zoom_in);
+	reg("ui.minimap_zoom_out", "Map Zoom Out", INPUT_CAT_UI, ',', 0, on_minimap_zoom_out);
+	reg("ui.minimap_zoom_reset", "Map Zoom Reset", INPUT_CAT_UI, 'm', INPUT_MOD_SHIFT, on_minimap_zoom_reset);
 	reg("ui.toggle_hotbar_names", "Toggle Hotbar Names", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_names);
 	reg("ui.toggle_hotbar_keys", "Toggle Hotbar Key Labels", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_keys);
 

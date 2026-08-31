@@ -25,6 +25,7 @@ int amod_keyup(SDL_Keycode key);
 int amod_textinput(SDL_Keycode key);
 void amod_update_hover_texts(void);
 int amod_client_cmd(const char *buf);
+int amod_text_line(const char *line);
 int amod_process(const unsigned char *buf);
 int amod_prefetch(const unsigned char *buf);
 int amod_options_count(void);

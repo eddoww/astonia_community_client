@@ -37,6 +37,9 @@
 #include "client/client.h"
 #include "lib/cjson/cJSON.h"
 #include "modder/modder.h"
+#ifdef USE_LUAJIT
+#include "scripting/lua_interface.h"
+#endif
 
 // Forward declarations
 void xlog(FILE *logfp, char *format, ...) __attribute__((format(printf, 2, 3)));
@@ -292,6 +295,7 @@ void display_usage(void)
 
 DLL_EXPORT char server_url[256];
 DLL_EXPORT int server_port = 0;
+static int dev_mode = 0; // -dev flag: developer conveniences (Lua auto-reload)
 DLL_EXPORT int want_width = 0;
 DLL_EXPORT int want_height = 0;
 DLL_EXPORT int want_monitor = 0; // Monitor number for multi-monitor support (0=default)
@@ -305,6 +309,13 @@ int parse_args(int argc, char *argv[])
 		char *arg = argv[i];
 
 		if (arg[0] != '-') {
+			continue;
+		}
+
+		// Long flags first: they must not fall through to the single-letter
+		// parser below ("-dev" would otherwise be read as -d "ev").
+		if (!strcmp(arg, "-dev") || !strcmp(arg, "--dev")) {
+			dev_mode = 1;
 			continue;
 		}
 
@@ -872,6 +883,10 @@ int main(int argc, char *argv[])
 	amod_init();
 	sprite_config_init();
 	amod_sprite_config();
+#ifdef USE_LUAJIT
+	lua_scripting_init();
+	lua_scripting_set_dev_mode(dev_mode != 0);
+#endif
 #ifdef ENABLE_SHAREDMEM
 	sharedmem_init();
 #endif
@@ -986,6 +1001,9 @@ int main(int argc, char *argv[])
 
 #ifdef ENABLE_SHAREDMEM
 	sharedmem_exit();
+#endif
+#ifdef USE_LUAJIT
+	lua_scripting_exit();
 #endif
 	amod_exit();
 	main_exit();

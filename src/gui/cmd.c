@@ -19,6 +19,9 @@
 #include "client/client.h"
 #include "game/game.h"
 #include "modder/modder.h"
+#ifdef USE_LUAJIT
+#include "scripting/lua_interface.h"
+#endif
 
 #define MAXCMDLINE 199
 #define MAXHIST    20
@@ -71,6 +74,10 @@ static void cmd_version(void)
 			addline("%c-mod version: %s", 'A' + i, ptr);
 		}
 	}
+
+#ifdef USE_LUAJIT
+	addline("Lua scripting: %s", lua_scripting_version());
+#endif
 }
 
 static int client_cmd(char *buf)

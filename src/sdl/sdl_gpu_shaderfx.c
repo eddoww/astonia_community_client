@@ -516,6 +516,35 @@ int sdl_blit_fx(int cache_index, const gpu_fx_draw_t *d, int sx, int sy, int cli
 	return fx_batch_add(st->gpu_tex, &inst) ? 1 : 0;
 }
 
+int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex, float dest_x, float dest_y, float dest_w, float dest_h, int src_x,
+    int src_y, int r, int g, int b, int alpha)
+{
+	if (!fx.active || !fx.in_frame || !tex) {
+		return 0;
+	}
+	if (dest_w <= 0.0f || dest_h <= 0.0f) {
+		return 1; /* nothing visible - handled */
+	}
+
+	int iw = (int)dest_w;
+	int ih = (int)dest_h;
+
+	gpu_fx_instance_t inst = {
+	    .dest = {dest_x, dest_y, dest_w, dest_h},
+	    .src = {src_x, src_y, iw, ih},
+	    /* org_sz is only read by the effect pipeline; keep it covering the
+	     * source region so nothing indexes outside the page */
+	    .org_sz = {src_x, src_y, iw, ih},
+	    .colorize = {0, 0, 0, GPU_FX_MODE_PLAIN},
+	    .balance = {r, g, b, 0},
+	    .fx = {0, 0, 0, 0},
+	    .light_a = {15, 15, 15, 15},
+	    .light_b = {15, alpha, 0, 0},
+	};
+
+	return fx_batch_add(tex, &inst) ? 1 : 0;
+}
+
 /* Called by the direct-draw path so interleaved non-batched draws keep
  * their painter order relative to batched sprites. */
 void gpu_shaderfx_direct_draw_barrier(void)

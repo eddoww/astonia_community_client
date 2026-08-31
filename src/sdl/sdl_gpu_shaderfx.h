@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <SDL3/SDL.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +29,7 @@ extern "C" {
 
 /* Effect-instance flags (colorize[3]) */
 #define GPU_FX_COLORIZE_NEW (1u << 0) /* sprite >= 220000: sdl_colorize_pix2 algorithm */
+#define GPU_FX_MODE_PLAIN   (1u << 1) /* no effect pipeline: texel * color-mod (text/GUI quads) */
 
 /* Per-sprite instance data, std430-compatible, 128 bytes.
  * All effect parameters are the RAW values the CPU pipeline receives
@@ -124,6 +126,15 @@ void gpu_shaderfx_direct_draw_barrier(void);
  * fall back to the CPU-baked path. */
 int sdl_blit_fx(int cache_index, const gpu_fx_draw_t *d, int sx, int sy, int clipsx, int clipsy, int clipex, int clipey,
     int x_offset, int y_offset);
+
+/* Batch one plain-texture quad (GPU_FX_MODE_PLAIN): texel * color-mod,
+ * no effect pipeline. Coordinates are DEVICE pixels; (src_x, src_y) is
+ * the texel origin inside `tex` (atlas region or 0,0), the source size
+ * equals the dest size (1:1 blit, like every text/GUI draw). r/g/b/alpha
+ * are the 0..255 modulation (255,255,255,255 = untouched texel). Returns
+ * 1 when batched, 0 when the caller must fall back to a direct draw. */
+int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex, float dest_x, float dest_y, float dest_w, float dest_h, int src_x,
+    int src_y, int r, int g, int b, int alpha);
 
 /* Per-frame stats (draw calls recorded by the batch, sprites batched). */
 void gpu_shaderfx_get_stats(int *draws, int *sprites, int *tex_flushes, int *direct_flushes);

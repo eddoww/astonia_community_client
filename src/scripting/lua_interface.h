@@ -63,7 +63,12 @@ void lua_scripting_areachange(void);
 // Get the version string of loaded Lua mods
 const char *lua_scripting_version(void);
 
-// Check for script file changes and reload if needed (for hot-reload)
+// Enable/disable developer mode (-dev flag): mtime-based script auto-reload
+void lua_scripting_set_dev_mode(bool enabled);
+
+// Check for script file changes and reload if needed (for hot-reload).
+// Safe to call every tick: only active in developer mode, self-throttled
+// to roughly one filesystem check per second.
 void lua_scripting_check_reload(void);
 
 #endif // LUA_INTERFACE_H

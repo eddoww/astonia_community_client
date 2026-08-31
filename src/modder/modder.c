@@ -419,6 +419,11 @@ int amod_mouse_over(int x, int y)
 			return 1;
 		}
 	}
+#ifdef USE_LUAJIT
+	if (lua_scripting_mouse_over(x, y)) {
+		return 1;
+	}
+#endif
 	return 0;
 }
 

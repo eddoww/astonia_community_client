@@ -42,6 +42,10 @@ void lua_scripting_mouse_move(int x, int y);
 // Returns: 1 if event consumed, -1 if consumed but allow other handlers, 0 otherwise
 int lua_scripting_mouse_click(int x, int y, int what);
 
+// Called from the client's hover logic to ask whether a Lua overlay is under
+// the mouse. Returns non-zero if a mod claims the position (hover consumed).
+int lua_scripting_mouse_over(int x, int y);
+
 // Called on key down
 // key: SDL key code (SDL_Keycode is unsigned in SDL3)
 // Returns: 1 if event consumed, -1 if consumed but allow other handlers, 0 otherwise

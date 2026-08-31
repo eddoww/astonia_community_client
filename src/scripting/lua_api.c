@@ -17,6 +17,8 @@
 #include "client/client.h"
 #include "game/game.h"
 #include "gui/gui.h"
+#include "gui/input_bind.h"
+#include "gui/panels.h"
 
 // External declarations from gui module (not exported in headers)
 extern int mousex, mousey;
@@ -855,6 +857,116 @@ static int l_get_clipboard(lua_State *L)
 	return 1;
 }
 
+// --- Window / panel awareness (read-only) ---
+
+// Any dismissable client window/overlay open? (native mod windows included)
+// Lets Lua overlays get out of the way of open client UI.
+static int l_has_open_window(lua_State *L)
+{
+	lua_pushboolean(L, gui_has_open_window());
+	return 1;
+}
+
+// Master GUI overlay visibility (Alt+Z style toggle)
+static int l_gui_overlay_visible(lua_State *L)
+{
+	lua_pushboolean(L, gui_overlay_visible);
+	return 1;
+}
+
+// Fullscreen world view active? (map spans the whole canvas, GUI overlays it)
+static int l_get_fullscreen_world(lua_State *L)
+{
+	lua_pushboolean(L, panels_fullscreen_world());
+	return 1;
+}
+
+// Effective panel visibility (overlay + toggle + auto-show)
+static int l_panel_shown(lua_State *L)
+{
+	int p = (int)luaL_checkinteger(L, 1);
+	if (p < 0 || p >= MAX_PANEL) {
+		lua_pushnil(L);
+		return 1;
+	}
+	lua_pushboolean(L, panel_shown(p));
+	return 1;
+}
+
+// Panel drag offset from its default layout position. Note that dotx()/doty()
+// already include these offsets (panels_apply_offsets runs at the end of
+// init_dots), so overlays anchored to dots follow moved panels automatically;
+// the raw offsets are exposed for overlays doing their own layout math.
+static int l_panel_offset(lua_State *L)
+{
+	int p = (int)luaL_checkinteger(L, 1);
+	if (p < 0 || p >= MAX_PANEL) {
+		lua_pushnil(L);
+		lua_pushnil(L);
+		return 2;
+	}
+	lua_pushinteger(L, panel_dx(p));
+	lua_pushinteger(L, panel_dy(p));
+	return 2;
+}
+
+// --- Hotbar state (read-only) ---
+
+static int l_get_hotbar_rows(lua_State *L)
+{
+	lua_pushinteger(L, hotbar_rows());
+	return 1;
+}
+
+static int l_get_hotbar_visible_slots(lua_State *L)
+{
+	lua_pushinteger(L, hotbar_visible_slots());
+	return 1;
+}
+
+// Get hotbar slot contents (0-based index); nil for empty/out-of-range slots
+static int l_get_hotbar_slot(lua_State *L)
+{
+	int idx = (int)luaL_checkinteger(L, 1);
+
+	if (idx < 0 || idx >= HOTBAR_MAX_SLOTS) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	const HotbarSlot *slot = hotbar_get(idx);
+	if (!slot || slot->type == HOTBAR_EMPTY) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_newtable(L);
+
+	lua_pushinteger(L, slot->type);
+	lua_setfield(L, -2, "type");
+
+	lua_pushinteger(L, (lua_Integer)hotbar_slot_sprite(idx));
+	lua_setfield(L, -2, "sprite");
+
+	const char *name = hotbar_slot_name(idx);
+	if (name && name[0]) {
+		lua_pushstring(L, name);
+		lua_setfield(L, -2, "name");
+	}
+
+	if (slot->type == HOTBAR_ITEM) {
+		lua_pushinteger(L, slot->inv_index);
+		lua_setfield(L, -2, "inv_index");
+		lua_pushinteger(L, (lua_Integer)slot->item_type);
+		lua_setfield(L, -2, "item_type");
+	} else if (slot->type == HOTBAR_SPELL) {
+		lua_pushinteger(L, slot->action_slot);
+		lua_setfield(L, -2, "action_slot");
+	}
+
+	return 1;
+}
+
 // --- Registration ---
 
 static const luaL_Reg client_funcs[] = {
@@ -901,6 +1013,15 @@ static const luaL_Reg client_funcs[] = {
 
     // GUI helpers
     {"dotx", l_dotx}, {"doty", l_doty}, {"butx", l_butx}, {"buty", l_buty},
+
+    // Window / panel awareness (read-only)
+    {"has_open_window", l_has_open_window}, {"gui_overlay_visible", l_gui_overlay_visible},
+    {"get_fullscreen_world", l_get_fullscreen_world}, {"panel_shown", l_panel_shown},
+    {"panel_offset", l_panel_offset},
+
+    // Hotbar state (read-only)
+    {"get_hotbar_rows", l_get_hotbar_rows}, {"get_hotbar_visible_slots", l_get_hotbar_visible_slots},
+    {"get_hotbar_slot", l_get_hotbar_slot},
 
     // Utilities
     {"exp2level", l_exp2level}, {"level2exp", l_level2exp},
@@ -1069,6 +1190,37 @@ void lua_api_register(lua_State *L)
 	lua_pushinteger(L, QF_DONE);
 	lua_setfield(L, -2, "QF_DONE");
 
+	// Panel indices (for client.panel_shown / client.panel_offset)
+	lua_pushinteger(L, PANEL_SKILLS);
+	lua_setfield(L, -2, "PANEL_SKILLS");
+	lua_pushinteger(L, PANEL_CHAT);
+	lua_setfield(L, -2, "PANEL_CHAT");
+	lua_pushinteger(L, PANEL_INVENTORY);
+	lua_setfield(L, -2, "PANEL_INVENTORY");
+	lua_pushinteger(L, PANEL_GOLD);
+	lua_setfield(L, -2, "PANEL_GOLD");
+	lua_pushinteger(L, PANEL_SPEED);
+	lua_setfield(L, -2, "PANEL_SPEED");
+	lua_pushinteger(L, PANEL_BUFFS);
+	lua_setfield(L, -2, "PANEL_BUFFS");
+	lua_pushinteger(L, PANEL_HOTBAR);
+	lua_setfield(L, -2, "PANEL_HOTBAR");
+	lua_pushinteger(L, PANEL_EQUIPMENT);
+	lua_setfield(L, -2, "PANEL_EQUIPMENT");
+	lua_pushinteger(L, MAX_PANEL);
+	lua_setfield(L, -2, "MAX_PANEL");
+
+	// Hotbar constants (for client.get_hotbar_slot)
+	lua_pushinteger(L, HOTBAR_MAX_SLOTS);
+	lua_setfield(L, -2, "HOTBAR_MAX_SLOTS");
+	lua_pushinteger(L, HOTBAR_SLOTS_PER_ROW);
+	lua_setfield(L, -2, "HOTBAR_SLOTS_PER_ROW");
+	lua_pushinteger(L, HOTBAR_EMPTY);
+	lua_setfield(L, -2, "HOTBAR_EMPTY");
+	lua_pushinteger(L, HOTBAR_ITEM);
+	lua_setfield(L, -2, "HOTBAR_ITEM");
+	lua_pushinteger(L, HOTBAR_SPELL);
+	lua_setfield(L, -2, "HOTBAR_SPELL");
 
 	// Speed states (for pspeed) - 0=normal, 1=fast, 2=stealth
 	lua_pushinteger(L, 0);

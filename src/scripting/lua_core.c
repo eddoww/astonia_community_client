@@ -689,8 +689,8 @@ static int call_lua_handler_str(const char *name, const char *str_arg)
 
 // List of callback event names
 static const char *callback_names[] = {"on_init", "on_exit", "on_gamestart", "on_tick", "on_frame", "on_mouse_move",
-    "on_mouse_click", "on_keydown", "on_keyup", "on_client_cmd", "on_areachange", "on_before_reload", "on_after_reload",
-    NULL};
+    "on_mouse_over", "on_mouse_click", "on_keydown", "on_keyup", "on_client_cmd", "on_areachange", "on_before_reload",
+    "on_after_reload", NULL};
 
 // Set up the callback registration system in Lua
 static void setup_callback_system(void)
@@ -913,6 +913,11 @@ void lua_scripting_mouse_move(int x, int y)
 int lua_scripting_mouse_click(int x, int y, int what)
 {
 	return call_lua_handler_int("on_mouse_click", 3, x, y, what);
+}
+
+int lua_scripting_mouse_over(int x, int y)
+{
+	return call_lua_handler_int("on_mouse_over", 2, x, y);
 }
 
 int lua_scripting_keydown(uint32_t key)

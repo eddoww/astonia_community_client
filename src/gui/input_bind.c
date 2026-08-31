@@ -130,13 +130,20 @@ static void on_escape(InputBinding *self)
 }
 
 /* Something dismissable is on screen (popups, look window, chat input ...).
- * Escape deals with those before it opens the menu - players expect Escape
- * to close whatever is in the way, and Cancel All is unbound by default. */
-static int anything_to_cancel(void)
+ * Exported so mods (native and Lua) can make their overlays cooperate with
+ * open client windows. */
+DLL_EXPORT int gui_has_open_window(void)
 {
 	return show_look || display_gfx || teleporter || show_tutor || display_help || display_quest || show_color ||
 	       cmd_is_active() || context_targeting_active() || spellbook_is_open() || action_ovr != ACTION_NONE ||
 	       amod_has_open_window();
+}
+
+/* Escape deals with dismissables before it opens the menu - players expect
+ * Escape to close whatever is in the way, and Cancel All is unbound by default. */
+static int anything_to_cancel(void)
+{
+	return gui_has_open_window();
 }
 
 static void on_menu(InputBinding *self)

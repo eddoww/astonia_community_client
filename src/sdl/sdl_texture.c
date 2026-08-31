@@ -700,9 +700,15 @@ static int texcache_acquire_slot(void)
 			__atomic_sub_fetch(
 			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 			if (sdlt[cache_index].gpu_tex) {
-				gpu_texture_destroy(sdlt[cache_index].gpu_tex);
+				/* atlas entries reference a SHARED page texture - never
+				 * destroy it here (the shelf region is not reclaimed yet,
+				 * see sdl_gpu_atlas.h) */
+				if (!sdlt[cache_index].atlas_used) {
+					gpu_texture_destroy(sdlt[cache_index].gpu_tex);
+				}
 				sdlt[cache_index].gpu_tex = NULL;
 			}
+			sdlt[cache_index].atlas_used = 0;
 		} else if (flags & SF_DIDTEX) {
 			// SDL texture destruction
 			__atomic_sub_fetch(
@@ -826,9 +832,13 @@ void sdl_texture_flush_sprites(void)
 			 * sync (previously skipped here - leak + stale accounting) */
 			__atomic_sub_fetch(&mem_tex, sdlt[i].xres * sdlt[i].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 			if (sdlt[i].gpu_tex) {
-				gpu_texture_destroy(sdlt[i].gpu_tex);
+				/* shared atlas page - never destroyed per entry */
+				if (!sdlt[i].atlas_used) {
+					gpu_texture_destroy(sdlt[i].gpu_tex);
+				}
 				sdlt[i].gpu_tex = NULL;
 			}
+			sdlt[i].atlas_used = 0;
 		} else if (flags & SF_DIDTEX) {
 			__atomic_sub_fetch(&mem_tex, sdlt[i].xres * sdlt[i].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 			if (sdlt[i].tex) {

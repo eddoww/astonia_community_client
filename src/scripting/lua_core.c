@@ -16,7 +16,7 @@
 #include <lualib.h>
 #include <lauxlib.h>
 
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 #include "astonia.h"
 #include "scripting/lua_interface.h"
@@ -820,14 +820,14 @@ int lua_scripting_mouse_click(int x, int y, int what)
 	return call_lua_handler_int("on_mouse_click", 3, x, y, what);
 }
 
-int lua_scripting_keydown(int key)
+int lua_scripting_keydown(uint32_t key)
 {
-	return call_lua_handler_int("on_keydown", 1, key);
+	return call_lua_handler_int("on_keydown", 1, (int)key);
 }
 
-int lua_scripting_keyup(int key)
+int lua_scripting_keyup(uint32_t key)
 {
-	return call_lua_handler_int("on_keyup", 1, key);
+	return call_lua_handler_int("on_keyup", 1, (int)key);
 }
 
 int lua_scripting_client_cmd(const char *buf)

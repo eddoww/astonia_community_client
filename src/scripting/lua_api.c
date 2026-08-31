@@ -11,7 +11,7 @@
 #include <lauxlib.h>
 #include <string.h>
 
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 #include "astonia.h"
 #include "client/client.h"
@@ -428,7 +428,7 @@ static int l_get_container(lua_State *L)
 {
 	int idx = (int)luaL_checkinteger(L, 1);
 
-	if (idx < 0 || idx >= CONTAINERSIZE) {
+	if (idx < 0 || idx >= _containersize) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -630,7 +630,7 @@ static int l_get_item(lua_State *L)
 {
 	int idx = (int)luaL_checkinteger(L, 1);
 
-	if (idx < 0 || idx >= INVENTORYSIZE) {
+	if (idx < 0 || idx >= _inventorysize) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -644,7 +644,7 @@ static int l_get_item_flags(lua_State *L)
 {
 	int idx = (int)luaL_checkinteger(L, 1);
 
-	if (idx < 0 || idx >= INVENTORYSIZE) {
+	if (idx < 0 || idx >= _inventorysize) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -797,8 +797,8 @@ static int l_cmd_text(lua_State *L)
 static int l_set_clipboard(lua_State *L)
 {
 	const char *text = luaL_checkstring(L, 1);
-	int result = SDL_SetClipboardText(text);
-	lua_pushboolean(L, result == 0);
+	bool result = SDL_SetClipboardText(text); // SDL3: returns true on success
+	lua_pushboolean(L, result);
 	return 1;
 }
 
@@ -1014,9 +1014,9 @@ void lua_api_register(lua_State *L)
 	// Other constants
 	lua_pushinteger(L, MAXCHARS);
 	lua_setfield(L, -2, "MAXCHARS");
-	lua_pushinteger(L, INVENTORYSIZE);
+	lua_pushinteger(L, _inventorysize); // runtime value: differs between v3 and v3.5 servers
 	lua_setfield(L, -2, "INVENTORYSIZE");
-	lua_pushinteger(L, CONTAINERSIZE);
+	lua_pushinteger(L, _containersize);
 	lua_setfield(L, -2, "CONTAINERSIZE");
 	lua_pushinteger(L, TICKS);
 	lua_setfield(L, -2, "TICKS");

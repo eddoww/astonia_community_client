@@ -10,6 +10,7 @@
 #define LUA_INTERFACE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 // Initialize the Lua scripting subsystem
 // Returns true on success, false on failure
@@ -42,14 +43,14 @@ void lua_scripting_mouse_move(int x, int y);
 int lua_scripting_mouse_click(int x, int y, int what);
 
 // Called on key down
-// key: SDL key code
+// key: SDL key code (SDL_Keycode is unsigned in SDL3)
 // Returns: 1 if event consumed, -1 if consumed but allow other handlers, 0 otherwise
-int lua_scripting_keydown(int key);
+int lua_scripting_keydown(uint32_t key);
 
 // Called on key up
-// key: SDL key code
+// key: SDL key code (SDL_Keycode is unsigned in SDL3)
 // Returns: 1 if event consumed, -1 if consumed but allow other handlers, 0 otherwise
-int lua_scripting_keyup(int key);
+int lua_scripting_keyup(uint32_t key);
 
 // Called on client command (text starting with #)
 // buf: command text

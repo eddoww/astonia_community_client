@@ -56,4 +56,13 @@ bool gpu_draw_line_is_available(void);
 // Draw a line
 void gpu_draw_line(float x1, float y1, float x2, float y2, float r, float g, float b, float a);
 
+// Check if triangle drawing is available
+bool gpu_draw_tri_is_available(void);
+
+// Draw a triangle with per-vertex colors (each color is float[4] RGBA 0..1).
+// c1/c2 may be NULL to reuse c0 (solid triangle). Coordinates are in screen
+// pixels of the currently bound target (like gpu_draw_rect/gpu_draw_line).
+void gpu_draw_triangle(float x0, float y0, float x1, float y1, float x2, float y2, const float c0[4], const float c1[4],
+    const float c2[4]);
+
 #endif // SDL_GPU_DRAW_H

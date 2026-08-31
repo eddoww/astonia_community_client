@@ -44,6 +44,60 @@
 // Current blend mode for rendering operations (used by all drawing functions)
 static SDL_BlendMode current_blend_mode = SDL_BLENDMODE_BLEND;
 
+/* GPU-mode counterpart of sdl_blit_tex: blit an SDL_GPUTexture with the same
+ * clipping/scale math. `pix_w`/`pix_h` are the texture's dimensions in device
+ * pixels (i.e. already multiplied by sdl_scale). Draws into whatever target
+ * is currently bound, so it also composes onto offscreen render targets. */
+static void sdl_blit_gpu_tex(SDL_GPUTexture *gtex, int pix_w, int pix_h, int sx, int sy, int clipsx, int clipsy,
+    int clipex, int clipey, int x_offset, int y_offset)
+{
+	int addx = 0, addy = 0;
+	SDL_FRect dr, sr;
+	Uint64 start = SDL_GetTicks();
+
+	if (!gtex || !gpu_draw_is_available()) {
+		return;
+	}
+
+	int dx = pix_w / sdl_scale;
+	int dy = pix_h / sdl_scale;
+
+	if (sx < clipsx) {
+		addx = clipsx - sx;
+		dx -= addx;
+		sx = clipsx;
+	}
+	if (sy < clipsy) {
+		addy = clipsy - sy;
+		dy -= addy;
+		sy = clipsy;
+	}
+	if (sx + dx >= clipex) {
+		dx = clipex - sx;
+	}
+	if (sy + dy >= clipey) {
+		dy = clipey - sy;
+	}
+
+	if (dx <= 0 || dy <= 0) {
+		return; // Completely clipped
+	}
+
+	dr.x = (float)((sx + x_offset) * sdl_scale);
+	dr.y = (float)((sy + y_offset) * sdl_scale);
+	dr.w = (float)(dx * sdl_scale);
+	dr.h = (float)(dy * sdl_scale);
+
+	sr.x = (float)(addx * sdl_scale);
+	sr.y = (float)(addy * sdl_scale);
+	sr.w = (float)(dx * sdl_scale);
+	sr.h = (float)(dy * sdl_scale);
+
+	gpu_draw_texture(gtex, &dr, &sr, pix_w, pix_h, NULL, 255);
+
+	sdl_time_blit += (long long)(SDL_GetTicks() - start);
+}
+
 static void sdl_blit_tex(
     SDL_Texture *tex, int sx, int sy, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
@@ -52,7 +106,8 @@ static void sdl_blit_tex(
 	SDL_FRect dr, sr;
 	Uint64 start = SDL_GetTicks();
 
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU sprite batching)
+	// GPU mode never creates SDL_Textures (an SDL_Texture cannot be sampled
+	// by SDL_GPU); the GPU-mode equivalent is sdl_blit_gpu_tex above.
 	if (use_gpu_rendering) {
 		return;
 	}
@@ -102,54 +157,12 @@ void sdl_blit(
 {
 	// GPU path: use GPU texture for direct drawing
 	if (use_gpu_rendering && sdlt[cache_index].gpu_tex) {
-		int xres = sdlt[cache_index].xres;
-		int yres = sdlt[cache_index].yres;
-
-		// Apply clipping
-		int addx = 0, addy = 0;
-		int dx = xres;
-		int dy = yres;
-
-		if (sx < clipsx) {
-			addx = clipsx - sx;
-			dx -= addx;
-			sx = clipsx;
-		}
-		if (sy < clipsy) {
-			addy = clipsy - sy;
-			dy -= addy;
-			sy = clipsy;
-		}
-		if (sx + dx >= clipex) {
-			dx = clipex - sx;
-		}
-		if (sy + dy >= clipey) {
-			dy = clipey - sy;
-		}
-
-		if (dx <= 0 || dy <= 0) {
-			return; // Completely clipped
-		}
-
-		// Destination rect (screen coordinates, scaled)
-		SDL_FRect dest = {.x = (float)((sx + x_offset) * sdl_scale),
-		    .y = (float)((sy + y_offset) * sdl_scale),
-		    .w = (float)(dx * sdl_scale),
-		    .h = (float)(dy * sdl_scale)};
-
 		// NOTE: Batching disabled - each sprite has a unique texture, so batching
 		// can't combine draws and the fence wait overhead makes it slower.
 		// TODO: Re-enable batching once texture atlases are implemented.
-
-		// Use direct GPU drawing
 		if (gpu_draw_is_available()) {
-			// Source rect (texture pixels, scaled)
-			SDL_FRect src = {.x = (float)(addx * sdl_scale),
-			    .y = (float)(addy * sdl_scale),
-			    .w = (float)(dx * sdl_scale),
-			    .h = (float)(dy * sdl_scale)};
-
-			gpu_draw_texture(sdlt[cache_index].gpu_tex, &dest, &src, xres * sdl_scale, yres * sdl_scale, NULL, 255);
+			sdl_blit_gpu_tex(sdlt[cache_index].gpu_tex, sdlt[cache_index].xres * sdl_scale,
+			    sdlt[cache_index].yres * sdl_scale, sx, sy, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
 			return;
 		}
 	}
@@ -2532,11 +2545,6 @@ void sdl_rounded_rect_alpha(int sx, int sy, int ex, int ey, int radius, unsigned
 {
 	int r, g, b;
 
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
@@ -2566,6 +2574,66 @@ void sdl_rounded_rect_alpha(int sx, int sy, int ex, int ey, int radius, unsigned
 	}
 	if (radius < 0) {
 		radius = 0;
+	}
+
+	// GPU path: same geometry as below - straight edges as 1px rects, corner
+	// arcs as midpoint-circle points (1x1 rects)
+	if (use_gpu_rendering) {
+		if (!gpu_draw_prim_is_available()) {
+			return;
+		}
+
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		int osx = (sx + x_offset) * sdl_scale;
+		int osy = (sy + y_offset) * sdl_scale;
+		int oex = (ex + x_offset) * sdl_scale;
+		int oey = (ey + y_offset) * sdl_scale;
+		int sr = radius * sdl_scale;
+
+		// The 4 straight edges (SDL_RenderLine endpoints are inclusive)
+		int edge_w = (oex - sr - 1) - (osx + sr) + 1;
+		int edge_h = (oey - sr - 1) - (osy + sr) + 1;
+		if (edge_w > 0) {
+			gpu_draw_rect((float)(osx + sr), (float)osy, (float)edge_w, 1.0f, nr, ng, nb, na); // Top
+			gpu_draw_rect((float)(osx + sr), (float)(oey - 1), (float)edge_w, 1.0f, nr, ng, nb, na); // Bottom
+		}
+		if (edge_h > 0) {
+			gpu_draw_rect((float)osx, (float)(osy + sr), 1.0f, (float)edge_h, nr, ng, nb, na); // Left
+			gpu_draw_rect((float)(oex - 1), (float)(osy + sr), 1.0f, (float)edge_h, nr, ng, nb, na); // Right
+		}
+
+		// The 4 corner arcs (midpoint circle algorithm)
+		if (sr > 0) {
+			int x = sr, y = 0, d = 1 - sr;
+			int cx1 = osx + sr, cy1 = osy + sr; // Top-left
+			int cx2 = oex - sr - 1, cy2 = osy + sr; // Top-right
+			int cx3 = osx + sr, cy3 = oey - sr - 1; // Bottom-left
+			int cx4 = oex - sr - 1, cy4 = oey - sr - 1; // Bottom-right
+
+			while (x >= y) {
+				gpu_draw_rect((float)(cx1 - x), (float)(cy1 - y), 1.0f, 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)(cx1 - y), (float)(cy1 - x), 1.0f, 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)(cx2 + x), (float)(cy2 - y), 1.0f, 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)(cx2 + y), (float)(cy2 - x), 1.0f, 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)(cx3 - x), (float)(cy3 + y), 1.0f, 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)(cx3 - y), (float)(cy3 + x), 1.0f, 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)(cx4 + x), (float)(cy4 + y), 1.0f, 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)(cx4 + y), (float)(cy4 + x), 1.0f, 1.0f, nr, ng, nb, na);
+
+				y++;
+				if (d < 0) {
+					d += 2 * y + 1;
+				} else {
+					x--;
+					d += 2 * (y - x) + 1;
+				}
+			}
+		}
+		return;
 	}
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
@@ -2621,11 +2689,6 @@ void sdl_rounded_rect_filled_alpha(int sx, int sy, int ex, int ey, int radius, u
 {
 	int r, g, b;
 
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
@@ -2655,6 +2718,65 @@ void sdl_rounded_rect_filled_alpha(int sx, int sy, int ex, int ey, int radius, u
 	}
 	if (radius < 0) {
 		radius = 0;
+	}
+
+	// GPU path: same decomposition as below - three fill rects plus corner
+	// quadrants as 1px-high scanline rects (used by mod widget panel
+	// backgrounds: ChatTabs window, menu-bar sidebar, weather indicator, ...)
+	if (use_gpu_rendering) {
+		if (!gpu_draw_prim_is_available()) {
+			return;
+		}
+
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		int osx = (sx + x_offset) * sdl_scale;
+		int osy = (sy + y_offset) * sdl_scale;
+		int oex = (ex + x_offset) * sdl_scale;
+		int oey = (ey + y_offset) * sdl_scale;
+		int sr = radius * sdl_scale;
+
+		// Fill center rectangle
+		gpu_draw_rect((float)osx, (float)(osy + sr), (float)(oex - osx), (float)(oey - osy - 2 * sr), nr, ng, nb, na);
+
+		// Fill top and bottom rectangles (between corners)
+		if (sr > 0 && oex - osx - 2 * sr > 0) {
+			gpu_draw_rect((float)(osx + sr), (float)osy, (float)(oex - osx - 2 * sr), (float)sr, nr, ng, nb, na);
+			gpu_draw_rect((float)(osx + sr), (float)(oey - sr), (float)(oex - osx - 2 * sr), (float)sr, nr, ng, nb, na);
+		}
+
+		// Fill the 4 corners with circle quadrants (horizontal scanlines,
+		// SDL_RenderLine endpoints are inclusive -> width x+1 / y+1)
+		if (sr > 0) {
+			int x = sr, y = 0, d = 1 - sr;
+			int cx1 = osx + sr, cy1 = osy + sr;
+			int cx2 = oex - sr - 1, cy2 = osy + sr;
+			int cx3 = osx + sr, cy3 = oey - sr - 1;
+			int cx4 = oex - sr - 1, cy4 = oey - sr - 1;
+
+			while (x >= y) {
+				gpu_draw_rect((float)(cx1 - x), (float)(cy1 - y), (float)(x + 1), 1.0f, nr, ng, nb, na); // Top-left
+				gpu_draw_rect((float)(cx1 - y), (float)(cy1 - x), (float)(y + 1), 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)cx2, (float)(cy2 - y), (float)(x + 1), 1.0f, nr, ng, nb, na); // Top-right
+				gpu_draw_rect((float)cx2, (float)(cy2 - x), (float)(y + 1), 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)(cx3 - x), (float)(cy3 + y), (float)(x + 1), 1.0f, nr, ng, nb, na); // Bottom-left
+				gpu_draw_rect((float)(cx3 - y), (float)(cy3 + x), (float)(y + 1), 1.0f, nr, ng, nb, na);
+				gpu_draw_rect((float)cx4, (float)(cy4 + y), (float)(x + 1), 1.0f, nr, ng, nb, na); // Bottom-right
+				gpu_draw_rect((float)cx4, (float)(cy4 + x), (float)(y + 1), 1.0f, nr, ng, nb, na);
+
+				y++;
+				if (d < 0) {
+					d += 2 * y + 1;
+				} else {
+					x--;
+					d += 2 * (y - x) + 1;
+				}
+			}
+		}
+		return;
 	}
 
 	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
@@ -2711,17 +2833,9 @@ void sdl_triangle_alpha(int x1, int y1, int x2, int y2, int x3, int y3, unsigned
 {
 	int r, g, b;
 
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
-
-	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	// Apply clipping (simple bounds check)
 	int minx = (x1 < x2 ? (x1 < x3 ? x1 : x3) : (x2 < x3 ? x2 : x3));
@@ -2740,6 +2854,25 @@ void sdl_triangle_alpha(int x1, int y1, int x2, int y2, int x3, int y3, unsigned
 	x3 = (x3 + x_offset) * sdl_scale;
 	y3 = (y3 + y_offset) * sdl_scale;
 
+	// GPU path: 3 GPU lines
+	if (use_gpu_rendering) {
+		if (!gpu_draw_line_is_available()) {
+			return;
+		}
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		gpu_draw_line((float)x1, (float)y1, (float)x2, (float)y2, nr, ng, nb, na);
+		gpu_draw_line((float)x2, (float)y2, (float)x3, (float)y3, nr, ng, nb, na);
+		gpu_draw_line((float)x3, (float)y3, (float)x1, (float)y1, nr, ng, nb, na);
+		return;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+
 	// Draw 3 lines
 	SDL_RenderLine(sdlren, (float)x1, (float)y1, (float)x2, (float)y2);
 	SDL_RenderLine(sdlren, (float)x2, (float)y2, (float)x3, (float)y3);
@@ -2751,17 +2884,9 @@ void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, u
 {
 	int r, g, b;
 
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
-
-	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	// Apply clipping (simple bounds check)
 	int minx = (x1 < x2 ? (x1 < x3 ? x1 : x3) : (x2 < x3 ? x2 : x3));
@@ -2772,6 +2897,22 @@ void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, u
 	if (maxx < clipsx || minx >= clipex || maxy < clipsy || miny >= clipey) {
 		return;
 	}
+
+	// GPU path: one solid GPU triangle
+	if (use_gpu_rendering) {
+		if (!gpu_draw_tri_is_available()) {
+			return;
+		}
+		float c[4] = {(float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, (float)alpha / 255.0f};
+
+		gpu_draw_triangle((float)((x1 + x_offset) * sdl_scale), (float)((y1 + y_offset) * sdl_scale),
+		    (float)((x2 + x_offset) * sdl_scale), (float)((y2 + y_offset) * sdl_scale),
+		    (float)((x3 + x_offset) * sdl_scale), (float)((y3 + y_offset) * sdl_scale), c, NULL, NULL);
+		return;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	x1 = (x1 + x_offset) * sdl_scale;
 	y1 = (y1 + y_offset) * sdl_scale;
@@ -2839,11 +2980,6 @@ void sdl_triangle_filled_alpha(int x1, int y1, int x2, int y2, int x3, int y3, u
 void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigned short color, unsigned char alpha,
     int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	if (thickness <= 0) {
 		thickness = 1;
 	}
@@ -2879,6 +3015,18 @@ void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigne
 	float nx = (-dy / len) * half_thick;
 	float ny = (dx / len) * half_thick;
 
+	// GPU path: the same quad as two solid GPU triangles
+	if (use_gpu_rendering) {
+		if (!gpu_draw_tri_is_available()) {
+			return;
+		}
+		float c[4] = {fr, fg, fb, fa};
+
+		gpu_draw_triangle(ffx + nx, ffy + ny, ffx - nx, ffy - ny, ftx - nx, fty - ny, c, NULL, NULL);
+		gpu_draw_triangle(ffx + nx, ffy + ny, ftx - nx, fty - ny, ftx + nx, fty + ny, c, NULL, NULL);
+		return;
+	}
+
 	// Use SDL_RenderGeometry for GPU-accelerated thick line (single draw call)
 	// Construct a quad from 4 corner points
 	SDL_Vertex vertices[4] = {
@@ -2900,11 +3048,6 @@ void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, u
 {
 	int r, g, b;
 
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	if (radius <= 0) {
 		return;
 	}
@@ -2912,9 +3055,6 @@ void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, u
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
-
-	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	cx = (cx + x_offset) * sdl_scale;
 	cy = (cy + y_offset) * sdl_scale;
@@ -2945,6 +3085,25 @@ void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, u
 		pts[pt_count++] = (SDL_FPoint){(float)(cx + (int)(sr * cos(rad))), (float)(cy + (int)(sr * sin(rad)))};
 	}
 
+	// GPU path: the same points as 1x1 primitive rects
+	if (use_gpu_rendering) {
+		if (!gpu_draw_prim_is_available()) {
+			return;
+		}
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		for (int i = 0; i < pt_count; i++) {
+			gpu_draw_rect(pts[i].x, pts[i].y, 1.0f, 1.0f, nr, ng, nb, na);
+		}
+		return;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+
 	// Single batch render call
 	if (pt_count > 0) {
 		SDL_RenderPoints(sdlren, pts, pt_count);
@@ -2954,11 +3113,6 @@ void sdl_arc_alpha(int cx, int cy, int radius, int start_angle, int end_angle, u
 void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2,
     unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	// Apply clipping
 	if (sx < clipsx) {
 		sx = clipsx;
@@ -2977,8 +3131,6 @@ void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, 
 		return;
 	}
 
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
-
 	// SDL3 SDL_Vertex uses SDL_FColor with float values 0.0-1.0
 	float fr1 = (float)R16TO32(color1) / 255.0f, fg1 = (float)G16TO32(color1) / 255.0f,
 	      fb1 = (float)B16TO32(color1) / 255.0f;
@@ -2991,6 +3143,22 @@ void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, 
 	float fsy = (float)((sy + y_offset) * sdl_scale);
 	float fex = (float)((ex + x_offset) * sdl_scale);
 	float fey = (float)((ey + y_offset) * sdl_scale);
+
+	// GPU path: the same quad as two GPU triangles with per-vertex colors
+	// (left side = color1, right side = color2)
+	if (use_gpu_rendering) {
+		if (!gpu_draw_tri_is_available()) {
+			return;
+		}
+		float c1[4] = {fr1, fg1, fb1, fa};
+		float c2[4] = {fr2, fg2, fb2, fa};
+
+		gpu_draw_triangle(fsx, fsy, fex, fsy, fex, fey, c1, c2, c2);
+		gpu_draw_triangle(fsx, fsy, fex, fey, fsx, fey, c1, c2, c1);
+		return;
+	}
+
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	// Use SDL_RenderGeometry for GPU-accelerated gradient (single draw call)
 	// Horizontal gradient: left side = color1, right side = color2
@@ -3009,11 +3177,6 @@ void sdl_gradient_rect_h(int sx, int sy, int ex, int ey, unsigned short color1, 
 void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, unsigned short color2,
     unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	// Apply clipping
 	if (sx < clipsx) {
 		sx = clipsx;
@@ -3032,8 +3195,6 @@ void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, 
 		return;
 	}
 
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
-
 	// SDL3 SDL_Vertex uses SDL_FColor with float values 0.0-1.0
 	float fr1 = (float)R16TO32(color1) / 255.0f, fg1 = (float)G16TO32(color1) / 255.0f,
 	      fb1 = (float)B16TO32(color1) / 255.0f;
@@ -3046,6 +3207,22 @@ void sdl_gradient_rect_v(int sx, int sy, int ex, int ey, unsigned short color1, 
 	float fsy = (float)((sy + y_offset) * sdl_scale);
 	float fex = (float)((ex + x_offset) * sdl_scale);
 	float fey = (float)((ey + y_offset) * sdl_scale);
+
+	// GPU path: the same quad as two GPU triangles with per-vertex colors
+	// (top = color1, bottom = color2)
+	if (use_gpu_rendering) {
+		if (!gpu_draw_tri_is_available()) {
+			return;
+		}
+		float c1[4] = {fr1, fg1, fb1, fa};
+		float c2[4] = {fr2, fg2, fb2, fa};
+
+		gpu_draw_triangle(fsx, fsy, fex, fsy, fex, fey, c1, c1, c2);
+		gpu_draw_triangle(fsx, fsy, fex, fey, fsx, fey, c1, c2, c2);
+		return;
+	}
+
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	// Use SDL_RenderGeometry for GPU-accelerated gradient (single draw call)
 	// Vertical gradient: top = color1, bottom = color2
@@ -3066,17 +3243,9 @@ void sdl_bezier_quadratic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, 
 {
 	int r, g, b;
 
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
-
-	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	float fx0 = (float)((x0 + x_offset) * sdl_scale);
 	float fy0 = (float)((y0 + y_offset) * sdl_scale);
@@ -3096,6 +3265,25 @@ void sdl_bezier_quadratic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, 
 		    u * u * fx0 + 2.0f * u * t * fx1 + t * t * fx2, u * u * fy0 + 2.0f * u * t * fy1 + t * t * fy2};
 	}
 
+	// GPU path: the same polyline as GPU line segments
+	if (use_gpu_rendering) {
+		if (!gpu_draw_line_is_available()) {
+			return;
+		}
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		for (int i = 0; i < 32; i++) {
+			gpu_draw_line(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, nr, ng, nb, na);
+		}
+		return;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+
 	SDL_RenderLines(sdlren, pts, 33);
 }
 
@@ -3104,17 +3292,9 @@ void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int 
 {
 	int r, g, b;
 
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
-
-	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
 	float fx0 = (float)((x0 + x_offset) * sdl_scale);
 	float fy0 = (float)((y0 + y_offset) * sdl_scale);
@@ -3140,17 +3320,31 @@ void sdl_bezier_cubic_alpha(int x0, int y0, int x1, int y1, int x2, int y2, int 
 		    u3 * fy0 + 3.0f * u2 * t * fy1 + 3.0f * u * t2 * fy2 + t3 * fy3};
 	}
 
+	// GPU path: the same polyline as GPU line segments
+	if (use_gpu_rendering) {
+		if (!gpu_draw_line_is_available()) {
+			return;
+		}
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float na = (float)alpha / 255.0f;
+
+		for (int i = 0; i < 48; i++) {
+			gpu_draw_line(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, nr, ng, nb, na);
+		}
+		return;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+
 	SDL_RenderLines(sdlren, pts, 49);
 }
 
 void sdl_gradient_circle(int cx, int cy, int radius, unsigned short color, unsigned char center_alpha,
     unsigned char edge_alpha, int x_offset, int y_offset)
 {
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
-
 	if (radius <= 0) {
 		return;
 	}
@@ -3162,6 +3356,35 @@ void sdl_gradient_circle(int cx, int cy, int radius, unsigned short color, unsig
 	cx = (cx + x_offset) * sdl_scale;
 	cy = (cy + y_offset) * sdl_scale;
 	int sr = radius * sdl_scale;
+
+	// GPU path: triangle fan with per-vertex alpha - the fan's linear
+	// interpolation from center_alpha to edge_alpha is the radial gradient
+	// (smoother than the concentric point circles the SDL_Renderer path
+	// draws, without their moire holes)
+	if (use_gpu_rendering) {
+		if (!gpu_draw_tri_is_available()) {
+			return;
+		}
+#define GRADIENT_CIRCLE_SEGMENTS 72
+		float nr = (float)r / 255.0f;
+		float ng = (float)g / 255.0f;
+		float nb = (float)b / 255.0f;
+		float cc[4] = {nr, ng, nb, (float)center_alpha / 255.0f};
+		float ce[4] = {nr, ng, nb, (float)edge_alpha / 255.0f};
+		float fcx = (float)cx;
+		float fcy = (float)cy;
+		float fsr = (float)sr;
+
+		for (int i = 0; i < GRADIENT_CIRCLE_SEGMENTS; i++) {
+			float a0 = (float)i * (2.0f * (float)M_PI / (float)GRADIENT_CIRCLE_SEGMENTS);
+			float a1 = (float)(i + 1) * (2.0f * (float)M_PI / (float)GRADIENT_CIRCLE_SEGMENTS);
+
+			gpu_draw_triangle(fcx, fcy, fcx + fsr * cosf(a0), fcy + fsr * sinf(a0), fcx + fsr * cosf(a1),
+			    fcy + fsr * sinf(a1), cc, ce, ce);
+		}
+#undef GRADIENT_CIRCLE_SEGMENTS
+		return;
+	}
 
 	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
 
@@ -3202,10 +3425,28 @@ void sdl_gradient_circle(int cx, int cy, int radius, unsigned short color, unsig
 	}
 }
 
+/* Plot one pixel of the anti-aliased line: 1x1 GPU rect in GPU mode,
+ * SDL_RenderPoint otherwise. `a` is the computed coverage alpha (0..255). */
+static void aa_plot(int r, int g, int b, float a, float x, float y)
+{
+	if (a < 0.0f) {
+		a = 0.0f;
+	}
+	if (a > 255.0f) {
+		a = 255.0f;
+	}
+	if (use_gpu_rendering) {
+		gpu_draw_rect(x, y, 1.0f, 1.0f, (float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, a / 255.0f);
+	} else {
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a);
+		SDL_RenderPoint(sdlren, x, y);
+	}
+}
+
 void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned char alpha, int x_offset, int y_offset)
 {
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
+	// GPU path draws the same Wu pixels as 1x1 rects (via aa_plot)
+	if (use_gpu_rendering && !gpu_draw_prim_is_available()) {
 		return;
 	}
 
@@ -3219,7 +3460,9 @@ void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned 
 	x1 = (x1 + x_offset) * sdl_scale;
 	y1 = (y1 + y_offset) * sdl_scale;
 
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	if (!use_gpu_rendering) {
+		SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	}
 
 	int steep = abs(y1 - y0) > abs(x1 - x0);
 	if (steep) {
@@ -3251,19 +3494,11 @@ void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned 
 	int ypxl1 = (int)floorf(yend);
 
 	if (steep) {
-		SDL_SetRenderDrawColor(
-		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
-		SDL_RenderPoint(sdlren, (float)ypxl1, (float)xpxl1);
-		SDL_SetRenderDrawColor(
-		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
-		SDL_RenderPoint(sdlren, (float)(ypxl1 + 1), (float)xpxl1);
+		aa_plot(r, g, b, (float)alpha * (1.0f - (yend - floorf(yend))) * xgap, (float)ypxl1, (float)xpxl1);
+		aa_plot(r, g, b, (float)alpha * (yend - floorf(yend)) * xgap, (float)(ypxl1 + 1), (float)xpxl1);
 	} else {
-		SDL_SetRenderDrawColor(
-		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
-		SDL_RenderPoint(sdlren, (float)xpxl1, (float)ypxl1);
-		SDL_SetRenderDrawColor(
-		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
-		SDL_RenderPoint(sdlren, (float)xpxl1, (float)(ypxl1 + 1));
+		aa_plot(r, g, b, (float)alpha * (1.0f - (yend - floorf(yend))) * xgap, (float)xpxl1, (float)ypxl1);
+		aa_plot(r, g, b, (float)alpha * (yend - floorf(yend)) * xgap, (float)xpxl1, (float)(ypxl1 + 1));
 	}
 
 	float intery = yend + gradient;
@@ -3276,37 +3511,21 @@ void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned 
 	int ypxl2 = (int)floorf(yend);
 
 	if (steep) {
-		SDL_SetRenderDrawColor(
-		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
-		SDL_RenderPoint(sdlren, (float)ypxl2, (float)xpxl2);
-		SDL_SetRenderDrawColor(
-		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
-		SDL_RenderPoint(sdlren, (float)(ypxl2 + 1), (float)xpxl2);
+		aa_plot(r, g, b, (float)alpha * (1.0f - (yend - floorf(yend))) * xgap, (float)ypxl2, (float)xpxl2);
+		aa_plot(r, g, b, (float)alpha * (yend - floorf(yend)) * xgap, (float)(ypxl2 + 1), (float)xpxl2);
 	} else {
-		SDL_SetRenderDrawColor(
-		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (yend - floorf(yend))) * xgap));
-		SDL_RenderPoint(sdlren, (float)xpxl2, (float)ypxl2);
-		SDL_SetRenderDrawColor(
-		    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (yend - floorf(yend)) * xgap));
-		SDL_RenderPoint(sdlren, (float)xpxl2, (float)(ypxl2 + 1));
+		aa_plot(r, g, b, (float)alpha * (1.0f - (yend - floorf(yend))) * xgap, (float)xpxl2, (float)ypxl2);
+		aa_plot(r, g, b, (float)alpha * (yend - floorf(yend)) * xgap, (float)xpxl2, (float)(ypxl2 + 1));
 	}
 
 	// Main loop
 	for (int x = xpxl1 + 1; x < xpxl2; x++) {
 		if (steep) {
-			SDL_SetRenderDrawColor(
-			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (intery - floorf(intery)))));
-			SDL_RenderPoint(sdlren, floorf(intery), (float)x);
-			SDL_SetRenderDrawColor(
-			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (intery - floorf(intery))));
-			SDL_RenderPoint(sdlren, floorf(intery) + 1, (float)x);
+			aa_plot(r, g, b, (float)alpha * (1.0f - (intery - floorf(intery))), floorf(intery), (float)x);
+			aa_plot(r, g, b, (float)alpha * (intery - floorf(intery)), floorf(intery) + 1, (float)x);
 		} else {
-			SDL_SetRenderDrawColor(
-			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (1.0f - (intery - floorf(intery)))));
-			SDL_RenderPoint(sdlren, (float)x, floorf(intery));
-			SDL_SetRenderDrawColor(
-			    sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)((float)alpha * (intery - floorf(intery))));
-			SDL_RenderPoint(sdlren, (float)x, floorf(intery) + 1);
+			aa_plot(r, g, b, (float)alpha * (1.0f - (intery - floorf(intery))), (float)x, floorf(intery));
+			aa_plot(r, g, b, (float)alpha * (intery - floorf(intery)), (float)x, floorf(intery) + 1);
 		}
 		intery += gradient;
 	}
@@ -3316,11 +3535,8 @@ void sdl_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int star
     unsigned short color, unsigned char alpha, int x_offset, int y_offset)
 {
 	int r, g, b;
-
-	// GPU path: skip SDL_Renderer drawing (TODO: implement GPU primitives)
-	if (use_gpu_rendering) {
-		return;
-	}
+	int gpu_lines = 0;
+	float nr = 0.0f, ng = 0.0f, nb = 0.0f, na = 0.0f;
 
 	if (inner_radius <= 0 || outer_radius <= 0 || outer_radius <= inner_radius) {
 		return;
@@ -3330,8 +3546,20 @@ void sdl_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int star
 	g = G16TO32(color);
 	b = B16TO32(color);
 
-	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
-	SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	// GPU path draws the same radial lines via the GPU line pipeline
+	if (use_gpu_rendering) {
+		if (!gpu_draw_line_is_available()) {
+			return;
+		}
+		gpu_lines = 1;
+		nr = (float)r / 255.0f;
+		ng = (float)g / 255.0f;
+		nb = (float)b / 255.0f;
+		na = (float)alpha / 255.0f;
+	} else {
+		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)alpha);
+		SDL_SetRenderDrawBlendMode(sdlren, current_blend_mode);
+	}
 
 	cx = (cx + x_offset) * sdl_scale;
 	cy = (cy + y_offset) * sdl_scale;
@@ -3359,7 +3587,11 @@ void sdl_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int star
 		int y1 = cy + (int)((double)inner_radius * sin_a);
 		int x2 = cx + (int)((double)outer_radius * cos_a);
 		int y2 = cy + (int)((double)outer_radius * sin_a);
-		SDL_RenderLine(sdlren, (float)x1, (float)y1, (float)x2, (float)y2);
+		if (gpu_lines) {
+			gpu_draw_line((float)x1, (float)y1, (float)x2, (float)y2, nr, ng, nb, na);
+		} else {
+			SDL_RenderLine(sdlren, (float)x1, (float)y1, (float)x2, (float)y2);
+		}
 	}
 	// Draw the last segment
 	double rad = (double)end_angle * M_PI / 180.0;
@@ -3369,5 +3601,9 @@ void sdl_ring_alpha(int cx, int cy, int inner_radius, int outer_radius, int star
 	int y1 = cy + (int)((double)inner_radius * sin_a);
 	int x2 = cx + (int)((double)outer_radius * cos_a);
 	int y2 = cy + (int)((double)outer_radius * sin_a);
-	SDL_RenderLine(sdlren, (float)x1, (float)y1, (float)x2, (float)y2);
+	if (gpu_lines) {
+		gpu_draw_line((float)x1, (float)y1, (float)x2, (float)y2, nr, ng, nb, na);
+	} else {
+		SDL_RenderLine(sdlren, (float)x1, (float)y1, (float)x2, (float)y2);
+	}
 }

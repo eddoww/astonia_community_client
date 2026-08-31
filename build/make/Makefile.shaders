@@ -18,7 +18,7 @@
 #   make -f build/make/Makefile.shaders metal    - Build Metal only
 #   make -f build/make/Makefile.shaders clean    - Clean compiled shaders
 
-.PHONY: all spirv dxil metal clean help
+.PHONY: all spirv dxil metal glsl clean help
 
 # ============================================================================
 # Configuration
@@ -68,6 +68,24 @@ spirv: $(SPIRV_VS) $(SPIRV_PS)
 # DXIL for Direct3D 12 (Windows)
 dxil: $(DXIL_VS) $(DXIL_PS)
 	@echo "DXIL shaders compiled"
+
+# GLSL shaders compiled with glslc (shader-effects sprite path).
+# Kept separate from `all` so the committed dxc-produced binaries are
+# never clobbered by a different toolchain by accident.
+GLSLC ?= glslc
+
+GLSL_FX_OUT := $(SHADER_OUT_DIR)/sprite_fx_vs.spv $(SHADER_OUT_DIR)/sprite_fx_ps.spv
+
+glsl: $(GLSL_FX_OUT)
+	@echo "GLSL (sprite_fx) shaders compiled"
+
+$(SHADER_OUT_DIR)/sprite_fx_vs.spv: $(SHADER_SRC_DIR)/sprite_fx.vert src/sdl/sdl_gpu_shaderfx.h | $(SHADER_OUT_DIR)
+	@echo "Compiling $< (vertex) -> SPIR-V"
+	$(GLSLC) -O -fshader-stage=vertex -o $@ $<
+
+$(SHADER_OUT_DIR)/sprite_fx_ps.spv: $(SHADER_SRC_DIR)/sprite_fx.frag src/sdl/sdl_gpu_shaderfx.h | $(SHADER_OUT_DIR)
+	@echo "Compiling $< (fragment) -> SPIR-V"
+	$(GLSLC) -O -fshader-stage=fragment -o $@ $<
 
 # Metal for macOS/iOS (requires macOS build environment)
 metal: $(MSL_VS) $(MSL_PS)

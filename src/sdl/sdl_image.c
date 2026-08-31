@@ -21,6 +21,8 @@
 #include "sdl/sdl_private.h"
 #include "game/sprite_config.h"
 #include "sdl/sdl_gpu.h"
+#include "sdl/sdl_gpu_atlas.h"
+#include "sdl/sdl_gpu_shaderfx.h"
 
 // Module-local variables
 static int sdlm_sprite = 0;
@@ -1125,7 +1127,27 @@ void sdl_make(struct sdl_texture *st, struct sdl_image *si, int preload)
 			// GPU path: Create GPU texture
 			if (use_gpu_rendering) {
 				if (st->pixel) {
-					st->gpu_tex = gpu_texture_create(st->pixel, st->xres * sdl_scale, st->yres * sdl_scale);
+					/* Shader-effects path: BASE entries (no effects, neutral
+					 * light) go into the shared atlas so the instanced
+					 * batcher can merge draws across sprites. */
+					st->atlas_used = 0;
+					if (gpu_shaderfx_ready() && st->sink == 0 && st->freeze == 0 && st->cr == 0 && st->cg == 0 &&
+					    st->cb == 0 && st->light == 0 && st->sat == 0 && st->c1 == 0 && st->c2 == 0 && st->c3 == 0 &&
+					    st->shine == 0 && st->ml == 15 && st->ll == 15 && st->rl == 15 && st->ul == 15 &&
+					    st->dl == 15) {
+						int ax, ay;
+						SDL_GPUTexture *page =
+						    gpu_atlas_insert(st->pixel, st->xres * sdl_scale, st->yres * sdl_scale, &ax, &ay);
+						if (page) {
+							st->gpu_tex = page;
+							st->atlas_x = (uint16_t)ax;
+							st->atlas_y = (uint16_t)ay;
+							st->atlas_used = 1;
+						}
+					}
+					if (!st->gpu_tex) {
+						st->gpu_tex = gpu_texture_create(st->pixel, st->xres * sdl_scale, st->yres * sdl_scale);
+					}
 					if (st->gpu_tex) {
 						// Update memory accounting
 						extern long long mem_tex;

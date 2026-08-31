@@ -49,6 +49,12 @@ struct sdl_texture {
 	SDL_GPUTexture *gpu_tex; // GPU texture for SDL_GPU path (NULL if not created)
 	uint32_t *pixel;
 
+	// Shader-effects atlas placement: when atlas_used, gpu_tex points at a
+	// SHARED atlas page (do NOT destroy it on eviction) and atlas_x/y is
+	// this sprite's origin inside the page.
+	uint16_t atlas_x, atlas_y;
+	uint8_t atlas_used;
+
 	int prev, next;
 	int hprev, hnext;
 

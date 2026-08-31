@@ -16,6 +16,7 @@
 #include "sdl_gpu_post.h"
 #include "sdl_gpu_batch.h"
 #include "sdl_gpu_shaderfx.h"
+#include "sdl_gpu_atlas.h"
 #include "astonia.h"
 
 // ============================================================================
@@ -54,6 +55,9 @@ static int current_offscreen_height = 0;
 // Debug counters
 static int gpu_debug_frame_count = 0;
 static int gpu_debug_draw_count = 0;
+// Wall time from gpu_frame_begin to submit (render recording + submit
+// only, excludes game logic and frame pacing) - for ASTONIA_GPU_STATS
+static Uint64 gpu_frame_start_ns = 0;
 
 // Graphics pipelines
 static SDL_GPUGraphicsPipeline *pipelines[GPU_PIPELINE_COUNT] = {NULL};
@@ -185,6 +189,10 @@ bool gpu_frame_begin(void)
 		return false;
 	}
 
+	// Start the render-span clock AFTER the swapchain wait so present
+	// back-pressure does not pollute the CPU recording measurement
+	gpu_frame_start_ns = SDL_GetTicksNS();
+
 	// Try to use post-processing (renders to offscreen texture, then applies effects)
 	if (gpu_postfx_is_enabled()) {
 		current_render_pass = gpu_postfx_begin_scene(current_cmd_buffer);
@@ -287,6 +295,7 @@ void gpu_frame_end(void)
 		}
 		if (stats_enabled) {
 			static Uint64 last_report;
+			static Uint64 render_ns_since;
 			static int frames_since, draws_since, fx_draws_since, fx_sprites_since;
 			int fxd, fxs, fxt, fxdirect;
 			gpu_shaderfx_get_stats(&fxd, &fxs, &fxt, &fxdirect);
@@ -294,16 +303,23 @@ void gpu_frame_end(void)
 			draws_since += gpu_debug_draw_count;
 			fx_draws_since += fxd;
 			fx_sprites_since += fxs;
+			render_ns_since += SDL_GetTicksNS() - gpu_frame_start_ns;
 			Uint64 now = SDL_GetTicks();
 			if (last_report == 0) {
 				last_report = now;
 			}
 			if (now - last_report >= 1000 && frames_since > 0) {
-				note("GPU_STATS frames=%d avg_draws=%d avg_fx_draws=%d avg_fx_sprites=%d ms/frame=%.2f", frames_since,
-				    draws_since / frames_since, fx_draws_since / frames_since, fx_sprites_since / frames_since,
+				int atlas_pages;
+				long long atlas_texels;
+				gpu_atlas_get_stats(&atlas_pages, &atlas_texels);
+				note("GPU_STATS frames=%d avg_draws=%d avg_fx_draws=%d avg_fx_sprites=%d atlas_pages=%d "
+				     "render_ms=%.2f ms/frame=%.2f",
+				    frames_since, draws_since / frames_since, fx_draws_since / frames_since,
+				    fx_sprites_since / frames_since, atlas_pages, (double)render_ns_since / 1e6 / (double)frames_since,
 				    (double)(now - last_report) / (double)frames_since);
 				last_report = now;
 				frames_since = draws_since = fx_draws_since = fx_sprites_since = 0;
+				render_ns_since = 0;
 			}
 		}
 	}

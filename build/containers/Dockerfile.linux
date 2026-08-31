@@ -33,6 +33,7 @@ RUN pacman -S --noconfirm --needed --ask=4 --overwrite="*" \
     sdl3 \
     sdl3_mixer \
     mimalloc \
+    luajit \
     && pacman -Scc --noconfirm
 
 # Install Rust

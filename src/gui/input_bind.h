@@ -299,6 +299,9 @@ int hotbar_set_bind_target(int slot, int bind_index, HotbarTargetOverride target
 /* returns the sprite to display in a hotbar slot (item sprite or spell icon) */
 DLL_EXPORT uint32_t hotbar_slot_sprite(int slot);
 DLL_EXPORT const char *hotbar_slot_name(int slot);
+
+/* any dismissable client window/overlay is open (native mod windows included) */
+DLL_EXPORT int gui_has_open_window(void);
 DLL_EXPORT void hotbar_activate(int slot);
 DLL_EXPORT void hotbar_activate_with_mode(int slot, int mode);
 

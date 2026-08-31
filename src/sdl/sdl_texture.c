@@ -20,6 +20,7 @@
 #include "sdl/sdl_private.h"
 #include "sdl/font_manager.h"
 #include "sdl/sdl_gpu.h"
+#include "sdl/sdl_gpu_atlas.h"
 #ifdef DEVELOPER
 extern int sockstate; // Declare early for use in wait logging
 #endif
@@ -499,12 +500,18 @@ static int tex_entry_build_text(int cache_index, const struct tex_request *r, in
 	sdlt[cache_index].text = xstrdup(r->text, MEM_TEMP7);
 #endif
 
-	// GPU path: create GPU texture for text
+	// GPU path: create GPU texture for text (atlas region when the
+	// shader-effects batcher is active - drawn as one batched quad)
 	if (use_gpu_rendering) {
 		int tex_w, tex_h;
-		sdlt[cache_index].gpu_tex = sdl_maketext_gpu(
-		    r->text, (struct renderfont *)r->text_font, (uint32_t)r->text_color, r->text_flags, &tex_w, &tex_h);
+		int atlas_x = 0, atlas_y = 0;
+		uint8_t atlas_used = 0;
+		sdlt[cache_index].gpu_tex = sdl_maketext_gpu(r->text, (struct renderfont *)r->text_font,
+		    (uint32_t)r->text_color, r->text_flags, &tex_w, &tex_h, &atlas_x, &atlas_y, &atlas_used);
 		sdlt[cache_index].tex = NULL;
+		sdlt[cache_index].atlas_x = (uint16_t)atlas_x;
+		sdlt[cache_index].atlas_y = (uint16_t)atlas_y;
+		sdlt[cache_index].atlas_used = atlas_used;
 
 		if (sdlt[cache_index].gpu_tex) {
 			sdlt[cache_index].xres = (uint16_t)tex_w;
@@ -701,9 +708,10 @@ static int texcache_acquire_slot(void)
 			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 			if (sdlt[cache_index].gpu_tex) {
 				/* atlas entries reference a SHARED page texture - never
-				 * destroy it here (the shelf region is not reclaimed yet,
-				 * see sdl_gpu_atlas.h) */
-				if (!sdlt[cache_index].atlas_used) {
+				 * destroy it, return the region to the page instead */
+				if (sdlt[cache_index].atlas_used) {
+					gpu_atlas_release(sdlt[cache_index].gpu_tex, sdlt[cache_index].atlas_x, sdlt[cache_index].atlas_y);
+				} else {
 					gpu_texture_destroy(sdlt[cache_index].gpu_tex);
 				}
 				sdlt[cache_index].gpu_tex = NULL;
@@ -832,8 +840,11 @@ void sdl_texture_flush_sprites(void)
 			 * sync (previously skipped here - leak + stale accounting) */
 			__atomic_sub_fetch(&mem_tex, sdlt[i].xres * sdlt[i].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 			if (sdlt[i].gpu_tex) {
-				/* shared atlas page - never destroyed per entry */
-				if (!sdlt[i].atlas_used) {
+				/* shared atlas page - never destroyed per entry, return
+				 * the region instead */
+				if (sdlt[i].atlas_used) {
+					gpu_atlas_release(sdlt[i].gpu_tex, sdlt[i].atlas_x, sdlt[i].atlas_y);
+				} else {
 					gpu_texture_destroy(sdlt[i].gpu_tex);
 				}
 				sdlt[i].gpu_tex = NULL;

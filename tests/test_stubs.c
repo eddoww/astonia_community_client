@@ -193,7 +193,6 @@ int sprite_config_drop_alpha(unsigned int sprite __attribute__((unused)))
 #include "sdl/sdl_gpu.h"
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_post.h"
-#include "sdl/sdl_gpu_batch.h"
 #include "sdl/sdl_gpu_shaderfx.h"
 
 bool use_gpu_rendering = false;
@@ -213,6 +212,13 @@ SDL_GPUTexture *gpu_atlas_insert(const uint32_t *pixels __attribute__((unused)),
 }
 
 void gpu_atlas_shutdown(void) {}
+
+void gpu_atlas_release(SDL_GPUTexture *page_texture __attribute__((unused)), int x __attribute__((unused)),
+    int y __attribute__((unused)))
+{
+}
+
+void gpu_atlas_frame_tick(void) {}
 
 void gpu_atlas_get_stats(int *pages, long long *used_texels)
 {
@@ -240,6 +246,20 @@ void gpu_shaderfx_frame_begin(void) {}
 void gpu_shaderfx_flush(void) {}
 void gpu_shaderfx_submit_upload(void) {}
 void gpu_shaderfx_direct_draw_barrier(void) {}
+
+int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex __attribute__((unused)), float dest_x __attribute__((unused)),
+    float dest_y __attribute__((unused)), float dest_w __attribute__((unused)), float dest_h __attribute__((unused)),
+    int src_x __attribute__((unused)), int src_y __attribute__((unused)), int src_w __attribute__((unused)),
+    int src_h __attribute__((unused)), int r __attribute__((unused)), int g __attribute__((unused)),
+    int b __attribute__((unused)), int alpha __attribute__((unused)))
+{
+	return 0;
+}
+
+int gpu_shaderfx_capacity(void)
+{
+	return 0;
+}
 
 int sdl_blit_fx(int cache_index __attribute__((unused)), const gpu_fx_draw_t *d __attribute__((unused)),
     int sx __attribute__((unused)), int sy __attribute__((unused)), int clipsx __attribute__((unused)),
@@ -362,13 +382,6 @@ bool gpu_postfx_init(int screen_width __attribute__((unused)), int screen_height
 
 void gpu_postfx_shutdown(void) {}
 
-bool gpu_batch_init(int screen_width __attribute__((unused)), int screen_height __attribute__((unused)))
-{
-	return false;
-}
-
-void gpu_batch_shutdown(void) {}
-
 SDL_GPUTexture *gpu_render_target_create(int width __attribute__((unused)), int height __attribute__((unused)))
 {
 	return NULL;
@@ -381,3 +394,38 @@ bool gpu_set_render_target(SDL_GPUTexture *target __attribute__((unused)), int w
 }
 
 void gpu_draw_set_blend_mode(int mode __attribute__((unused))) {}
+
+int gpu_draw_get_blend_mode(void)
+{
+	return 0;
+}
+
+// Batched GPU text (sdl_gpu_text.c is not linked into the tests; the
+// pure rasterizer sdl_text_glyph.c IS - it needs no stubs)
+#include "sdl/sdl_gpu_text.h"
+
+int gpu_text_draw_run(const char *text __attribute__((unused)), struct renderfont *font __attribute__((unused)),
+    int r __attribute__((unused)), int g __attribute__((unused)), int b __attribute__((unused)),
+    int sx __attribute__((unused)), int sy __attribute__((unused)), int clipsx __attribute__((unused)),
+    int clipsy __attribute__((unused)), int clipex __attribute__((unused)), int clipey __attribute__((unused)),
+    int x_offset __attribute__((unused)), int y_offset __attribute__((unused)))
+{
+	return 0;
+}
+
+void gpu_text_frame_begin(void) {}
+
+void gpu_text_get_stats(int *runs, int *glyphs, int *fallbacks)
+{
+	if (runs) {
+		*runs = 0;
+	}
+	if (glyphs) {
+		*glyphs = 0;
+	}
+	if (fallbacks) {
+		*fallbacks = 0;
+	}
+}
+
+void gpu_text_reset(void) {}

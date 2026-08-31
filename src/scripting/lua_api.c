@@ -786,7 +786,7 @@ static int l_level2exp(lua_State *L)
 // a token bucket allowing bursts of up to CMD_RATE_BURST commands, refilled
 // at CMD_RATE_PER_SEC per second. Commands beyond the limit are logged and
 // dropped; client.cmd_text returns false so mods can detect the drop.
-#define CMD_RATE_BURST 10.0
+#define CMD_RATE_BURST   10.0
 #define CMD_RATE_PER_SEC 10.0
 
 static double cmd_rate_tokens = CMD_RATE_BURST;
@@ -1016,8 +1016,7 @@ static const luaL_Reg client_funcs[] = {
 
     // Window / panel awareness (read-only)
     {"has_open_window", l_has_open_window}, {"gui_overlay_visible", l_gui_overlay_visible},
-    {"get_fullscreen_world", l_get_fullscreen_world}, {"panel_shown", l_panel_shown},
-    {"panel_offset", l_panel_offset},
+    {"get_fullscreen_world", l_get_fullscreen_world}, {"panel_shown", l_panel_shown}, {"panel_offset", l_panel_offset},
 
     // Hotbar state (read-only)
     {"get_hotbar_rows", l_get_hotbar_rows}, {"get_hotbar_visible_slots", l_get_hotbar_visible_slots},

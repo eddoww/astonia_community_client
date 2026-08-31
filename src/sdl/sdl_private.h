@@ -286,8 +286,8 @@ uint32_t sdl_colorbalance(uint32_t irgb, char cr, char cg, char cb, char light, 
 // Internal functions from sdl_draw.c
 // ============================================================================
 SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t color, int flags);
-SDL_GPUTexture *sdl_maketext_gpu(
-    const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width, int *out_height);
+SDL_GPUTexture *sdl_maketext_gpu(const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width,
+    int *out_height, int *out_atlas_x, int *out_atlas_y, uint8_t *out_atlas_used);
 
 // ============================================================================
 // Internal functions from sdl_core.c
@@ -302,6 +302,11 @@ int if_single_thread_process_one_job(void);
 
 // Line clipping function (non-static for testing)
 int clip_line(int *x0, int *y0, int *x1, int *y1, int xmin, int ymin, int xmax, int ymax);
+
+// Bitmap string rasterizer (non-static for testing; the ground truth the
+// batched glyph path in tests/test_text_compare.c is diffed against)
+uint32_t *sdl_rendertext_to_pixels(
+    const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width, int *out_height);
 
 // Render call counter functions for test verification
 void sdl_test_reset_render_counters(void);

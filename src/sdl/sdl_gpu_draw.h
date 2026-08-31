@@ -24,6 +24,7 @@ bool gpu_draw_init(int screen_width, int screen_height);
 // Select the blend mode used by subsequent sprite/primitive/line draws
 // (mode indices as above; out-of-range values fall back to 0/BLEND)
 void gpu_draw_set_blend_mode(int mode);
+int gpu_draw_get_blend_mode(void);
 
 // Shutdown
 void gpu_draw_shutdown(void);

@@ -43,24 +43,7 @@ static const postfx_vertex_t quad_vertices[6] = {
 // Helper to determine shader format based on platform
 static SDL_GPUShaderFormat get_shader_format(void)
 {
-	if (!sdlgpu) {
-		return 0;
-	}
-
-	// Get supported shader formats from the device
-	SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(sdlgpu);
-
-	// Prefer SPIR-V (Vulkan), then DXIL (D3D12), then MSL (Metal)
-	if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
-		return SDL_GPU_SHADERFORMAT_SPIRV;
-	}
-	if (formats & SDL_GPU_SHADERFORMAT_DXIL) {
-		return SDL_GPU_SHADERFORMAT_DXIL;
-	}
-	if (formats & SDL_GPU_SHADERFORMAT_MSL) {
-		return SDL_GPU_SHADERFORMAT_MSL;
-	}
-	return 0;
+	return gpu_preferred_shader_format();
 }
 
 // Load shader from compiled binary file
@@ -102,12 +85,7 @@ static SDL_GPUShader *load_shader(
 	// Create shader
 	// SPIR-V from GLSL uses "main" as entry point; HLSL/DXIL uses "VSMain"/"PSMain"
 	SDL_GPUShaderFormat fmt = get_shader_format();
-	const char *entrypoint;
-	if (fmt == SDL_GPU_SHADERFORMAT_SPIRV) {
-		entrypoint = "main"; // GLSL entry point
-	} else {
-		entrypoint = (stage == SDL_GPU_SHADERSTAGE_VERTEX) ? "VSMain" : "PSMain";
-	}
+	const char *entrypoint = gpu_shader_entrypoint(fmt);
 
 	SDL_GPUShaderCreateInfo info = {.code = (const Uint8 *)data,
 	    .code_size = size,

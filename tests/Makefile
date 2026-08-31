@@ -63,8 +63,9 @@ TEST_HASH_DIAG = $(BIN_DIR)/test_hash_distribution
 TEST_RENDER_PRIMS = $(BIN_DIR)/test_render_primitives
 TEST_SPRITE_CONFIG = $(BIN_DIR)/test_sprite_config
 TEST_LOADING_UI = $(BIN_DIR)/test_loading_ui
+TEST_SHADERFX = $(BIN_DIR)/test_shaderfx_compare
 
-all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI)
+all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX)
 test: run
 
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
@@ -143,8 +144,20 @@ test_sprite_config: $(TEST_SPRITE_CONFIG)
 	@echo "==============================================="
 	cd .. && ./bin/test_sprite_config
 
+$(TEST_SHADERFX): test_shaderfx_compare.c $(ALL_SRCS)
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# Run shader-effects CPU/GPU comparison (SKIPs without a GPU device)
+test_shaderfx: $(TEST_SHADERFX)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running shader-effects CPU/GPU comparison..."
+	@echo "==============================================="
+	cd .. && ./bin/test_shaderfx_compare
+
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui
+run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_shaderfx
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"

@@ -194,10 +194,76 @@ int sprite_config_drop_alpha(unsigned int sprite __attribute__((unused)))
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_post.h"
 #include "sdl/sdl_gpu_batch.h"
+#include "sdl/sdl_gpu_shaderfx.h"
 
 bool use_gpu_rendering = false;
 bool gpu_rendering_requested = false;
 SDL_GPUDevice *sdlgpu = NULL;
+
+// Shader-effects path (sdl_gpu_shaderfx.c / sdl_gpu_atlas.c are not
+// linked into the tests)
+#include "sdl/sdl_gpu_atlas.h"
+
+bool gpu_shaderfx_requested = false;
+
+SDL_GPUTexture *gpu_atlas_insert(const uint32_t *pixels __attribute__((unused)), int w __attribute__((unused)),
+    int h __attribute__((unused)), int *out_x __attribute__((unused)), int *out_y __attribute__((unused)))
+{
+	return NULL;
+}
+
+void gpu_atlas_shutdown(void) {}
+
+void gpu_atlas_get_stats(int *pages, long long *used_texels)
+{
+	if (pages) {
+		*pages = 0;
+	}
+	if (used_texels) {
+		*used_texels = 0;
+	}
+}
+
+bool gpu_shaderfx_init(void)
+{
+	return false;
+}
+
+void gpu_shaderfx_shutdown(void) {}
+
+bool gpu_shaderfx_ready(void)
+{
+	return false;
+}
+
+void gpu_shaderfx_frame_begin(void) {}
+void gpu_shaderfx_flush(void) {}
+void gpu_shaderfx_submit_upload(void) {}
+void gpu_shaderfx_direct_draw_barrier(void) {}
+
+int sdl_blit_fx(int cache_index __attribute__((unused)), const gpu_fx_draw_t *d __attribute__((unused)),
+    int sx __attribute__((unused)), int sy __attribute__((unused)), int clipsx __attribute__((unused)),
+    int clipsy __attribute__((unused)), int clipex __attribute__((unused)), int clipey __attribute__((unused)),
+    int x_offset __attribute__((unused)), int y_offset __attribute__((unused)))
+{
+	return 0;
+}
+
+void gpu_shaderfx_get_stats(int *draws, int *sprites, int *tex_flushes, int *direct_flushes)
+{
+	if (draws) {
+		*draws = 0;
+	}
+	if (sprites) {
+		*sprites = 0;
+	}
+	if (tex_flushes) {
+		*tex_flushes = 0;
+	}
+	if (direct_flushes) {
+		*direct_flushes = 0;
+	}
+}
 
 bool gpu_init(SDL_Window *window __attribute__((unused)))
 {

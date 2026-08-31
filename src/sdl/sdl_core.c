@@ -26,6 +26,8 @@
 #include "sdl/sdl_gpu_post.h"
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_batch.h"
+#include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/sdl_gpu_atlas.h"
 #include "gui/gui.h"
 #include "gui/input_bind.h"
 
@@ -294,6 +296,16 @@ int sdl_init(int width, int height, char *title, int monitor)
 		// Initialize sprite batching system (optional, currently bypassed)
 		if (!gpu_batch_init(width, height)) {
 			note("SDL_GPU: sprite batching not available");
+		}
+
+		// Shader-effects sprite path (experimental sub-flag, default off):
+		// base textures + per-draw effects in the fragment shader
+		if (gpu_shaderfx_requested) {
+			if (gpu_shaderfx_init()) {
+				note("SDL_GPU shader effects enabled (experimental)");
+			} else {
+				note("SDL_GPU shader effects requested but unavailable - staying on the CPU-baked path");
+			}
 		}
 	} else {
 		// Default path: Create SDL_Renderer
@@ -668,6 +680,8 @@ void sdl_exit(void)
 	gamepad_shutdown();
 
 	// Shutdown sprite batching first (before GPU device is destroyed)
+	gpu_shaderfx_shutdown();
+	gpu_atlas_shutdown();
 	gpu_batch_shutdown();
 
 	// Shutdown GPU drawing (before GPU device is destroyed)
@@ -1123,6 +1137,17 @@ void sdl_pre_add(unsigned int sprite, signed char sink, unsigned char freeze, un
 	if (sprite >= MAXSPRITE) {
 		note("illegal sprite %u wanted in pre_add", sprite);
 		return;
+	}
+
+	/* Shader-effects path: draws of eligible sprites use the BASE
+	 * (effect-free, neutral-light) cache entry with effects applied
+	 * per draw, so prefetch that entry instead of the baked combo. */
+	if (gpu_shaderfx_ready() && scale == 100) {
+		sink = 0;
+		freeze = 0;
+		cr = cg = cb = light = sat = 0;
+		c1 = c2 = c3 = shine = 0;
+		ml = ll = rl = ul = dl = 15;
 	}
 
 	// Ensure there is a cache slot (but don't force full make+tex)

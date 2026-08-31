@@ -15,6 +15,8 @@
 #include "sdl_gpu.h"
 #include "sdl_gpu_post.h"
 #include "sdl_gpu_batch.h"
+#include "sdl_gpu_shaderfx.h"
+#include "sdl_gpu_atlas.h"
 #include "astonia.h"
 
 // ============================================================================
@@ -53,6 +55,9 @@ static int current_offscreen_height = 0;
 // Debug counters
 static int gpu_debug_frame_count = 0;
 static int gpu_debug_draw_count = 0;
+// Wall time from gpu_frame_begin to submit (render recording + submit
+// only, excludes game logic and frame pacing) - for ASTONIA_GPU_STATS
+static Uint64 gpu_frame_start_ns = 0;
 
 // Graphics pipelines
 static SDL_GPUGraphicsPipeline *pipelines[GPU_PIPELINE_COUNT] = {NULL};
@@ -184,6 +189,10 @@ bool gpu_frame_begin(void)
 		return false;
 	}
 
+	// Start the render-span clock AFTER the swapchain wait so present
+	// back-pressure does not pollute the CPU recording measurement
+	gpu_frame_start_ns = SDL_GetTicksNS();
+
 	// Try to use post-processing (renders to offscreen texture, then applies effects)
 	if (gpu_postfx_is_enabled()) {
 		current_render_pass = gpu_postfx_begin_scene(current_cmd_buffer);
@@ -200,6 +209,7 @@ bool gpu_frame_begin(void)
 
 			// Set batch context for sprite batching
 			gpu_batch_set_context(current_cmd_buffer, current_render_pass);
+			gpu_shaderfx_frame_begin();
 			return true;
 		}
 		// Post-FX failed, fall through to direct swapchain rendering
@@ -238,6 +248,7 @@ bool gpu_frame_begin(void)
 
 	// Set batch context for sprite batching
 	gpu_batch_set_context(current_cmd_buffer, current_render_pass);
+	gpu_shaderfx_frame_begin();
 
 	return true;
 }
@@ -250,6 +261,7 @@ void gpu_frame_end(void)
 
 	// Flush any pending batched sprites before ending the render pass
 	gpu_batch_flush();
+	gpu_shaderfx_flush();
 
 	// End the main render pass
 	if (current_render_pass) {
@@ -264,6 +276,51 @@ void gpu_frame_end(void)
 			// Direct swapchain rendering - just end the pass
 			SDL_EndGPURenderPass(current_render_pass);
 			current_render_pass = NULL;
+		}
+	}
+
+	// Upload this frame's batched instance data on its own command buffer,
+	// submitted BEFORE the render command buffer: SDL_GPU executes command
+	// buffers in submission order, so the copy lands before the draws
+	// without any fence waits.
+	gpu_shaderfx_submit_upload();
+
+	// Optional A/B instrumentation: ASTONIA_GPU_STATS=1 logs draw-call and
+	// batching counters once per second (~any fps) for perf comparisons.
+	{
+		static int stats_enabled = -1;
+		if (stats_enabled < 0) {
+			const char *env = SDL_getenv("ASTONIA_GPU_STATS");
+			stats_enabled = (env && *env && *env != '0') ? 1 : 0;
+		}
+		if (stats_enabled) {
+			static Uint64 last_report;
+			static Uint64 render_ns_since;
+			static int frames_since, draws_since, fx_draws_since, fx_sprites_since;
+			int fxd, fxs, fxt, fxdirect;
+			gpu_shaderfx_get_stats(&fxd, &fxs, &fxt, &fxdirect);
+			frames_since++;
+			draws_since += gpu_debug_draw_count;
+			fx_draws_since += fxd;
+			fx_sprites_since += fxs;
+			render_ns_since += SDL_GetTicksNS() - gpu_frame_start_ns;
+			Uint64 now = SDL_GetTicks();
+			if (last_report == 0) {
+				last_report = now;
+			}
+			if (now - last_report >= 1000 && frames_since > 0) {
+				int atlas_pages;
+				long long atlas_texels;
+				gpu_atlas_get_stats(&atlas_pages, &atlas_texels);
+				note("GPU_STATS frames=%d avg_draws=%d avg_fx_draws=%d avg_fx_sprites=%d atlas_pages=%d "
+				     "render_ms=%.2f ms/frame=%.2f",
+				    frames_since, draws_since / frames_since, fx_draws_since / frames_since,
+				    fx_sprites_since / frames_since, atlas_pages, (double)render_ns_since / 1e6 / (double)frames_since,
+				    (double)(now - last_report) / (double)frames_since);
+				last_report = now;
+				frames_since = draws_since = fx_draws_since = fx_sprites_since = 0;
+				render_ns_since = 0;
+			}
 		}
 	}
 
@@ -340,6 +397,7 @@ bool gpu_set_render_target(SDL_GPUTexture *target, int width, int height, bool c
 	// End the current pass and open a new one aimed at the requested target.
 	// The screen target resumes with LOADOP_LOAD so earlier drawing survives.
 	if (current_render_pass) {
+		gpu_shaderfx_flush();
 		SDL_EndGPURenderPass(current_render_pass);
 		current_render_pass = NULL;
 	}

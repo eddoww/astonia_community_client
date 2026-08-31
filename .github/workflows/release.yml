@@ -24,6 +24,46 @@ jobs:
         with:
           build-on-miss: 'true'
 
+  build-shaders-release:
+    needs: [build-sdl3-linux]
+    name: Compile Shaders
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup SDL3 (cached)
+        uses: ./.github/actions/setup-sdl3-linux
+
+      - name: Setup shader toolchain
+        uses: ./.github/actions/setup-shader-toolchain
+
+      - name: Compile all shader formats
+        run: make -f build/make/Makefile.shaders all
+
+      - name: Verify every shader built for every backend
+        run: |
+          missing=0
+          for n in line postfx primitive sprite_fx sprite_simple tri; do
+            for s in vs ps; do
+              for e in spv dxil msl; do
+                f="res/shaders/compiled/${n}_${s}.${e}"
+                [ -s "$f" ] || { echo "MISSING: $f"; missing=1; }
+              done
+            done
+          done
+          [ "$missing" = "0" ] || { echo "ERROR: refusing to release an incomplete shader set"; exit 1; }
+
+      - name: Upload compiled shaders
+        uses: actions/upload-artifact@v7
+        with:
+          name: compiled-shaders
+          path: res/shaders/compiled/
+          retention-days: 7
+          overwrite: true
+
   build-linux-release:
     needs: [build-sdl3-linux]
     name: Build Linux Release
@@ -118,6 +158,7 @@ jobs:
             mingw-w64-clang-x86_64-clang
             mingw-w64-clang-x86_64-sdl3
             mingw-w64-clang-x86_64-sdl3-mixer
+            mingw-w64-clang-x86_64-sdl3-ttf
             mingw-w64-clang-x86_64-libpng
             mingw-w64-clang-x86_64-libzip
             mingw-w64-clang-x86_64-dwarfstack
@@ -183,7 +224,7 @@ jobs:
       - name: Install dependencies
         run: |
           brew untap aws/tap 2>/dev/null || true
-          brew install sdl3 sdl3_mixer libzip zlib mimalloc imagemagick
+          brew install sdl3 sdl3_mixer sdl3_ttf libzip zlib mimalloc imagemagick
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -208,6 +249,7 @@ jobs:
           cp bin/libastonia_net.dylib binaries/
           cp -L /opt/homebrew/lib/libSDL3.0.dylib binaries/ 2>/dev/null || true
           cp -L /opt/homebrew/lib/libSDL3_mixer.0.dylib binaries/ 2>/dev/null || true
+          cp -L /opt/homebrew/lib/libSDL3_ttf.0.dylib binaries/ 2>/dev/null || true
           echo "=== macOS Binaries ==="
           ls -la binaries/
 
@@ -336,13 +378,15 @@ jobs:
         build-windows-release,
         build-macos-release,
         build-appimage-release,
+        build-shaders-release,
       ]
     # macOS is not shipped yet: a failed macOS build must not block the Linux/Windows release
     if: >-
       ${{ !cancelled()
           && needs.build-linux-release.result == 'success'
           && needs.build-windows-release.result == 'success'
-          && needs.build-appimage-release.result == 'success' }}
+          && needs.build-appimage-release.result == 'success'
+          && needs.build-shaders-release.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -390,6 +434,12 @@ jobs:
           name: macos-binaries
           path: macos-binaries
 
+      - name: Download compiled shaders
+        uses: actions/download-artifact@v8
+        with:
+          name: compiled-shaders
+          path: res/shaders/compiled
+
       - name: Rename DMG to match convention
         if: hashFiles('Astonia-macOS.dmg') != ''
         run: mv Astonia-macOS.dmg client-macos.dmg
@@ -410,6 +460,10 @@ jobs:
           zip -q -r client-windows.zip windows_client
           zip -q -r mod-sdk.zip mod-sdk
           tar czf client-linux-binaries.tar.gz -C linux_client/bin .
+          # Steam consumes the binaries-only archives, which carry no res/.
+          # Ship the compiled shaders separately so the content depot can place
+          # them at res/shaders/compiled/ next to the other resources.
+          tar czf client-shaders.tar.gz -C res/shaders/compiled .
           cd windows_client/bin && zip -q -r ../../client-windows-binaries.zip . && cd ../..
           if [ -d macos-binaries ] && [ -n "$(ls -A macos-binaries)" ]; then
             tar czf client-macos-binaries.tar.gz -C macos-binaries .
@@ -425,6 +479,7 @@ jobs:
           [ -f client-macos.dmg ] && sha256sum client-macos.dmg >> checksums.txt || true
           sha256sum mod-sdk.zip >> checksums.txt
           sha256sum client-linux-binaries.tar.gz >> checksums.txt
+          sha256sum client-shaders.tar.gz >> checksums.txt
           sha256sum client-windows-binaries.zip >> checksums.txt
           [ -f client-macos-binaries.tar.gz ] && sha256sum client-macos-binaries.tar.gz >> checksums.txt || true
 
@@ -439,6 +494,7 @@ jobs:
             mod-sdk.zip
             client-linux-binaries.tar.gz
             client-windows-binaries.zip
+            client-shaders.tar.gz
             client-macos-binaries.tar.gz
             checksums.txt
           draft: false

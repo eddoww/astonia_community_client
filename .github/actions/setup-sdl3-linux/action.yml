@@ -13,6 +13,10 @@ inputs:
     description: 'SDL_mixer release tag'
     required: false
     default: 'release-3.2.4'
+  sdl3-ttf-version:
+    description: 'SDL_ttf release tag (provides the optional TTF text path)'
+    required: false
+    default: 'release-3.2.2'
 
 runs:
   using: 'composite'
@@ -23,14 +27,14 @@ runs:
       uses: actions/cache@v6
       with:
         path: /tmp/sdl3-install
-        key: sdl3-linux-${{ inputs.sdl3-version }}-${{ inputs.sdl3-mixer-version }}
+        key: sdl3-linux-${{ inputs.sdl3-version }}-${{ inputs.sdl3-mixer-version }}-ttf${{ inputs.sdl3-ttf-version }}
 
     - name: Restore SDL3 libraries from cache
       if: inputs.build-on-miss != 'true'
       uses: actions/cache/restore@v6
       with:
         path: /tmp/sdl3-install
-        key: sdl3-linux-${{ inputs.sdl3-version }}-${{ inputs.sdl3-mixer-version }}
+        key: sdl3-linux-${{ inputs.sdl3-version }}-${{ inputs.sdl3-mixer-version }}-ttf${{ inputs.sdl3-ttf-version }}
         fail-on-cache-miss: true
 
     - name: Install SDL build dependencies
@@ -96,6 +100,22 @@ runs:
         cmake --build SDL_mixer-build
         cmake --install SDL_mixer-build
         rm -rf SDL_mixer-${{ inputs.sdl3-mixer-version }} SDL_mixer-build
+
+    - name: Build SDL3_ttf from source
+      if: inputs.build-on-miss == 'true' && steps.cache-sdl3.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        cd /tmp
+        curl -sL https://github.com/libsdl-org/SDL_ttf/archive/refs/tags/${{ inputs.sdl3-ttf-version }}.tar.gz | tar xz
+        cmake -S SDL_ttf-${{ inputs.sdl3-ttf-version }} -B SDL_ttf-build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
+          -DCMAKE_PREFIX_PATH=/tmp/sdl3-install \
+          -DSDLTTF_VENDORED=ON \
+          -DSDLTTF_HARFBUZZ=ON
+        cmake --build SDL_ttf-build
+        cmake --install SDL_ttf-build
+        rm -rf SDL_ttf-${{ inputs.sdl3-ttf-version }} SDL_ttf-build
 
     - name: Install SDL3 into /usr/local
       shell: bash

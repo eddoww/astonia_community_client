@@ -193,7 +193,6 @@ int sprite_config_drop_alpha(unsigned int sprite __attribute__((unused)))
 #include "sdl/sdl_gpu.h"
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_post.h"
-#include "sdl/sdl_gpu_batch.h"
 #include "sdl/sdl_gpu_shaderfx.h"
 
 bool use_gpu_rendering = false;
@@ -382,13 +381,6 @@ bool gpu_postfx_init(int screen_width __attribute__((unused)), int screen_height
 }
 
 void gpu_postfx_shutdown(void) {}
-
-bool gpu_batch_init(int screen_width __attribute__((unused)), int screen_height __attribute__((unused)))
-{
-	return false;
-}
-
-void gpu_batch_shutdown(void) {}
 
 SDL_GPUTexture *gpu_render_target_create(int width __attribute__((unused)), int height __attribute__((unused)))
 {

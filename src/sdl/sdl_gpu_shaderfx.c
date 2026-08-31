@@ -7,8 +7,9 @@
  * pipeline applied in the fragment shader (res/shaders/sprite_fx.*),
  * batched with instanced rendering.
  *
- * Differences from the bypassed first-generation batcher
- * (sdl_gpu_batch.c):
+ * Differences from the bypassed first-generation batcher (retired in
+ * phase 2; it submitted an upload command buffer and BLOCKED on a fence
+ * at every flush, which is why it lost to the unbatched path):
  *  - NO mid-frame fence waits. Instance data is written into a mapped
  *    transfer buffer as draws are recorded; ONE upload command buffer
  *    is submitted at frame end BEFORE the main render command buffer,

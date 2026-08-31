@@ -25,7 +25,6 @@
 #include "sdl/sdl_gpu.h"
 #include "sdl/sdl_gpu_post.h"
 #include "sdl/sdl_gpu_draw.h"
-#include "sdl/sdl_gpu_batch.h"
 #include "sdl/sdl_gpu_shaderfx.h"
 #include "sdl/sdl_gpu_atlas.h"
 #include "sdl/sdl_gpu_text.h"
@@ -292,11 +291,6 @@ int sdl_init(int width, int height, char *title, int monitor)
 		// Initialize post-processing system (optional)
 		if (!gpu_postfx_init(width, height)) {
 			note("SDL_GPU: post-processing not available");
-		}
-
-		// Initialize sprite batching system (optional, currently bypassed)
-		if (!gpu_batch_init(width, height)) {
-			note("SDL_GPU: sprite batching not available");
 		}
 
 		// Shader-effects sprite path (experimental sub-flag, default off):
@@ -684,7 +678,6 @@ void sdl_exit(void)
 	gpu_text_reset();
 	gpu_shaderfx_shutdown();
 	gpu_atlas_shutdown();
-	gpu_batch_shutdown();
 
 	// Shutdown GPU drawing (before GPU device is destroyed)
 	gpu_draw_shutdown();

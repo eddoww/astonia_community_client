@@ -75,15 +75,36 @@ endif
 SDL_CFLAGS_RAW=$(shell $(PKG_CONFIG) sdl3 --cflags 2>/dev/null || echo "-I$(BREW_PREFIX)/include -I$(BREW_PREFIX)/include/SDL3")
 SDL_CFLAGS=$(patsubst -I%,-isystem %,$(SDL_CFLAGS_RAW))
 
+# SDL3_ttf is OPTIONAL, detected the same way as on Linux: when present the
+# client gains the TTF text path (Options > Display > TTF Text). Without it
+# font_manager.c compiles to inert stubs and fm_available() reports the option
+# as unavailable. Provided in CI by `brew install sdl3_ttf`. Homebrew installs
+# the pkg-config file as sdl3-ttf; fall back to the brew prefix like SDL3_mixer.
+HAS_SDL3_TTF := $(shell $(PKG_CONFIG) --exists sdl3-ttf 2>/dev/null && echo 1)
+ifeq ($(HAS_SDL3_TTF),1)
+SDL_TTF_CFLAGS_RAW=$(shell $(PKG_CONFIG) sdl3-ttf --cflags)
+SDL_TTF_CFLAGS=-DHAVE_SDL3_TTF $(patsubst -I%,-isystem %,$(SDL_TTF_CFLAGS_RAW))
+SDL_TTF_LIBS=$(shell $(PKG_CONFIG) sdl3-ttf --libs)
+$(info SDL3_ttf found - building with TTF text support)
+else ifneq ($(wildcard $(BREW_PREFIX)/include/SDL3_ttf/SDL_ttf.h),)
+SDL_TTF_CFLAGS=-DHAVE_SDL3_TTF -isystem $(BREW_PREFIX)/include
+SDL_TTF_LIBS=-L$(BREW_PREFIX)/lib -lSDL3_ttf
+$(info SDL3_ttf found via brew prefix - building with TTF text support)
+else
+SDL_TTF_CFLAGS=
+SDL_TTF_LIBS=
+$(info SDL3_ttf not found - building without TTF text support (optional))
+endif
+
 # Default to using mimalloc unless USE_MIMALLOC=0 is set
 USE_MIMALLOC ?= 1
 
-CFLAGS=$(OPT) $(DEBUG) $(WARNING_FLAGS) $(DEVELOPER_FLAGS) -fno-omit-frame-pointer -flto -fvisibility=hidden $(SDL_CFLAGS) -Iinclude -Isrc $(ZIP_CFLAGS) -DUSE_MIMALLOC=$(USE_MIMALLOC) -DSDL_FUNCTION_POINTER_IS_VOID_POINTER
-CFLAGS_PIC=$(OPT) $(DEBUG) $(WARNING_FLAGS) $(DEVELOPER_FLAGS) -fPIC -fno-omit-frame-pointer -fvisibility=hidden $(SDL_CFLAGS) -Iinclude -Isrc $(ZIP_CFLAGS) -DUSE_MIMALLOC=$(USE_MIMALLOC) -DSDL_FUNCTION_POINTER_IS_VOID_POINTER
+CFLAGS=$(OPT) $(DEBUG) $(WARNING_FLAGS) $(DEVELOPER_FLAGS) -fno-omit-frame-pointer -flto -fvisibility=hidden $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) -Iinclude -Isrc $(ZIP_CFLAGS) -DUSE_MIMALLOC=$(USE_MIMALLOC) -DSDL_FUNCTION_POINTER_IS_VOID_POINTER
+CFLAGS_PIC=$(OPT) $(DEBUG) $(WARNING_FLAGS) $(DEVELOPER_FLAGS) -fPIC -fno-omit-frame-pointer -fvisibility=hidden $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) -Iinclude -Isrc $(ZIP_CFLAGS) -DUSE_MIMALLOC=$(USE_MIMALLOC) -DSDL_FUNCTION_POINTER_IS_VOID_POINTER
 LDFLAGS=$(OPT) $(DEBUG) -rdynamic -Wl,-rpath,@loader_path
 
 SDL_LIBS=$(shell pkg-config sdl3 --libs)
-LIBS = -lz -lpng $(ZIP_LIBS) $(SDL_LIBS) $(SDL_MIXER_LIBS) -lm
+LIBS = -lz -lpng $(ZIP_LIBS) $(SDL_LIBS) $(SDL_MIXER_LIBS) $(SDL_TTF_LIBS) -lm
 ifeq ($(USE_MIMALLOC),1)
 LIBS += -lmimalloc
 endif

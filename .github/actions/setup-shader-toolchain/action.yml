@@ -1,0 +1,82 @@
+name: 'Setup shader toolchain (Linux)'
+description: 'Provide glslc and the SDL_shadercross CLI so res/shaders can be cross-compiled to SPIR-V, DXIL and MSL'
+
+# Why this exists: the client loads pre-compiled shaders at runtime from
+# res/shaders/compiled/<name>.<spv|dxil|msl>. SPIR-V covers the Vulkan backend,
+# but SDL_GPU picks D3D12 first on Windows (DXIL) and Metal on macOS (MSL), so a
+# build without those leaves the GPU renderer disabled on those platforms.
+#
+# SDL_shadercross has no tagged releases, so the commit is pinned here. It is
+# what performs the resource-space remapping SDL_GPU's D3D12 backend expects --
+# plain spirv-cross + dxc output does not bind correctly without it.
+
+inputs:
+  shadercross-commit:
+    description: 'SDL_shadercross commit to build (no upstream releases exist)'
+    required: false
+    default: 'e55cf5e31ced6f3d1be5cc6d0c50e99384f9f4ba'
+  dxc-release:
+    description: 'DirectXShaderCompiler release tag providing the prebuilt Linux dxcompiler'
+    required: false
+    default: 'v1.10.2605.37'
+  dxc-asset:
+    description: 'Prebuilt Linux DXC asset name within that release'
+    required: false
+    default: 'linux_dxc_2026_08_11.x86_64.tar.gz'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install glslc and build tools
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y glslc cmake ninja-build
+
+    - name: Cache SDL_shadercross CLI
+      id: cache-shadercross
+      uses: actions/cache@v4
+      with:
+        path: /tmp/shadercross-install
+        key: shadercross-${{ inputs.shadercross-commit }}-dxc-${{ inputs.dxc-release }}
+
+    - name: Fetch prebuilt DirectXShaderCompiler
+      if: steps.cache-shadercross.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p /tmp/dxc
+        curl -sSL -o /tmp/dxc.tar.gz \
+          "https://github.com/microsoft/DirectXShaderCompiler/releases/download/${{ inputs.dxc-release }}/${{ inputs.dxc-asset }}"
+        tar xzf /tmp/dxc.tar.gz -C /tmp/dxc
+        # FindDirectXShaderCompiler.cmake looks for lib/ or linux/lib/ under the root
+        find /tmp/dxc -name 'libdxcompiler*' -print
+
+    - name: Build SDL_shadercross CLI
+      if: steps.cache-shadercross.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        git clone --recursive https://github.com/libsdl-org/SDL_shadercross.git /tmp/SDL_shadercross
+        git -C /tmp/SDL_shadercross checkout --recurse-submodules ${{ inputs.shadercross-commit }}
+        cmake -S /tmp/SDL_shadercross -B /tmp/SDL_shadercross-build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/tmp/shadercross-install \
+          -DCMAKE_PREFIX_PATH=/usr/local \
+          -DDirectXShaderCompiler_ROOT=/tmp/dxc \
+          -DSDLSHADERCROSS_VENDORED=ON \
+          -DSDLSHADERCROSS_CLI=ON \
+          -DSDLSHADERCROSS_DXC=ON \
+          -DSDLSHADERCROSS_INSTALL=ON
+        cmake --build /tmp/SDL_shadercross-build
+        cmake --install /tmp/SDL_shadercross-build
+        # the CLI dlopen()s libdxcompiler at runtime, so keep it beside the binary
+        cp -L /tmp/dxc/lib/libdxcompiler.so* /tmp/shadercross-install/lib/ 2>/dev/null \
+          || find /tmp/dxc -name 'libdxcompiler.so*' -exec cp -L {} /tmp/shadercross-install/lib/ \;
+
+    - name: Install shader toolchain into /usr/local
+      shell: bash
+      run: |
+        sudo cp -r /tmp/shadercross-install/* /usr/local/
+        sudo ldconfig
+        echo "--- toolchain versions ---"
+        glslc --version | head -2
+        shadercross --help >/dev/null 2>&1 && echo "shadercross: OK" || echo "shadercross: present but --help returned non-zero"

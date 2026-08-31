@@ -99,7 +99,14 @@ static void sdl_blit_gpu_tex(SDL_GPUTexture *gtex, int atlas_x, int atlas_y, int
 	sr.w = (float)(dx * sdl_scale);
 	sr.h = (float)(dy * sdl_scale);
 
-	gpu_draw_texture(gtex, &dr, &sr, tex_w, tex_h, NULL, 255);
+	/* batch the 1:1 blit as a plain instance when the shader-effects
+	 * batch is up and the blend mode is standard - GUI icons, cached
+	 * combo textures etc. then merge into the instanced draw runs
+	 * instead of paying a pipeline bind + draw call each */
+	if (!(gpu_draw_get_blend_mode() == 0 && gpu_shaderfx_plain_quad(gtex, dr.x, dr.y, dr.w, dr.h, (int)sr.x, (int)sr.y,
+	                                            (int)sr.w, (int)sr.h, 255, 255, 255, 255))) {
+		gpu_draw_texture(gtex, &dr, &sr, tex_w, tex_h, NULL, 255);
+	}
 
 	sdl_time_blit += (long long)(SDL_GetTicks() - start);
 }
@@ -571,7 +578,7 @@ int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, cons
 			 * batch is off or a non-standard blend mode is active */
 			if (!(gpu_draw_get_blend_mode() == 0 &&
 			        gpu_shaderfx_plain_quad(sdlt[cache_index].gpu_tex, dest.x, dest.y, dest.w, dest.h, (int)src.x,
-			            (int)src.y, 255, 255, 255, alpha))) {
+			            (int)src.y, (int)src.w, (int)src.h, 255, 255, 255, alpha))) {
 				gpu_draw_texture(sdlt[cache_index].gpu_tex, &dest, &src, page_w, page_h, NULL, alpha);
 			}
 		}
@@ -1752,8 +1759,18 @@ void sdl_render_mod_texture(int tex_id, int x, int y, unsigned char alpha, int c
 
 	if (use_gpu_rendering) {
 		if (gpu_draw_is_available()) {
-			gpu_draw_texture(mod_textures[tex_id].gpu_tex, &dr, &sr, mod_textures[tex_id].width,
-			    mod_textures[tex_id].height, NULL, alpha);
+			/* unscaled mod-texture blit (dest = src * sdl_scale, an
+			 * integer nearest upscale - tie-free, so the batched texel
+			 * math matches the sampler exactly): joins the plain-instance
+			 * batch when possible. The float-scaled variant below stays
+			 * direct - fractional nearest resampling has boundary ties
+			 * where the batched path is not guaranteed to match. */
+			if (!(gpu_draw_get_blend_mode() == 0 &&
+			        gpu_shaderfx_plain_quad(mod_textures[tex_id].gpu_tex, dr.x, dr.y, dr.w, dr.h, (int)sr.x, (int)sr.y,
+			            (int)sr.w, (int)sr.h, 255, 255, 255, alpha))) {
+				gpu_draw_texture(mod_textures[tex_id].gpu_tex, &dr, &sr, mod_textures[tex_id].width,
+				    mod_textures[tex_id].height, NULL, alpha);
+			}
 		}
 		return;
 	}

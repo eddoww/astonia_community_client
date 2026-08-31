@@ -525,24 +525,21 @@ int gpu_shaderfx_capacity(void)
 }
 
 int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex, float dest_x, float dest_y, float dest_w, float dest_h, int src_x,
-    int src_y, int r, int g, int b, int alpha)
+    int src_y, int src_w, int src_h, int r, int g, int b, int alpha)
 {
 	if (!fx.active || !fx.in_frame || !tex) {
 		return 0;
 	}
-	if (dest_w <= 0.0f || dest_h <= 0.0f) {
+	if (dest_w <= 0.0f || dest_h <= 0.0f || src_w <= 0 || src_h <= 0) {
 		return 1; /* nothing visible - handled */
 	}
 
-	int iw = (int)dest_w;
-	int ih = (int)dest_h;
-
 	gpu_fx_instance_t inst = {
 	    .dest = {dest_x, dest_y, dest_w, dest_h},
-	    .src = {src_x, src_y, iw, ih},
+	    .src = {src_x, src_y, src_w, src_h},
 	    /* org_sz is only read by the effect pipeline; keep it covering the
 	     * source region so nothing indexes outside the page */
-	    .org_sz = {src_x, src_y, iw, ih},
+	    .org_sz = {src_x, src_y, src_w, src_h},
 	    .colorize = {0, 0, 0, GPU_FX_MODE_PLAIN},
 	    .balance = {r, g, b, 0},
 	    .fx = {0, 0, 0, 0},

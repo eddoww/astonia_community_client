@@ -128,13 +128,17 @@ int sdl_blit_fx(int cache_index, const gpu_fx_draw_t *d, int sx, int sy, int cli
     int x_offset, int y_offset);
 
 /* Batch one plain-texture quad (GPU_FX_MODE_PLAIN): texel * color-mod,
- * no effect pipeline. Coordinates are DEVICE pixels; (src_x, src_y) is
- * the texel origin inside `tex` (atlas region or 0,0), the source size
- * equals the dest size (1:1 blit, like every text/GUI draw). r/g/b/alpha
- * are the 0..255 modulation (255,255,255,255 = untouched texel). Returns
- * 1 when batched, 0 when the caller must fall back to a direct draw. */
+ * no effect pipeline. Coordinates are DEVICE pixels; (src_x, src_y,
+ * src_w, src_h) is the texel region inside `tex` (atlas region or the
+ * whole texture). A source size different from the dest size resamples
+ * NEAREST like the parity path's sampler - same interpolation endpoints,
+ * but float tie-breaking at texel boundaries is not guaranteed to match,
+ * so pixel-exact callers only batch 1:1 draws (all current callers).
+ * r/g/b/alpha are the 0..255 modulation (255,255,255,255 = untouched
+ * texel). Returns 1 when batched, 0 when the caller must fall back to
+ * a direct draw. */
 int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex, float dest_x, float dest_y, float dest_w, float dest_h, int src_x,
-    int src_y, int r, int g, int b, int alpha);
+    int src_y, int src_w, int src_h, int r, int g, int b, int alpha);
 
 /* Instances still available in this frame's ring slot (0 when no frame
  * is active). Lets multi-quad emitters (text runs) verify they fit

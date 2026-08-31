@@ -142,20 +142,7 @@ static const draw_vertex_t tri_vertices[3] = {
 
 static SDL_GPUShaderFormat get_shader_format(void)
 {
-	if (!sdlgpu) {
-		return 0;
-	}
-	SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(sdlgpu);
-	if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
-		return SDL_GPU_SHADERFORMAT_SPIRV;
-	}
-	if (formats & SDL_GPU_SHADERFORMAT_DXIL) {
-		return SDL_GPU_SHADERFORMAT_DXIL;
-	}
-	if (formats & SDL_GPU_SHADERFORMAT_MSL) {
-		return SDL_GPU_SHADERFORMAT_MSL;
-	}
-	return 0;
+	return gpu_preferred_shader_format();
 }
 
 static SDL_GPUShader *load_shader(
@@ -191,9 +178,7 @@ static SDL_GPUShader *load_shader(
 	SDL_GPUShaderFormat fmt = get_shader_format();
 	SDL_GPUShaderCreateInfo info = {.code = (const Uint8 *)data,
 	    .code_size = size,
-	    .entrypoint = (fmt == SDL_GPU_SHADERFORMAT_SPIRV)     ? "main"
-	                  : (stage == SDL_GPU_SHADERSTAGE_VERTEX) ? "VSMain"
-	                                                          : "PSMain",
+	    .entrypoint = gpu_shader_entrypoint(fmt),
 	    .format = fmt,
 	    .stage = stage,
 	    .num_samplers = num_samplers,
@@ -344,7 +329,7 @@ static SDL_GPUColorTargetBlendState gpu_blend_state(int mode)
 
 static bool create_sprite_pipeline(void)
 {
-	const char *ext = (get_shader_format() == SDL_GPU_SHADERFORMAT_SPIRV) ? "spv" : "dxil";
+	const char *ext = gpu_shader_file_ext(get_shader_format());
 	char vs_path[256], fs_path[256];
 	snprintf(vs_path, sizeof(vs_path), "res/shaders/compiled/sprite_simple_vs.%s", ext);
 	snprintf(fs_path, sizeof(fs_path), "res/shaders/compiled/sprite_simple_ps.%s", ext);
@@ -422,7 +407,7 @@ static bool create_sprite_pipeline(void)
 
 static bool create_primitive_pipeline(void)
 {
-	const char *ext = (get_shader_format() == SDL_GPU_SHADERFORMAT_SPIRV) ? "spv" : "dxil";
+	const char *ext = gpu_shader_file_ext(get_shader_format());
 	char vs_path[256], fs_path[256];
 	snprintf(vs_path, sizeof(vs_path), "res/shaders/compiled/primitive_vs.%s", ext);
 	snprintf(fs_path, sizeof(fs_path), "res/shaders/compiled/primitive_ps.%s", ext);
@@ -508,7 +493,7 @@ static bool create_tri_vbo(void)
 
 static bool create_line_pipeline(void)
 {
-	const char *ext = (get_shader_format() == SDL_GPU_SHADERFORMAT_SPIRV) ? "spv" : "dxil";
+	const char *ext = gpu_shader_file_ext(get_shader_format());
 	char vs_path[256], fs_path[256];
 	snprintf(vs_path, sizeof(vs_path), "res/shaders/compiled/line_vs.%s", ext);
 	snprintf(fs_path, sizeof(fs_path), "res/shaders/compiled/line_ps.%s", ext);
@@ -582,7 +567,7 @@ static bool create_line_pipeline(void)
 
 static bool create_tri_pipeline(void)
 {
-	const char *ext = (get_shader_format() == SDL_GPU_SHADERFORMAT_SPIRV) ? "spv" : "dxil";
+	const char *ext = gpu_shader_file_ext(get_shader_format());
 	char vs_path[256], fs_path[256];
 	snprintf(vs_path, sizeof(vs_path), "res/shaders/compiled/tri_vs.%s", ext);
 	snprintf(fs_path, sizeof(fs_path), "res/shaders/compiled/tri_ps.%s", ext);

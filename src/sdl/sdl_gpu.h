@@ -96,6 +96,26 @@ bool gpu_frame_begin(void);
 void gpu_frame_end(void);
 
 /**
+ * Preferred shader binary format of the active device: SPIRV when the
+ * backend supports it, else DXIL (D3D12), else MSL (Metal); 0 when no
+ * device is up. All shader loaders pick their compiled file with this.
+ */
+SDL_GPUShaderFormat gpu_preferred_shader_format(void);
+
+/**
+ * File extension of the compiled shader set for a format:
+ * "spv" / "dxil" / "msl" (res/shaders/compiled/<name>_vs.<ext>).
+ */
+const char *gpu_shader_file_ext(SDL_GPUShaderFormat fmt);
+
+/**
+ * Entry point name convention of the compiled shader set: "main" for
+ * SPIR-V (glslc) and DXIL (SDL_shadercross keeps the GLSL entry name),
+ * "main0" for MSL (spirv-cross renames the entry point).
+ */
+const char *gpu_shader_entrypoint(SDL_GPUShaderFormat fmt);
+
+/**
  * Get the current command buffer.
  *
  * Only valid between gpu_frame_begin() and gpu_frame_end().

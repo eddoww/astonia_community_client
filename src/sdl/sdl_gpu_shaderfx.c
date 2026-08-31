@@ -84,8 +84,8 @@ static struct {
 /* setup                                                                */
 /* ==================================================================== */
 
-static SDL_GPUShader *fx_load_shader(
-    const char *path, SDL_GPUShaderStage stage, Uint32 num_samplers, Uint32 num_storage, Uint32 num_uniform)
+static SDL_GPUShader *fx_load_shader(const char *path, SDL_GPUShaderFormat fmt, SDL_GPUShaderStage stage,
+    Uint32 num_samplers, Uint32 num_storage, Uint32 num_uniform)
 {
 	size_t size;
 	void *code = SDL_LoadFile(path, &size);
@@ -97,8 +97,8 @@ static SDL_GPUShader *fx_load_shader(
 	SDL_GPUShaderCreateInfo info = {
 	    .code = code,
 	    .code_size = size,
-	    .entrypoint = "main",
-	    .format = SDL_GPU_SHADERFORMAT_SPIRV,
+	    .entrypoint = gpu_shader_entrypoint(fmt),
+	    .format = fmt,
 	    .stage = stage,
 	    .num_samplers = num_samplers,
 	    .num_storage_textures = 0,
@@ -151,13 +151,22 @@ static bool fx_create_quad_vbo(void)
 
 static bool fx_create_pipeline(void)
 {
-	if (!(SDL_GetGPUShaderFormats(sdlgpu) & SDL_GPU_SHADERFORMAT_SPIRV)) {
-		note("gpu_shaderfx: backend has no SPIR-V support (only .spv shaders are shipped for the fx path yet)");
+	SDL_GPUShaderFormat fmt = gpu_preferred_shader_format();
+
+	if (!fmt) {
+		note("gpu_shaderfx: no supported shader format on this backend");
 		return false;
 	}
 
-	SDL_GPUShader *vs = fx_load_shader("res/shaders/compiled/sprite_fx_vs.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 1, 1);
-	SDL_GPUShader *ps = fx_load_shader("res/shaders/compiled/sprite_fx_ps.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1, 1);
+	/* the loader falls back cleanly: when the compiled shader for the
+	 * backend's format is missing (e.g. no .dxil/.msl shipped yet), the
+	 * fx path self-disables and the client stays on the parity path */
+	char vs_path[256], ps_path[256];
+	snprintf(vs_path, sizeof(vs_path), "res/shaders/compiled/sprite_fx_vs.%s", gpu_shader_file_ext(fmt));
+	snprintf(ps_path, sizeof(ps_path), "res/shaders/compiled/sprite_fx_ps.%s", gpu_shader_file_ext(fmt));
+
+	SDL_GPUShader *vs = fx_load_shader(vs_path, fmt, SDL_GPU_SHADERSTAGE_VERTEX, 0, 1, 1);
+	SDL_GPUShader *ps = fx_load_shader(ps_path, fmt, SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1, 1);
 	if (!vs || !ps) {
 		if (vs) {
 			SDL_ReleaseGPUShader(sdlgpu, vs);

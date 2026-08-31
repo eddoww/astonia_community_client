@@ -151,6 +151,41 @@ bool gpu_is_active(void)
 	return use_gpu_rendering && sdlgpu != NULL;
 }
 
+SDL_GPUShaderFormat gpu_preferred_shader_format(void)
+{
+	if (!sdlgpu) {
+		return 0;
+	}
+	SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(sdlgpu);
+	if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
+		return SDL_GPU_SHADERFORMAT_SPIRV;
+	}
+	if (formats & SDL_GPU_SHADERFORMAT_DXIL) {
+		return SDL_GPU_SHADERFORMAT_DXIL;
+	}
+	if (formats & SDL_GPU_SHADERFORMAT_MSL) {
+		return SDL_GPU_SHADERFORMAT_MSL;
+	}
+	return 0;
+}
+
+const char *gpu_shader_file_ext(SDL_GPUShaderFormat fmt)
+{
+	switch (fmt) {
+	case SDL_GPU_SHADERFORMAT_DXIL:
+		return "dxil";
+	case SDL_GPU_SHADERFORMAT_MSL:
+		return "msl";
+	default:
+		return "spv";
+	}
+}
+
+const char *gpu_shader_entrypoint(SDL_GPUShaderFormat fmt)
+{
+	return (fmt == SDL_GPU_SHADERFORMAT_MSL) ? "main0" : "main";
+}
+
 // ============================================================================
 // Frame Management
 // ============================================================================

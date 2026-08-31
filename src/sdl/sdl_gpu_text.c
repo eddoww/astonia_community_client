@@ -235,7 +235,7 @@ int gpu_text_draw_run(const char *text, struct renderfont *font, int r, int g, i
 
 			if (text_glyph_quad(&m, pen_x, pen_y, cx0, cy0, cx1, cy1, &dst_x, &dst_y, &src_x, &src_y, &w, &h)) {
 				if (!gpu_shaderfx_plain_quad(gl->tex, (float)dst_x, (float)dst_y, (float)w, (float)h, gl->ax + src_x,
-				        gl->ay + src_y, r, g, b, 255)) {
+				        gl->ay + src_y, w, h, r, g, b, 255)) {
 					/* capacity was pre-checked; only a mid-frame shutdown
 					 * gets here - the glyphs already emitted draw the same
 					 * opaque pixels the fallback string will, so this stays

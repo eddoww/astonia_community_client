@@ -250,8 +250,14 @@ void gpu_shaderfx_direct_draw_barrier(void) {}
 
 int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex __attribute__((unused)), float dest_x __attribute__((unused)),
     float dest_y __attribute__((unused)), float dest_w __attribute__((unused)), float dest_h __attribute__((unused)),
-    int src_x __attribute__((unused)), int src_y __attribute__((unused)), int r __attribute__((unused)),
-    int g __attribute__((unused)), int b __attribute__((unused)), int alpha __attribute__((unused)))
+    int src_x __attribute__((unused)), int src_y __attribute__((unused)), int src_w __attribute__((unused)),
+    int src_h __attribute__((unused)), int r __attribute__((unused)), int g __attribute__((unused)),
+    int b __attribute__((unused)), int alpha __attribute__((unused)))
+{
+	return 0;
+}
+
+int gpu_shaderfx_capacity(void)
 {
 	return 0;
 }

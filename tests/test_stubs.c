@@ -252,6 +252,13 @@ void gpu_draw_texture(SDL_GPUTexture *texture __attribute__((unused)),
 {
 }
 
+void gpu_draw_texture_rot45(SDL_GPUTexture *texture __attribute__((unused)),
+    const SDL_FRect *dest __attribute__((unused)), const SDL_FRect *src __attribute__((unused)),
+    int tex_width __attribute__((unused)), int tex_height __attribute__((unused)),
+    const float *color_mod __attribute__((unused)), int alpha __attribute__((unused)))
+{
+}
+
 void gpu_draw_rect(float x __attribute__((unused)), float y __attribute__((unused)),
     float w __attribute__((unused)), float h __attribute__((unused)), float r __attribute__((unused)),
     float g __attribute__((unused)), float b __attribute__((unused)), float a __attribute__((unused)))

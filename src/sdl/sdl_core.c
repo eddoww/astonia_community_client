@@ -1394,19 +1394,134 @@ void sdl_set_title(char *title)
 	SDL_SetWindowTitle(sdlwnd, title);
 }
 
+/* Dual-mode dynamic texture (used by the minimap): an SDL_Texture in
+ * SDL_Renderer mode, an SDL_GPUTexture in GPU mode. The GPU texture is
+ * (re)created from the CPU pixel buffer on each sdl_update_texture call -
+ * the callers keep their pixel buffers as the source of truth and update
+ * rarely (map exploration / player movement), so a full re-upload of these
+ * small textures is cheap and avoids a separate GPU-update code path. */
+struct sdl_user_texture {
+	SDL_Texture *tex; // SDL_Renderer path
+	SDL_GPUTexture *gpu_tex; // SDL_GPU path (NULL until the first update)
+	int width, height;
+};
+
 void *sdl_create_texture(int width, int height)
 {
-	return SDL_CreateTexture(sdlren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, width, height);
+	struct sdl_user_texture *t;
+
+	t = xmalloc(sizeof(*t), MEM_SDL_BASE);
+	if (!t) {
+		return NULL;
+	}
+	memset(t, 0, sizeof(*t));
+	t->width = width;
+	t->height = height;
+
+	if (use_gpu_rendering) {
+		// GPU texture is created on the first sdl_update_texture call
+		// (gpu_texture_create needs the pixel data up front)
+		return t;
+	}
+
+	t->tex = SDL_CreateTexture(sdlren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, width, height);
+	if (!t->tex) {
+		warn("sdl_create_texture: %s", SDL_GetError());
+		xfree(t);
+		return NULL;
+	}
+	SDL_SetTextureBlendMode(t->tex, SDL_BLENDMODE_BLEND);
+	SDL_SetTextureScaleMode(t->tex, SDL_SCALEMODE_NEAREST);
+
+	return t;
+}
+
+void sdl_update_texture(void *tex, const uint32_t *pixels)
+{
+	struct sdl_user_texture *t = tex;
+
+	if (!t || !pixels) {
+		return;
+	}
+
+	if (use_gpu_rendering) {
+		SDL_GPUTexture *ntex = gpu_texture_create(pixels, t->width, t->height);
+		if (ntex) {
+			// SDL_ReleaseGPUTexture defers destruction until in-flight
+			// command buffers referencing the old texture complete
+			gpu_texture_destroy(t->gpu_tex);
+			t->gpu_tex = ntex;
+		}
+		return;
+	}
+
+	SDL_UpdateTexture(t->tex, NULL, pixels, t->width * (int)sizeof(uint32_t));
+}
+
+/* GPU-mode textured draws pick the pipeline for the global blend mode, but
+ * the SDL_Renderer path uses the per-texture blend mode (always BLEND for
+ * these textures) - force BLEND around the draw for identical results. */
+static int blend_guard_begin(void)
+{
+	int prev = sdl_get_blend_mode();
+
+	if (prev) {
+		sdl_set_blend_mode(0);
+	}
+	return prev;
+}
+
+static void blend_guard_end(int prev)
+{
+	if (prev) {
+		sdl_set_blend_mode(prev);
+	}
 }
 
 void sdl_render_copy(void *tex, void *sr, void *dr)
 {
-	SDL_RenderTexture(sdlren, tex, sr, dr);
+	struct sdl_user_texture *t = tex;
+
+	if (!t) {
+		return;
+	}
+
+	if (use_gpu_rendering) {
+		if (t->gpu_tex && gpu_draw_is_available()) {
+			int prev = blend_guard_begin();
+			gpu_draw_texture(t->gpu_tex, dr, sr, t->width, t->height, NULL, 255);
+			blend_guard_end(prev);
+		}
+		return;
+	}
+
+	SDL_RenderTexture(sdlren, t->tex, sr, dr);
 }
 
 void sdl_render_copy_ex(void *tex, void *sr, void *dr, double angle)
 {
-	SDL_RenderTextureRotated(sdlren, tex, sr, dr, angle, 0, SDL_FLIP_NONE);
+	struct sdl_user_texture *t = tex;
+
+	if (!t) {
+		return;
+	}
+
+	if (use_gpu_rendering) {
+		if (t->gpu_tex && gpu_draw_is_available()) {
+			int prev = blend_guard_begin();
+			if (angle == 0.0) {
+				gpu_draw_texture(t->gpu_tex, dr, sr, t->width, t->height, NULL, 255);
+			} else {
+				// only 45 degrees is used (round minimap); other angles
+				// would need their own rotated quad VBO
+				gpu_draw_texture_rot45(t->gpu_tex, dr, sr, t->width, t->height, NULL, 255);
+			}
+			blend_guard_end(prev);
+		}
+		return;
+	}
+
+	SDL_RenderTextureRotated(sdlren, t->tex, sr, dr, angle, 0, SDL_FLIP_NONE);
 }
 
 void sdl_flush_textinput(void)

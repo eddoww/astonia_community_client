@@ -44,6 +44,7 @@ static struct {
 
 	// Shared resources
 	SDL_GPUBuffer *quad_vbo;
+	SDL_GPUBuffer *quad_rot45_vbo;
 	SDL_GPUSampler *sampler;
 
 	// Screen dimensions
@@ -70,6 +71,20 @@ static const draw_vertex_t quad_vertices[6] = {
     {0.0f, 0.0f, 0.0f, 0.0f},
     {1.0f, 1.0f, 1.0f, 1.0f},
     {0.0f, 1.0f, 0.0f, 1.0f},
+};
+
+// The same quad rotated 45 degrees clockwise around its center (0.5,0.5);
+// texcoords stay axis-aligned. The vertex shader computes
+// dest.xy + pos * dest.wh, so for a SQUARE dest rect this yields exactly
+// the quad SDL_RenderTextureRotated(..., 45.0, NULL, SDL_FLIP_NONE) draws.
+#define ROT45 0.70710678f // sqrt(2)/2
+static const draw_vertex_t quad_rot45_vertices[6] = {
+    {0.5f, 0.5f - ROT45, 0.0f, 0.0f},
+    {0.5f + ROT45, 0.5f, 1.0f, 0.0f},
+    {0.5f, 0.5f + ROT45, 1.0f, 1.0f},
+    {0.5f, 0.5f - ROT45, 0.0f, 0.0f},
+    {0.5f, 0.5f + ROT45, 1.0f, 1.0f},
+    {0.5f - ROT45, 0.5f, 0.0f, 1.0f},
 };
 
 // Push constant structure for sprite shader
@@ -255,6 +270,12 @@ static bool create_quad_vbo(void)
 {
 	draw_state.quad_vbo = create_static_vbo(quad_vertices, sizeof(quad_vertices));
 	return draw_state.quad_vbo != NULL;
+}
+
+static bool create_quad_rot45_vbo(void)
+{
+	draw_state.quad_rot45_vbo = create_static_vbo(quad_rot45_vertices, sizeof(quad_rot45_vertices));
+	return draw_state.quad_rot45_vbo != NULL;
 }
 
 static bool create_sampler(void)
@@ -656,6 +677,11 @@ bool gpu_draw_init(int screen_width, int screen_height)
 		return false;
 	}
 
+	// Non-fatal: only the rotated minimap draw needs it
+	if (!create_quad_rot45_vbo()) {
+		note("gpu_draw_init: rot45 quad VBO failed");
+	}
+
 	if (!create_sampler()) {
 		note("gpu_draw_init: sampler failed");
 		gpu_draw_shutdown();
@@ -757,6 +783,9 @@ void gpu_draw_shutdown(void)
 	if (draw_state.quad_vbo) {
 		SDL_ReleaseGPUBuffer(sdlgpu, draw_state.quad_vbo);
 	}
+	if (draw_state.quad_rot45_vbo) {
+		SDL_ReleaseGPUBuffer(sdlgpu, draw_state.quad_rot45_vbo);
+	}
 	if (draw_state.sampler) {
 		SDL_ReleaseGPUSampler(sdlgpu, draw_state.sampler);
 	}
@@ -795,10 +824,12 @@ bool gpu_draw_is_available(void)
 	return draw_state.initialized && draw_state.sprite_ready;
 }
 
-void gpu_draw_texture(SDL_GPUTexture *texture, const SDL_FRect *dest, const SDL_FRect *src, int tex_width,
-    int tex_height, const float *color_mod, int alpha)
+/* Shared body of gpu_draw_texture and gpu_draw_texture_rot45: draw the
+ * given unit-quad VBO transformed by `dest` with `texture` bound. */
+static void draw_texture_with_vbo(SDL_GPUBuffer *vbo, SDL_GPUTexture *texture, const SDL_FRect *dest,
+    const SDL_FRect *src, int tex_width, int tex_height, const float *color_mod, int alpha)
 {
-	if (!draw_state.sprite_ready || !texture) {
+	if (!draw_state.sprite_ready || !texture || !vbo) {
 		return;
 	}
 
@@ -812,7 +843,7 @@ void gpu_draw_texture(SDL_GPUTexture *texture, const SDL_FRect *dest, const SDL_
 	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.sprite_pipelines));
 
 	// Bind vertex buffer
-	SDL_GPUBufferBinding vb_binding = {.buffer = draw_state.quad_vbo, .offset = 0};
+	SDL_GPUBufferBinding vb_binding = {.buffer = vbo, .offset = 0};
 	SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
 
 	// Bind texture
@@ -859,6 +890,18 @@ void gpu_draw_texture(SDL_GPUTexture *texture, const SDL_FRect *dest, const SDL_
 
 	// Track draw count for debugging
 	gpu_debug_increment_draw_count();
+}
+
+void gpu_draw_texture(SDL_GPUTexture *texture, const SDL_FRect *dest, const SDL_FRect *src, int tex_width,
+    int tex_height, const float *color_mod, int alpha)
+{
+	draw_texture_with_vbo(draw_state.quad_vbo, texture, dest, src, tex_width, tex_height, color_mod, alpha);
+}
+
+void gpu_draw_texture_rot45(SDL_GPUTexture *texture, const SDL_FRect *dest, const SDL_FRect *src, int tex_width,
+    int tex_height, const float *color_mod, int alpha)
+{
+	draw_texture_with_vbo(draw_state.quad_rot45_vbo, texture, dest, src, tex_width, tex_height, color_mod, alpha);
 }
 
 void gpu_draw_rect(float x, float y, float w, float h, float r, float g, float b, float a)

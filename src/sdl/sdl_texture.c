@@ -19,6 +19,7 @@
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
 #include "sdl/font_manager.h"
+#include "sdl/sdl_gpu.h"
 #ifdef DEVELOPER
 extern int sockstate; // Declare early for use in wait logging
 #endif
@@ -486,11 +487,8 @@ static void texcache_promote_to_hash_head(int cache_index, int hash)
 // Returns the cache_index on success, or STX_NONE if text creation failed
 static int tex_entry_build_text(int cache_index, const struct tex_request *r, int hash)
 {
-	float w, h;
 	int ntx;
 
-	sdlt[cache_index].tex =
-	    sdl_maketext(r->text, (struct renderfont *)r->text_font, (uint32_t)r->text_color, r->text_flags);
 	sdlt[cache_index].text_color = (uint32_t)r->text_color;
 	sdlt[cache_index].text_flags = (uint16_t)r->text_flags;
 	sdlt[cache_index].text_font = r->text_font;
@@ -500,18 +498,50 @@ static int tex_entry_build_text(int cache_index, const struct tex_request *r, in
 #else
 	sdlt[cache_index].text = xstrdup(r->text, MEM_TEMP7);
 #endif
-	if (sdlt[cache_index].tex) {
-		SDL_GetTextureSize(sdlt[cache_index].tex, &w, &h);
-		sdlt[cache_index].xres = (uint16_t)w;
-		sdlt[cache_index].yres = (uint16_t)h;
-		// Set flags ONLY if tex creation succeeded
-		uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
-		__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE | SF_DIDTEX, __ATOMIC_RELEASE);
+
+	// GPU path: create GPU texture for text
+	if (use_gpu_rendering) {
+		int tex_w, tex_h;
+		sdlt[cache_index].gpu_tex = sdl_maketext_gpu(
+		    r->text, (struct renderfont *)r->text_font, (uint32_t)r->text_color, r->text_flags, &tex_w, &tex_h);
+		sdlt[cache_index].tex = NULL;
+
+		if (sdlt[cache_index].gpu_tex) {
+			sdlt[cache_index].xres = (uint16_t)tex_w;
+			sdlt[cache_index].yres = (uint16_t)tex_h;
+			uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
+			__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE | SF_DIDGPUTEX, __ATOMIC_RELEASE);
+			/* keep mem_tex symmetric with eviction, which subtracts
+			 * xres*yres*4 for every SF_DIDGPUTEX/SF_DIDTEX entry - text
+			 * entries used to skip this add, driving mem_tex negative */
+			__atomic_add_fetch(
+			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+		} else {
+			sdlt[cache_index].xres = sdlt[cache_index].yres = 0;
+			uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
+			__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE, __ATOMIC_RELEASE);
+		}
 	} else {
-		sdlt[cache_index].xres = sdlt[cache_index].yres = 0;
-		// Text creation failed - don't set SF_DIDTEX
-		uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
-		__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE, __ATOMIC_RELEASE);
+		// CPU path: create SDL texture for text
+		float w, h;
+		sdlt[cache_index].tex =
+		    sdl_maketext(r->text, (struct renderfont *)r->text_font, (uint32_t)r->text_color, r->text_flags);
+		sdlt[cache_index].gpu_tex = NULL;
+
+		if (sdlt[cache_index].tex) {
+			SDL_GetTextureSize(sdlt[cache_index].tex, &w, &h);
+			sdlt[cache_index].xres = (uint16_t)w;
+			sdlt[cache_index].yres = (uint16_t)h;
+			uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
+			__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE | SF_DIDTEX, __ATOMIC_RELEASE);
+			/* keep mem_tex symmetric with eviction (see GPU branch above) */
+			__atomic_add_fetch(
+			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+		} else {
+			sdlt[cache_index].xres = sdlt[cache_index].yres = 0;
+			uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
+			__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE, __ATOMIC_RELEASE);
+		}
 	}
 
 	// Link into hash chain
@@ -665,12 +695,21 @@ static int texcache_acquire_slot(void)
 		}
 
 		flags = flags_load(&sdlt[cache_index]);
-		if (flags & SF_DIDTEX) {
+		if (flags & SF_DIDGPUTEX) {
+			// GPU texture destruction
+			__atomic_sub_fetch(
+			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+			if (sdlt[cache_index].gpu_tex) {
+				gpu_texture_destroy(sdlt[cache_index].gpu_tex);
+				sdlt[cache_index].gpu_tex = NULL;
+			}
+		} else if (flags & SF_DIDTEX) {
+			// SDL texture destruction
 			__atomic_sub_fetch(
 			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 			if (sdlt[cache_index].tex) {
 				SDL_DestroyTexture(sdlt[cache_index].tex);
-				sdlt[cache_index].tex = NULL; // Clear pointer after destroying
+				sdlt[cache_index].tex = NULL;
 			}
 		} else if (flags & SF_DIDALLOC) {
 			if (sdlt[cache_index].pixel) {
@@ -782,7 +821,15 @@ void sdl_texture_flush_sprites(void)
 		sdlt[i].hprev = STX_NONE;
 
 		flags = flags_load(&sdlt[i]);
-		if (flags & SF_DIDTEX) {
+		if (flags & SF_DIDGPUTEX) {
+			/* GPU-mode entries: destroy the GPU texture and keep mem_tex in
+			 * sync (previously skipped here - leak + stale accounting) */
+			__atomic_sub_fetch(&mem_tex, sdlt[i].xres * sdlt[i].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+			if (sdlt[i].gpu_tex) {
+				gpu_texture_destroy(sdlt[i].gpu_tex);
+				sdlt[i].gpu_tex = NULL;
+			}
+		} else if (flags & SF_DIDTEX) {
 			__atomic_sub_fetch(&mem_tex, sdlt[i].xres * sdlt[i].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 			if (sdlt[i].tex) {
 				SDL_DestroyTexture(sdlt[i].tex);

@@ -41,6 +41,14 @@ void gpu_draw_resize(int new_width, int new_height);
 void gpu_draw_texture(SDL_GPUTexture *texture, const SDL_FRect *dest, const SDL_FRect *src, int tex_width,
     int tex_height, const float *color_mod, int alpha);
 
+// Draw a textured quad rotated 45 degrees clockwise around the center of
+// `dest` (GPU counterpart of SDL_RenderTextureRotated(..., 45.0, NULL,
+// SDL_FLIP_NONE), used by the round minimap). Only valid for square dest
+// rects - rotation and non-uniform scaling don't commute. Same parameter
+// semantics as gpu_draw_texture otherwise.
+void gpu_draw_texture_rot45(SDL_GPUTexture *texture, const SDL_FRect *dest, const SDL_FRect *src, int tex_width,
+    int tex_height, const float *color_mod, int alpha);
+
 // Draw a filled rectangle
 void gpu_draw_rect(float x, float y, float w, float h, float r, float g, float b, float a);
 

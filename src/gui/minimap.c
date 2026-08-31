@@ -57,7 +57,9 @@ static int map_poi_load(void);
 static void map_update_poi(void);
 static uint32_t map_poi_col(int x, int y);
 
-SDL_Texture *maptex1 = NULL, *maptex2 = NULL;
+/* Opaque dual-mode textures from sdl_create_texture (work in both the
+ * SDL_Renderer and the SDL_GPU path; see sdl_core.c) */
+static void *maptex1 = NULL, *maptex2 = NULL;
 
 /* (re)compute the screen anchors from the current layout; kept below the
  * top bar - with the fullscreen world view DOT_MTL is the screen corner */
@@ -82,14 +84,9 @@ void minimap_init(void)
 	visible = 1;
 	update1 = update2 = update3 = 1;
 
+	// blend mode BLEND and scale mode NEAREST are set by sdl_create_texture
 	maptex1 = sdl_create_texture(MAXMAP, MAXMAP);
 	maptex2 = sdl_create_texture(MINIMAP * 2, MINIMAP * 2);
-
-	SDL_SetTextureBlendMode(maptex1, SDL_BLENDMODE_BLEND);
-	SDL_SetTextureBlendMode(maptex2, SDL_BLENDMODE_BLEND);
-
-	SDL_SetTextureScaleMode(maptex1, SDL_SCALEMODE_NEAREST);
-	SDL_SetTextureScaleMode(maptex2, SDL_SCALEMODE_NEAREST);
 }
 
 static void set_pix(int x, int y, unsigned char val)
@@ -248,7 +245,7 @@ void display_minimap(void)
 					mapix1[x + y * MAXMAP] = pix_col(x, y);
 				}
 			}
-			SDL_UpdateTexture(maptex1, NULL, mapix1, MAXMAP * sizeof(uint32_t));
+			sdl_update_texture(maptex1, mapix1);
 			update1 = 0;
 		}
 
@@ -323,7 +320,7 @@ void display_minimap(void)
 					}
 				}
 			}
-			SDL_UpdateTexture(maptex2, NULL, mapix2, MINIMAP * 2 * sizeof(uint32_t));
+			sdl_update_texture(maptex2, mapix2);
 			update2 = 0;
 		}
 

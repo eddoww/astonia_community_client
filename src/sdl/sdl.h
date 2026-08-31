@@ -196,6 +196,7 @@ void sdl_reset_blend_mode(void);
 DLL_EXPORT uint32_t *sdl_load_png(char *filename, int *dx, int *dy);
 void sdl_set_title(char *title);
 void *sdl_create_texture(int width, int height);
+void sdl_update_texture(void *tex, const uint32_t *pixels);
 void sdl_render_copy(void *tex, void *sr, void *dr);
 void sdl_render_copy_ex(void *tex, void *sr, void *dr, double angle);
 int sdl_tex_xres(int cache_index);

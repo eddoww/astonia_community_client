@@ -62,7 +62,18 @@ static struct fm_face fm_faces[FM_MAX_FONTS];
 static int fm_face_count;
 static int fm_current = -1;
 
+/* Two handles per size: plain and outline (outline width sdl_scale, for
+ * the shaded/framed underlay pass). SDL_ttf flushes a font's whole glyph
+ * cache on every TTF_SetFontOutline() call, so the old single-handle
+ * toggle re-rasterized every glyph through FreeType - with per-glyph
+ * FILE reads - on every underlay string build. Dedicated handles keep
+ * both caches warm forever. The faces are opened from ONE shared memory
+ * buffer (fm_face_mem) so FreeType never touches the disk again after
+ * load. tests/test_text_compare.c part C proves the rendered output is
+ * bit-identical to the old toggle approach. */
 static TTF_Font *fm_font[FM_SIZE_COUNT];
+static TTF_Font *fm_font_outline[FM_SIZE_COUNT];
+static void *fm_face_mem; /* backing buffer of the open faces */
 static int fm_adv[FM_SIZE_COUNT][128]; /* per-character advance, device pixels */
 static int fm_lineskip[FM_SIZE_COUNT]; /* line skip, device pixels */
 
@@ -101,7 +112,29 @@ static void fm_close_fonts(void)
 			TTF_CloseFont(fm_font[s]);
 			fm_font[s] = NULL;
 		}
+		if (fm_font_outline[s]) {
+			TTF_CloseFont(fm_font_outline[s]);
+			fm_font_outline[s] = NULL;
+		}
 	}
+	/* safe only after every face handle is closed (FreeType reads the
+	 * memory face on demand) */
+	if (fm_face_mem) {
+		SDL_free(fm_face_mem);
+		fm_face_mem = NULL;
+	}
+}
+
+/* Open one face handle from the shared memory buffer. */
+static TTF_Font *fm_open_from_mem(const void *mem, size_t size, float pt)
+{
+	SDL_IOStream *io = SDL_IOFromConstMem(mem, size);
+
+	if (!io) {
+		return NULL;
+	}
+	/* closeio=true: the stream is owned by the font (the buffer is not) */
+	return TTF_OpenFontIO(io, true, pt);
 }
 
 /* Copy printable ASCII from text into buf, stopping at NUL, the draw text
@@ -132,6 +165,7 @@ static int fm_sanitize(const char *text, int n, char *buf, int bufsize)
 static int fm_load_face(int idx)
 {
 	int s, c;
+	size_t mem_size = 0;
 
 	if (idx < 0 || idx >= fm_face_count) {
 		return 0;
@@ -139,17 +173,30 @@ static int fm_load_face(int idx)
 
 	fm_close_fonts();
 
+	/* one read of the font file; every face handle serves from memory */
+	fm_face_mem = SDL_LoadFile(fm_faces[idx].path, &mem_size);
+	if (!fm_face_mem) {
+		warn("font_manager: failed to read %s: %s", fm_faces[idx].path, SDL_GetError());
+		return 0;
+	}
+
 	for (s = 0; s < FM_SIZE_COUNT; s++) {
 		float pt = (float)(fm_pt_for_size(s) * sdl_scale);
 
-		fm_font[s] = TTF_OpenFont(fm_faces[idx].path, pt);
-		if (!fm_font[s]) {
+		fm_font[s] = fm_open_from_mem(fm_face_mem, mem_size, pt);
+		fm_font_outline[s] = fm_open_from_mem(fm_face_mem, mem_size, pt);
+		if (!fm_font[s] || !fm_font_outline[s]) {
 			warn("font_manager: failed to load %s at %.0fpt: %s", fm_faces[idx].path, (double)pt, SDL_GetError());
 			fm_close_fonts();
 			return 0;
 		}
 		/* mono hinting keeps small sizes crisp on the pixel grid */
 		TTF_SetFontHinting(fm_font[s], TTF_HINTING_MONO);
+		TTF_SetFontHinting(fm_font_outline[s], TTF_HINTING_MONO);
+		/* underlay pass: grow the glyphs by one game pixel in every
+		 * direction - set ONCE; toggling the outline flushes SDL_ttf's
+		 * glyph cache (that was the per-frame FreeType file I/O) */
+		TTF_SetFontOutline(fm_font_outline[s], sdl_scale);
 
 		fm_lineskip[s] = TTF_GetFontLineSkip(fm_font[s]);
 
@@ -340,7 +387,6 @@ SDL_Surface *fm_render_text_surface(const char *text, uint32_t color, int flags)
 	TTF_Font *font;
 	SDL_Surface *surface;
 	SDL_Color col;
-	int outlined = 0;
 
 	if (!fm_available() || !text) {
 		return NULL;
@@ -349,26 +395,23 @@ SDL_Surface *fm_render_text_surface(const char *text, uint32_t color, int flags)
 		return NULL;
 	}
 
-	font = fm_font[fm_size_class(flags)];
+	/* Shaded/framed underlay pass renders through the dedicated outline
+	 * handle (glyphs grown by one game pixel in every direction;
+	 * render_text_alpha() draws this pass at -1/-1, so the outline
+	 * surrounds the main pass exactly). Dedicated handles keep both
+	 * glyph caches warm - see the note at fm_font_outline. */
+	if (flags & FM_UNDERLAY_FONT) {
+		font = fm_font_outline[fm_size_class(flags)];
+	} else {
+		font = fm_font[fm_size_class(flags)];
+	}
 
 	col.r = (Uint8)((color >> 16) & 0xFF);
 	col.g = (Uint8)((color >> 8) & 0xFF);
 	col.b = (Uint8)(color & 0xFF);
 	col.a = (Uint8)((color >> 24) & 0xFF);
 
-	/* Shaded/framed underlay pass: grow the glyphs by one game pixel in
-	 * every direction. render_text_alpha() draws this pass at -1/-1, so the
-	 * outline surrounds the main pass exactly. */
-	if (flags & FM_UNDERLAY_FONT) {
-		TTF_SetFontOutline(font, sdl_scale);
-		outlined = 1;
-	}
-
 	surface = TTF_RenderText_Blended(font, buf, 0, col);
-
-	if (outlined) {
-		TTF_SetFontOutline(font, 0);
-	}
 
 	if (!surface) {
 		warn("font_manager: render failed: %s", SDL_GetError());

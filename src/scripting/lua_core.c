@@ -101,14 +101,23 @@ static void instruction_limit_hook(lua_State *L, lua_Debug *ar)
 	luaL_error(L, "script exceeded instruction limit (possible infinite loop)");
 }
 
+// Depth-counted so nested Lua entry (e.g. client.cmd_text from a callback
+// re-entering on_client_cmd) cannot switch the watchdog off for the
+// remainder of the outer callback when the inner one returns.
+static int instruction_limit_depth = 0;
+
 static void enable_instruction_limit(lua_State *L)
 {
-	lua_sethook(L, instruction_limit_hook, LUA_MASKCOUNT, LUA_MAX_INSTRUCTIONS);
+	if (++instruction_limit_depth == 1) {
+		lua_sethook(L, instruction_limit_hook, LUA_MASKCOUNT, LUA_MAX_INSTRUCTIONS);
+	}
 }
 
 static void disable_instruction_limit(lua_State *L)
 {
-	lua_sethook(L, NULL, 0, 0);
+	if (instruction_limit_depth > 0 && --instruction_limit_depth == 0) {
+		lua_sethook(L, NULL, 0, 0);
+	}
 }
 
 // Safe require function - loads modules only from the current mod directory

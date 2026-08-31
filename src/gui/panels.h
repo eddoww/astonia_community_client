@@ -25,6 +25,7 @@ enum {
 	PANEL_SPEED, /* stealth/normal/fast walk mode              */
 	PANEL_BUFFS, /* self-spell bars + rage meter               */
 	PANEL_HOTBAR, /* hotbar rows + spellbook chevron            */
+	PANEL_EQUIPMENT, /* worn-equipment slots + gear lock           */
 	MAX_PANEL
 };
 

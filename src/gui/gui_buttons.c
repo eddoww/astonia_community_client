@@ -527,6 +527,9 @@ static void detect_hover_target(void)
 		// translate button
 		if (butsel >= BUT_INV_BEG && butsel <= BUT_INV_END) {
 			invsel = 30 + invoff * INVDX + butsel - BUT_INV_BEG;
+			if (invsel >= _inventorysize) {
+				invsel = -1; /* partial last row: cell has no slot behind it */
+			}
 		} else if (butsel >= BUT_WEA_BEG && butsel <= BUT_WEA_END) {
 			weasel = butsel - BUT_WEA_BEG;
 		} else if (butsel >= BUT_CON_BEG && butsel <= BUT_CON_END) {

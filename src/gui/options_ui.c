@@ -89,7 +89,7 @@ extern SDL_Window *sdlwnd;
  * them (see amod_option_tab). The Gameplay tab always shows its native Combat
  * rows, mod or not. */
 #define OPT_AUDIO_NATIVE    6
-#define OPT_UI_NATIVE       (14 + MAX_PANEL) /* rows 0..10 classic, 11..13+MAX_PANEL panels */
+#define OPT_UI_NATIVE       (17 + MAX_PANEL) /* rows 0..10 classic, 11..13 inventory grid, 14..16+MAX_PANEL panels */
 #define OPT_GAMEPLAY_NATIVE 2
 
 #define OPT_MAX_MOD_ROWS 64
@@ -705,10 +705,25 @@ static void opt_display_ui(void)
 
 	ry = opt_row_y(11);
 	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Panels & World");
+		draw_section_header(opt_lx, ry, opt_content_w, "Inventory Grid");
 	}
 
 	ry = opt_row_y(12);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, inv_grid_cols(), INV_GRID_MIN_COLS, INV_GRID_MAX_COLS, "Items Per Row");
+	}
+
+	ry = opt_row_y(13);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, inv_grid_rows(), 0, INV_GRID_MAX_ROWS, "Visible Rows (0 = Auto)");
+	}
+
+	ry = opt_row_y(14);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Panels & World");
+	}
+
+	ry = opt_row_y(15);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, panels_fullscreen_world(), "Fullscreen World View");
 	}
@@ -716,14 +731,14 @@ static void opt_display_ui(void)
 	for (int p = 0; p < MAX_PANEL; p++) {
 		char label[48];
 
-		ry = opt_row_y(13 + p);
+		ry = opt_row_y(16 + p);
 		if (ry >= 0) {
 			snprintf(label, sizeof(label), "Show %s", panel_name(p));
 			draw_checkbox(opt_lx, ry, panel_visible(p), label);
 		}
 	}
 
-	ry = opt_row_y(13 + MAX_PANEL);
+	ry = opt_row_y(16 + MAX_PANEL);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, 0, "Reset Panel Layout");
 	}
@@ -828,6 +843,36 @@ static int opt_click_ui(int mx, int my)
 
 	ry = opt_row_y(12);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		val = INV_GRID_MIN_COLS + (mx - tx) * (INV_GRID_MAX_COLS - INV_GRID_MIN_COLS) / tw;
+		if (val < INV_GRID_MIN_COLS) {
+			val = INV_GRID_MIN_COLS;
+		}
+		if (val > INV_GRID_MAX_COLS) {
+			val = INV_GRID_MAX_COLS;
+		}
+		inv_grid_set_cols(val);
+		init_dots();
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(13);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		val = (mx - tx) * INV_GRID_MAX_ROWS / tw; /* 0 = auto (classic row count) */
+		if (val < 0) {
+			val = 0;
+		}
+		if (val > INV_GRID_MAX_ROWS) {
+			val = INV_GRID_MAX_ROWS;
+		}
+		inv_grid_set_rows(val);
+		init_dots();
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(15);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		panels_set_fullscreen_world(!panels_fullscreen_world());
 		init_dots();
 		/* the world projection centers on DOT_MCT, which just moved */
@@ -838,7 +883,7 @@ static int opt_click_ui(int mx, int my)
 	}
 
 	for (int p = 0; p < MAX_PANEL; p++) {
-		ry = opt_row_y(13 + p);
+		ry = opt_row_y(16 + p);
 		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 			panel_toggle(p);
 			save_options();
@@ -846,7 +891,7 @@ static int opt_click_ui(int mx, int my)
 		}
 	}
 
-	ry = opt_row_y(13 + MAX_PANEL);
+	ry = opt_row_y(16 + MAX_PANEL);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		panels_reset_layout();
 		init_dots();

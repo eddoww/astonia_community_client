@@ -50,6 +50,7 @@ static const int gold_dots[] = {DOT_GLD, DOT_JNK};
 static const int speed_dots[] = {DOT_MOD};
 static const int buffs_dots[] = {DOT_SSP};
 static const int hotbar_dots[] = {DOT_HOTBAR};
+static const int equipment_dots[] = {DOT_WEA};
 
 static const ButRange skills_buts[] = {{BUT_SKL_BEG, BUT_SKL_END}, {BUT_CON_BEG, BUT_CON_END}, {BUT_SCL_UP, BUT_SCL_DW},
     {BUT_DRAG_SKILLS, BUT_DRAG_SKILLS}};
@@ -59,6 +60,8 @@ static const ButRange gold_buts[] = {{BUT_GLD, BUT_JNK}, {BUT_DRAG_GOLD, BUT_DRA
 static const ButRange speed_buts[] = {{BUT_MOD_WALK0, BUT_MOD_WALK2}, {BUT_DRAG_SPEED, BUT_DRAG_SPEED}};
 static const ButRange buffs_buts[] = {{BUT_DRAG_BUFFS, BUT_DRAG_BUFFS}};
 static const ButRange hotbar_buts[] = {{BUT_HOTBAR_BEG, BUT_HOTBAR_END}, {BUT_DRAG_HOTBAR, BUT_DRAG_HOTBAR}};
+static const ButRange equipment_buts[] = {
+    {BUT_WEA_BEG, BUT_WEA_END}, {BUT_WEA_LCK, BUT_WEA_LCK}, {BUT_DRAG_EQUIPMENT, BUT_DRAG_EQUIPMENT}};
 
 #define PANEL_ENTRY(idstr, namestr, d, b) {idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), 1, 0, 0}
 
@@ -70,6 +73,7 @@ static Panel panels[MAX_PANEL] = {
     [PANEL_SPEED] = PANEL_ENTRY("speed", "Speed Panel", speed_dots, speed_buts),
     [PANEL_BUFFS] = PANEL_ENTRY("buffs", "Buffs Panel", buffs_dots, buffs_buts),
     [PANEL_HOTBAR] = PANEL_ENTRY("hotbar", "Hotbar", hotbar_dots, hotbar_buts),
+    [PANEL_EQUIPMENT] = PANEL_ENTRY("equipment", "Equipment Panel", equipment_dots, equipment_buts),
 };
 
 static int drag_dirty; /* a drag moved something since the last save */

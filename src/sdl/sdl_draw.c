@@ -195,8 +195,15 @@ void sdl_blit(
 
 // Helper function to render text to a pixel buffer
 // Returns pixel buffer (caller must free) and sets *out_width, *out_height
+#ifdef UNIT_TEST
+// Non-static so tests/test_text_compare.c can diff the batched glyph
+// path against the real string rasterizer (prototype in sdl_private.h)
+uint32_t *sdl_rendertext_to_pixels(
+    const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width, int *out_height)
+#else
 static uint32_t *sdl_rendertext_to_pixels(
     const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width, int *out_height)
+#endif
 {
 	uint32_t *pixel, *dst;
 	unsigned char *rawrun;

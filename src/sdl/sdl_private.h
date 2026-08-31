@@ -303,6 +303,11 @@ int if_single_thread_process_one_job(void);
 // Line clipping function (non-static for testing)
 int clip_line(int *x0, int *y0, int *x1, int *y1, int xmin, int ymin, int xmax, int ymax);
 
+// Bitmap string rasterizer (non-static for testing; the ground truth the
+// batched glyph path in tests/test_text_compare.c is diffed against)
+uint32_t *sdl_rendertext_to_pixels(
+    const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width, int *out_height);
+
 // Render call counter functions for test verification
 void sdl_test_reset_render_counters(void);
 int sdl_test_get_render_point_count(void);

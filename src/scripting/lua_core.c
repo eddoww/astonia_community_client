@@ -391,11 +391,6 @@ static int load_mod_scripts(const char *mod_path, const char *mod_name)
 			continue;
 		}
 
-		// Handle DT_UNKNOWN for portability (XFS, NFS, etc.)
-		if (entry->d_type != DT_REG && entry->d_type != DT_UNKNOWN) {
-			continue;
-		}
-
 		char full_path[512];
 		written = snprintf(full_path, sizeof(full_path), "%s/%s", mod_path, entry->d_name);
 		if (written >= (int)sizeof(full_path)) {
@@ -403,11 +398,12 @@ static int load_mod_scripts(const char *mod_path, const char *mod_name)
 			continue;
 		}
 
-		if (entry->d_type == DT_UNKNOWN) {
-			struct stat st;
-			if (stat(full_path, &st) != 0 || !S_ISREG(st.st_mode)) {
-				continue;
-			}
+		// stat() instead of d_type: mingw-w64's dirent has no d_type, and
+		// some filesystems (XFS, NFS) report DT_UNKNOWN anyway. The scan
+		// runs once per (re)load, so the extra syscall is irrelevant.
+		struct stat st;
+		if (stat(full_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+			continue;
 		}
 
 		if (load_script(full_path)) {
@@ -420,10 +416,10 @@ static int load_mod_scripts(const char *mod_path, const char *mod_name)
 	// Clear current mod path (require only works during mod loading)
 	current_mod_path[0] = '\0';
 
-	// Track the mod name
+	// Track the mod name (truncation of very long directory names is fine)
 	if (count > 0 && loaded_mod_count < MAX_MODS) {
-		strncpy(loaded_mod_names[loaded_mod_count], mod_name, sizeof(loaded_mod_names[0]) - 1);
-		loaded_mod_names[loaded_mod_count][sizeof(loaded_mod_names[0]) - 1] = '\0';
+		snprintf(loaded_mod_names[loaded_mod_count], sizeof(loaded_mod_names[0]), "%.*s",
+		    (int)sizeof(loaded_mod_names[0]) - 1, mod_name);
 		loaded_mod_count++;
 	}
 
@@ -467,11 +463,6 @@ static int load_all_mods(void)
 			continue;
 		}
 
-		// Check if it's a directory (handle DT_UNKNOWN for portability)
-		if (entry->d_type != DT_DIR && entry->d_type != DT_UNKNOWN) {
-			continue;
-		}
-
 		char mod_path[512];
 		int written = snprintf(mod_path, sizeof(mod_path), "%s/%s", mods_path, entry->d_name);
 		if (written >= (int)sizeof(mod_path)) {
@@ -479,11 +470,10 @@ static int load_all_mods(void)
 			continue;
 		}
 
-		if (entry->d_type == DT_UNKNOWN) {
-			struct stat st;
-			if (stat(mod_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
-				continue;
-			}
+		// stat() instead of d_type - see load_mod_scripts for rationale
+		struct stat st;
+		if (stat(mod_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+			continue;
 		}
 
 		int scripts_loaded = load_mod_scripts(mod_path, entry->d_name);
@@ -886,8 +876,9 @@ void lua_scripting_tick(void)
 			lua_gc(L, LUA_GCCOLLECT, 0);
 			used_kb = (size_t)lua_gc(L, LUA_GCCOUNT, 0);
 			if (used_kb * 1024u > LUA_MEMORY_LIMIT) {
-				warn("Lua mods exceed the %uMB memory limit (%zuKB in use); disabling Lua scripting",
-				    LUA_MEMORY_LIMIT / (1024u * 1024u), used_kb);
+				// %lu instead of %zu: msvcrt's printf does not understand %z
+				warn("Lua mods exceed the %uMB memory limit (%luKB in use); disabling Lua scripting",
+				    LUA_MEMORY_LIMIT / (1024u * 1024u), (unsigned long)used_kb);
 				addline("Lua mods disabled: memory limit exceeded. Use #lua_reload to retry.");
 				lua_close(L);
 				L = NULL;

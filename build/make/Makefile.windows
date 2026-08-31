@@ -154,6 +154,27 @@ LTO_FLAGS = -flto=thin
 # Default to using mimalloc unless USE_MIMALLOC=0 is set
 USE_MIMALLOC ?= 1
 
+# LuaJIT scripting support (enabled by default, disable with USE_LUAJIT=0)
+# On Windows this expects the MSYS2 CLANG64 package: mingw-w64-clang-x86_64-luajit
+# (the runtime DLL is bundled automatically by package_windows.sh via ldd)
+USE_LUAJIT ?= 1
+# Escape hatch: LUA_ALLOW_JIT=1 lets mod states JIT-compile (faster, but the
+# instruction watchdog cannot interrupt JIT-compiled hot loops - see mods/README.md)
+LUA_ALLOW_JIT ?= 0
+ifeq ($(USE_LUAJIT),1)
+LUAJIT_CFLAGS_RAW ?= $(shell pkg-config --cflags luajit)
+LUAJIT_CFLAGS = -DUSE_LUAJIT=1 $(patsubst -I%,-isystem %,$(LUAJIT_CFLAGS_RAW))
+ifeq ($(LUA_ALLOW_JIT),1)
+LUAJIT_CFLAGS += -DLUA_SCRIPTING_ALLOW_JIT
+endif
+LUAJIT_LIBS = $(shell pkg-config --libs luajit)
+$(info LuaJIT scripting enabled (USE_LUAJIT=1))
+else
+LUAJIT_CFLAGS =
+LUAJIT_LIBS =
+$(info LuaJIT scripting disabled (USE_LUAJIT=0))
+endif
+
 # Project feature flags
 FEATURE_FLAGS = -DSTORE_UNIQUE \
     -DENABLE_CRASH_HANDLER \
@@ -179,6 +200,7 @@ ifndef CFLAGS
              $(LTO_FLAGS) \
              $(FEATURE_FLAGS) \
              $(SDL_CFLAGS) \
+             $(LUAJIT_CFLAGS) \
              -I$(SDL_PREFIX)/include \
              -Iinclude \
              -Isrc
@@ -190,7 +212,8 @@ else
               $(OPT_FLAGS) \
               $(VISIBILITY_FLAGS) \
               $(LTO_FLAGS) \
-              $(FEATURE_FLAGS)
+              $(FEATURE_FLAGS) \
+              $(LUAJIT_CFLAGS)
 endif
 
 # ============================================================================
@@ -236,7 +259,7 @@ LDFLAGS_CONSOLE ?= $(LINKER_FLAGS) \
                    $(SUBSYSTEM_CONSOLE)
 
 SDL_LIBS=$(shell pkg-config sdl3 --libs)
-LIBS = -lwsock32 -lws2_32 -lpsapi -lz -lpng -lzip -ldwarfstack $(SDL_LIBS) -lSDL3_mixer
+LIBS = -lwsock32 -lws2_32 -lpsapi -lz -lpng -lzip -ldwarfstack $(SDL_LIBS) -lSDL3_mixer $(LUAJIT_LIBS)
 ifeq ($(USE_MIMALLOC),1)
 LIBS += -lmimalloc
 endif
@@ -259,6 +282,11 @@ OBJS	=		src/gui/gui_core.o src/gui/gui_input.o src/gui/gui_display.o src/gui/gui
 			src/game/memory_windows.o src/gui/draghack_windows.o src/client/unique_windows.o\
 			src/game/version.o\
 			src/lib/cjson/cJSON.o
+
+# Add Lua scripting objects if enabled
+ifeq ($(USE_LUAJIT),1)
+OBJS += src/scripting/lua_core.o src/scripting/lua_api.o
+endif
 
 bin/moac.exe lib/moac.a lib/moac.lib:	verify-sdl3-mixer $(OBJS) $(ASTONIA_NET_LIB)
 			$(CC) $(LDFLAGS) -Wl,--out-implib,lib/moac.a -o bin/moac.exe $(OBJS) $(ASTONIA_NET_LIB) $(LIBS)
@@ -297,6 +325,15 @@ src/game/font.o:	src/game/font.c src/game/game.h src/game/game_private.h
 src/game/main.o:	src/game/main.c src/astonia.h src/game/game.h src/game/game_private.h src/client/client.h src/gui/gui.h src/gui/input_bind.h src/sdl/sdl.h src/modder/modder.h
 src/game/sprite.o:	src/game/sprite.c src/astonia.h src/game/game.h src/game/game_private.h src/client/client.h src/gui/gui.h src/game/sprite_config.h
 src/game/sprite_config.o:	src/game/sprite_config.c src/game/sprite_config.h src/lib/cjson/cJSON.h src/astonia.h
+
+# Lua scripting modules (only compiled when USE_LUAJIT=1)
+ifeq ($(USE_LUAJIT),1)
+src/scripting/lua_core.o: src/scripting/lua_core.c src/astonia.h src/scripting/lua_interface.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/scripting/lua_api.o: src/scripting/lua_api.c src/astonia.h src/client/client.h src/game/game.h src/gui/gui.h src/gui/input_bind.h src/gui/panels.h src/scripting/lua_interface.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+endif
 
 # cJSON library (third-party, suppress warnings)
 src/lib/cjson/cJSON.o:	src/lib/cjson/cJSON.c src/lib/cjson/cJSON.h

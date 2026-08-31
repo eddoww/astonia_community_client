@@ -53,7 +53,8 @@ jobs:
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
-            libmimalloc-dev
+            libmimalloc-dev \
+            libluajit-5.1-dev
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -120,6 +121,7 @@ jobs:
             mingw-w64-clang-x86_64-libzip
             mingw-w64-clang-x86_64-dwarfstack
             mingw-w64-clang-x86_64-mimalloc
+            mingw-w64-clang-x86_64-luajit
             make
             git
 
@@ -252,7 +254,8 @@ jobs:
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
-            libmimalloc-dev
+            libmimalloc-dev \
+            libluajit-5.1-dev
 
       - name: Run tests
         run: make test
@@ -306,7 +309,8 @@ jobs:
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
-            libmimalloc-dev
+            libmimalloc-dev \
+            libluajit-5.1-dev
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -409,7 +413,8 @@ jobs:
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
-            libmimalloc-dev
+            libmimalloc-dev \
+            libluajit-5.1-dev
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1

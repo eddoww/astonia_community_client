@@ -200,8 +200,29 @@ bool use_gpu_rendering = false;
 bool gpu_rendering_requested = false;
 SDL_GPUDevice *sdlgpu = NULL;
 
-// Shader-effects path (sdl_gpu_shaderfx.c is not linked into the tests)
+// Shader-effects path (sdl_gpu_shaderfx.c / sdl_gpu_atlas.c are not
+// linked into the tests)
+#include "sdl/sdl_gpu_atlas.h"
+
 bool gpu_shaderfx_requested = false;
+
+SDL_GPUTexture *gpu_atlas_insert(const uint32_t *pixels __attribute__((unused)), int w __attribute__((unused)),
+    int h __attribute__((unused)), int *out_x __attribute__((unused)), int *out_y __attribute__((unused)))
+{
+	return NULL;
+}
+
+void gpu_atlas_shutdown(void) {}
+
+void gpu_atlas_get_stats(int *pages, long long *used_texels)
+{
+	if (pages) {
+		*pages = 0;
+	}
+	if (used_texels) {
+		*used_texels = 0;
+	}
+}
 
 bool gpu_shaderfx_init(void)
 {

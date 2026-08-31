@@ -27,6 +27,7 @@
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_batch.h"
 #include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/sdl_gpu_atlas.h"
 #include "gui/gui.h"
 #include "gui/input_bind.h"
 
@@ -680,6 +681,7 @@ void sdl_exit(void)
 
 	// Shutdown sprite batching first (before GPU device is destroyed)
 	gpu_shaderfx_shutdown();
+	gpu_atlas_shutdown();
 	gpu_batch_shutdown();
 
 	// Shutdown GPU drawing (before GPU device is destroyed)

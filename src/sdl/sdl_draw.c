@@ -21,6 +21,7 @@
 #include "sdl/sdl_gpu.h"
 #include "sdl/sdl_gpu_batch.h"
 #include "sdl/sdl_gpu_draw.h"
+#include "sdl/sdl_gpu_atlas.h"
 
 #define RENDER_TEXT_LEFT    0
 #define RENDER_ALIGN_CENTER 1
@@ -45,11 +46,14 @@
 static SDL_BlendMode current_blend_mode = SDL_BLENDMODE_BLEND;
 
 /* GPU-mode counterpart of sdl_blit_tex: blit an SDL_GPUTexture with the same
- * clipping/scale math. `pix_w`/`pix_h` are the texture's dimensions in device
- * pixels (i.e. already multiplied by sdl_scale). Draws into whatever target
- * is currently bound, so it also composes onto offscreen render targets. */
-static void sdl_blit_gpu_tex(SDL_GPUTexture *gtex, int pix_w, int pix_h, int sx, int sy, int clipsx, int clipsy,
-    int clipex, int clipey, int x_offset, int y_offset)
+ * clipping/scale math. `pix_w`/`pix_h` are the SPRITE's dimensions in device
+ * pixels (i.e. already multiplied by sdl_scale). For atlas entries the
+ * sprite lives at (atlas_x, atlas_y) inside a shared page texture of
+ * `tex_w` x `tex_h`; standalone textures pass 0,0 and pix_w/pix_h. Draws
+ * into whatever target is currently bound, so it also composes onto
+ * offscreen render targets. */
+static void sdl_blit_gpu_tex(SDL_GPUTexture *gtex, int atlas_x, int atlas_y, int tex_w, int tex_h, int pix_w, int pix_h,
+    int sx, int sy, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
 {
 	int addx = 0, addy = 0;
 	SDL_FRect dr, sr;
@@ -88,12 +92,12 @@ static void sdl_blit_gpu_tex(SDL_GPUTexture *gtex, int pix_w, int pix_h, int sx,
 	dr.w = (float)(dx * sdl_scale);
 	dr.h = (float)(dy * sdl_scale);
 
-	sr.x = (float)(addx * sdl_scale);
-	sr.y = (float)(addy * sdl_scale);
+	sr.x = (float)(atlas_x + addx * sdl_scale);
+	sr.y = (float)(atlas_y + addy * sdl_scale);
 	sr.w = (float)(dx * sdl_scale);
 	sr.h = (float)(dy * sdl_scale);
 
-	gpu_draw_texture(gtex, &dr, &sr, pix_w, pix_h, NULL, 255);
+	gpu_draw_texture(gtex, &dr, &sr, tex_w, tex_h, NULL, 255);
 
 	sdl_time_blit += (long long)(SDL_GetTicks() - start);
 }
@@ -157,12 +161,21 @@ void sdl_blit(
 {
 	// GPU path: use GPU texture for direct drawing
 	if (use_gpu_rendering && sdlt[cache_index].gpu_tex) {
-		// NOTE: Batching disabled - each sprite has a unique texture, so batching
-		// can't combine draws and the fence wait overhead makes it slower.
-		// TODO: Re-enable batching once texture atlases are implemented.
+		// NOTE: this is the parity path (per-draw pipeline binds); the
+		// batched shader-effects path is sdl_blit_fx (sdl_gpu_shaderfx.c).
 		if (gpu_draw_is_available()) {
-			sdl_blit_gpu_tex(sdlt[cache_index].gpu_tex, sdlt[cache_index].xres * sdl_scale,
-			    sdlt[cache_index].yres * sdl_scale, sx, sy, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+			int pix_w = sdlt[cache_index].xres * sdl_scale;
+			int pix_h = sdlt[cache_index].yres * sdl_scale;
+			int ax = 0, ay = 0, tw = pix_w, th = pix_h;
+			if (sdlt[cache_index].atlas_used) {
+				// entry lives inside a shared atlas page
+				ax = sdlt[cache_index].atlas_x;
+				ay = sdlt[cache_index].atlas_y;
+				tw = GPU_ATLAS_PAGE_SIZE;
+				th = GPU_ATLAS_PAGE_SIZE;
+			}
+			sdl_blit_gpu_tex(sdlt[cache_index].gpu_tex, ax, ay, tw, th, pix_w, pix_h, sx, sy, clipsx, clipsy, clipex,
+			    clipey, x_offset, y_offset);
 			return;
 		}
 	}

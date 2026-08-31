@@ -496,11 +496,15 @@ int sdl_blit_fx(int cache_index, const gpu_fx_draw_t *d, int sx, int sy, int cli
 		sink = (d->sink < lim) ? d->sink : lim;
 	}
 
+	/* atlas entries live at an offset inside a shared page texture */
+	int ax = st->atlas_used ? st->atlas_x : 0;
+	int ay = st->atlas_used ? st->atlas_y : 0;
+
 	gpu_fx_instance_t inst = {
 	    .dest = {(float)((sx + x_offset) * sdl_scale), (float)((sy + y_offset) * sdl_scale), (float)(dx * sdl_scale),
 	        (float)(dy * sdl_scale)},
-	    .src = {addx * sdl_scale, addy * sdl_scale, dx * sdl_scale, dy * sdl_scale},
-	    .org_sz = {0, 0, pix_w, pix_h},
+	    .src = {ax + addx * sdl_scale, ay + addy * sdl_scale, dx * sdl_scale, dy * sdl_scale},
+	    .org_sz = {ax, ay, pix_w, pix_h},
 	    .colorize = {(uint32_t)d->c1, (uint32_t)d->c2, (uint32_t)d->c3,
 	        (d->sprite >= 220000) ? GPU_FX_COLORIZE_NEW : 0u},
 	    .balance = {d->cr, d->cg, d->cb, d->light},

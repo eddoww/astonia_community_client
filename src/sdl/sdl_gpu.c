@@ -15,6 +15,7 @@
 #include "sdl_gpu.h"
 #include "sdl_gpu_post.h"
 #include "sdl_gpu_batch.h"
+#include "sdl_gpu_shaderfx.h"
 #include "astonia.h"
 
 // ============================================================================
@@ -200,6 +201,7 @@ bool gpu_frame_begin(void)
 
 			// Set batch context for sprite batching
 			gpu_batch_set_context(current_cmd_buffer, current_render_pass);
+			gpu_shaderfx_frame_begin();
 			return true;
 		}
 		// Post-FX failed, fall through to direct swapchain rendering
@@ -238,6 +240,7 @@ bool gpu_frame_begin(void)
 
 	// Set batch context for sprite batching
 	gpu_batch_set_context(current_cmd_buffer, current_render_pass);
+	gpu_shaderfx_frame_begin();
 
 	return true;
 }
@@ -250,6 +253,7 @@ void gpu_frame_end(void)
 
 	// Flush any pending batched sprites before ending the render pass
 	gpu_batch_flush();
+	gpu_shaderfx_flush();
 
 	// End the main render pass
 	if (current_render_pass) {
@@ -264,6 +268,43 @@ void gpu_frame_end(void)
 			// Direct swapchain rendering - just end the pass
 			SDL_EndGPURenderPass(current_render_pass);
 			current_render_pass = NULL;
+		}
+	}
+
+	// Upload this frame's batched instance data on its own command buffer,
+	// submitted BEFORE the render command buffer: SDL_GPU executes command
+	// buffers in submission order, so the copy lands before the draws
+	// without any fence waits.
+	gpu_shaderfx_submit_upload();
+
+	// Optional A/B instrumentation: ASTONIA_GPU_STATS=1 logs draw-call and
+	// batching counters once per second (~any fps) for perf comparisons.
+	{
+		static int stats_enabled = -1;
+		if (stats_enabled < 0) {
+			const char *env = SDL_getenv("ASTONIA_GPU_STATS");
+			stats_enabled = (env && *env && *env != '0') ? 1 : 0;
+		}
+		if (stats_enabled) {
+			static Uint64 last_report;
+			static int frames_since, draws_since, fx_draws_since, fx_sprites_since;
+			int fxd, fxs, fxt, fxdirect;
+			gpu_shaderfx_get_stats(&fxd, &fxs, &fxt, &fxdirect);
+			frames_since++;
+			draws_since += gpu_debug_draw_count;
+			fx_draws_since += fxd;
+			fx_sprites_since += fxs;
+			Uint64 now = SDL_GetTicks();
+			if (last_report == 0) {
+				last_report = now;
+			}
+			if (now - last_report >= 1000 && frames_since > 0) {
+				note("GPU_STATS frames=%d avg_draws=%d avg_fx_draws=%d avg_fx_sprites=%d ms/frame=%.2f", frames_since,
+				    draws_since / frames_since, fx_draws_since / frames_since, fx_sprites_since / frames_since,
+				    (double)(now - last_report) / (double)frames_since);
+				last_report = now;
+				frames_since = draws_since = fx_draws_since = fx_sprites_since = 0;
+			}
 		}
 	}
 
@@ -340,6 +381,7 @@ bool gpu_set_render_target(SDL_GPUTexture *target, int width, int height, bool c
 	// End the current pass and open a new one aimed at the requested target.
 	// The screen target resumes with LOADOP_LOAD so earlier drawing survives.
 	if (current_render_pass) {
+		gpu_shaderfx_flush();
 		SDL_EndGPURenderPass(current_render_pass);
 		current_render_pass = NULL;
 	}

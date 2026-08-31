@@ -22,6 +22,7 @@
 #include "game/game_private.h"
 #include "client/client.h"
 #include "sdl/sdl.h"
+#include "sdl/sdl_gpu_shaderfx.h"
 #include "sdl/font_manager.h"
 
 static RenderFont fonta_shaded_storage[128];
@@ -214,14 +215,30 @@ int render_exit(void)
  */
 DLL_EXPORT int render_sprite_fx(RenderFX *fx, int scrx, int scry)
 {
-	int stx;
+	int stx = -1;
+	int routed = 0;
 
 	assert(fx != NULL && "render_sprite_fx: fx=NULL");
 	assert(fx->light >= 0 && fx->light <= 16 && "render_sprite_fx: fx->light out of range");
 	assert(fx->freeze >= 0 && fx->freeze < RENDERFX_MAX_FREEZE && "render_sprite_fx: fx->freeze out of range");
 
-	stx = sdl_tx_load(fx->sprite, fx->sink, fx->freeze, fx->scale, fx->cr, fx->cg, fx->cb, fx->clight, fx->sat, fx->c1,
-	    fx->c2, fx->c3, fx->shine, fx->ml, fx->ll, fx->rl, fx->ul, fx->dl, NULL, 0, 0, NULL, 0, 0);
+	/* Shader-effects path (experimental, opt-in): load the BASE texture
+	 * (no effects, neutral light - shared by every effect combination of
+	 * this sprite) and apply the effects per draw in the fragment shader.
+	 * scale!=100 stays on the CPU bake: the CPU colorizes the four source
+	 * taps BEFORE bilinear resampling, which a sampler cannot replicate. */
+	if (gpu_shaderfx_ready() && fx->scale == 100) {
+		stx = sdl_tx_load(
+		    fx->sprite, 0, 0, fx->scale, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 15, 15, 15, 15, NULL, 0, 0, NULL, 0, 0);
+		if (stx != -1) {
+			routed = 1;
+		}
+	}
+
+	if (!routed) {
+		stx = sdl_tx_load(fx->sprite, fx->sink, fx->freeze, fx->scale, fx->cr, fx->cg, fx->cb, fx->clight, fx->sat,
+		    fx->c1, fx->c2, fx->c3, fx->shine, fx->ml, fx->ll, fx->rl, fx->ul, fx->dl, NULL, 0, 0, NULL, 0, 0);
+	}
 
 	if (stx == -1) {
 		return 0;
@@ -248,12 +265,52 @@ DLL_EXPORT int render_sprite_fx(RenderFX *fx, int scrx, int scry)
 	}
 
 	// blit it
-	if (fx->alpha) {
-		sdl_tex_alpha(stx, fx->alpha);
-	}
-	sdl_blit(stx, scrx, scry, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
-	if (fx->alpha) {
-		sdl_tex_alpha(stx, 255);
+	if (routed) {
+		gpu_fx_draw_t fxd = {
+		    .sprite = fx->sprite,
+		    .sink = fx->sink,
+		    .freeze = fx->freeze,
+		    .cr = fx->cr,
+		    .cg = fx->cg,
+		    .cb = fx->cb,
+		    .light = fx->clight,
+		    .sat = fx->sat,
+		    .c1 = fx->c1,
+		    .c2 = fx->c2,
+		    .c3 = fx->c3,
+		    .shine = fx->shine,
+		    .ml = fx->ml,
+		    .ll = fx->ll,
+		    .rl = fx->rl,
+		    .ul = fx->ul,
+		    .dl = fx->dl,
+		    .alpha = fx->alpha,
+		};
+		if (!sdl_blit_fx(stx, &fxd, scrx, scry, clipsx, clipsy, clipex, clipey, x_offset, y_offset)) {
+			/* shader path unavailable right now (base texture still
+			 * uploading, batch full, no GPU frame) - fall back to the
+			 * CPU-baked combo for this draw */
+			int stx2 =
+			    sdl_tx_load(fx->sprite, fx->sink, fx->freeze, fx->scale, fx->cr, fx->cg, fx->cb, fx->clight, fx->sat,
+			        fx->c1, fx->c2, fx->c3, fx->shine, fx->ml, fx->ll, fx->rl, fx->ul, fx->dl, NULL, 0, 0, NULL, 0, 0);
+			if (stx2 != -1) {
+				if (fx->alpha) {
+					sdl_tex_alpha(stx2, fx->alpha);
+				}
+				sdl_blit(stx2, scrx, scry, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+				if (fx->alpha) {
+					sdl_tex_alpha(stx2, 255);
+				}
+			}
+		}
+	} else {
+		if (fx->alpha) {
+			sdl_tex_alpha(stx, fx->alpha);
+		}
+		sdl_blit(stx, scrx, scry, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+		if (fx->alpha) {
+			sdl_tex_alpha(stx, 255);
+		}
 	}
 
 	// remove additional cliprect

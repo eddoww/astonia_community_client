@@ -12,6 +12,7 @@
 #include "astonia.h"
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu.h"
+#include "sdl/sdl_gpu_shaderfx.h"
 #include "helper/helper.h"
 
 // State
@@ -833,6 +834,9 @@ static void draw_texture_with_vbo(SDL_GPUBuffer *vbo, SDL_GPUTexture *texture, c
 		return;
 	}
 
+	/* keep painter order with the shader-effects batch */
+	gpu_shaderfx_direct_draw_barrier();
+
 	SDL_GPURenderPass *pass = gpu_get_render_pass();
 	SDL_GPUCommandBuffer *cmd = gpu_get_command_buffer();
 	if (!pass || !cmd) {
@@ -916,6 +920,9 @@ void gpu_draw_rect(float x, float y, float w, float h, float r, float g, float b
 		return;
 	}
 
+	/* keep painter order with the shader-effects batch */
+	gpu_shaderfx_direct_draw_barrier();
+
 	// Bind primitive pipeline
 	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.prim_pipelines));
 
@@ -976,6 +983,9 @@ void gpu_draw_line(float x1, float y1, float x2, float y2, float r, float g, flo
 	if (!cmd || !pass) {
 		return;
 	}
+
+	/* keep painter order with the shader-effects batch */
+	gpu_shaderfx_direct_draw_barrier();
 
 	// Bind line pipeline
 	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.line_pipelines));
@@ -1039,6 +1049,9 @@ void gpu_draw_triangle(
 	if (!c2) {
 		c2 = c0;
 	}
+
+	/* keep painter order with the shader-effects batch */
+	gpu_shaderfx_direct_draw_barrier();
 
 	// Bind triangle pipeline
 	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.tri_pipelines));

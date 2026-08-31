@@ -777,12 +777,19 @@ bool lua_scripting_init(void)
 		return false;
 	}
 
+	// Open standard libraries (we'll sandbox them next)
+	luaL_openlibs(L);
+
 #ifndef LUA_SCRIPTING_ALLOW_JIT
 	// Run mod states interpreter-only. JIT-compiled traces do not honor
 	// LUA_MASKCOUNT hooks, so the instruction watchdog would never fire on a
 	// hot loop. Interpreter-only trades mod execution speed (typically well
 	// under a frame's budget for overlay-style mods) for a watchdog that is
 	// guaranteed to trigger. Build with LUA_ALLOW_JIT=1 to opt out.
+	//
+	// This MUST run *after* luaL_openlibs: opening the jit library
+	// re-enables the compiler, so disabling it earlier is silently undone
+	// (verified: the watchdog then never fires on an infinite loop).
 	if (!luaJIT_setmode(L, 0, LUAJIT_MODE_ENGINE | LUAJIT_MODE_OFF)) {
 		warn("Failed to disable LuaJIT compilation; instruction watchdog may not fire in hot loops");
 	} else {
@@ -791,9 +798,6 @@ bool lua_scripting_init(void)
 #else
 	note("LuaJIT compiler ENABLED for mods (LUA_SCRIPTING_ALLOW_JIT): instruction watchdog is best-effort");
 #endif
-
-	// Open standard libraries (we'll sandbox them next)
-	luaL_openlibs(L);
 
 	// Apply sandboxing
 	apply_sandbox(L);

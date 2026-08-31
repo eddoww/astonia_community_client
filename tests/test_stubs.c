@@ -214,6 +214,13 @@ SDL_GPUTexture *gpu_atlas_insert(const uint32_t *pixels __attribute__((unused)),
 
 void gpu_atlas_shutdown(void) {}
 
+void gpu_atlas_release(SDL_GPUTexture *page_texture __attribute__((unused)), int x __attribute__((unused)),
+    int y __attribute__((unused)))
+{
+}
+
+void gpu_atlas_frame_tick(void) {}
+
 void gpu_atlas_get_stats(int *pages, long long *used_texels)
 {
 	if (pages) {
@@ -240,6 +247,14 @@ void gpu_shaderfx_frame_begin(void) {}
 void gpu_shaderfx_flush(void) {}
 void gpu_shaderfx_submit_upload(void) {}
 void gpu_shaderfx_direct_draw_barrier(void) {}
+
+int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex __attribute__((unused)), float dest_x __attribute__((unused)),
+    float dest_y __attribute__((unused)), float dest_w __attribute__((unused)), float dest_h __attribute__((unused)),
+    int src_x __attribute__((unused)), int src_y __attribute__((unused)), int r __attribute__((unused)),
+    int g __attribute__((unused)), int b __attribute__((unused)), int alpha __attribute__((unused)))
+{
+	return 0;
+}
 
 int sdl_blit_fx(int cache_index __attribute__((unused)), const gpu_fx_draw_t *d __attribute__((unused)),
     int sx __attribute__((unused)), int sy __attribute__((unused)), int clipsx __attribute__((unused)),

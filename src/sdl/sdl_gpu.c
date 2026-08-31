@@ -166,6 +166,9 @@ bool gpu_frame_begin(void)
 	current_offscreen_target = NULL;
 	gpu_debug_draw_count = 0;
 
+	// Advance the atlas quarantine clock (region reclamation)
+	gpu_atlas_frame_tick();
+
 	// Acquire command buffer
 	current_cmd_buffer = SDL_AcquireGPUCommandBuffer(sdlgpu);
 	if (!current_cmd_buffer) {

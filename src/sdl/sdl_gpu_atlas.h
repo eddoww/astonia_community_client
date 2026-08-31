@@ -36,6 +36,17 @@ extern "C" {
  * caller should create a standalone texture instead. Thread-safe. */
 SDL_GPUTexture *gpu_atlas_insert(const uint32_t *pixels, int w, int h, int *out_x, int *out_y);
 
+/* Return a region obtained from gpu_atlas_insert to its page (called on
+ * cache eviction). The span is quarantined for a few frames before it
+ * becomes allocatable again, because draws recorded this frame may
+ * still reference the old texels. Thread-safe; unknown regions are
+ * ignored with a note. */
+void gpu_atlas_release(SDL_GPUTexture *page_texture, int x, int y);
+
+/* Advance the quarantine clock; call ONCE per rendered frame (from
+ * gpu_frame_begin). */
+void gpu_atlas_frame_tick(void);
+
 /* Release all pages (client shutdown). */
 void gpu_atlas_shutdown(void);
 

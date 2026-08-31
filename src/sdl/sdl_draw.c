@@ -22,6 +22,8 @@
 #include "sdl/sdl_gpu_batch.h"
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_atlas.h"
+#include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/sdl_gpu_text.h"
 
 #define RENDER_TEXT_LEFT    0
 #define RENDER_ALIGN_CENTER 1
@@ -332,12 +334,43 @@ SDL_Texture *sdl_maketext(const char *text, struct renderfont *font, uint32_t co
 	return texture;
 }
 
-// GPU version of text rendering - creates GPU texture
-SDL_GPUTexture *sdl_maketext_gpu(
-    const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width, int *out_height)
+/* Upload composed text pixels for the GPU path: into a shared atlas
+ * page when the batcher is up (the drawtext fast path then draws the
+ * string as ONE batched plain quad instead of a pipeline bind + draw),
+ * else a standalone texture. Oversized strings fall through to
+ * standalone automatically (gpu_atlas_insert caps region size). */
+static SDL_GPUTexture *maketext_gpu_upload(
+    const uint32_t *pixel, int w, int h, int *out_atlas_x, int *out_atlas_y, uint8_t *out_atlas_used)
+{
+	*out_atlas_x = 0;
+	*out_atlas_y = 0;
+	*out_atlas_used = 0;
+
+	if (gpu_shaderfx_ready()) {
+		int ax = 0, ay = 0;
+		SDL_GPUTexture *page = gpu_atlas_insert(pixel, w, h, &ax, &ay);
+
+		if (page) {
+			*out_atlas_x = ax;
+			*out_atlas_y = ay;
+			*out_atlas_used = 1;
+			return page;
+		}
+	}
+	return gpu_texture_create(pixel, w, h);
+}
+
+// GPU version of text rendering - creates GPU texture (possibly a
+// region inside a shared atlas page, see out_atlas_*)
+SDL_GPUTexture *sdl_maketext_gpu(const char *text, struct renderfont *font, uint32_t color, int flags, int *out_width,
+    int *out_height, int *out_atlas_x, int *out_atlas_y, uint8_t *out_atlas_used)
 {
 	Uint64 start = SDL_GetTicks();
 	int sizex, sizey;
+
+	*out_atlas_x = 0;
+	*out_atlas_y = 0;
+	*out_atlas_used = 0;
 
 	/* TTF path (experimental, opt-in): the same SDL_ttf glyphs as the
 	 * SDL_Renderer TTF path, uploaded into a GPU texture. On failure fall
@@ -358,9 +391,10 @@ SDL_GPUTexture *sdl_maketext_gpu(
 				th = argb->h;
 				if (argb->pitch == tw * (int)sizeof(uint32_t)) {
 					/* rows are tightly packed - upload directly */
-					ttf_tex = gpu_texture_create((const uint32_t *)argb->pixels, tw, th);
+					ttf_tex = maketext_gpu_upload(
+					    (const uint32_t *)argb->pixels, tw, th, out_atlas_x, out_atlas_y, out_atlas_used);
 				} else {
-					/* gpu_texture_create expects tightly packed rows */
+					/* the uploads expect tightly packed rows */
 					uint32_t *tight = malloc((size_t)tw * (size_t)th * sizeof(uint32_t));
 
 					if (tight) {
@@ -369,7 +403,7 @@ SDL_GPUTexture *sdl_maketext_gpu(
 							    (const uint8_t *)argb->pixels + (size_t)row * (size_t)argb->pitch,
 							    (size_t)tw * sizeof(uint32_t));
 						}
-						ttf_tex = gpu_texture_create(tight, tw, th);
+						ttf_tex = maketext_gpu_upload(tight, tw, th, out_atlas_x, out_atlas_y, out_atlas_used);
 						free(tight);
 					}
 				}
@@ -397,7 +431,7 @@ SDL_GPUTexture *sdl_maketext_gpu(
 	sdl_time_text += (long long)(SDL_GetTicks() - start);
 
 	start = SDL_GetTicks();
-	SDL_GPUTexture *gpu_tex = gpu_texture_create(pixel, sizex, sizey);
+	SDL_GPUTexture *gpu_tex = maketext_gpu_upload(pixel, sizex, sizey, out_atlas_x, out_atlas_y, out_atlas_used);
 
 #ifdef SDL_FAST_MALLOC
 	FREE(pixel);
@@ -419,6 +453,7 @@ int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, cons
 	int dx, cache_index = -1;
 	SDL_Texture *tex = NULL;
 	int r, g, b, a;
+	int aligned_sx;
 	const char *c;
 
 	if (!*text) {
@@ -429,6 +464,36 @@ int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, cons
 	g = G16TO32(color);
 	b = B16TO32(color);
 	a = 255;
+
+	/* layout advance first - every path needs it for alignment */
+	if (fm_active()) {
+		/* keep layout advance and alignment in sync with the TTF glyphs */
+		dx = fm_text_width(flags, text, -1);
+	} else {
+		for (dx = 0, c = text; *c && *c != RENDER_TEXT_TERMINATOR; c++) {
+			if (*c < 0) {
+				continue;
+			}
+			dx += font[(unsigned char)*c].dim;
+		}
+	}
+	aligned_sx = sx;
+	if (flags & RENDER_ALIGN_CENTER) {
+		aligned_sx -= dx / 2;
+	} else if (flags & RENDER_TEXT_RIGHT) {
+		aligned_sx -= dx;
+	}
+
+	/* Batched glyph path (bitmap fonts, opaque draws): one atlas quad per
+	 * glyph through the sprite_fx batch - no cache entry, no text-hash
+	 * walk, no per-string texture. Pixel-identical to the cached-string
+	 * draw (tests/test_text_compare.c). Draws with alpha < 255 must not
+	 * double-blend overlapping ink (derived _shaded/_framed fonts), so
+	 * they use the cached-string quad below instead. */
+	if (use_gpu_rendering && !fm_active() && alpha == 255 &&
+	    gpu_text_draw_run(text, font, r, g, b, aligned_sx, sy, clipsx, clipsy, clipex, clipey, x_offset, y_offset)) {
+		return aligned_sx + dx;
+	}
 
 	/* GPU mode: transient GPU textures cannot be destroyed safely while the
 	 * frame still references them, so uncached text goes through the texture
@@ -441,26 +506,9 @@ int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, cons
 		tex = (cache_index != STX_NONE) ? sdlt[cache_index].tex : NULL;
 	}
 
-	if (fm_active()) {
-		/* keep layout advance and alignment in sync with the TTF glyphs */
-		dx = fm_text_width(flags, text, -1);
-	} else {
-		for (dx = 0, c = text; *c && *c != RENDER_TEXT_TERMINATOR; c++) {
-			if (*c < 0) {
-				continue;
-			}
-			dx += font[(unsigned char)*c].dim;
-		}
-	}
-
 	// GPU path: use GPU texture if available (cached text only)
 	if (use_gpu_rendering && gpu_draw_is_available() && cache_index >= 0 && sdlt[cache_index].gpu_tex) {
-		// Apply alignment
-		if (flags & RENDER_ALIGN_CENTER) {
-			sx -= dx / 2;
-		} else if (flags & RENDER_TEXT_RIGHT) {
-			sx -= dx;
-		}
+		sx = aligned_sx;
 
 		// Text texture dimensions are already in pixels (pre-scaled)
 		int tex_w = sdlt[cache_index].xres;
@@ -501,27 +549,38 @@ int sdl_drawtext_alpha(int sx, int sy, unsigned short int color, int flags, cons
 		}
 
 		if (draw_w > 0 && draw_h > 0) {
+			/* atlas-resident strings live inside a shared page texture */
+			int ax = sdlt[cache_index].atlas_used ? sdlt[cache_index].atlas_x : 0;
+			int ay = sdlt[cache_index].atlas_used ? sdlt[cache_index].atlas_y : 0;
+			int page_w = sdlt[cache_index].atlas_used ? GPU_ATLAS_PAGE_SIZE : tex_w;
+			int page_h = sdlt[cache_index].atlas_used ? GPU_ATLAS_PAGE_SIZE : tex_h;
+
 			// Scale back to pixels for GPU rendering
 			SDL_FRect dest = {.x = (float)(draw_x * sdl_scale),
 			    .y = (float)(draw_y * sdl_scale),
 			    .w = (float)(draw_w * sdl_scale),
 			    .h = (float)(draw_h * sdl_scale)};
-			SDL_FRect src = {.x = (float)(src_x * sdl_scale),
-			    .y = (float)(src_y * sdl_scale),
+			SDL_FRect src = {.x = (float)(ax + src_x * sdl_scale),
+			    .y = (float)(ay + src_y * sdl_scale),
 			    .w = (float)(draw_w * sdl_scale),
 			    .h = (float)(draw_h * sdl_scale)};
-			gpu_draw_texture(sdlt[cache_index].gpu_tex, &dest, &src, tex_w, tex_h, NULL, alpha);
+
+			/* cached-string fast path: ONE batched plain quad (exact for
+			 * every case incl. TTF and alpha fades - the pre-composed
+			 * pixels blend once); falls back to the direct draw when the
+			 * batch is off or a non-standard blend mode is active */
+			if (!(gpu_draw_get_blend_mode() == 0 &&
+			        gpu_shaderfx_plain_quad(sdlt[cache_index].gpu_tex, dest.x, dest.y, dest.w, dest.h, (int)src.x,
+			            (int)src.y, 255, 255, 255, alpha))) {
+				gpu_draw_texture(sdlt[cache_index].gpu_tex, &dest, &src, page_w, page_h, NULL, alpha);
+			}
 		}
 		return sx + dx;
 	}
 
 	// CPU path (SDL_Renderer)
 	if (tex) {
-		if (flags & RENDER_ALIGN_CENTER) {
-			sx -= dx / 2;
-		} else if (flags & RENDER_TEXT_RIGHT) {
-			sx -= dx;
-		}
+		sx = aligned_sx;
 
 		/* alpha is a draw-time texture mod, not part of the cache key; the
 		 * cached texture is shared, so always restore full opacity after */

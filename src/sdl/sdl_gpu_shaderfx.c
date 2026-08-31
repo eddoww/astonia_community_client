@@ -516,6 +516,14 @@ int sdl_blit_fx(int cache_index, const gpu_fx_draw_t *d, int sx, int sy, int cli
 	return fx_batch_add(st->gpu_tex, &inst) ? 1 : 0;
 }
 
+int gpu_shaderfx_capacity(void)
+{
+	if (!fx.in_frame || !fx.mapped) {
+		return 0;
+	}
+	return FX_MAX_INSTANCES - fx.count;
+}
+
 int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex, float dest_x, float dest_y, float dest_w, float dest_h, int src_x,
     int src_y, int r, int g, int b, int alpha)
 {

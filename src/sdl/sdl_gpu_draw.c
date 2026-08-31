@@ -820,6 +820,11 @@ void gpu_draw_set_blend_mode(int mode)
 	draw_state.blend_mode = mode;
 }
 
+int gpu_draw_get_blend_mode(void)
+{
+	return draw_state.blend_mode;
+}
+
 bool gpu_draw_is_available(void)
 {
 	return draw_state.initialized && draw_state.sprite_ready;

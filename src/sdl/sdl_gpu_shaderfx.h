@@ -136,6 +136,11 @@ int sdl_blit_fx(int cache_index, const gpu_fx_draw_t *d, int sx, int sy, int cli
 int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex, float dest_x, float dest_y, float dest_w, float dest_h, int src_x,
     int src_y, int r, int g, int b, int alpha);
 
+/* Instances still available in this frame's ring slot (0 when no frame
+ * is active). Lets multi-quad emitters (text runs) verify they fit
+ * BEFORE emitting anything. */
+int gpu_shaderfx_capacity(void);
+
 /* Per-frame stats (draw calls recorded by the batch, sprites batched). */
 void gpu_shaderfx_get_stats(int *draws, int *sprites, int *tex_flushes, int *direct_flushes);
 

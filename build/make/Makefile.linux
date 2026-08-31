@@ -65,9 +65,15 @@ USE_MIMALLOC ?= 1
 
 # LuaJIT scripting support (enabled by default, disable with USE_LUAJIT=0)
 USE_LUAJIT ?= 1
+# Escape hatch: LUA_ALLOW_JIT=1 lets mod states JIT-compile (faster, but the
+# instruction watchdog cannot interrupt JIT-compiled hot loops - see mods/README.md)
+LUA_ALLOW_JIT ?= 0
 ifeq ($(USE_LUAJIT),1)
 LUAJIT_CFLAGS_RAW=$(shell pkg-config --cflags luajit 2>/dev/null || echo "-I/usr/include/luajit-2.1")
 LUAJIT_CFLAGS=-DUSE_LUAJIT=1 $(patsubst -I%,-isystem %,$(LUAJIT_CFLAGS_RAW))
+ifeq ($(LUA_ALLOW_JIT),1)
+LUAJIT_CFLAGS += -DLUA_SCRIPTING_ALLOW_JIT
+endif
 LUAJIT_LIBS=$(shell pkg-config --libs luajit 2>/dev/null || echo "-lluajit-5.1")
 $(info LuaJIT scripting enabled (USE_LUAJIT=1))
 else

@@ -37,9 +37,11 @@ struct mod {
 	void (*_amod_areachange)(void);
 	int (*_amod_keydown)(SDL_Keycode);
 	int (*_amod_keyup)(SDL_Keycode);
+	int (*_amod_textinput)(SDL_Keycode);
 	void (*_amod_update_hover_texts)(void);
 	int (*_amod_client_cmd)(const char *buf);
 	int (*_amod_hotbar_activate)(int slot, int mode);
+	int (*_amod_text_line)(const char *line);
 	char *(*_amod_version)(void);
 	int loaded;
 };
@@ -58,9 +60,11 @@ struct mod mod[MAXMOD] = {{
     NULL, // _amod_areachange
     NULL, // _amod_keydown
     NULL, // _amod_keyup
+    NULL, // _amod_textinput
     NULL, // _amod_update_hover_texts
     NULL, // _amod_client_cmd
     NULL, // _amod_hotbar_activate
+    NULL, // _amod_text_line
     NULL, // _amod_version
     0 // loaded
 }};
@@ -148,6 +152,9 @@ int amod_init(void)
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_keyup"))) {
 			mod[i]._amod_keyup = (int (*)(SDL_Keycode))tmp;
 		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_textinput"))) {
+			mod[i]._amod_textinput = (int (*)(SDL_Keycode))tmp;
+		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_update_hover_texts"))) {
 			mod[i]._amod_update_hover_texts = (void (*)(void))tmp;
 		}
@@ -156,6 +163,9 @@ int amod_init(void)
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_hotbar_activate"))) {
 			mod[i]._amod_hotbar_activate = (int (*)(int, int))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_text_line"))) {
+			mod[i]._amod_text_line = (int (*)(const char *))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_version"))) {
 			mod[i]._amod_version = (char *(*)(void))tmp;
@@ -301,6 +311,11 @@ int amod_init(void)
 		}
 	}
 
+	// capability probe: tells mods implementing amod_textinput that this
+	// client dispatches real text input, so they can stop translating raw
+	// keycodes in their own input fields (key 0 never types anything)
+	amod_textinput(0);
+
 	return 1;
 }
 
@@ -406,7 +421,32 @@ int amod_keydown(SDL_Keycode key)
 	int ret = 0, tmp;
 	for (int i = 0; i < MAXMOD; i++) {
 		if (mod[i]._amod_keydown && (tmp = mod[i]._amod_keydown(key))) {
-			sdl_flush_textinput();
+			/* A mod that implements amod_textinput gets the real (layout- and
+			 * shift-aware) character through that hook instead - leave the
+			 * pending SDL text event queued for it. For older mods the flush
+			 * keeps the consumed key's char out of the classic command line. */
+			if (!mod[i]._amod_textinput) {
+				sdl_flush_textinput();
+			}
+			if (tmp > 0) {
+				return 1;
+			} else {
+				ret = 1;
+			}
+		}
+	}
+	return ret;
+}
+
+// Text input (SDL_EVENT_TEXT_INPUT) - the shifted/layout-correct character,
+// dispatched before the classic command line sees it. key==0 is the one-time
+// capability probe sent after mod loading so mods can stop translating raw
+// keycodes themselves. Same return convention as amod_keydown.
+int amod_textinput(SDL_Keycode key)
+{
+	int ret = 0, tmp;
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_textinput && (tmp = mod[i]._amod_textinput(key))) {
 			if (tmp > 0) {
 				return 1;
 			} else {
@@ -446,6 +486,26 @@ int amod_client_cmd(const char *buf)
 	int ret = 0, tmp;
 	for (int i = 0; i < MAXMOD; i++) {
 		if (mod[i]._amod_client_cmd && (tmp = mod[i]._amod_client_cmd(buf))) {
+			if (tmp > 0) {
+				return 1;
+			} else {
+				ret = 1;
+			}
+		}
+	}
+	return ret;
+}
+
+// Called for every chat/system text line just before the classic chat window
+// renders it. Any mod may consume the line (e.g. to show it in its own chat
+// UI); consumed lines are not added to the classic scrollback. Same return
+// convention as the other event handlers: 1 = consumed, stop; -1 = consumed
+// but let later mods observe it too; 0 = not handled.
+int amod_text_line(const char *line)
+{
+	int ret = 0, tmp;
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_text_line && (tmp = mod[i]._amod_text_line(line))) {
 			if (tmp > 0) {
 				return 1;
 			} else {

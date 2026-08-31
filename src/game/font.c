@@ -40,18 +40,18 @@ unsigned char fontb_029[] = /*   */ {255};
 unsigned char fontb_030[] = /*   */ {255};
 unsigned char fontb_031[] = /*   */ {255};
 unsigned char fontb_032[] = /*   */ {255};
-unsigned char fontb_033[] = /* ! */ {255};
-unsigned char fontb_034[] = /* " */ {255};
-unsigned char fontb_035[] = /* # */ {255};
-unsigned char fontb_036[] = /* $ */ {255};
+unsigned char fontb_033[] = /* ! */ {0, 254, 0, 254, 0, 254, 254, 0, 255};
+unsigned char fontb_034[] = /* " */ {0, 2, 254, 0, 2, 255};
+unsigned char fontb_035[] = /* # */ {0, 2, 254, 0, 1, 1, 254, 0, 2, 254, 0, 1, 1, 254, 0, 2, 255};
+unsigned char fontb_036[] = /* $ */ {1, 1, 254, 0, 254, 1, 254, 2, 254, 0, 1, 255};
 unsigned char fontb_037[] = /* % */ {254, 0, 3, 254, 2, 254, 1, 254, 0, 3, 255};
-unsigned char fontb_038[] = /* & */ {255};
+unsigned char fontb_038[] = /* & */ {1, 254, 0, 2, 254, 1, 254, 0, 2, 254, 1, 1, 255};
 unsigned char fontb_039[] = /* ' */ {0, 254, 0, 255};
-unsigned char fontb_040[] = /* ( */ {255};
-unsigned char fontb_041[] = /* ) */ {255};
+unsigned char fontb_040[] = /* ( */ {1, 254, 0, 254, 0, 254, 0, 254, 1, 255};
+unsigned char fontb_041[] = /* ) */ {0, 254, 1, 254, 1, 254, 1, 254, 0, 255};
 unsigned char fontb_042[] = /* * */ {254, 0, 2, 254, 1, 254, 0, 2, 255};
 unsigned char fontb_043[] = /* + */ {254, 1, 254, 0, 1, 1, 254, 1, 255};
-unsigned char fontb_044[] = /* , */ {255};
+unsigned char fontb_044[] = /* , */ {254, 254, 254, 254, 0, 254, 0, 255};
 unsigned char fontb_045[] = /* - */ {254, 254, 0, 1, 1, 255};
 unsigned char fontb_046[] = /* . */ {254, 254, 254, 254, 0, 255};
 unsigned char fontb_047[] = /* / */ {2, 254, 1, 254, 1, 254, 1, 254, 0, 255};
@@ -65,13 +65,13 @@ unsigned char fontb_054[] = /* 6 */ {0, 1, 1, 254, 0, 254, 0, 1, 1, 254, 0, 2, 2
 unsigned char fontb_055[] = /* 7 */ {0, 1, 1, 254, 2, 254, 2, 254, 2, 254, 2, 255};
 unsigned char fontb_056[] = /* 8 */ {0, 1, 1, 254, 0, 2, 254, 0, 1, 1, 254, 0, 2, 254, 0, 1, 1, 255};
 unsigned char fontb_057[] = /* 9 */ {0, 1, 1, 254, 0, 2, 254, 0, 1, 1, 254, 2, 254, 0, 1, 1, 255};
-unsigned char fontb_058[] = /* : */ {255};
-unsigned char fontb_059[] = /* ; */ {255};
-unsigned char fontb_060[] = /* < */ {255};
+unsigned char fontb_058[] = /* : */ {254, 0, 254, 254, 0, 255};
+unsigned char fontb_059[] = /* ; */ {254, 0, 254, 254, 0, 254, 0, 255};
+unsigned char fontb_060[] = /* < */ {2, 254, 1, 254, 0, 254, 1, 254, 2, 255};
 unsigned char fontb_061[] = /* = */ {254, 0, 1, 1, 254, 254, 0, 1, 1, 255};
-unsigned char fontb_062[] = /* > */ {255};
-unsigned char fontb_063[] = /* ? */ {255};
-unsigned char fontb_064[] = /* @ */ {255};
+unsigned char fontb_062[] = /* > */ {0, 254, 1, 254, 2, 254, 1, 254, 0, 255};
+unsigned char fontb_063[] = /* ? */ {0, 1, 254, 2, 254, 1, 254, 254, 1, 255};
+unsigned char fontb_064[] = /* @ */ {1, 254, 0, 2, 254, 0, 2, 254, 0, 254, 1, 1, 255};
 unsigned char fontb_065[] = /* A */ {1, 254, 0, 2, 254, 0, 1, 1, 254, 0, 2, 254, 0, 2, 255};
 unsigned char fontb_066[] = /* B */ {0, 1, 254, 0, 2, 254, 0, 1, 254, 0, 2, 254, 0, 1, 255};
 unsigned char fontb_067[] = /* C */ {1, 1, 254, 0, 254, 0, 254, 0, 254, 1, 1, 255};
@@ -98,12 +98,12 @@ unsigned char fontb_087[] = /* W */ {0, 4, 254, 0, 4, 254, 0, 2, 2, 254, 0, 1, 2
 unsigned char fontb_088[] = /* X */ {0, 2, 254, 0, 2, 254, 1, 254, 0, 2, 254, 0, 2, 255};
 unsigned char fontb_089[] = /* Y */ {0, 2, 254, 0, 2, 254, 0, 2, 254, 1, 254, 1, 255};
 unsigned char fontb_090[] = /* Z */ {0, 1, 1, 254, 2, 254, 1, 254, 0, 254, 0, 1, 1, 255};
-unsigned char fontb_091[] = /* [ */ {255};
-unsigned char fontb_092[] = /* \ */ {255};
-unsigned char fontb_093[] = /* ] */ {255};
-unsigned char fontb_094[] = /* ^ */ {255};
+unsigned char fontb_091[] = /* [ */ {0, 1, 254, 0, 254, 0, 254, 0, 254, 0, 1, 255};
+unsigned char fontb_092[] = /* \ */ {0, 254, 1, 254, 1, 254, 1, 254, 2, 255};
+unsigned char fontb_093[] = /* ] */ {0, 1, 254, 1, 254, 1, 254, 1, 254, 0, 1, 255};
+unsigned char fontb_094[] = /* ^ */ {1, 254, 0, 2, 255};
 unsigned char fontb_095[] = /* _ */ {254, 254, 254, 254, 0, 1, 1, 255};
-unsigned char fontb_096[] = /* ` */ {255};
+unsigned char fontb_096[] = /* ` */ {0, 254, 1, 255};
 unsigned char fontb_097[] = /* a */ {254, 1, 1, 254, 0, 2, 254, 0, 2, 254, 1, 1, 255};
 unsigned char fontb_098[] = /* b */ {0, 254, 0, 1, 254, 0, 2, 254, 0, 2, 254, 0, 1, 255};
 unsigned char fontb_099[] = /* c */ {254, 1, 1, 254, 0, 254, 0, 254, 1, 1, 255};
@@ -130,10 +130,10 @@ unsigned char fontb_119[] = /* w */ {254, 0, 4, 254, 0, 2, 2, 254, 0, 1, 2, 1, 2
 unsigned char fontb_120[] = /* x */ {254, 0, 2, 254, 0, 1, 254, 1, 1, 254, 0, 2, 255};
 unsigned char fontb_121[] = /* y */ {254, 0, 2, 254, 0, 2, 254, 1, 1, 254, 0, 1, 1, 255};
 unsigned char fontb_122[] = /* z */ {254, 0, 1, 1, 254, 2, 254, 1, 254, 0, 1, 1, 255};
-unsigned char fontb_123[] = /* { */ {255};
-unsigned char fontb_124[] = /* | */ {255};
-unsigned char fontb_125[] = /* } */ {255};
-unsigned char fontb_126[] = /* ~ */ {255};
+unsigned char fontb_123[] = /* { */ {1, 254, 1, 254, 0, 254, 1, 254, 1, 255};
+unsigned char fontb_124[] = /* | */ {0, 254, 0, 254, 0, 254, 0, 254, 0, 255};
+unsigned char fontb_125[] = /* } */ {0, 254, 0, 254, 1, 254, 0, 254, 0, 255};
+unsigned char fontb_126[] = /* ~ */ {254, 1, 2, 254, 0, 2, 255};
 unsigned char fontb_127[] = /*   */ {255};
 RenderFont fontb[] = {
     {0, fontb_000},
@@ -169,18 +169,18 @@ RenderFont fontb[] = {
     {0, fontb_030},
     {0, fontb_031},
     {4, fontb_032},
-    {0, fontb_033},
-    {0, fontb_034},
-    {0, fontb_035},
-    {0, fontb_036},
+    {2, fontb_033},
+    {4, fontb_034},
+    {4, fontb_035},
+    {4, fontb_036},
     {5, fontb_037},
-    {0, fontb_038},
+    {4, fontb_038},
     {2, fontb_039},
-    {0, fontb_040},
-    {0, fontb_041},
+    {3, fontb_040},
+    {3, fontb_041},
     {4, fontb_042},
     {4, fontb_043},
-    {0, fontb_044},
+    {2, fontb_044},
     {4, fontb_045},
     {2, fontb_046},
     {4, fontb_047},
@@ -194,13 +194,13 @@ RenderFont fontb[] = {
     {4, fontb_055},
     {4, fontb_056},
     {4, fontb_057},
-    {0, fontb_058},
-    {0, fontb_059},
-    {0, fontb_060},
+    {2, fontb_058},
+    {2, fontb_059},
+    {4, fontb_060},
     {4, fontb_061},
-    {0, fontb_062},
-    {0, fontb_063},
-    {0, fontb_064},
+    {4, fontb_062},
+    {4, fontb_063},
+    {4, fontb_064},
     {4, fontb_065},
     {4, fontb_066},
     {4, fontb_067},
@@ -227,12 +227,12 @@ RenderFont fontb[] = {
     {4, fontb_088},
     {4, fontb_089},
     {4, fontb_090},
-    {0, fontb_091},
-    {0, fontb_092},
-    {0, fontb_093},
-    {0, fontb_094},
+    {3, fontb_091},
+    {4, fontb_092},
+    {3, fontb_093},
+    {4, fontb_094},
     {4, fontb_095},
-    {0, fontb_096},
+    {3, fontb_096},
     {4, fontb_097},
     {4, fontb_098},
     {4, fontb_099},
@@ -259,10 +259,10 @@ RenderFont fontb[] = {
     {4, fontb_120},
     {4, fontb_121},
     {4, fontb_122},
-    {0, fontb_123},
-    {0, fontb_124},
-    {0, fontb_125},
-    {0, fontb_126},
+    {3, fontb_123},
+    {2, fontb_124},
+    {3, fontb_125},
+    {5, fontb_126},
     {0, fontb_127},
 };
 

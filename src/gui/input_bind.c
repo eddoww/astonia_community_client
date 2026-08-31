@@ -1641,18 +1641,7 @@ void input_shutdown(void)
 
 DLL_EXPORT Uint8 input_current_modifiers(void)
 {
-	SDL_Keymod km = SDL_GetModState();
-	Uint8 m = INPUT_MOD_NONE;
-	if (km & SDL_KMOD_SHIFT) {
-		m |= INPUT_MOD_SHIFT;
-	}
-	if (km & SDL_KMOD_CTRL) {
-		m |= INPUT_MOD_CTRL;
-	}
-	if (km & SDL_KMOD_ALT) {
-		m |= INPUT_MOD_ALT;
-	}
-	return m;
+	return input_mods_from_sdl(SDL_GetModState());
 }
 
 /* ── Numpad normalization ──────────────────────────────────────────────── */

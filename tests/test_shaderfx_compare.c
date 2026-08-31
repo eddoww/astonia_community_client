@@ -600,15 +600,18 @@ int main(void)
 {
 	int failed = 0, exact = 0, tolerant = 0;
 
-	/* No window and no renderer are needed; use the dummy video driver
-	 * unless the caller picked one (a GPU device does not require a
-	 * display for offscreen rendering). */
+	/* No window and no renderer are needed. The offscreen video driver
+	 * supports SDL_GPU (Vulkan) without a display; the dummy driver does
+	 * not - fall back to it only to fail the device probe gracefully. */
 	if (!SDL_getenv("SDL_VIDEO_DRIVER")) {
-		SDL_setenv_unsafe("SDL_VIDEO_DRIVER", "dummy", 1);
+		SDL_setenv_unsafe("SDL_VIDEO_DRIVER", "offscreen", 1);
 	}
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
-		printf("SKIP: SDL_Init failed (%s)\n", SDL_GetError());
-		return 0;
+		SDL_setenv_unsafe("SDL_VIDEO_DRIVER", "dummy", 1);
+		if (!SDL_Init(SDL_INIT_VIDEO)) {
+			printf("SKIP: SDL_Init failed (%s)\n", SDL_GetError());
+			return 0;
+		}
 	}
 	if (gpu_setup() != 0) {
 		printf("SKIP: no usable SDL_GPU device (%s)\n", SDL_GetError());

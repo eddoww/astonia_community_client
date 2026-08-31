@@ -35,7 +35,19 @@ SDL_SRCS = ../src/sdl/sdl_test.c \
            ../src/sdl/sdl_image.c \
            ../src/sdl/sdl_effects.c \
            ../src/sdl/sdl_draw.c \
+           ../src/sdl/sdl_text_glyph.c \
            ../src/sdl/font_manager.c
+
+# Optional sdl3-ttf for the text-compare harness's TTF part (part C).
+# The rest of the suite intentionally builds without SDL3_ttf.
+HAVE_SDL3_TTF_PC := $(shell pkg-config --exists sdl3-ttf 2>/dev/null && echo 1)
+ifeq ($(HAVE_SDL3_TTF_PC),1)
+    TTF_TEST_CFLAGS = $(shell pkg-config --cflags sdl3-ttf) -DHAVE_TTF_COMPARE
+    TTF_TEST_LIBS = $(shell pkg-config --libs sdl3-ttf)
+else
+    TTF_TEST_CFLAGS =
+    TTF_TEST_LIBS =
+endif
 
 # Helper source files
 HELPER_SRCS = ../src/game/memory.c \
@@ -64,8 +76,9 @@ TEST_RENDER_PRIMS = $(BIN_DIR)/test_render_primitives
 TEST_SPRITE_CONFIG = $(BIN_DIR)/test_sprite_config
 TEST_LOADING_UI = $(BIN_DIR)/test_loading_ui
 TEST_SHADERFX = $(BIN_DIR)/test_shaderfx_compare
+TEST_TEXT = $(BIN_DIR)/test_text_compare
 
-all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX)
+all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT)
 test: run
 
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
@@ -156,8 +169,21 @@ test_shaderfx: $(TEST_SHADERFX)
 	@echo "==============================================="
 	cd .. && ./bin/test_shaderfx_compare
 
+# Text batching comparison harness (part A always runs; part B SKIPs
+# without a GPU device; part C SKIPs when built without sdl3-ttf)
+$(TEST_TEXT): test_text_compare.c ../src/game/font.c $(ALL_SRCS)
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) $(TTF_TEST_CFLAGS) $^ -o $@ $(LDFLAGS) $(TTF_TEST_LIBS)
+
+test_text: $(TEST_TEXT)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running text-rendering comparison..."
+	@echo "==============================================="
+	cd .. && ./bin/test_text_compare
+
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_shaderfx
+run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_shaderfx test_text
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"

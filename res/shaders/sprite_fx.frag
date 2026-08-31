@@ -433,6 +433,19 @@ void main()
         discard;
     }
 
+    /* Plain-texture mode (GPU_FX_MODE_PLAIN): no effect pipeline, just
+     * texel * color-mod - the batched equivalent of the parity path's
+     * sprite_simple draw (text glyphs, cached text quads, GUI blits).
+     * balance.xyz carries the RGB modulation 0..255 (255 = untinted),
+     * light_b.y the alpha modulation, exactly like the direct path's
+     * colorMod uniform. */
+    if ((inst.colorize.w & 2u) != 0u) {
+        vec3 cmod = vec3(inst.balance.xyz) / 255.0;
+        float amod = float(inst.light_b.y) / 255.0;
+        outColor = vec4((vec3(p.rgb) / 255.0) * cmod, (float(p.a) / 255.0) * amod);
+        return;
+    }
+
     /* 1. colorize */
     if ((inst.colorize.x | inst.colorize.y | inst.colorize.z) != 0u) {
         if ((inst.colorize.w & 1u) != 0u) { /* GPU_FX_COLORIZE_NEW */

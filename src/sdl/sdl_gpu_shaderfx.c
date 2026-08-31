@@ -7,8 +7,9 @@
  * pipeline applied in the fragment shader (res/shaders/sprite_fx.*),
  * batched with instanced rendering.
  *
- * Differences from the bypassed first-generation batcher
- * (sdl_gpu_batch.c):
+ * Differences from the bypassed first-generation batcher (retired in
+ * phase 2; it submitted an upload command buffer and BLOCKED on a fence
+ * at every flush, which is why it lost to the unbatched path):
  *  - NO mid-frame fence waits. Instance data is written into a mapped
  *    transfer buffer as draws are recorded; ONE upload command buffer
  *    is submitted at frame end BEFORE the main render command buffer,
@@ -83,8 +84,8 @@ static struct {
 /* setup                                                                */
 /* ==================================================================== */
 
-static SDL_GPUShader *fx_load_shader(
-    const char *path, SDL_GPUShaderStage stage, Uint32 num_samplers, Uint32 num_storage, Uint32 num_uniform)
+static SDL_GPUShader *fx_load_shader(const char *path, SDL_GPUShaderFormat fmt, SDL_GPUShaderStage stage,
+    Uint32 num_samplers, Uint32 num_storage, Uint32 num_uniform)
 {
 	size_t size;
 	void *code = SDL_LoadFile(path, &size);
@@ -96,8 +97,8 @@ static SDL_GPUShader *fx_load_shader(
 	SDL_GPUShaderCreateInfo info = {
 	    .code = code,
 	    .code_size = size,
-	    .entrypoint = "main",
-	    .format = SDL_GPU_SHADERFORMAT_SPIRV,
+	    .entrypoint = gpu_shader_entrypoint(fmt),
+	    .format = fmt,
 	    .stage = stage,
 	    .num_samplers = num_samplers,
 	    .num_storage_textures = 0,
@@ -150,13 +151,22 @@ static bool fx_create_quad_vbo(void)
 
 static bool fx_create_pipeline(void)
 {
-	if (!(SDL_GetGPUShaderFormats(sdlgpu) & SDL_GPU_SHADERFORMAT_SPIRV)) {
-		note("gpu_shaderfx: backend has no SPIR-V support (only .spv shaders are shipped for the fx path yet)");
+	SDL_GPUShaderFormat fmt = gpu_preferred_shader_format();
+
+	if (!fmt) {
+		note("gpu_shaderfx: no supported shader format on this backend");
 		return false;
 	}
 
-	SDL_GPUShader *vs = fx_load_shader("res/shaders/compiled/sprite_fx_vs.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 1, 1);
-	SDL_GPUShader *ps = fx_load_shader("res/shaders/compiled/sprite_fx_ps.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1, 1);
+	/* the loader falls back cleanly: when the compiled shader for the
+	 * backend's format is missing (e.g. no .dxil/.msl shipped yet), the
+	 * fx path self-disables and the client stays on the parity path */
+	char vs_path[256], ps_path[256];
+	snprintf(vs_path, sizeof(vs_path), "res/shaders/compiled/sprite_fx_vs.%s", gpu_shader_file_ext(fmt));
+	snprintf(ps_path, sizeof(ps_path), "res/shaders/compiled/sprite_fx_ps.%s", gpu_shader_file_ext(fmt));
+
+	SDL_GPUShader *vs = fx_load_shader(vs_path, fmt, SDL_GPU_SHADERSTAGE_VERTEX, 0, 1, 1);
+	SDL_GPUShader *ps = fx_load_shader(ps_path, fmt, SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1, 1);
 	if (!vs || !ps) {
 		if (vs) {
 			SDL_ReleaseGPUShader(sdlgpu, vs);
@@ -514,6 +524,40 @@ int sdl_blit_fx(int cache_index, const gpu_fx_draw_t *d, int sx, int sy, int cli
 	};
 
 	return fx_batch_add(st->gpu_tex, &inst) ? 1 : 0;
+}
+
+int gpu_shaderfx_capacity(void)
+{
+	if (!fx.in_frame || !fx.mapped) {
+		return 0;
+	}
+	return FX_MAX_INSTANCES - fx.count;
+}
+
+int gpu_shaderfx_plain_quad(SDL_GPUTexture *tex, float dest_x, float dest_y, float dest_w, float dest_h, int src_x,
+    int src_y, int src_w, int src_h, int r, int g, int b, int alpha)
+{
+	if (!fx.active || !fx.in_frame || !tex) {
+		return 0;
+	}
+	if (dest_w <= 0.0f || dest_h <= 0.0f || src_w <= 0 || src_h <= 0) {
+		return 1; /* nothing visible - handled */
+	}
+
+	gpu_fx_instance_t inst = {
+	    .dest = {dest_x, dest_y, dest_w, dest_h},
+	    .src = {src_x, src_y, src_w, src_h},
+	    /* org_sz is only read by the effect pipeline; keep it covering the
+	     * source region so nothing indexes outside the page */
+	    .org_sz = {src_x, src_y, src_w, src_h},
+	    .colorize = {0, 0, 0, GPU_FX_MODE_PLAIN},
+	    .balance = {r, g, b, 0},
+	    .fx = {0, 0, 0, 0},
+	    .light_a = {15, 15, 15, 15},
+	    .light_b = {15, alpha, 0, 0},
+	};
+
+	return fx_batch_add(tex, &inst) ? 1 : 0;
 }
 
 /* Called by the direct-draw path so interleaved non-batched draws keep

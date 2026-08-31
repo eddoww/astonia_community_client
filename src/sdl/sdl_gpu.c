@@ -14,9 +14,9 @@
 
 #include "sdl_gpu.h"
 #include "sdl_gpu_post.h"
-#include "sdl_gpu_batch.h"
 #include "sdl_gpu_shaderfx.h"
 #include "sdl_gpu_atlas.h"
+#include "sdl_gpu_text.h"
 #include "astonia.h"
 
 // ============================================================================
@@ -151,6 +151,41 @@ bool gpu_is_active(void)
 	return use_gpu_rendering && sdlgpu != NULL;
 }
 
+SDL_GPUShaderFormat gpu_preferred_shader_format(void)
+{
+	if (!sdlgpu) {
+		return 0;
+	}
+	SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(sdlgpu);
+	if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
+		return SDL_GPU_SHADERFORMAT_SPIRV;
+	}
+	if (formats & SDL_GPU_SHADERFORMAT_DXIL) {
+		return SDL_GPU_SHADERFORMAT_DXIL;
+	}
+	if (formats & SDL_GPU_SHADERFORMAT_MSL) {
+		return SDL_GPU_SHADERFORMAT_MSL;
+	}
+	return 0;
+}
+
+const char *gpu_shader_file_ext(SDL_GPUShaderFormat fmt)
+{
+	switch (fmt) {
+	case SDL_GPU_SHADERFORMAT_DXIL:
+		return "dxil";
+	case SDL_GPU_SHADERFORMAT_MSL:
+		return "msl";
+	default:
+		return "spv";
+	}
+}
+
+const char *gpu_shader_entrypoint(SDL_GPUShaderFormat fmt)
+{
+	return (fmt == SDL_GPU_SHADERFORMAT_MSL) ? "main0" : "main";
+}
+
 // ============================================================================
 // Frame Management
 // ============================================================================
@@ -165,6 +200,12 @@ bool gpu_frame_begin(void)
 	using_postfx_this_frame = false;
 	current_offscreen_target = NULL;
 	gpu_debug_draw_count = 0;
+
+	// Advance the atlas quarantine clock (region reclamation)
+	gpu_atlas_frame_tick();
+
+	// Reset per-frame batched-text stats
+	gpu_text_frame_begin();
 
 	// Acquire command buffer
 	current_cmd_buffer = SDL_AcquireGPUCommandBuffer(sdlgpu);
@@ -207,8 +248,6 @@ bool gpu_frame_begin(void)
 			    .max_depth = 1.0f};
 			SDL_SetGPUViewport(current_render_pass, &viewport);
 
-			// Set batch context for sprite batching
-			gpu_batch_set_context(current_cmd_buffer, current_render_pass);
 			gpu_shaderfx_frame_begin();
 			return true;
 		}
@@ -246,8 +285,6 @@ bool gpu_frame_begin(void)
 	    .max_depth = 1.0f};
 	SDL_SetGPUViewport(current_render_pass, &viewport);
 
-	// Set batch context for sprite batching
-	gpu_batch_set_context(current_cmd_buffer, current_render_pass);
 	gpu_shaderfx_frame_begin();
 
 	return true;
@@ -260,7 +297,6 @@ void gpu_frame_end(void)
 	}
 
 	// Flush any pending batched sprites before ending the render pass
-	gpu_batch_flush();
 	gpu_shaderfx_flush();
 
 	// End the main render pass
@@ -297,12 +333,18 @@ void gpu_frame_end(void)
 			static Uint64 last_report;
 			static Uint64 render_ns_since;
 			static int frames_since, draws_since, fx_draws_since, fx_sprites_since;
+			static int text_runs_since, text_glyphs_since, text_fallbacks_since;
 			int fxd, fxs, fxt, fxdirect;
+			int truns, tglyphs, tfall;
 			gpu_shaderfx_get_stats(&fxd, &fxs, &fxt, &fxdirect);
+			gpu_text_get_stats(&truns, &tglyphs, &tfall);
 			frames_since++;
 			draws_since += gpu_debug_draw_count;
 			fx_draws_since += fxd;
 			fx_sprites_since += fxs;
+			text_runs_since += truns;
+			text_glyphs_since += tglyphs;
+			text_fallbacks_since += tfall;
 			render_ns_since += SDL_GetTicksNS() - gpu_frame_start_ns;
 			Uint64 now = SDL_GetTicks();
 			if (last_report == 0) {
@@ -312,13 +354,17 @@ void gpu_frame_end(void)
 				int atlas_pages;
 				long long atlas_texels;
 				gpu_atlas_get_stats(&atlas_pages, &atlas_texels);
-				note("GPU_STATS frames=%d avg_draws=%d avg_fx_draws=%d avg_fx_sprites=%d atlas_pages=%d "
+				note("GPU_STATS frames=%d avg_draws=%d avg_fx_draws=%d avg_fx_sprites=%d avg_text_runs=%d "
+				     "avg_text_glyphs=%d avg_text_fallbacks=%d atlas_pages=%d "
 				     "render_ms=%.2f ms/frame=%.2f",
 				    frames_since, draws_since / frames_since, fx_draws_since / frames_since,
-				    fx_sprites_since / frames_since, atlas_pages, (double)render_ns_since / 1e6 / (double)frames_since,
+				    fx_sprites_since / frames_since, text_runs_since / frames_since, text_glyphs_since / frames_since,
+				    text_fallbacks_since / frames_since, atlas_pages,
+				    (double)render_ns_since / 1e6 / (double)frames_since,
 				    (double)(now - last_report) / (double)frames_since);
 				last_report = now;
 				frames_since = draws_since = fx_draws_since = fx_sprites_since = 0;
+				text_runs_since = text_glyphs_since = text_fallbacks_since = 0;
 				render_ns_since = 0;
 			}
 		}
@@ -424,7 +470,6 @@ bool gpu_set_render_target(SDL_GPUTexture *target, int width, int height, bool c
 	SDL_GPUViewport viewport = {.x = 0.0f, .y = 0.0f, .w = vw, .h = vh, .min_depth = 0.0f, .max_depth = 1.0f};
 	SDL_SetGPUViewport(current_render_pass, &viewport);
 
-	gpu_batch_set_context(current_cmd_buffer, current_render_pass);
 
 	current_offscreen_target = target;
 	current_offscreen_width = width;

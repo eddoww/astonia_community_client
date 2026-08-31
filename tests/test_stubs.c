@@ -264,6 +264,18 @@ void gpu_draw_line(float x1 __attribute__((unused)), float y1 __attribute__((unu
 {
 }
 
+bool gpu_draw_tri_is_available(void)
+{
+	return false;
+}
+
+void gpu_draw_triangle(float x0 __attribute__((unused)), float y0 __attribute__((unused)),
+    float x1 __attribute__((unused)), float y1 __attribute__((unused)), float x2 __attribute__((unused)),
+    float y2 __attribute__((unused)), const float *c0 __attribute__((unused)),
+    const float *c1 __attribute__((unused)), const float *c2 __attribute__((unused)))
+{
+}
+
 bool gpu_postfx_init(int screen_width __attribute__((unused)), int screen_height __attribute__((unused)))
 {
 	return false;

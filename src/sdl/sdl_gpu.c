@@ -17,6 +17,7 @@
 #include "sdl_gpu_batch.h"
 #include "sdl_gpu_shaderfx.h"
 #include "sdl_gpu_atlas.h"
+#include "sdl_gpu_text.h"
 #include "astonia.h"
 
 // ============================================================================
@@ -169,6 +170,9 @@ bool gpu_frame_begin(void)
 	// Advance the atlas quarantine clock (region reclamation)
 	gpu_atlas_frame_tick();
 
+	// Reset per-frame batched-text stats
+	gpu_text_frame_begin();
+
 	// Acquire command buffer
 	current_cmd_buffer = SDL_AcquireGPUCommandBuffer(sdlgpu);
 	if (!current_cmd_buffer) {
@@ -300,12 +304,18 @@ void gpu_frame_end(void)
 			static Uint64 last_report;
 			static Uint64 render_ns_since;
 			static int frames_since, draws_since, fx_draws_since, fx_sprites_since;
+			static int text_runs_since, text_glyphs_since, text_fallbacks_since;
 			int fxd, fxs, fxt, fxdirect;
+			int truns, tglyphs, tfall;
 			gpu_shaderfx_get_stats(&fxd, &fxs, &fxt, &fxdirect);
+			gpu_text_get_stats(&truns, &tglyphs, &tfall);
 			frames_since++;
 			draws_since += gpu_debug_draw_count;
 			fx_draws_since += fxd;
 			fx_sprites_since += fxs;
+			text_runs_since += truns;
+			text_glyphs_since += tglyphs;
+			text_fallbacks_since += tfall;
 			render_ns_since += SDL_GetTicksNS() - gpu_frame_start_ns;
 			Uint64 now = SDL_GetTicks();
 			if (last_report == 0) {
@@ -315,13 +325,17 @@ void gpu_frame_end(void)
 				int atlas_pages;
 				long long atlas_texels;
 				gpu_atlas_get_stats(&atlas_pages, &atlas_texels);
-				note("GPU_STATS frames=%d avg_draws=%d avg_fx_draws=%d avg_fx_sprites=%d atlas_pages=%d "
+				note("GPU_STATS frames=%d avg_draws=%d avg_fx_draws=%d avg_fx_sprites=%d avg_text_runs=%d "
+				     "avg_text_glyphs=%d avg_text_fallbacks=%d atlas_pages=%d "
 				     "render_ms=%.2f ms/frame=%.2f",
 				    frames_since, draws_since / frames_since, fx_draws_since / frames_since,
-				    fx_sprites_since / frames_since, atlas_pages, (double)render_ns_since / 1e6 / (double)frames_since,
+				    fx_sprites_since / frames_since, text_runs_since / frames_since, text_glyphs_since / frames_since,
+				    text_fallbacks_since / frames_since, atlas_pages,
+				    (double)render_ns_since / 1e6 / (double)frames_since,
 				    (double)(now - last_report) / (double)frames_since);
 				last_report = now;
 				frames_since = draws_since = fx_draws_since = fx_sprites_since = 0;
+				text_runs_since = text_glyphs_since = text_fallbacks_since = 0;
 				render_ns_since = 0;
 			}
 		}

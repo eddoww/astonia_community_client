@@ -88,8 +88,8 @@ int text_glyph_rasterize(
 	out->w = max_x + 1;
 	out->h = max_y + 1;
 	for (y = 0; y < out->h; y++) {
-		memmove(
-		    buffer + (size_t)y * out->w, buffer + (size_t)y * TEXT_GLYPH_MAX_DIM, (size_t)out->w * sizeof(uint32_t));
+		memmove(buffer + (size_t)y * (size_t)out->w, buffer + (size_t)y * TEXT_GLYPH_MAX_DIM,
+		    (size_t)out->w * sizeof(uint32_t));
 	}
 	out->pixel = buffer;
 	return 1;

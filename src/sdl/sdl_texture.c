@@ -500,12 +500,18 @@ static int tex_entry_build_text(int cache_index, const struct tex_request *r, in
 	sdlt[cache_index].text = xstrdup(r->text, MEM_TEMP7);
 #endif
 
-	// GPU path: create GPU texture for text
+	// GPU path: create GPU texture for text (atlas region when the
+	// shader-effects batcher is active - drawn as one batched quad)
 	if (use_gpu_rendering) {
 		int tex_w, tex_h;
-		sdlt[cache_index].gpu_tex = sdl_maketext_gpu(
-		    r->text, (struct renderfont *)r->text_font, (uint32_t)r->text_color, r->text_flags, &tex_w, &tex_h);
+		int atlas_x = 0, atlas_y = 0;
+		uint8_t atlas_used = 0;
+		sdlt[cache_index].gpu_tex = sdl_maketext_gpu(r->text, (struct renderfont *)r->text_font,
+		    (uint32_t)r->text_color, r->text_flags, &tex_w, &tex_h, &atlas_x, &atlas_y, &atlas_used);
 		sdlt[cache_index].tex = NULL;
+		sdlt[cache_index].atlas_x = (uint16_t)atlas_x;
+		sdlt[cache_index].atlas_y = (uint16_t)atlas_y;
+		sdlt[cache_index].atlas_used = atlas_used;
 
 		if (sdlt[cache_index].gpu_tex) {
 			sdlt[cache_index].xres = (uint16_t)tex_w;

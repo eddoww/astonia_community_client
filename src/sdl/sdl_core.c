@@ -792,7 +792,7 @@ void sdl_loop(void)
 			if (event.key.repeat && !cmd_is_active()) {
 				break;
 			}
-			gui_sdl_keyproc(event.key.key);
+			gui_sdl_keyproc(event.key.key, event.key.mod);
 			break;
 		}
 		case SDL_EVENT_KEY_UP:

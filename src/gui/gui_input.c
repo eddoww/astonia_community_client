@@ -29,8 +29,13 @@
  * matching button-up doesn't execute the look command on top of the cancel */
 static int rclick_cancelled_targeting;
 
-void gui_sdl_keyproc(SDL_Keycode key)
+void gui_sdl_keyproc(SDL_Keycode key, SDL_Keymod mod)
 {
+	/* modifier state at the time the key event was generated — the live
+	 * SDL_GetModState() may already reflect a later release when a quick
+	 * modifier+key tap was fully pumped before this dispatch runs */
+	Uint8 mods = input_mods_from_sdl(mod);
+
 	if (keybind_settings_capturing()) {
 		if (key == SDLK_ESCAPE) {
 			keybind_settings_cancel_capture();
@@ -40,7 +45,7 @@ void gui_sdl_keyproc(SDL_Keycode key)
 		    key == SDLK_RALT) {
 			return;
 		}
-		keybind_settings_accept_key(key, input_current_modifiers());
+		keybind_settings_accept_key(key, mods);
 		sdl_flush_textinput();
 		return;
 	}
@@ -56,7 +61,7 @@ void gui_sdl_keyproc(SDL_Keycode key)
 		    key == SDLK_RALT) {
 			return; /* wait for a real key */
 		}
-		keybind_panel_accept_key(key, input_current_modifiers());
+		keybind_panel_accept_key(key, mods);
 		sdl_flush_textinput();
 		return;
 	}
@@ -144,9 +149,6 @@ void gui_sdl_keyproc(SDL_Keycode key)
 	if (cmd_is_active()) {
 		return;
 	}
-
-	/* build modifier mask for binding lookup */
-	Uint8 mods = input_current_modifiers();
 
 	/* check hotbar extra binds first (modifier combos take priority) */
 	{

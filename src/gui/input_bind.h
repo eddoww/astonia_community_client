@@ -21,6 +21,29 @@
 #define INPUT_MOD_CTRL  (1 << 1)
 #define INPUT_MOD_ALT   (1 << 2)
 
+/* Convert an SDL modifier state into an INPUT_MOD_* mask.
+ *
+ * Key dispatch must use the modifier state carried by the key event itself
+ * (SDL_KeyboardEvent.mod), never the live SDL_GetModState(): a fast tap of
+ * e.g. Shift+M can be pressed AND released within a single frame, so by the
+ * time the queued keydown is processed the live state has already dropped
+ * Shift — and the bare binding on the same key would fire instead of the
+ * modified one. */
+static inline Uint8 input_mods_from_sdl(SDL_Keymod km)
+{
+	Uint8 m = INPUT_MOD_NONE;
+	if (km & SDL_KMOD_SHIFT) {
+		m |= INPUT_MOD_SHIFT;
+	}
+	if (km & SDL_KMOD_CTRL) {
+		m |= INPUT_MOD_CTRL;
+	}
+	if (km & SDL_KMOD_ALT) {
+		m |= INPUT_MOD_ALT;
+	}
+	return m;
+}
+
 /* Virtual keycodes for mouse buttons (outside SDL keycode range) */
 #define INPUT_MOUSE_X1 0x40000100
 #define INPUT_MOUSE_X2 0x40000101

@@ -69,7 +69,7 @@ int main_init(void);
 int main_loop(void);
 void main_exit(void);
 void gui_dump(FILE *fp);
-void gui_sdl_keyproc(SDL_Keycode key);
+void gui_sdl_keyproc(SDL_Keycode key, SDL_Keymod mod);
 void gui_sdl_mouseproc(float x, float y, int what);
 
 extern int (*get_skltab_sep)(int i);

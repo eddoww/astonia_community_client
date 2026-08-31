@@ -15,6 +15,7 @@
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
+#include <luajit.h>
 
 #include <SDL3/SDL.h>
 
@@ -54,6 +55,42 @@ static char current_mod_path[512] = "";
 // Instruction limit for script execution (prevents infinite loops)
 // ~10 million instructions is roughly 1-2 seconds of execution
 #define LUA_MAX_INSTRUCTIONS 10000000
+
+// Per-state memory ceiling for Lua mods. Exceeding it makes allocations fail,
+// which surfaces in the offending script as a "not enough memory" error caught
+// by the surrounding pcall - the client itself is unaffected.
+#define LUA_MEMORY_LIMIT (64u * 1024u * 1024u) // 64MB
+
+// Bytes currently allocated by the Lua state (maintained by l_limited_alloc)
+static size_t lua_mem_used = 0;
+
+// Whether the hard allocator-level cap is active (lua_newstate with a custom
+// allocator requires a GC64 LuaJIT build on 64-bit; on older builds we fall
+// back to polling the GC count from lua_scripting_tick)
+static bool lua_mem_hard_cap = false;
+
+// Memory-capped allocator handed to lua_newstate. LuaJIT guarantees osize==0
+// when ptr==NULL, so the accounting below stays exact.
+static void *l_limited_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
+{
+	(void)ud;
+
+	if (nsize == 0) {
+		lua_mem_used -= osize;
+		free(ptr);
+		return NULL;
+	}
+
+	if (lua_mem_used - osize + nsize > LUA_MEMORY_LIMIT) {
+		return NULL; // over the cap: allocation fails, Lua raises LUA_ERRMEM
+	}
+
+	void *nptr = realloc(ptr, nsize);
+	if (nptr) {
+		lua_mem_used = lua_mem_used - osize + nsize;
+	}
+	return nptr;
+}
 
 static void instruction_limit_hook(lua_State *L, lua_Debug *ar)
 {
@@ -161,8 +198,10 @@ static int l_safe_require(lua_State *L)
 // Sandbox configuration - functions to remove from global environment
 static const char *unsafe_functions[] = {"dofile", "loadfile", "load", "loadstring", NULL};
 
-// Unsafe packages to remove
-static const char *unsafe_packages[] = {"io", "os", "debug", "package", NULL};
+// Unsafe packages to remove. "jit" must go too: leaving it in would let a
+// mod call jit.on() and re-enable trace compilation, defeating the
+// interpreter-only enforcement that makes the instruction watchdog reliable.
+static const char *unsafe_packages[] = {"io", "os", "debug", "package", "jit", NULL};
 
 // Safe os functions to keep (time-related only)
 static void setup_safe_os(lua_State *L)
@@ -280,9 +319,16 @@ static int is_lua_file(const char *filename)
 }
 
 // Load a single Lua script
+// Top-level code runs under the instruction watchdog too, so a hostile
+// `while true do end` at file scope cannot hang the client during load.
 static int load_script(const char *path)
 {
-	int result = luaL_dofile(L, path);
+	int result = luaL_loadfile(L, path);
+	if (result == LUA_OK) {
+		enable_instruction_limit(L);
+		result = lua_pcall(L, 0, 0, 0);
+		disable_instruction_limit(L);
+	}
 	if (result != LUA_OK) {
 		const char *error = lua_tostring(L, -1);
 		fail("Lua error loading %s: %s", path, error ? error : "unknown error");
@@ -711,12 +757,38 @@ bool lua_scripting_init(void)
 {
 	note("Initializing Lua scripting subsystem...");
 
-	// Create new Lua state with standard libraries
-	L = luaL_newstate();
+	// Create new Lua state with a memory-capped allocator. On 64-bit this
+	// requires a GC64 LuaJIT build (the default since LuaJIT 2.1); older
+	// builds reject custom allocators, so fall back to the internal one and
+	// enforce the cap by polling from lua_scripting_tick instead.
+	lua_mem_used = 0;
+	L = lua_newstate(l_limited_alloc, NULL);
+	if (L) {
+		lua_mem_hard_cap = true;
+	} else {
+		lua_mem_hard_cap = false;
+		warn("LuaJIT build rejects custom allocators; memory cap enforced by GC polling instead");
+		L = luaL_newstate();
+	}
 	if (!L) {
 		fail("Failed to create Lua state");
 		return false;
 	}
+
+#ifndef LUA_SCRIPTING_ALLOW_JIT
+	// Run mod states interpreter-only. JIT-compiled traces do not honor
+	// LUA_MASKCOUNT hooks, so the instruction watchdog would never fire on a
+	// hot loop. Interpreter-only trades mod execution speed (typically well
+	// under a frame's budget for overlay-style mods) for a watchdog that is
+	// guaranteed to trigger. Build with LUA_ALLOW_JIT=1 to opt out.
+	if (!luaJIT_setmode(L, 0, LUAJIT_MODE_ENGINE | LUAJIT_MODE_OFF)) {
+		warn("Failed to disable LuaJIT compilation; instruction watchdog may not fire in hot loops");
+	} else {
+		note("LuaJIT compiler disabled for mod sandbox (interpreter-only)");
+	}
+#else
+	note("LuaJIT compiler ENABLED for mods (LUA_SCRIPTING_ALLOW_JIT): instruction watchdog is best-effort");
+#endif
 
 	// Open standard libraries (we'll sandbox them next)
 	luaL_openlibs(L);
@@ -802,6 +874,26 @@ void lua_scripting_gamestart(void)
 
 void lua_scripting_tick(void)
 {
+	// Fallback memory-cap enforcement for LuaJIT builds without custom
+	// allocator support: poll the GC-reported usage, try a full collection
+	// first, and shut scripting down if mods still exceed the cap.
+	if (L && !lua_mem_hard_cap) {
+		size_t used_kb = (size_t)lua_gc(L, LUA_GCCOUNT, 0);
+		if (used_kb * 1024u > LUA_MEMORY_LIMIT) {
+			lua_gc(L, LUA_GCCOLLECT, 0);
+			used_kb = (size_t)lua_gc(L, LUA_GCCOUNT, 0);
+			if (used_kb * 1024u > LUA_MEMORY_LIMIT) {
+				warn("Lua mods exceed the %uMB memory limit (%zuKB in use); disabling Lua scripting",
+				    LUA_MEMORY_LIMIT / (1024u * 1024u), used_kb);
+				addline("Lua mods disabled: memory limit exceeded. Use #lua_reload to retry.");
+				lua_close(L);
+				L = NULL;
+				loaded_script_count = 0;
+				return;
+			}
+		}
+	}
+
 	call_lua_handler("on_tick");
 }
 

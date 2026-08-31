@@ -780,15 +780,51 @@ static int l_level2exp(lua_State *L)
 
 // --- Command functions ---
 
+// Rate limit for script-issued commands (anti-automation/botting policy):
+// a token bucket allowing bursts of up to CMD_RATE_BURST commands, refilled
+// at CMD_RATE_PER_SEC per second. Commands beyond the limit are logged and
+// dropped; client.cmd_text returns false so mods can detect the drop.
+#define CMD_RATE_BURST 10.0
+#define CMD_RATE_PER_SEC 10.0
+
+static double cmd_rate_tokens = CMD_RATE_BURST;
+static uint64_t cmd_rate_last_ms = 0;
+static unsigned int cmd_rate_dropped = 0;
+
 static int l_cmd_text(lua_State *L)
 {
 	const char *text = luaL_checkstring(L, 1);
+
+	// Refill the token bucket
+	uint64_t now = SDL_GetTicks();
+	if (cmd_rate_last_ms == 0) {
+		cmd_rate_last_ms = now;
+	}
+	cmd_rate_tokens += (double)(now - cmd_rate_last_ms) * (CMD_RATE_PER_SEC / 1000.0);
+	if (cmd_rate_tokens > CMD_RATE_BURST) {
+		cmd_rate_tokens = CMD_RATE_BURST;
+	}
+	cmd_rate_last_ms = now;
+
+	if (cmd_rate_tokens < 1.0) {
+		cmd_rate_dropped++;
+		// Log with exponential backoff (1st, 2nd, 4th, 8th, ... drop) so a
+		// spamming mod cannot flood the log either
+		if ((cmd_rate_dropped & (cmd_rate_dropped - 1)) == 0) {
+			warn("[Lua] cmd_text rate limit exceeded (%u command(s) dropped so far)", cmd_rate_dropped);
+		}
+		lua_pushboolean(L, 0);
+		return 1;
+	}
+	cmd_rate_tokens -= 1.0;
+
 	// Create a non-const copy for cmd_text
 	char buf[256];
 	strncpy(buf, text, sizeof(buf) - 1);
 	buf[sizeof(buf) - 1] = '\0';
 	cmd_text(buf);
-	return 0;
+	lua_pushboolean(L, 1);
+	return 1;
 }
 
 // --- Clipboard functions ---
@@ -1032,6 +1068,7 @@ void lua_api_register(lua_State *L)
 	lua_setfield(L, -2, "QF_OPEN");
 	lua_pushinteger(L, QF_DONE);
 	lua_setfield(L, -2, "QF_DONE");
+
 
 	// Speed states (for pspeed) - 0=normal, 1=fast, 2=stealth
 	lua_pushinteger(L, 0);

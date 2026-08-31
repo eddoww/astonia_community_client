@@ -346,7 +346,9 @@ void display(void)
 		if (game_options & GO_WHEEL) {
 			display_wheel();
 		}
-		display_wear();
+		if (panel_shown(PANEL_EQUIPMENT)) {
+			display_wear();
+		}
 		display_exp();
 		display_military();
 		display_selfbars();
@@ -669,7 +671,15 @@ void update_ui_layout(void)
 		set_conoff(0, conoff);
 		set_skloff(0, skloff);
 	}
-	max_invoff = ((_inventorysize - 30) / INVDX) - INVDY;
+	/* round up: with non-multiple-of-INVDX item counts the last row is
+	 * partial but must still be reachable */
+	max_invoff = ((_inventorysize - 30 + INVDX - 1) / INVDX) - INVDY;
+	if (max_invoff < 0) {
+		max_invoff = 0;
+	}
+	if (invoff > max_invoff) {
+		invoff = max_invoff; /* a denser grid setting can shrink the range */
+	}
 	set_button_flags();
 }
 

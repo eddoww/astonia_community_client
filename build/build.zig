@@ -94,6 +94,10 @@ pub fn build(b: *std.Build) void {
         // builds as inert stubs unless -DHAVE_SDL3_TTF and SDL3_ttf are added
         "src/sdl/font_manager.c",
         "src/sdl/gamepad.c",
+        "src/sdl/sdl_gpu.c",
+        "src/sdl/sdl_gpu_post.c",
+        "src/sdl/sdl_gpu_batch.c",
+        "src/sdl/sdl_gpu_draw.c",
         "src/sdl/sound.c",
 
         // HELPERS

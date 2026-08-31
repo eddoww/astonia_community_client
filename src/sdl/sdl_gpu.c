@@ -14,7 +14,6 @@
 
 #include "sdl_gpu.h"
 #include "sdl_gpu_post.h"
-#include "sdl_gpu_batch.h"
 #include "sdl_gpu_shaderfx.h"
 #include "sdl_gpu_atlas.h"
 #include "sdl_gpu_text.h"
@@ -214,8 +213,6 @@ bool gpu_frame_begin(void)
 			    .max_depth = 1.0f};
 			SDL_SetGPUViewport(current_render_pass, &viewport);
 
-			// Set batch context for sprite batching
-			gpu_batch_set_context(current_cmd_buffer, current_render_pass);
 			gpu_shaderfx_frame_begin();
 			return true;
 		}
@@ -253,8 +250,6 @@ bool gpu_frame_begin(void)
 	    .max_depth = 1.0f};
 	SDL_SetGPUViewport(current_render_pass, &viewport);
 
-	// Set batch context for sprite batching
-	gpu_batch_set_context(current_cmd_buffer, current_render_pass);
 	gpu_shaderfx_frame_begin();
 
 	return true;
@@ -267,7 +262,6 @@ void gpu_frame_end(void)
 	}
 
 	// Flush any pending batched sprites before ending the render pass
-	gpu_batch_flush();
 	gpu_shaderfx_flush();
 
 	// End the main render pass
@@ -441,7 +435,6 @@ bool gpu_set_render_target(SDL_GPUTexture *target, int width, int height, bool c
 	SDL_GPUViewport viewport = {.x = 0.0f, .y = 0.0f, .w = vw, .h = vh, .min_depth = 0.0f, .max_depth = 1.0f};
 	SDL_SetGPUViewport(current_render_pass, &viewport);
 
-	gpu_batch_set_context(current_cmd_buffer, current_render_pass);
 
 	current_offscreen_target = target;
 	current_offscreen_width = width;

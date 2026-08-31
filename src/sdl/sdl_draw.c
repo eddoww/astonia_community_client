@@ -19,7 +19,6 @@
 #include "sdl/sdl_private.h"
 #include "sdl/font_manager.h"
 #include "sdl/sdl_gpu.h"
-#include "sdl/sdl_gpu_batch.h"
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_atlas.h"
 #include "sdl/sdl_gpu_shaderfx.h"

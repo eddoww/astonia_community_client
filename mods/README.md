@@ -51,6 +51,10 @@ end)
 
 Type `#lua_reload` in the chat to reload all mods without restarting the client.
 
+When the client is started with the `-dev` flag, loaded scripts are also watched
+for changes (about once per second) and reloaded automatically when a file's
+modification time changes - save the file and the mod reloads in-game.
+
 ## Available Events
 
 | Event | Description |
@@ -61,6 +65,7 @@ Type `#lua_reload` in the chat to reload all mods without restarting the client.
 | `on_tick` | Called every game tick (24/sec) |
 | `on_frame` | Called every display frame |
 | `on_mouse_move` | Called on mouse movement (x, y) |
+| `on_mouse_over` | Return 1 if your overlay is under the mouse (x, y) - consumes hover |
 | `on_mouse_click` | Return 1 to consume event (x, y, button) |
 | `on_keydown` | Return 1 to consume event (key) |
 | `on_keyup` | Return 1 to consume event (key) |
@@ -119,7 +124,7 @@ Access the client API through the `client` global table:
 - `client.get_container(slot)` - Get container item sprite
 
 ### Player State
-- `client.get_pspeed()` - Get speed state (0=ill, 1=stealth, 2=normal, 3=fast)
+- `client.get_pspeed()` - Get speed state (0=normal, 1=fast, 2=stealth)
 - `client.get_mil_exp()` - Get military experience
 - `client.get_mil_rank([exp])` - Get military rank (optionally from specific exp)
 
@@ -147,10 +152,31 @@ Access the client API through the `client` global table:
 - `client.dotx(idx)`, `client.doty(idx)` - Get screen anchor positions
 - `client.butx(idx)`, `client.buty(idx)` - Get button positions
 
+Dot and button positions already include panel drag offsets: overlays anchored
+to a dot follow the panel when the player moves it.
+
+### Panels & Windows (read-only)
+- `client.has_open_window()` - True if any dismissable client window is open
+  (look window, teleporter, spellbook, chat input, native mod windows, ...)
+- `client.gui_overlay_visible()` - False while the master GUI overlay is hidden
+- `client.get_fullscreen_world()` - True in fullscreen-world mode (map spans the
+  whole canvas, GUI floats above it)
+- `client.panel_shown(p)` - Effective visibility of panel `p` (`C.PANEL_*`)
+- `client.panel_offset(p)` - Returns dx, dy drag offset of panel `p` from its
+  default position (for overlays doing their own layout math)
+
+### Hotbar (read-only)
+- `client.get_hotbar_rows()` - Number of hotbar rows (1-3)
+- `client.get_hotbar_visible_slots()` - Visible slots per row
+- `client.get_hotbar_slot(idx)` - Slot contents (0-based), nil if empty:
+  `{type, sprite, name, inv_index, item_type, action_slot}` where `type` is
+  `C.HOTBAR_ITEM` or `C.HOTBAR_SPELL`
+
 ### Utilities
 - `client.exp2level(exp)` - Convert experience to level
 - `client.level2exp(level)` - Convert level to experience needed
-- `client.cmd_text(text)` - Send text as if player typed it
+- `client.cmd_text(text)` - Send text as if player typed it. Rate limited (see
+  below); returns `true` if the command was sent, `false` if it was dropped.
 
 ### Colors
 The `colors` table provides predefined colors:
@@ -164,15 +190,59 @@ The `C` table provides game constants:
 - `C.MAPDX`, `C.MAPDY`, `C.DIST`, `C.MAXCHARS`, `C.INVENTORYSIZE`, `C.CONTAINERSIZE`, `C.TICKS`
 - `C.V_MAX`, `C.MAXQUEST`, `C.MAXMN`
 - `C.QF_OPEN`, `C.QF_DONE` (quest flags)
-- `C.SPEED_ILL`, `C.SPEED_STEALTH`, `C.SPEED_NORMAL`, `C.SPEED_FAST`
+- `C.SPEED_NORMAL`, `C.SPEED_FAST`, `C.SPEED_STEALTH`
+- `C.PANEL_SKILLS`, `C.PANEL_CHAT`, `C.PANEL_INVENTORY`, `C.PANEL_GOLD`,
+  `C.PANEL_SPEED`, `C.PANEL_BUFFS`, `C.PANEL_HOTBAR`, `C.PANEL_EQUIPMENT`,
+  `C.MAX_PANEL`
+- `C.HOTBAR_MAX_SLOTS`, `C.HOTBAR_SLOTS_PER_ROW`, `C.HOTBAR_EMPTY`,
+  `C.HOTBAR_ITEM`, `C.HOTBAR_SPELL`
 
 ## Sandbox
 
 For security, the following Lua features are disabled:
 - File I/O (`io` library)
 - OS commands (`os.execute`, etc. - only `os.time`, `os.date`, `os.difftime`, `os.clock` available)
-- Debug library
+- Debug library and the `jit` library
 - Dynamic code loading (`loadfile`, `dofile`, `load`, `loadstring`)
+- `require` is replaced by a safe variant that only loads `.lua` files from
+  your own mod directory (no path traversal, no absolute paths)
+
+## Resource Limits
+
+Mods run inside hard resource limits. Well-behaved mods will never notice
+them; hostile or buggy ones cannot take the client down.
+
+### Instruction watchdog
+
+Every callback (and each script's top-level code at load time) may execute at
+most ~10 million VM instructions per invocation. An infinite loop is aborted
+with a `script exceeded instruction limit` error; the client keeps running and
+other mods are unaffected.
+
+To make the watchdog reliable, **mod states run interpreter-only**: LuaJIT's
+trace compiler is disabled (`jit.off`), because JIT-compiled loops do not honor
+the instruction-count hook and could run forever. The performance tradeoff is
+deliberate - overlay-style mods spend a tiny fraction of a frame in Lua, and
+the interpreter is still fast. If you are building the client yourself and
+want maximum Lua throughput for a trusted mod, compile with
+`make LUA_ALLOW_JIT=1` to re-enable the JIT (the watchdog then becomes
+best-effort: it cannot interrupt compiled hot loops).
+
+### Memory cap
+
+All Lua mods together may allocate at most **64MB**. Allocations over the cap
+fail: the offending script sees an ordinary `not enough memory` error (catch
+it with `pcall` if you want to degrade gracefully). The client itself is not
+affected.
+
+### Command rate limit
+
+`client.cmd_text()` is rate limited to **10 commands per second** with a burst
+allowance of 10 (token bucket). This is an anti-automation policy: mods are
+meant to display information and streamline the UI, not to play the game.
+Commands over the limit are dropped and logged; `cmd_text` returns `false`
+for a dropped command, `true` for a sent one. Do not build mods that try to
+work around this limit - they will not be accepted into the mod registry.
 
 ## Examples
 

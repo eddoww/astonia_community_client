@@ -1189,6 +1189,50 @@ local function run_api_tests()
     test("debug is nil (sandboxed)", debug == nil)
     test("loadfile is nil (sandboxed)", loadfile == nil)
     test("load is nil (sandboxed)", load == nil)
+    test("jit is nil (sandboxed)", jit == nil)
+
+    -- Test panel/window awareness API (only if available - requires client rebuild)
+    if client.has_open_window then
+        test("has_open_window returns boolean", type(client.has_open_window()) == "boolean")
+        test("gui_overlay_visible returns boolean", type(client.gui_overlay_visible()) == "boolean")
+        test("get_fullscreen_world returns boolean", type(client.get_fullscreen_world()) == "boolean")
+        test("C.PANEL_HOTBAR exists", C.PANEL_HOTBAR ~= nil)
+        test("C.MAX_PANEL exists", C.MAX_PANEL ~= nil)
+        test("panel_shown returns boolean", type(client.panel_shown(C.PANEL_HOTBAR)) == "boolean")
+        test("panel_shown out of range returns nil", client.panel_shown(C.MAX_PANEL) == nil)
+        local dx, dy = client.panel_offset(C.PANEL_HOTBAR)
+        test("panel_offset returns numbers", type(dx) == "number" and type(dy) == "number")
+    else
+        client.note("Panel awareness API not available - rebuild client to enable")
+    end
+
+    -- Test hotbar read API (only if available - requires client rebuild)
+    if client.get_hotbar_rows then
+        test("get_hotbar_rows returns number", type(client.get_hotbar_rows()) == "number")
+        test("get_hotbar_visible_slots returns number", type(client.get_hotbar_visible_slots()) == "number")
+        test("C.HOTBAR_MAX_SLOTS exists", C.HOTBAR_MAX_SLOTS ~= nil)
+        local slot0 = client.get_hotbar_slot(0)
+        test("get_hotbar_slot(0) returns table or nil", type(slot0) == "table" or slot0 == nil)
+        test("get_hotbar_slot out of range returns nil", client.get_hotbar_slot(C.HOTBAR_MAX_SLOTS) == nil)
+    else
+        client.note("Hotbar read API not available - rebuild client to enable")
+    end
+
+    -- Test memory cap: a burst of allocations must fail (not enough memory)
+    -- long before it can harm the client. Uses ~2^30 bytes if uncapped.
+    local mem_ok, mem_err = pcall(function()
+        local t = {}
+        local chunk = string.rep("x", 1024 * 1024)
+        for i = 1, 1024 do
+            t[i] = chunk .. i -- unique 1MB strings, ~1GB total
+        end
+        return t
+    end)
+    test("memory cap blocks 1GB allocation", mem_ok == false)
+    if not mem_ok then
+        test("memory cap raises 'not enough memory'",
+            tostring(mem_err):find("not enough memory") ~= nil)
+    end
 
     -- Summary
     client.addline("=== Test Results ===")

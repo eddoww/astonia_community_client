@@ -329,6 +329,47 @@ bool gpu_draw_is_available(void)
 }
 
 #include "sdl/sdl_gpu_glow.h"
+#include "sdl/sdl_gpu_prim.h"
+
+/* Primitive batch (sdl_gpu_prim.c is not linked into the tests). The
+ * batch is transparent to callers - gpu_draw_rect() falls through to its
+ * unbatched draw when the batch declines - so these stubs decline
+ * everything and the existing rect assertions keep working unchanged. */
+bool gpu_prim_batch_init(void)
+{
+	return false;
+}
+
+void gpu_prim_batch_shutdown(void) {}
+
+bool gpu_prim_batch_ready(void)
+{
+	return false;
+}
+
+void gpu_prim_batch_frame_begin(void) {}
+void gpu_prim_batch_flush(void) {}
+void gpu_prim_batch_submit_upload(void) {}
+void gpu_prim_batch_direct_draw_barrier(void) {}
+
+void gpu_prim_batch_get_stats(int *draws, int *rects)
+{
+	if (draws) {
+		*draws = 0;
+	}
+	if (rects) {
+		*rects = 0;
+	}
+}
+
+bool gpu_prim_batch_add(float x __attribute__((unused)), float y __attribute__((unused)),
+    float w __attribute__((unused)), float h __attribute__((unused)), float r __attribute__((unused)),
+    float g __attribute__((unused)), float b __attribute__((unused)), float a __attribute__((unused)))
+{
+	return false;
+}
+
+
 
 /* Glow batch (sdl_gpu_glow.c is not linked into the tests). Same idea as
  * the prim switches below: test_glow_available gates gpu_glow_ready() and

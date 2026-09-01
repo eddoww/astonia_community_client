@@ -21,6 +21,10 @@
 // Initialize simple GPU drawing
 bool gpu_draw_init(int screen_width, int screen_height);
 
+// Blend state for one mode (indices as below). Shared with the batched
+// primitive pipeline, which bakes the same states into its own pipelines.
+SDL_GPUColorTargetBlendState gpu_draw_blend_state(int mode);
+
 // Select the blend mode used by subsequent sprite/primitive/line draws
 // (mode indices as above; out-of-range values fall back to 0/BLEND)
 void gpu_draw_set_blend_mode(int mode);

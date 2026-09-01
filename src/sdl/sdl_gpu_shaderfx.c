@@ -36,6 +36,7 @@
 #include "sdl/sdl_gpu.h"
 #include "sdl/sdl_gpu_shaderfx.h"
 #include "sdl/sdl_gpu_glow.h"
+#include "sdl/sdl_gpu_prim.h"
 
 _Static_assert(sizeof(gpu_fx_instance_t) == 128, "gpu_fx_instance_t must be 128 bytes (matches std430 struct)");
 
@@ -446,8 +447,10 @@ static bool fx_batch_add(SDL_GPUTexture *texture, const gpu_fx_instance_t *inst)
 	if (fx.count >= FX_MAX_INSTANCES) {
 		return false;
 	}
-	/* additive glows recorded before this sprite must land underneath it */
+	/* anything another batch recorded before this sprite must land
+	 * underneath it */
 	gpu_glow_direct_draw_barrier();
+	gpu_prim_batch_direct_draw_barrier();
 	if (fx.run_texture && texture != fx.run_texture) {
 		fx.stat_flush_tex++;
 		gpu_shaderfx_flush();

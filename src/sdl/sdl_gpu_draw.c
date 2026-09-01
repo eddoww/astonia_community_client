@@ -14,6 +14,7 @@
 #include "sdl/sdl_gpu.h"
 #include "sdl/sdl_gpu_shaderfx.h"
 #include "sdl/sdl_gpu_glow.h"
+#include "sdl/sdl_gpu_prim.h"
 #include "helper/helper.h"
 
 // State
@@ -287,7 +288,7 @@ static bool create_sampler(void)
  * 2 MOD:   dstRGB = srcRGB*dstRGB                 (dstA unchanged)
  * 3 MUL:   dstRGB = srcRGB*dstRGB + dstRGB*(1-srcA) (dstA unchanged)
  * 4 NONE:  dst = src */
-static SDL_GPUColorTargetBlendState gpu_blend_state(int mode)
+SDL_GPUColorTargetBlendState gpu_draw_blend_state(int mode)
 {
 	SDL_GPUColorTargetBlendState bs;
 
@@ -376,7 +377,7 @@ static bool create_sprite_pipeline(void)
 	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
 		SDL_GPUColorTargetDescription color_desc = {
 		    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-		    .blend_state = gpu_blend_state(mode),
+		    .blend_state = gpu_draw_blend_state(mode),
 		};
 
 		SDL_GPUGraphicsPipelineTargetInfo target_info = {
@@ -450,7 +451,7 @@ static bool create_primitive_pipeline(void)
 	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
 		SDL_GPUColorTargetDescription color_desc = {
 		    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-		    .blend_state = gpu_blend_state(mode),
+		    .blend_state = gpu_draw_blend_state(mode),
 		};
 
 		SDL_GPUGraphicsPipelineTargetInfo target_info = {
@@ -536,7 +537,7 @@ static bool create_line_pipeline(void)
 	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
 		SDL_GPUColorTargetDescription color_desc = {
 		    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-		    .blend_state = gpu_blend_state(mode),
+		    .blend_state = gpu_draw_blend_state(mode),
 		};
 
 		SDL_GPUGraphicsPipelineTargetInfo target_info = {
@@ -610,7 +611,7 @@ static bool create_tri_pipeline(void)
 	for (int mode = 0; mode < GPU_DRAW_BLEND_MODES; mode++) {
 		SDL_GPUColorTargetDescription color_desc = {
 		    .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-		    .blend_state = gpu_blend_state(mode),
+		    .blend_state = gpu_draw_blend_state(mode),
 		};
 
 		SDL_GPUGraphicsPipelineTargetInfo target_info = {
@@ -828,6 +829,7 @@ static void draw_texture_with_vbo(SDL_GPUBuffer *vbo, SDL_GPUTexture *texture, c
 	/* keep painter order with the shader-effects batch */
 	gpu_shaderfx_direct_draw_barrier();
 	gpu_glow_direct_draw_barrier();
+	gpu_prim_batch_direct_draw_barrier();
 
 	SDL_GPURenderPass *pass = gpu_get_render_pass();
 	SDL_GPUCommandBuffer *cmd = gpu_get_command_buffer();
@@ -906,6 +908,14 @@ void gpu_draw_rect(float x, float y, float w, float h, float r, float g, float b
 		return;
 	}
 
+	/* Batched path. Circles, arcs, rings and anti-aliased lines all
+	 * decompose into a stream of 1x1 rects, so this is where the primitive
+	 * path stops costing a draw call per plotted pixel. Falls through to
+	 * the single-rect draw below when the batch cannot take it. */
+	if (gpu_prim_batch_add(x, y, w, h, r, g, b, a)) {
+		return;
+	}
+
 	SDL_GPUCommandBuffer *cmd = gpu_get_command_buffer();
 	SDL_GPURenderPass *pass = gpu_get_render_pass();
 	if (!cmd || !pass) {
@@ -915,6 +925,7 @@ void gpu_draw_rect(float x, float y, float w, float h, float r, float g, float b
 	/* keep painter order with the shader-effects batch */
 	gpu_shaderfx_direct_draw_barrier();
 	gpu_glow_direct_draw_barrier();
+	gpu_prim_batch_direct_draw_barrier();
 
 	// Bind primitive pipeline
 	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.prim_pipelines));
@@ -980,6 +991,7 @@ void gpu_draw_line(float x1, float y1, float x2, float y2, float r, float g, flo
 	/* keep painter order with the shader-effects batch */
 	gpu_shaderfx_direct_draw_barrier();
 	gpu_glow_direct_draw_barrier();
+	gpu_prim_batch_direct_draw_barrier();
 
 	// Bind line pipeline
 	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.line_pipelines));
@@ -1047,6 +1059,7 @@ void gpu_draw_triangle(
 	/* keep painter order with the shader-effects batch */
 	gpu_shaderfx_direct_draw_barrier();
 	gpu_glow_direct_draw_barrier();
+	gpu_prim_batch_direct_draw_barrier();
 
 	// Bind triangle pipeline
 	SDL_BindGPUGraphicsPipeline(pass, pick_pipeline(draw_state.tri_pipelines));

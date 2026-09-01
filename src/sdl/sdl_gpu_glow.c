@@ -20,6 +20,7 @@
 #include "sdl/sdl_gpu.h"
 #include "sdl/sdl_gpu_glow.h"
 #include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/sdl_gpu_prim.h"
 
 _Static_assert(sizeof(gpu_glow_instance_t) == 48, "gpu_glow_instance_t must be 48 bytes (matches std430 struct)");
 
@@ -408,8 +409,10 @@ bool gpu_glow_add(
 		return false;
 	}
 
-	/* batched sprites recorded before this glow must land underneath it */
+	/* anything another batch recorded before this glow must land
+	 * underneath it */
 	gpu_shaderfx_direct_draw_barrier();
+	gpu_prim_batch_direct_draw_barrier();
 
 	gpu_glow_instance_t *inst = &gl.mapped[gl.count];
 	inst->seg[0] = x0;

@@ -654,6 +654,59 @@ TEST(test_mod_texture_path_validation)
 }
 
 // ============================================================================
+// Test: Spell-effect pixels reach the GPU path
+// ============================================================================
+
+// GPU-mode switches owned by test_stubs.c
+extern bool test_gpu_prim_available;
+extern int test_gpu_rect_count;
+void test_gpu_reset_counters(void);
+
+TEST(test_effect_pixels_have_gpu_path)
+{
+	fprintf(stderr, "  → Testing spell-effect pixels render in GPU mode...\n");
+
+	// sdl_pretty_pixel/sdl_rain_pixel back bless, potion, heal and earth-rain.
+	// In GPU mode sdlren is NULL, so an SDL_Renderer-only implementation draws
+	// nothing at all - the effects silently disappear. Assert both backends
+	// actually emit geometry.
+	int old_scale = sdl_scale;
+
+	for (sdl_scale = 1; sdl_scale <= 4; sdl_scale++) {
+		// CPU path: SDL_RenderPoint(s)
+		use_gpu_rendering = false;
+		test_gpu_prim_available = false;
+		sdl_test_reset_render_counters();
+		sdl_pretty_pixel(100, 100, 0x7FFF, TEST_XOFF, TEST_YOFF);
+		sdl_rain_pixel(100, 100, 0x7FFF, TEST_XOFF, TEST_YOFF);
+		ASSERT_TRUE(sdl_test_get_render_point_count() >= 2);
+
+		// GPU path: 1x1 gpu_draw_rect() per plotted device pixel
+		use_gpu_rendering = true;
+		test_gpu_prim_available = true;
+		test_gpu_reset_counters();
+		sdl_pretty_pixel(100, 100, 0x7FFF, TEST_XOFF, TEST_YOFF);
+		sdl_rain_pixel(100, 100, 0x7FFF, TEST_XOFF, TEST_YOFF);
+		ASSERT_TRUE(test_gpu_rect_count >= 2);
+	}
+
+	// GPU requested but no primitive pipeline: draw nothing, don't touch sdlren
+	use_gpu_rendering = true;
+	test_gpu_prim_available = false;
+	test_gpu_reset_counters();
+	sdl_test_reset_render_counters();
+	sdl_pretty_pixel(100, 100, 0x7FFF, TEST_XOFF, TEST_YOFF);
+	sdl_rain_pixel(100, 100, 0x7FFF, TEST_XOFF, TEST_YOFF);
+	ASSERT_EQ_INT(0, test_gpu_rect_count);
+	ASSERT_EQ_INT(0, sdl_test_get_render_point_count());
+
+	use_gpu_rendering = false;
+	sdl_scale = old_scale;
+
+	fprintf(stderr, "     Spell-effect pixels OK on both backends\n");
+}
+
+// ============================================================================
 // Main Test Suite
 // ============================================================================
 
@@ -684,6 +737,7 @@ TEST_MAIN(
 	test_line_clipping_slope();
 	test_thick_line_clipping();
 	test_mod_texture_path_validation();
+	test_effect_pixels_have_gpu_path();
 
 	sdl_shutdown_for_tests();
 )

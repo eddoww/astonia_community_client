@@ -208,7 +208,8 @@ void init_dots(void)
 	// color picker window
 	set_dot(DOT_COL, 340, 210, 0);
 
-	// action bar (kept for BUT_ACT_* hit testing, but no longer rendered)
+	// action bar - no longer rendered; DOT_ACT only anchors the overhead
+	// text (display_otext) and the BUT_ACT_* boxes below, which are dead
 	set_dot(
 	    DOT_ACT, XRES - LEGACY_ACTIONBAR_SLOTS * 40 - (XRES - LEGACY_ACTIONBAR_SLOTS * 40) / 2, doty(DOT_BOT) - 12, 0);
 
@@ -259,15 +260,24 @@ void init_dots(void)
 	for (i = 0; i < 16; i++) {
 		set_but(BUT_SKL_BEG + i, dot[DOT_SKL].x, dot[DOT_SKL].y + i * LINEHEIGHT, 10, 0);
 	}
+	/* Legacy action bar: display_action() is empty, so nothing draws here -
+	 * and an invisible control must not be clickable. The row sits 3px below
+	 * the hotbar's home position and belongs to no panel, so it neither
+	 * moves nor hides with the hotbar: moving (or shrinking) the hotbar used
+	 * to expose 16 ghost hit boxes over the bare world that still cast
+	 * spells, toggled the minimap and flipped the key-binding lock. The
+	 * positions stay for reference; the hit boxes are dead. */
 	for (i = 0; i < LEGACY_ACTIONBAR_SLOTS; i++) {
-		set_but(BUT_ACT_BEG + i, dot[DOT_ACT].x + i * 40, dot[DOT_ACT].y, 18, 0);
+		set_but(BUT_ACT_BEG + i, dot[DOT_ACT].x + i * 40, dot[DOT_ACT].y, 18, BUTF_NOHIT);
 	}
 
 	/* gear lock sits flush against the right-anchored Menu cluster, as it
 	 * did on the classic 800px bar - not floating after the equipment row */
 	set_but(BUT_WEA_LCK, XRES - XRES0 + 648, dot[DOT_WEA].y + 4, 18, !stop ? 0 : BUTF_TOPOFF);
-	set_but(BUT_ACT_LCK, dot[DOT_ACT].x - 40, dot[DOT_ACT].y, 18, 0);
-	set_but(BUT_ACT_OPN, dot[DOT_ACT].x + LEGACY_ACTIONBAR_SLOTS * 40, dot[DOT_ACT].y, 18, 0);
+	/* the action bar's padlock and open chevron are just as invisible as its
+	 * slots - see above */
+	set_but(BUT_ACT_LCK, dot[DOT_ACT].x - 40, dot[DOT_ACT].y, 18, BUTF_NOHIT);
+	set_but(BUT_ACT_OPN, dot[DOT_ACT].x + LEGACY_ACTIONBAR_SLOTS * 40, dot[DOT_ACT].y, 18, BUTF_NOHIT);
 
 	set_but(BUT_SCL_UP, dot[DOT_SCL].x + 0, dot[DOT_SCU].y + 0, 30, 0);
 	set_but(BUT_SCL_TR, dot[DOT_SCL].x + 0, dot[DOT_SCU].y + 10, 40, BUTF_CAPTURE | BUTF_MOVEEXEC);

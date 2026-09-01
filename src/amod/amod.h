@@ -51,6 +51,11 @@ DLL_EXPORT int amod_hotbar_activate(int slot, int mode);
  * will not appear in the classic chat), -1 to consume it while letting later
  * mods observe it too, 0 to leave it alone. */
 DLL_EXPORT int amod_text_line(const char *line);
+
+/* Called at the end of the client's keybind registration, before the saved
+ * config applies: register mod key bindings here (input_register) so player
+ * rebinds of them persist. Runs on every input_init (login / relog). */
+DLL_EXPORT void amod_register_keybinds(void);
 /* Real text input (shift/layout-correct character), dispatched before the
  * classic command line sees it. amod_keydown only carries raw unshifted SDL
  * keycodes, so input fields needing '#', '!', uppercase etc. must implement

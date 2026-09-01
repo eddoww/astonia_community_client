@@ -185,6 +185,26 @@ DLL_EXPORT void addline(const char *format, ...)
 	buf[sizeof(buf) - 1] = 0;
 	va_end(va);
 
+	/* every chat/system line funnels through here - server text, client
+	 * notices and mod command feedback alike - so this is where the tabbed
+	 * chat gets its copy (and may consume the line so the classic window
+	 * stays quiet). Guarded: a mod printing from inside its own text hook
+	 * must not recurse. */
+	{
+		static int in_hook;
+
+		if (!in_hook) {
+			int eaten;
+
+			in_hook = 1;
+			eaten = amod_text_line(buf);
+			in_hook = 0;
+			if (eaten) {
+				return;
+			}
+		}
+	}
+
 	if (render_text_init_done()) {
 		render_add_text(buf);
 	}

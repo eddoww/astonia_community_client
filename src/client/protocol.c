@@ -423,9 +423,7 @@ static size_t sv_text(unsigned char *buf)
 			}
 		} else {
 			if (!hover_capture_text(line)) {
-				if (!amod_text_line(line)) {
-					addline("%s", line);
-				}
+				addline("%s", line); /* the tabbed-chat hook lives inside addline() */
 			}
 		}
 	}

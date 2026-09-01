@@ -846,19 +846,37 @@ void display_text(void)
 	display_cmd();
 }
 
-/* Speed selector: a three-segment control, slowest first. The bound key is
- * printed under each label so the F-key shortcuts stay discoverable. */
+/* Speed selector.
+ *
+ * A three-segment control, fastest first (dots.c owns the order). Each segment
+ * carries chevrons for how quick it is (>>> fast, >> normal, > stealth), its
+ * name, and the key bound to it - the F-key captions used to be hardcoded. */
+static void speed_chevrons(int cx, int cy, int n, unsigned short col, unsigned char alpha)
+{
+	int w = 3, h = 4, gap = 1;
+	int total = n * (w + gap) - gap;
+	int x = cx - total / 2;
+
+	for (int i = 0; i < n; i++) {
+		int lx = x + i * (w + gap);
+
+		render_line_alpha(lx, cy - h, lx + w, cy, col, alpha);
+		render_line_alpha(lx + w, cy, lx, cy + h, col, alpha);
+	}
+}
+
 void display_mode(void)
 {
 	static const struct {
 		int but;
 		int mode;
+		int speed;
 		const char *label;
 		const char *bind;
 	} seg[3] = {
-	    {BUT_MOD_WALK2, 2, "Stealth", "move.speed_stealth"},
-	    {BUT_MOD_WALK0, 0, "Normal", "move.speed_normal"},
-	    {BUT_MOD_WALK1, 1, "Fast", "move.speed_fast"},
+	    {BUT_MOD_WALK1, 1, 3, "Fast", "move.speed_fast"},
+	    {BUT_MOD_WALK0, 0, 2, "Normal", "move.speed_normal"},
+	    {BUT_MOD_WALK2, 2, 1, "Stealth", "move.speed_stealth"},
 	};
 
 	int i;
@@ -868,14 +886,28 @@ void display_mode(void)
 		int y = buty(seg[i].but) - SPEED_SEG_H / 2;
 		int active = (pspeed == seg[i].mode);
 		int hot = (butsel == seg[i].but);
-		int state = active ? UI_BTN_ACTIVE : (hot ? (vk_lbut ? UI_BTN_PRESSED : UI_BTN_HOVER) : UI_BTN_REST);
+		unsigned short text = active ? UI_TEXT : (hot ? UI_TEXT : UI_TEXT_LABEL);
 		InputBinding *b = input_find_by_id(seg[i].bind);
 		const char *key = (b && b->key != SDLK_UNKNOWN) ? input_key_to_string(b->key, b->modifiers) : "";
 
-		ui_button(x, y, SPEED_SEG_W, SPEED_SEG_H, "", state);
-		render_text(x + SPEED_SEG_W / 2, y + 3, active || hot ? UI_TEXT : UI_TEXT_LABEL, UI_FONT_CENTER, seg[i].label);
+		if (active) {
+			render_rounded_rect_filled_alpha(
+			    x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_BG_ROW_ACTIVE, UI_A_CONTROL);
+			render_gradient_rect_v(
+			    x + 1, y + 1, x + SPEED_SEG_W - 1, y + SPEED_SEG_H / 2, UI_ACCENT_DIM, UI_BG_BASE, 120);
+			render_rounded_rect_alpha(x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_ACCENT, 255);
+			render_rect_alpha(x + 3, y + SPEED_SEG_H - 3, x + SPEED_SEG_W - 3, y + SPEED_SEG_H - 2, UI_ACCENT, 255);
+		} else if (hot) {
+			render_rounded_rect_filled_alpha(
+			    x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_BG_ROW_HOVER, UI_A_ROW_HOVER);
+			render_rounded_rect_alpha(x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_ACCENT, UI_A_BORDER_HOV);
+		}
+
+		speed_chevrons(
+		    x + SPEED_SEG_W / 2, y + 5, seg[i].speed, active ? UI_ACCENT : UI_TEXT_MUTED, active ? 255 : 170);
+		render_text(x + SPEED_SEG_W / 2, y + 8, text, UI_FONT_CENTER, seg[i].label);
 		if (*key) {
-			render_text(x + SPEED_SEG_W / 2, y + 13, active ? UI_ACCENT : UI_TEXT_DISABLED, UI_FONT_CENTER, key);
+			render_text(x + SPEED_SEG_W / 2, y + 17, active ? UI_ACCENT : UI_TEXT_DISABLED, UI_FONT_CENTER, key);
 		}
 	}
 }
@@ -883,14 +915,17 @@ void display_mode(void)
 /* ── Buff chips ─────────────────────────────────────────────────────────
  *
  * One socket per tracked effect (potion, heal/freeze, bless, rage). An
- * active effect fills its socket from the bottom as time runs out and
- * prints what is left underneath; an idle one stays a dim empty socket. */
+ * active effect gets a colored wash, a ring that unwinds clockwise as the
+ * time runs out and the seconds printed underneath; an idle one is a dim
+ * empty socket. Nearly-expired effects pulse, like the old sliding bar did. */
 static void buff_chip(int idx, const char *tag, unsigned short color, int active, int pct, const char *sub)
 {
 	int x1 = dotx(DOT_SSP) + idx * (BUFF_CHIP + BUFF_GAP);
 	int y1 = doty(DOT_SSP);
 	int x2 = x1 + BUFF_CHIP, y2 = y1 + BUFF_CHIP;
-	int fill;
+	int cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+	int r = BUFF_CHIP / 2 - 1;
+	int urgent;
 
 	if (pct < 0) {
 		pct = 0;
@@ -898,20 +933,26 @@ static void buff_chip(int idx, const char *tag, unsigned short color, int active
 	if (pct > 100) {
 		pct = 100;
 	}
+	urgent = active && pct <= 15 && (tick & 8);
 
+	/* socket */
 	render_rounded_rect_filled_alpha(x1, y1, x2, y2, UI_R_ROW, UI_BG_SUNKEN, UI_A_SOCKET);
+	render_gradient_rect_v(x1 + 1, y1 + 1, x2 - 1, cy, UI_BG_RAISED, UI_BG_SUNKEN, 150);
+
 	if (active) {
-		fill = (BUFF_CHIP - 2) * pct / 100;
-		if (fill > 0) {
-			render_rect_alpha(x1 + 1, y2 - 1 - fill, x2 - 1, y2 - 1, color, 150);
-		}
-		render_rounded_rect_alpha(x1, y1, x2, y2, UI_R_ROW, color, UI_A_BORDER_HOV);
+		/* colored wash, brighter the fuller the effect still is */
+		render_rounded_rect_filled_alpha(
+		    x1 + 1, y1 + 1, x2 - 1, y2 - 1, UI_R_ROW, color, (unsigned char)(40 + 70 * pct / 100));
+		/* remaining-time ring: a full circle at 100%, unwinding clockwise */
+		render_ring_alpha(cx, cy, r - 2, r, -90, -90 + 360 * pct / 100, color, urgent ? 255 : 220);
+		render_rounded_rect_alpha(x1, y1, x2, y2, UI_R_ROW, color, urgent ? 255 : UI_A_BORDER_HOV);
 	} else {
 		render_rounded_rect_alpha(x1, y1, x2, y2, UI_R_ROW, UI_BORDER, UI_A_BORDER_REST);
 	}
-	render_text((x1 + x2) / 2, y1 + BUFF_CHIP / 2 - 5, active ? UI_TEXT : UI_TEXT_DISABLED, UI_FONT_CENTER, tag);
+
+	render_text(cx, cy - 5, active ? UI_TEXT : UI_TEXT_DISABLED, UI_FONT_CENTER, tag);
 	if (active && sub && *sub) {
-		render_text((x1 + x2) / 2, y2 + 1, UI_TEXT_MUTED, UI_FONT_CENTER, sub);
+		render_text(cx, y2 + 1, urgent ? UI_TEXT_ERROR : UI_TEXT_MUTED, UI_FONT_CENTER, sub);
 	}
 }
 

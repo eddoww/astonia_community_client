@@ -27,6 +27,17 @@ DLL_EXPORT int skl_grid_rows(void); /* setting; 0 = auto (16, or 12 small bottom
 DLL_EXPORT int skl_grid_rows_effective(void); /* the row count actually drawn */
 DLL_EXPORT void skl_grid_set_rows(int n);
 
+/* the shop / grave grid is sized like the inventory one, independently of it */
+#define CON_GRID_MIN_COLS  4
+#define CON_GRID_MAX_COLS  8
+#define CON_GRID_MIN_ROWS  3
+#define CON_GRID_MAX_ROWS  6
+#define CON_GRID_MAX_SLOTS (CON_GRID_MAX_COLS * CON_GRID_MAX_ROWS)
+DLL_EXPORT int con_grid_cols(void);
+DLL_EXPORT int con_grid_rows(void); /* setting; 0 = auto (4, or 3 small bottom) */
+DLL_EXPORT void con_grid_set_cols(int n);
+DLL_EXPORT void con_grid_set_rows(int n);
+
 /* ── Panel content geometry ─────────────────────────────────────────────
  * Shared by dots.c (which lays the panels out), display.c (which draws
  * them) and hover.c (which puts tooltips over them). */
@@ -38,12 +49,16 @@ DLL_EXPORT void skl_grid_set_rows(int n);
 #define WEA_ROWS      5
 #define WEA_FOOT_H    18 /* gear-lock row under the doll            */
 #define SPEED_SEG_W   46 /* one segment of the speed selector       */
-#define SPEED_SEG_H   18
+#define SPEED_SEG_H   28
 #define SPEED_SEG_GAP 2
-#define BUFF_CHIP     26 /* one buff chip                          */
+#define BUFF_CHIP     28 /* one buff chip                          */
 #define BUFF_GAP      3
-#define BUFF_LABEL_H  9
+#define BUFF_LABEL_H  10
 #define BUFF_COUNT    4
+#define SPB_COLS      7 /* spellbook window columns              */
+
+/* number of castable spells the spellbook has cells for (spellbook_ui.c) */
+int spellbook_slot_count(void);
 
 /* centre of worn-equipment slot `slot` in the paper doll; 0 when the slot
  * has no cell (dots.c) */
@@ -51,7 +66,7 @@ int wea_slot_pos(int slot, int *x, int *y);
 
 #define INVDX      (inv_grid_cols())
 #define INVDY      (__invdy)
-#define CONDX      4
+#define CONDX      (con_grid_cols())
 #define CONDY      (__condy)
 #define SKLDY      (__skldy)
 #define SKLWIDTH   145
@@ -61,13 +76,13 @@ int wea_slot_pos(int slot, int *x, int *y);
 #define FX_ITEMBRIGHT RENDERFX_BRIGHT
 #define DOTF_TOPOFF   (1 << 0) // dot moves with top bar
 
-#define BUT_MAP       0
-#define BUT_WEA_BEG   1
-#define BUT_WEA_END   12
-#define BUT_INV_BEG   13
-#define BUT_INV_END   60 /* INV_GRID_MAX_SLOTS (8×6) button ids: 13..60 */
-#define BUT_CON_BEG   61
-#define BUT_CON_END   76
+#define BUT_MAP     0
+#define BUT_WEA_BEG 1
+#define BUT_WEA_END 12
+#define BUT_INV_BEG 13
+#define BUT_INV_END 60 /* INV_GRID_MAX_SLOTS (8×6) button ids: 13..60 */
+/* BUT_CON_* moved to the end of the id space - the container grid is a
+ * runtime size now and needs more than the classic 16 slots */
 #define BUT_SCL_UP    77
 #define BUT_SCL_TR    78
 #define BUT_SCL_DW    79
@@ -139,10 +154,16 @@ int wea_slot_pos(int slot, int *x, int *y);
  * panel's body so the full-screen world underneath is not targeted */
 #define BUT_PANEL_BODY 216
 
-#define MAX_BUT 217 /* keep > the highest BUT_* id (BUT_PANEL_BODY 216) */
+/* container (shop / grave) grid - sized at runtime like the inventory */
+#define BUT_CON_BEG 217
+#define BUT_CON_END (BUT_CON_BEG + CON_GRID_MAX_SLOTS - 1)
+
+#define MAX_BUT (BUT_CON_END + 1) /* keep > the highest BUT_* id */
 
 _Static_assert(
     BUT_INV_END - BUT_INV_BEG + 1 == INV_GRID_MAX_SLOTS, "inventory button range must hold the densest possible grid");
+_Static_assert(
+    BUT_CON_END - BUT_CON_BEG + 1 == CON_GRID_MAX_SLOTS, "container button range must hold the densest possible grid");
 _Static_assert(BUT_MILBAR < MAX_BUT && BUT_EXPBAR < MAX_BUT && BUT_HOTBAR_END < MAX_BUT && BUT_DRAG_END < MAX_BUT,
     "MAX_BUT must exceed every BUT_* id (but[] is indexed by id)");
 _Static_assert(

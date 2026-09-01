@@ -25,8 +25,9 @@ enum {
 	PANEL_INVENTORY, /* inventory grid + scrollbar + purse + trash  */
 	PANEL_SPEED, /* stealth/normal/fast walk mode               */
 	PANEL_BUFFS, /* self-spell timers + rage meter              */
-	PANEL_HOTBAR, /* hotbar rows + spellbook chevron             */
+	PANEL_HOTBAR, /* hotbar rows                                 */
 	PANEL_EQUIPMENT, /* worn-equipment paper doll + gear lock       */
+	PANEL_SPELLBOOK, /* castable spells, drag them onto the hotbar  */
 	MAX_PANEL
 };
 
@@ -92,10 +93,26 @@ void panels_apply_offsets(void);
 void panels_drag(int p);
 void panels_drag_finished(void);
 
-/* resize-grip mouse capture: turn mousedx/mousedy into size-setting steps
- * (inventory columns/rows, skill list rows). Returns 1 when the layout
- * changed and init_dots() has to run again. */
+/* resize-grip mouse capture: the grip tracks the pointer 1:1 and the panel's
+ * size setting follows (inventory / container columns and rows, skill list
+ * rows). Returns 1 when the size changed and init_dots() has to run again;
+ * the caller then calls panel_keep_anchor() so the window grows under the
+ * grip instead of away from it. */
 int panels_resize(int p);
+
+/* shift a panel so its content rect's top-left returns to (x1,y1) - used to
+ * pin the corner a resize is NOT dragging */
+void panel_keep_anchor(int p, int x1, int y1);
+
+/* the skills window shows a container: closing it while a shop/grave is open
+ * dismisses the view without hiding the panel for good */
+void panel_dismiss_container(void);
+void panel_container_opened(void);
+
+/* a mod chat window has taken over chat: hide the classic chat panel (it
+ * still appears while the classic input line is active, so nothing is ever
+ * typed blind) */
+DLL_EXPORT void panel_chat_external(int on);
 
 /* which panel owns button b, or -1 (chrome buttons included) */
 int panel_owns_button(int b);

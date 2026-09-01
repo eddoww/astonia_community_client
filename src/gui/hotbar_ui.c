@@ -235,17 +235,6 @@ void hotbar_display(void)
 		}
 	}
 
-	/* spellbook toggle button on the right side of the hotbar */
-	{
-		int rx = butx(BUT_HOTBAR_BEG + cols - 1) + FDX + 8;
-		int ry = buty(BUT_HOTBAR_BEG);
-		bzero(&fx, sizeof(fx));
-		fx.sprite = spellbook_is_open() ? 853U : 852U;
-		fx.scale = 80;
-		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = RENDERFX_NORMAL_LIGHT;
-		render_sprite_fx(&fx, rx, ry);
-	}
-
 	if (hb_drag_active()) {
 		uint32_t sprite = hotbar_slot_sprite(hb_drag_src);
 		if (sprite) {
@@ -368,27 +357,19 @@ int hotbar_is_dragging(void)
 	return hb_drag_active();
 }
 
+/* The spellbook is its own window now (PANEL_SPELLBOOK, toggled from the
+ * keybind or the menu bar), so the hotbar no longer carries a chevron. These
+ * two stay as no-ops for the call sites that used to hit-test it. */
 int hotbar_toggle_over(int mx, int my)
 {
-	if (hotbar_rows() <= 0) {
-		return 0; /* hotbar disabled - no toggle button to hit */
-	}
-	int cols = hotbar_visible_slots();
-	int rx = butx(BUT_HOTBAR_BEG + cols - 1) + FDX + 8;
-	int ry = buty(BUT_HOTBAR_BEG);
-	int dx = mx - rx;
-	int dy = my - ry;
-	/* match the drawn chevron (sprite 852/853 at 80% sits in the bottom strip
-	 * of its canvas: ~24x8px starting a few px below the anchor) instead of
-	 * the old 37x37 box that mostly covered empty space above it */
-	return dx >= -13 && dx <= 13 && dy >= 2 && dy <= 17;
+	(void)mx;
+	(void)my;
+	return 0;
 }
 
 int hotbar_toggle_hit(int mx, int my)
 {
-	if (hotbar_toggle_over(mx, my)) {
-		spellbook_toggle();
-		return 1;
-	}
+	(void)mx;
+	(void)my;
 	return 0;
 }

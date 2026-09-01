@@ -138,7 +138,8 @@ extern DLL_EXPORT unsigned int _client_dist;
 #define DOT_SSP    30 // self-spell-bars top left
 #define DOT_TUT    31 // tutor window top left
 #define DOT_HOTBAR 32 // hotbar (item/spell slots)
-#define MAX_DOT    33
+#define DOT_SPB    33 // spellbook window
+#define MAX_DOT    34
 
 #ifndef MAX_PATH
 #define MAX_PATH 260

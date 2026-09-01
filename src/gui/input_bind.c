@@ -620,6 +620,48 @@ DLL_EXPORT void inv_grid_set_rows(int n)
 	inv_rows = n;
 }
 
+/* ── Container (shop / grave) grid ──────────────────────────────────────
+ *
+ * The merchant window is sized like the inventory: its own items-per-row and
+ * visible-rows, driven from Options or the window's resize grip. Rows 0 =
+ * auto (4, or 3 with the small bottom window). The grid is purely a display
+ * shape - the wire carries a flat list of container slots. */
+
+static int con_cols = CON_GRID_MIN_COLS;
+static int con_rows;
+
+DLL_EXPORT int con_grid_cols(void)
+{
+	return con_cols;
+}
+
+DLL_EXPORT int con_grid_rows(void)
+{
+	return con_rows;
+}
+
+DLL_EXPORT void con_grid_set_cols(int n)
+{
+	if (n < CON_GRID_MIN_COLS) {
+		n = CON_GRID_MIN_COLS;
+	}
+	if (n > CON_GRID_MAX_COLS) {
+		n = CON_GRID_MAX_COLS;
+	}
+	con_cols = n;
+}
+
+DLL_EXPORT void con_grid_set_rows(int n)
+{
+	if (n < 0) {
+		n = 0; /* auto */
+	}
+	if (n > CON_GRID_MAX_ROWS) {
+		n = CON_GRID_MAX_ROWS;
+	}
+	con_rows = n;
+}
+
 /* ── Skill list height ──────────────────────────────────────────────────
  *
  * Visible rows of the skill list, driven either from Options or by dragging
@@ -1566,13 +1608,16 @@ static void register_all(void)
 
 		switch (p) {
 		case PANEL_INVENTORY:
-			key = 'i';
+			key = 'b'; /* bags */
 			break;
-		case PANEL_EQUIPMENT:
-			key = 'o';
+		case PANEL_SPELLBOOK:
+			key = 'i';
 			break;
 		case PANEL_SKILLS:
 			key = 'k';
+			break;
+		case PANEL_EQUIPMENT:
+			key = 'o';
 			break;
 		default:
 			break;
@@ -1642,6 +1687,10 @@ static void register_all(void)
 			b->param = i;
 		}
 	}
+
+	/* mod windows (journal, party, ...) register their toggles here so the
+	 * per-character config - loaded right after - can rebind them */
+	amod_register_keybinds();
 }
 
 /* ── Init / Shutdown ───────────────────────────────────────────────────── */
@@ -2310,6 +2359,14 @@ int input_load_config(const char *path)
 		if (v && cJSON_IsNumber(v)) {
 			skl_grid_set_rows((int)cJSON_GetNumberValue(v));
 		}
+		v = cJSON_GetObjectItem(jsettings, "con_cols");
+		if (v && cJSON_IsNumber(v)) {
+			con_grid_set_cols((int)cJSON_GetNumberValue(v));
+		}
+		v = cJSON_GetObjectItem(jsettings, "con_rows");
+		if (v && cJSON_IsNumber(v)) {
+			con_grid_set_rows((int)cJSON_GetNumberValue(v));
+		}
 		v = cJSON_GetObjectItem(jsettings, "go_override_mask");
 		if (v && cJSON_IsNumber(v)) {
 			go_override_mask = (uint32_t)cJSON_GetNumberValue(v);
@@ -2508,6 +2565,8 @@ int input_save_config(const char *path)
 	cJSON_AddNumberToObject(jsettings, "inv_cols", inv_cols);
 	cJSON_AddNumberToObject(jsettings, "inv_rows", inv_rows);
 	cJSON_AddNumberToObject(jsettings, "skl_rows", skl_rows);
+	cJSON_AddNumberToObject(jsettings, "con_cols", con_cols);
+	cJSON_AddNumberToObject(jsettings, "con_rows", con_rows);
 	if (go_override_mask) {
 		cJSON_AddNumberToObject(jsettings, "go_override_mask", go_override_mask);
 		cJSON_AddNumberToObject(jsettings, "go_override_value", go_override_value);

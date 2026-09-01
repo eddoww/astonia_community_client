@@ -357,16 +357,22 @@ void display(void)
 	display_game();
 	render_pop_clip();
 
-	/* The skills window is sized for what it shows, and an open container
-	 * replaces the skill list with a 4x4 grid - re-lay the panels out on
-	 * that transition instead of padding the window for the larger of the
-	 * two shapes at all times. */
+	/* Two panels are sized by live game state: the skills window swaps its
+	 * skill list for a container grid, and the spellbook grows with the
+	 * spells the character can cast. Re-lay the panels out on those
+	 * transitions instead of padding both for their largest shape. */
 	{
 		static int con_open = 0;
+		static int spell_count = -1;
 		int now_open = (con_cnt != 0);
+		int now_spells = spellbook_slot_count();
 
-		if (now_open != con_open) {
+		if (now_open != con_open || now_spells != spell_count) {
+			if (now_open && !con_open) {
+				panel_container_opened(); /* a dismissed shop view comes back */
+			}
 			con_open = now_open;
+			spell_count = now_spells;
 			init_dots();
 		}
 	}
@@ -422,7 +428,11 @@ void display(void)
 		}
 		if (panel_content_shown(PANEL_HOTBAR)) {
 			hotbar_display();
+		}
+		if (panel_content_shown(PANEL_SPELLBOOK)) {
+			panel_clip_begin(PANEL_SPELLBOOK);
 			spellbook_display();
+			panel_clip_end();
 		}
 		display_minimap();
 		panels_display_handles();
@@ -708,7 +718,9 @@ void update_ui_layout(void)
 	}
 	if (last_con_cnt != con_cnt) {
 		conoff = 0;
-		max_conoff = (con_cnt / CONDX) - CONDY;
+		/* ceil: with a truncating divide the last, partial row of a shop
+		 * could not be scrolled to */
+		max_conoff = ((con_cnt + CONDX - 1) / CONDX) - CONDY;
 		last_con_cnt = con_cnt;
 		set_conoff(0, conoff);
 		set_skloff(0, skloff);

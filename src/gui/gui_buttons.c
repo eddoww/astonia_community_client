@@ -919,7 +919,16 @@ void exec_cmd(int cmd, int a)
 		return;
 	case CMD_PANEL_CLOSE:
 		if (butsel >= BUT_PCLOSE_BEG && butsel <= BUT_PCLOSE_END) {
-			panel_set_visible(butsel - BUT_PCLOSE_BEG, 0);
+			int p = butsel - BUT_PCLOSE_BEG;
+
+			/* the skills window showing a shop/grave: close the container
+			 * view, not the panel - the next merchant opens it again */
+			if (p == PANEL_SKILLS && con_cnt) {
+				panel_dismiss_container();
+			} else {
+				panel_set_visible(p, 0);
+			}
+			init_dots();
 			save_options();
 		}
 		return;
@@ -935,8 +944,15 @@ void exec_cmd(int cmd, int a)
 	case CMD_PANEL_SIZE:
 		/* the grip owns the capture, like the drag handles above */
 		if (capbut >= BUT_PSIZE_BEG && capbut <= BUT_PSIZE_END) {
-			if (panels_resize(capbut - BUT_PSIZE_BEG)) {
+			int p = capbut - BUT_PSIZE_BEG;
+			int x1, y1, x2, y2;
+
+			/* pin the corner the grip is NOT dragging: init_dots() rebuilds
+			 * the default layout, and the inventory's is right-anchored, so
+			 * the window would otherwise grow away from the pointer */
+			if (panel_content_rect(p, &x1, &y1, &x2, &y2) && panels_resize(p)) {
 				init_dots();
+				panel_keep_anchor(p, x1, y1);
 			}
 		}
 		return;

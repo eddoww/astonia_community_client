@@ -45,6 +45,7 @@ struct mod {
 	int (*_amod_client_cmd)(const char *buf);
 	int (*_amod_hotbar_activate)(int slot, int mode);
 	int (*_amod_text_line)(const char *line);
+	void (*_amod_register_keybinds)(void);
 	char *(*_amod_version)(void);
 	int loaded;
 };
@@ -68,6 +69,7 @@ struct mod mod[MAXMOD] = {{
     NULL, // _amod_client_cmd
     NULL, // _amod_hotbar_activate
     NULL, // _amod_text_line
+    NULL, // _amod_register_keybinds
     NULL, // _amod_version
     0 // loaded
 }};
@@ -169,6 +171,9 @@ int amod_init(void)
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_text_line"))) {
 			mod[i]._amod_text_line = (int (*)(const char *))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_register_keybinds"))) {
+			mod[i]._amod_register_keybinds = (void (*)(void))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_version"))) {
 			mod[i]._amod_version = (char *(*)(void))tmp;
@@ -572,6 +577,18 @@ int amod_text_line(const char *line)
 		}
 	}
 	return ret;
+}
+
+/* called at the end of register_all(): mods add their own entries to the
+ * keybinding table here, BEFORE the per-character config is applied, so
+ * player rebinds of mod keys persist like any native binding */
+void amod_register_keybinds(void)
+{
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_register_keybinds) {
+			mod[i]._amod_register_keybinds();
+		}
+	}
 }
 
 int amod_hotbar_activate(int slot, int mode)

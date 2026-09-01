@@ -45,6 +45,7 @@ typedef struct {
 	int nbuts;
 	int frame; /* PANEL_FRAME_* */
 	int resizable;
+	int default_visible; /* summoned windows start closed */
 	int visible;
 	int collapsed;
 	int dx, dy;
@@ -59,6 +60,7 @@ static const int speed_dots[] = {DOT_MOD};
 static const int buffs_dots[] = {DOT_SSP};
 static const int hotbar_dots[] = {DOT_HOTBAR};
 static const int equipment_dots[] = {DOT_WEA};
+static const int spellbook_dots[] = {DOT_SPB};
 
 static const ButRange skills_buts[] = {
     {BUT_SKL_BEG, BUT_SKL_END}, {BUT_CON_BEG, BUT_CON_END}, {BUT_SCL_UP, BUT_SCL_DW}};
@@ -68,23 +70,34 @@ static const ButRange speed_buts[] = {{BUT_MOD_WALK0, BUT_MOD_WALK2}};
 static const ButRange buffs_buts[] = {{0, -1}};
 static const ButRange hotbar_buts[] = {{BUT_HOTBAR_BEG, BUT_HOTBAR_END}};
 static const ButRange equipment_buts[] = {{BUT_WEA_BEG, BUT_WEA_END}, {BUT_WEA_LCK, BUT_WEA_LCK}};
+static const ButRange spellbook_buts[] = {{0, -1}}; /* cells are hit-tested by spellbook_ui.c */
 
-#define PANEL_ENTRY(idstr, namestr, d, b, fr, rs)                                                                      \
-	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, 1, 0, 0, 0, 0, 0, 0, 0}
+#define PANEL_ENTRY(idstr, namestr, d, b, fr, rs, vis)                                                                 \
+	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, vis, vis, 0, 0, 0, 0, 0, 0, 0}
 
 static Panel panels[MAX_PANEL] = {
-    [PANEL_SKILLS] = PANEL_ENTRY("skills", "Skills", skills_dots, skills_buts, PANEL_FRAME_WINDOW, 1),
-    [PANEL_CHAT] = PANEL_ENTRY("chat", "Chat", chat_dots, chat_buts, PANEL_FRAME_HUD, 0),
-    [PANEL_INVENTORY] = PANEL_ENTRY("inventory", "Inventory", inv_dots, inv_buts, PANEL_FRAME_WINDOW, 1),
-    [PANEL_SPEED] = PANEL_ENTRY("speed", "Speed", speed_dots, speed_buts, PANEL_FRAME_HUD, 0),
-    [PANEL_BUFFS] = PANEL_ENTRY("buffs", "Effects", buffs_dots, buffs_buts, PANEL_FRAME_HUD, 0),
-    [PANEL_HOTBAR] = PANEL_ENTRY("hotbar", "Hotbar", hotbar_dots, hotbar_buts, PANEL_FRAME_NONE, 0),
-    [PANEL_EQUIPMENT] = PANEL_ENTRY("equipment", "Equipment", equipment_dots, equipment_buts, PANEL_FRAME_WINDOW, 0),
+    [PANEL_SKILLS] = PANEL_ENTRY("skills", "Skills", skills_dots, skills_buts, PANEL_FRAME_WINDOW, 1, 1),
+    [PANEL_CHAT] = PANEL_ENTRY("chat", "Chat", chat_dots, chat_buts, PANEL_FRAME_HUD, 0, 1),
+    [PANEL_INVENTORY] = PANEL_ENTRY("inventory", "Inventory", inv_dots, inv_buts, PANEL_FRAME_WINDOW, 1, 1),
+    [PANEL_SPEED] = PANEL_ENTRY("speed", "Speed", speed_dots, speed_buts, PANEL_FRAME_HUD, 0, 1),
+    [PANEL_BUFFS] = PANEL_ENTRY("buffs", "Effects", buffs_dots, buffs_buts, PANEL_FRAME_HUD, 0, 1),
+    [PANEL_HOTBAR] = PANEL_ENTRY("hotbar", "Hotbar", hotbar_dots, hotbar_buts, PANEL_FRAME_NONE, 0, 1),
+    [PANEL_EQUIPMENT] = PANEL_ENTRY("equipment", "Equipment", equipment_dots, equipment_buts, PANEL_FRAME_WINDOW, 0, 1),
+    [PANEL_SPELLBOOK] = PANEL_ENTRY("spellbook", "Spells", spellbook_dots, spellbook_buts, PANEL_FRAME_WINDOW, 0, 0),
 };
 
 _Static_assert(MAX_PANEL <= PANEL_BUT_SLOTS, "every panel needs a slot in each per-panel button bank");
 
 static int drag_dirty; /* a drag/resize moved something since the last save */
+
+/* the skills window's container view was closed by hand; cleared when the
+ * next shop/grave opens so the window comes back on its own */
+static int con_dismissed;
+
+/* an external chat window (the mod's tabbed chat) has taken over: the classic
+ * chat panel stays hidden except while the classic input line itself is live,
+ * so a stray "/say" flow is never typed blind */
+static int chat_external;
 
 DLL_EXPORT int panel_visible(int p)
 {
@@ -112,12 +125,15 @@ DLL_EXPORT int panel_shown(int p)
 	if (!gui_overlay_visible) {
 		return 0;
 	}
+	if (p == PANEL_CHAT && chat_external) {
+		return cmd_is_active();
+	}
 	if (panel_visible(p)) {
 		return 1;
 	}
 	/* auto-show: an open container needs the skills panel area, an active
 	 * chat line needs the chat panel (you must see what you type) */
-	if (p == PANEL_SKILLS && con_cnt) {
+	if (p == PANEL_SKILLS && con_cnt && !con_dismissed) {
 		return 1;
 	}
 	if (p == PANEL_CHAT && cmd_is_active()) {
@@ -126,14 +142,26 @@ DLL_EXPORT int panel_shown(int p)
 	return 0;
 }
 
+DLL_EXPORT void panel_chat_external(int on)
+{
+	chat_external = on ? 1 : 0;
+}
+
+/* The close button on a merchant/grave view hides that view without turning
+ * the Skills panel off for good - the next shop opens it again. */
+void panel_dismiss_container(void)
+{
+	con_dismissed = 1;
+}
+
+void panel_container_opened(void)
+{
+	con_dismissed = 0;
+}
+
 DLL_EXPORT int panel_collapsed(int p)
 {
 	if (p < 0 || p >= MAX_PANEL) {
-		return 0;
-	}
-	/* an open container un-minimizes the skills panel: the shop/grave grid
-	 * is the only place its items can be reached */
-	if (p == PANEL_SKILLS && con_cnt) {
 		return 0;
 	}
 	return panels[p].collapsed;
@@ -436,59 +464,96 @@ void panels_drag(int p)
 	mousedx = mousedy = 0;
 }
 
-/* Resize grip: turn the captured pointer delta into steps of the panel's
- * own size setting. The leftovers are kept so a slow drag still moves. */
+/* Shift a panel so its content rect's top-left lands back on (x1,y1). A
+ * resize re-derives the whole default layout, and the inventory's default is
+ * right-anchored, so without this the window would grow away from the grip. */
+void panel_keep_anchor(int p, int x1, int y1)
+{
+	int cx1, cy1, cx2, cy2, dx, dy;
+
+	if (p < 0 || p >= MAX_PANEL || !panel_content_rect(p, &cx1, &cy1, &cx2, &cy2)) {
+		return;
+	}
+	dx = x1 - cx1;
+	dy = y1 - cy1;
+	panel_clamp(p, &dx, &dy);
+	panels[p].dx += dx;
+	panels[p].dy += dy;
+	panel_shift(p, dx, dy);
+}
+
+/* Resize grip.
+ *
+ * The pointer is captured (and warped back to the canvas centre every frame),
+ * so the grip's position is tracked as a virtual point that the raw deltas
+ * accumulate into. The size setting is then read straight off where that
+ * point sits relative to the grid's fixed top-left corner - the window
+ * follows the pointer 1:1 instead of snapping a step per FDX of travel. */
 int panels_resize(int p)
 {
-	static int accx, accy, accp = -1;
-	int changed = 0;
+	static int gripx, gripy; /* virtual grip position          */
+	static int originx, originy; /* grid top-left, fixed for the drag */
+	static int accp = -1;
+	int cols, rows, changed = 0;
 
 	if (p < 0 || p >= MAX_PANEL || !panel_resizable(p)) {
 		mousedx = mousedy = 0;
 		return 0;
 	}
 	if (p != accp) {
-		accp = p; /* leftovers belong to the panel that produced them */
-		accx = accy = 0;
+		int cx1, cy1, cx2, cy2;
+
+		accp = p;
+		if (!panel_content_rect(p, &cx1, &cy1, &cx2, &cy2)) {
+			mousedx = mousedy = 0;
+			return 0;
+		}
+		gripx = cx2;
+		gripy = cy2;
+		if (p == PANEL_INVENTORY) {
+			originx = cx1 + INV_RAIL_W + INV_RAIL_GAP;
+			originy = cy1;
+		} else if (p == PANEL_SKILLS && con_cnt) {
+			originx = cx1;
+			originy = cy1;
+		} else {
+			originx = cx1;
+			originy = cy1;
+		}
 	}
 
-	accx += mousedx;
-	accy += mousedy;
+	gripx += mousedx;
+	gripy += mousedy;
 	mousedx = mousedy = 0;
 
 	if (p == PANEL_INVENTORY) {
-		while (accx >= FDX) {
-			accx -= FDX;
-			inv_grid_set_cols(inv_grid_cols() + 1);
+		cols = (gripx - originx + FDX / 2) / FDX;
+		rows = (gripy - originy - INV_FOOT_H + FDX / 2) / FDX;
+		if (cols != inv_grid_cols()) {
+			inv_grid_set_cols(cols);
 			changed = 1;
 		}
-		while (accx <= -FDX) {
-			accx += FDX;
-			inv_grid_set_cols(inv_grid_cols() - 1);
+		if (rows != __invdy) {
+			inv_grid_set_rows(rows);
 			changed = 1;
 		}
-		while (accy >= FDX) {
-			accy -= FDX;
-			inv_grid_set_rows(inv_grid_rows() ? inv_grid_rows() + 1 : INV_GRID_MIN_ROWS + 1);
+	} else if (p == PANEL_SKILLS && con_cnt) {
+		cols = (gripx - originx - SKL_RAIL_W + FDX / 2) / FDX;
+		rows = (gripy - originy + FDX / 2) / FDX;
+		if (cols != con_grid_cols()) {
+			con_grid_set_cols(cols);
 			changed = 1;
 		}
-		while (accy <= -FDX) {
-			accy += FDX;
-			inv_grid_set_rows(inv_grid_rows() ? inv_grid_rows() - 1 : INV_GRID_MIN_ROWS - 1);
+		if (rows != __condy) {
+			con_grid_set_rows(rows);
 			changed = 1;
 		}
 	} else if (p == PANEL_SKILLS) {
-		while (accy >= LINEHEIGHT) {
-			accy -= LINEHEIGHT;
-			skl_grid_set_rows(skl_grid_rows_effective() + 1);
+		rows = (gripy - originy + LINEHEIGHT / 2) / LINEHEIGHT;
+		if (rows != __skldy) {
+			skl_grid_set_rows(rows);
 			changed = 1;
 		}
-		while (accy <= -LINEHEIGHT) {
-			accy += LINEHEIGHT;
-			skl_grid_set_rows(skl_grid_rows_effective() - 1);
-			changed = 1;
-		}
-		accx = 0;
 	}
 
 	if (changed) {
@@ -683,7 +748,7 @@ void panels_display_handles(void)
 void panels_reset_layout(void)
 {
 	for (int p = 0; p < MAX_PANEL; p++) {
-		panels[p].visible = 1;
+		panels[p].visible = panels[p].default_visible;
 		panels[p].collapsed = 0;
 		panels[p].dx = 0;
 		panels[p].dy = 0;

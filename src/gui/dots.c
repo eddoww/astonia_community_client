@@ -157,8 +157,10 @@ void init_dots(void)
 	/* every floating panel keeps this much clearance from the canvas edge */
 	const int edge = 6 + UI_WIN_PAD;
 
-	__condy = !sbot ? 4 : 3;
-	__invdy = inv_grid_rows() ? inv_grid_rows() : __condy;
+	int auto_rows = !sbot ? 4 : 3;
+
+	__condy = con_grid_rows() ? con_grid_rows() : auto_rows;
+	__invdy = inv_grid_rows() ? inv_grid_rows() : auto_rows;
 	__skldy = skl_grid_rows_effective();
 
 	/* ── Inventory window (bottom right) ─────────────────────────────
@@ -187,9 +189,10 @@ void init_dots(void)
 	 * shop/grave grid. It is sized for whichever it is currently showing,
 	 * so a short skill list does not leave a container-sized void; display()
 	 * re-runs init_dots() when a container opens or closes. */
+	int skl_list_h = __skldy * LINEHEIGHT + 6;
 	{
 		int body_w = con_cnt ? CONDX * FDX : SKLWIDTH + 8;
-		int content_h = con_cnt ? CONDY * FDX + 4 : __skldy * LINEHEIGHT + 6;
+		int content_h = con_cnt ? CONDY * FDX + 4 : skl_list_h;
 
 		set_dot(DOT_SKL, 8 + 4, YRES - edge - content_h + 8, 0);
 		set_dot(DOT_SK2, 8 + body_w, YRES - edge, 0);
@@ -213,10 +216,14 @@ void init_dots(void)
 	/* ── Speed selector, stacked above the skills window ─────────────── */
 	{
 		int w = SPEED_SEG_W * 3 + SPEED_SEG_GAP * 2;
-		int y2, y1;
+		/* stacked above the skills window's TALLER possible shape (skill
+		 * list or merchant grid) so neither opening a shop nor closing one
+		 * ever bumps these two around - the anchor is a constant of the
+		 * current settings, not of what the window happens to show */
+		int skl_max_h = max(skl_list_h, CONDY * FDX + 4);
+		int y2 = YRES - edge - skl_max_h - UI_WIN_TITLE_H - UI_WIN_PAD * 2 - 4;
+		int y1 = y2 - SPEED_SEG_H;
 
-		y2 = (YRES - edge - (doty(DOT_SK2) - doty(DOT_SKL)) - 8) - UI_WIN_TITLE_H - UI_WIN_PAD * 2 - 4;
-		y1 = y2 - SPEED_SEG_H;
 		set_dot(DOT_MOD, 8, y1, 0);
 		panel_set_content_rect(PANEL_SPEED, 8, y1, 8 + w, y2);
 	}
@@ -240,6 +247,29 @@ void init_dots(void)
 
 		set_dot(DOT_WEA, x1 + FDX / 2, y1 + FDX / 2, 0);
 		panel_set_content_rect(PANEL_EQUIPMENT, x1, y1, x1 + content_w, y1 + content_h);
+	}
+
+	/* ── Spellbook window, centred over the hotbar ───────────────────── */
+	{
+		int avail = spellbook_slot_count();
+		int cols = avail < SPB_COLS ? avail : SPB_COLS;
+		int rows = (avail + SPB_COLS - 1) / SPB_COLS;
+		int cx = (XRES - hotbar_visible_slots() * FDX) / 2 + hotbar_visible_slots() * FDX / 2;
+		int x1, y1;
+
+		if (cols < 1) {
+			cols = 1;
+		}
+		if (rows < 1) {
+			rows = 1;
+		}
+		x1 = cx - cols * FDX / 2;
+		y1 = doty(DOT_BOT) - 40 - rows * FDX;
+		if (y1 < 60) {
+			y1 = 60;
+		}
+		set_dot(DOT_SPB, x1, y1, 0);
+		panel_set_content_rect(PANEL_SPELLBOOK, x1, y1, x1 + cols * FDX, y1 + rows * FDX);
 	}
 
 	// map top left, bottom right, center
@@ -323,13 +353,17 @@ void init_dots(void)
 			set_but(BUT_INV_BEG + i, 0, 0, 0, BUTF_NOHIT);
 		}
 	}
-	for (x = 0; x < CONDX; x++) {
-		for (y = 0; y < CONDY; y++) {
-			set_but(BUT_CON_BEG + x + y * CONDX, dot[DOT_CON].x + x * FDX, dot[DOT_CON].y + y * FDX, 20, 0);
+	{
+		int cols = CONDX;
+
+		for (x = 0; x < cols; x++) {
+			for (y = 0; y < CONDY; y++) {
+				set_but(BUT_CON_BEG + x + y * cols, dot[DOT_CON].x + x * FDX, dot[DOT_CON].y + y * FDX, 20, 0);
+			}
 		}
-	}
-	for (i = CONDX * CONDY; i <= BUT_CON_END - BUT_CON_BEG; i++) {
-		set_but(BUT_CON_BEG + i, 0, 0, 0, BUTF_NOHIT);
+		for (i = cols * CONDY; i <= BUT_CON_END - BUT_CON_BEG; i++) {
+			set_but(BUT_CON_BEG + i, 0, 0, 0, BUTF_NOHIT);
+		}
 	}
 	for (i = 0; i <= BUT_SKL_END - BUT_SKL_BEG; i++) {
 		if (i < __skldy) {
@@ -370,9 +404,9 @@ void init_dots(void)
 	set_but(BUT_GLD, dot[DOT_GLD].x, dot[DOT_GLD].y, 14, BUTF_CAPTURE);
 	set_but(BUT_JNK, dot[DOT_JNK].x, dot[DOT_JNK].y, 14, 0);
 
-	/* speed selector: stealth | normal | fast, slowest first */
+	/* speed selector: fast | normal | stealth, left to right */
 	{
-		static const int seg_but[3] = {BUT_MOD_WALK2, BUT_MOD_WALK0, BUT_MOD_WALK1};
+		static const int seg_but[3] = {BUT_MOD_WALK1, BUT_MOD_WALK0, BUT_MOD_WALK2};
 
 		for (i = 0; i < 3; i++) {
 			set_but(seg_but[i], dot[DOT_MOD].x + i * (SPEED_SEG_W + SPEED_SEG_GAP) + SPEED_SEG_W / 2,
@@ -410,6 +444,12 @@ void init_dots(void)
 	/* title bars, close/minimize glyphs and resize grips derive from the
 	 * content rects, so they are placed last - and before the offsets */
 	panels_place_chrome_buttons(set_but);
+
+	/* the hotbar is frameless (it is an action bar, not a window), so it
+	 * keeps the small proximity grab tab left of its first slot */
+	if (hotbar_rows() > 0) {
+		set_but(BUT_DRAG_HOTBAR, dot[DOT_HOTBAR].x - FDX / 2 - 8, dot[DOT_HOTBAR].y, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	}
 
 	// shift every panel by its stored drag offset - must stay the last
 	// step so it sees the complete default layout

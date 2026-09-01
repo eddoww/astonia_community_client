@@ -258,8 +258,8 @@ int sdl_init(int width, int height, char *title, int monitor)
 	const char *renderers_to_try[] = {"metal", NULL};
 #endif
 
-	// SDL_GPU path (EXPERIMENTAL, opt-in, default off): only attempted when
-	// explicitly requested via the gpu_rendering extra option / GO_GPU -o bit.
+	// SDL_GPU path (DEFAULT ON, opt-out via Options > Graphics): the
+	// gpu_rendering extra option / GO_GPU -o bit request it.
 	// SDL_GPUDevice and SDL_Renderer are mutually exclusive for a window, so
 	// the GPU device is claimed before any SDL_Renderer is created. The
 	// direct-draw pipelines (sprite/primitive/line) are what actually put the
@@ -286,7 +286,7 @@ int sdl_init(int width, int height, char *title, int monitor)
 	}
 
 	if (gpu_ready) {
-		note("SDL_GPU rendering enabled (experimental)");
+		note("SDL_GPU rendering enabled");
 		// GPU path: sdlren will remain NULL, all rendering goes through GPU API
 		sdlren = NULL;
 
@@ -314,7 +314,7 @@ int sdl_init(int width, int height, char *title, int monitor)
 		// base textures + per-draw effects in the fragment shader
 		if (gpu_shaderfx_requested) {
 			if (gpu_shaderfx_init()) {
-				note("SDL_GPU shader effects enabled (experimental)");
+				note("SDL_GPU shader effects enabled");
 			} else {
 				note("SDL_GPU shader effects requested but unavailable - staying on the CPU-baked path");
 			}

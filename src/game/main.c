@@ -544,6 +544,17 @@ static int saved_gpu_rendering = -1;
 /* GPU shader effects sub-flag (experimental, opt-in, needs gpu_rendering):
  * base textures + per-draw effects in the fragment shader. */
 static int saved_gpu_shaderfx = -1;
+/* Bump when a *_requested default flips, so configs written under the old
+ * default do not pin the old behaviour forever. Everything the client saves
+ * is written on every options change, so an experimental feature that was
+ * default-off left an explicit "false" in nearly every existing config even
+ * for players who never chose it - without this, flipping the default would
+ * reach nobody. A config older than the current revision has its GPU keys
+ * treated as unset (the new defaults apply); an opt-out made afterwards is
+ * written with the current revision and sticks. */
+#define GPU_DEFAULTS_REV 1
+static int saved_defaults_rev = 0;
+
 /* GPU effect glows (needs gpu_rendering). Default ON: held as the negative
  * GO_NOFANCYFX bit so nothing has to opt in, checked per draw so the
  * Options toggle takes effect immediately. */
@@ -566,6 +577,7 @@ static void save_extra_options(void)
 	cJSON_AddBoolToObject(root, "gpu_rendering", (game_options & GO_GPU) != 0);
 	cJSON_AddBoolToObject(root, "gpu_shader_effects", (game_options & GO_SHADERFX) != 0);
 	cJSON_AddBoolToObject(root, "gpu_fancy_effects", (game_options & GO_NOFANCYFX) == 0);
+	cJSON_AddNumberToObject(root, "defaults_rev", GPU_DEFAULTS_REV);
 	cJSON_AddNumberToObject(root, "master_volume", sound_volume);
 	cJSON_AddNumberToObject(root, "sfx_volume", sound_volume_sfx);
 	cJSON_AddNumberToObject(root, "ambient_volume", sound_volume_ambient);
@@ -672,6 +684,15 @@ static void load_extra_options(void)
 		} else {
 			game_options |= GO_NOFANCYFX;
 		}
+	}
+	saved_defaults_rev = extra_int(root, "defaults_rev", 0, 0, 1000000);
+	if (saved_defaults_rev < GPU_DEFAULTS_REV) {
+		/* written while these were experimental opt-ins; adopt the new
+		 * defaults rather than inheriting a "false" nobody chose */
+		saved_gpu_rendering = -1;
+		saved_gpu_shaderfx = -1;
+		game_options |= GO_GPU;
+		game_options |= GO_SHADERFX;
 	}
 	sound_volume = extra_int(root, "master_volume", sound_volume, 0, 128);
 	sound_volume_sfx = extra_int(root, "sfx_volume", sound_volume_sfx, 0, 128);
@@ -955,11 +976,14 @@ int main(int argc, char *argv[])
 	 * the GO_GPU -o bit; when neither is set, no GPU code runs at all.
 	 * sdl_init falls back to SDL_Renderer when the GPU path is requested but
 	 * not usable (no device, missing shader pipelines). */
-	gpu_rendering_requested = launch_gpu || (saved_gpu_rendering > 0) || ((game_options & GO_GPU) != 0);
+	/* DEFAULT ON: only an explicit saved false (0) turns it off. -1 means the
+	 * key is absent, which is a fresh config and gets the default. */
+	gpu_rendering_requested = launch_gpu || saved_gpu_rendering != 0 || ((game_options & GO_GPU) != 0);
 	/* shader-effects sub-flag: only meaningful when the GPU renderer comes
 	 * up; sdl_init ignores it otherwise */
+	/* DEFAULT ON too, and still only meaningful under the GPU renderer */
 	gpu_shaderfx_requested =
-	    gpu_rendering_requested && (launch_shaderfx || (saved_gpu_shaderfx > 0) || ((game_options & GO_SHADERFX) != 0));
+	    gpu_rendering_requested && (launch_shaderfx || saved_gpu_shaderfx != 0 || ((game_options & GO_SHADERFX) != 0));
 
 	if (!sdl_init(want_width, want_height, buf, want_monitor)) {
 		render_exit();

@@ -107,19 +107,37 @@ $(SHADER_OUT_DIR)/%_ps.spv: $(SHADER_SRC_DIR)/%.frag | $(SHADER_OUT_DIR)
 $(SHADER_OUT_DIR)/sprite_fx_vs.spv: src/sdl/sdl_gpu_shaderfx.h
 $(SHADER_OUT_DIR)/sprite_fx_ps.spv: src/sdl/sdl_gpu_shaderfx.h
 
-# SPIR-V -> DXIL (SDL_shadercross: handles SDL_GPU's D3D12 space mapping)
-$(SHADER_OUT_DIR)/%.dxil: $(SHADER_OUT_DIR)/%.spv
-	@command -v $(SHADERCROSS) > /dev/null 2>&1 || \
-		(echo "ERROR: $(SHADERCROSS) (SDL_shadercross) not found - see the toolchain notes at the top of this file"; exit 1)
-	@echo "Cross-compiling $< -> DXIL"
-	$(SHADERCROSS) $< -o $@
+# SPIR-V -> DXIL / MSL via SDL_shadercross, which performs the resource-space
+# remapping SDL_GPU's D3D12 backend expects.
+#
+# The stage must be passed explicitly: shadercross infers it from suffixes like
+# ".vert"/".frag", and our names are <shader>_vs / <shader>_ps, so inference
+# fails with "Could not infer shader stage from filename!". Hence one rule per
+# stage rather than a single %.dxil / %.msl pattern.
+SHADERCROSS_CHECK = @command -v $(SHADERCROSS) > /dev/null 2>&1 || \
+	(echo "ERROR: $(SHADERCROSS) (SDL_shadercross) not found - see the toolchain notes at the top of this file"; exit 1)
 
-# SPIR-V -> MSL (entry point becomes main0)
-$(SHADER_OUT_DIR)/%.msl: $(SHADER_OUT_DIR)/%.spv
-	@command -v $(SHADERCROSS) > /dev/null 2>&1 || \
-		(echo "ERROR: $(SHADERCROSS) (SDL_shadercross) not found - see the toolchain notes at the top of this file"; exit 1)
-	@echo "Cross-compiling $< -> MSL"
-	$(SHADERCROSS) $< -o $@
+$(SHADER_OUT_DIR)/%_vs.dxil: $(SHADER_OUT_DIR)/%_vs.spv
+	$(SHADERCROSS_CHECK)
+	@echo "Cross-compiling $< (vertex) -> DXIL"
+	$(SHADERCROSS) $< -s SPIRV -d DXIL -t vertex -o $@
+
+$(SHADER_OUT_DIR)/%_ps.dxil: $(SHADER_OUT_DIR)/%_ps.spv
+	$(SHADERCROSS_CHECK)
+	@echo "Cross-compiling $< (fragment) -> DXIL"
+	$(SHADERCROSS) $< -s SPIRV -d DXIL -t fragment -o $@
+
+# MSL: SPIRV-Cross renames the entry point to main0, which is what
+# gpu_shader_entrypoint() expects for this format.
+$(SHADER_OUT_DIR)/%_vs.msl: $(SHADER_OUT_DIR)/%_vs.spv
+	$(SHADERCROSS_CHECK)
+	@echo "Cross-compiling $< (vertex) -> MSL"
+	$(SHADERCROSS) $< -s SPIRV -d MSL -t vertex -o $@
+
+$(SHADER_OUT_DIR)/%_ps.msl: $(SHADER_OUT_DIR)/%_ps.spv
+	$(SHADERCROSS_CHECK)
+	@echo "Cross-compiling $< (fragment) -> MSL"
+	$(SHADERCROSS) $< -s SPIRV -d MSL -t fragment -o $@
 
 # ============================================================================
 # Clean

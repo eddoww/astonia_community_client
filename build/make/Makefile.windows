@@ -107,6 +107,22 @@ SDL_CFLAGS_RAW ?= $(shell pkg-config sdl3 --cflags)
 SDL_CFLAGS ?= $(patsubst -I%,-isystem %,$(SDL_CFLAGS_RAW))
 SDL_PREFIX ?= $(shell pkg-config sdl3 --variable=prefix)
 
+# SDL3_ttf is OPTIONAL, detected the same way as on Linux: when present the
+# client gains the TTF text path (Options > Display > TTF Text). Without it
+# font_manager.c compiles to inert stubs and fm_available() reports the option
+# as unavailable. Provided in CI by mingw-w64-clang-x86_64-sdl3-ttf.
+HAS_SDL3_TTF := $(shell pkg-config --exists sdl3-ttf 2>/dev/null && echo 1)
+ifeq ($(HAS_SDL3_TTF),1)
+SDL_TTF_CFLAGS_RAW=$(shell pkg-config sdl3-ttf --cflags)
+SDL_TTF_CFLAGS=-DHAVE_SDL3_TTF $(patsubst -I%,-isystem %,$(SDL_TTF_CFLAGS_RAW))
+SDL_TTF_LIBS=$(shell pkg-config sdl3-ttf --libs)
+$(info SDL3_ttf found - building with TTF text support)
+else
+SDL_TTF_CFLAGS=
+SDL_TTF_LIBS=
+$(info SDL3_ttf not found - building without TTF text support (optional))
+endif
+
 # ============================================================================
 # Compiler and Linker Flag Components
 # ============================================================================
@@ -200,6 +216,7 @@ ifndef CFLAGS
              $(LTO_FLAGS) \
              $(FEATURE_FLAGS) \
              $(SDL_CFLAGS) \
+             $(SDL_TTF_CFLAGS) \
              $(LUAJIT_CFLAGS) \
              -I$(SDL_PREFIX)/include \
              -Iinclude \
@@ -259,7 +276,7 @@ LDFLAGS_CONSOLE ?= $(LINKER_FLAGS) \
                    $(SUBSYSTEM_CONSOLE)
 
 SDL_LIBS=$(shell pkg-config sdl3 --libs)
-LIBS = -lwsock32 -lws2_32 -lpsapi -lz -lpng -lzip -ldwarfstack $(SDL_LIBS) -lSDL3_mixer $(LUAJIT_LIBS)
+LIBS = -lwsock32 -lws2_32 -lpsapi -lz -lpng -lzip -ldwarfstack $(SDL_LIBS) -lSDL3_mixer $(SDL_TTF_LIBS) $(LUAJIT_LIBS)
 ifeq ($(USE_MIMALLOC),1)
 LIBS += -lmimalloc
 endif
@@ -386,10 +403,8 @@ src/sdl/sdl_gpu_atlas.o:	src/sdl/sdl_gpu_atlas.c src/astonia.h src/sdl/sdl_gpu_a
 src/sdl/sdl_gpu_text.o:	src/sdl/sdl_gpu_text.c src/astonia.h src/sdl/sdl_gpu_text.h src/sdl/sdl_gpu_atlas.h src/sdl/sdl_gpu_shaderfx.h src/sdl/sdl_gpu_draw.h src/sdl/sdl_text_glyph.h src/sdl/sdl_private.h
 src/sdl/sdl_text_glyph.o:	src/sdl/sdl_text_glyph.c src/sdl/sdl_text_glyph.h
 src/sdl/sdl_gpu_draw.o:	src/sdl/sdl_gpu_draw.c src/astonia.h src/sdl/sdl_gpu_draw.h src/sdl/sdl_gpu.h src/sdl/sdl_gpu_post.h
-# font_manager.c builds as inert stubs here. To enable the experimental TTF
-# text path on Windows: install mingw-w64-clang-x86_64-sdl3-ttf (MSYS2),
-# then add "-DHAVE_SDL3_TTF $(shell pkg-config sdl3-ttf --cflags)" to CFLAGS
-# and "$(shell pkg-config sdl3-ttf --libs)" to LIBS (mirror Makefile.linux).
+# font_manager.c: TTF path is enabled when pkg-config finds sdl3-ttf (see
+# the SDL3_ttf block above); otherwise it compiles to inert stubs.
 src/sdl/font_manager.o:	src/sdl/font_manager.c src/sdl/font_manager.h src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h
 
 src/helper/helper.o:	src/helper/helper.c src/astonia.h

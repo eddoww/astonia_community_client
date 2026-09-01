@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_keycode.h>
 
@@ -325,6 +326,69 @@ void gpu_draw_shutdown(void) {}
 bool gpu_draw_is_available(void)
 {
 	return false;
+}
+
+#include "sdl/sdl_gpu_glow.h"
+
+/* Glow batch (sdl_gpu_glow.c is not linked into the tests). Same idea as
+ * the prim switches below: test_glow_available gates gpu_glow_ready() and
+ * the counters record what the glow path would have emitted, so the
+ * effect call sites can be driven without a GPU device. */
+bool test_glow_available = false;
+int test_glow_count = 0;
+gpu_glow_instance_t test_glow_last = {{0}, {0}, {0}};
+
+void test_glow_reset_counters(void)
+{
+	test_glow_count = 0;
+	memset(&test_glow_last, 0, sizeof(test_glow_last));
+}
+
+bool gpu_glow_init(void)
+{
+	return test_glow_available;
+}
+
+void gpu_glow_shutdown(void) {}
+
+bool gpu_glow_ready(void)
+{
+	return test_glow_available;
+}
+
+void gpu_glow_frame_begin(void) {}
+void gpu_glow_flush(void) {}
+void gpu_glow_submit_upload(void) {}
+void gpu_glow_direct_draw_barrier(void) {}
+
+void gpu_glow_get_stats(int *draws, int *glows)
+{
+	if (draws) {
+		*draws = 0;
+	}
+	if (glows) {
+		*glows = test_glow_count;
+	}
+}
+
+bool gpu_glow_add(float x0, float y0, float x1, float y1, float radius, float core, float r, float g, float b,
+    float intensity)
+{
+	if (!test_glow_available) {
+		return false;
+	}
+	test_glow_last.seg[0] = x0;
+	test_glow_last.seg[1] = y0;
+	test_glow_last.seg[2] = x1;
+	test_glow_last.seg[3] = y1;
+	test_glow_last.shape[0] = radius;
+	test_glow_last.shape[1] = core;
+	test_glow_last.color[0] = r;
+	test_glow_last.color[1] = g;
+	test_glow_last.color[2] = b;
+	test_glow_last.color[3] = intensity;
+	test_glow_count++;
+	return true;
 }
 
 /* Tests flip these to exercise the GPU branches of sdl_draw.c without a real

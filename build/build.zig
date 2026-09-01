@@ -97,6 +97,7 @@ pub fn build(b: *std.Build) void {
         "src/sdl/sdl_gpu.c",
         "src/sdl/sdl_gpu_post.c",
         "src/sdl/sdl_gpu_shaderfx.c",
+        "src/sdl/sdl_gpu_glow.c",
         "src/sdl/sdl_gpu_atlas.c",
         "src/sdl/sdl_gpu_text.c",
         "src/sdl/sdl_text_glyph.c",

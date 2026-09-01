@@ -140,6 +140,22 @@ void sdl_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned 
 void sdl_thick_line_alpha(int fx, int fy, int tx, int ty, int thickness, unsigned short color, unsigned char alpha,
     int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset);
 
+// Spell-effect glows (SDL_GPU only; see sdl_gpu_glow.h).
+//
+// True when effect code should draw real radial glows instead of its
+// hand-rolled falloffs: the GPU renderer is up, the glow pipeline built,
+// and the user has not turned gpu_fancy_effects off. sdl_pretty_pixel()
+// and sdl_rain_pixel() consult this themselves; callers that want to
+// replace a whole construction (the nine stacked lines of a lightning
+// bolt, the dotted pulse arcs) check it and use sdl_glow_line().
+int sdl_fancy_effects_active(void);
+// One additive capsule glow in logical coordinates. radius/core are as in
+// gpu_glow_add() but radius is given in LOGICAL pixels and scaled here.
+// Wholly-offscreen capsules are dropped; like the CPU falloffs it
+// replaces, the halo itself is not clipped against the rect.
+void sdl_glow_line(int fx, int fy, int tx, int ty, unsigned short color, float radius, float core, float intensity,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset);
+
 // Rectangle primitives
 void sdl_rect(int sx, int sy, int ex, int ey, unsigned short int color, int clipsx, int clipsy, int clipex, int clipey,
     int x_offset, int y_offset);

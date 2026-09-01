@@ -139,6 +139,11 @@ DLL_EXPORT void render_pixel_alpha(int x, int y, unsigned short col, unsigned ch
 DLL_EXPORT void render_line(int fx, int fy, int tx, int ty, unsigned short col);
 DLL_EXPORT void render_line_alpha(int fx, int fy, int tx, int ty, unsigned short col, unsigned char alpha);
 DLL_EXPORT void render_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned char alpha);
+/* Additive capsule glows (SDL_GPU only); see amod.h for the mod-facing docs. */
+DLL_EXPORT int render_glow_available(void);
+DLL_EXPORT void render_glow(int x, int y, unsigned short color, float radius, float core, float intensity);
+DLL_EXPORT void render_glow_line(
+    int fx, int fy, int tx, int ty, unsigned short color, float radius, float core, float intensity);
 DLL_EXPORT void render_thick_line_alpha(
     int fx, int fy, int tx, int ty, int thickness, unsigned short color, unsigned char alpha);
 

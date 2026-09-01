@@ -26,6 +26,8 @@
 #include "sdl/sdl_gpu_post.h"
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/sdl_gpu_glow.h"
+#include "sdl/sdl_gpu_prim.h"
 #include "sdl/sdl_gpu_atlas.h"
 #include "sdl/sdl_gpu_text.h"
 #include "gui/gui.h"
@@ -256,8 +258,8 @@ int sdl_init(int width, int height, char *title, int monitor)
 	const char *renderers_to_try[] = {"metal", NULL};
 #endif
 
-	// SDL_GPU path (EXPERIMENTAL, opt-in, default off): only attempted when
-	// explicitly requested via the gpu_rendering extra option / GO_GPU -o bit.
+	// SDL_GPU path (DEFAULT ON, opt-out via Options > Graphics): the
+	// gpu_rendering extra option / GO_GPU -o bit request it.
 	// SDL_GPUDevice and SDL_Renderer are mutually exclusive for a window, so
 	// the GPU device is claimed before any SDL_Renderer is created. The
 	// direct-draw pipelines (sprite/primitive/line) are what actually put the
@@ -284,7 +286,7 @@ int sdl_init(int width, int height, char *title, int monitor)
 	}
 
 	if (gpu_ready) {
-		note("SDL_GPU rendering enabled (experimental)");
+		note("SDL_GPU rendering enabled");
 		// GPU path: sdlren will remain NULL, all rendering goes through GPU API
 		sdlren = NULL;
 
@@ -293,11 +295,26 @@ int sdl_init(int width, int height, char *title, int monitor)
 			note("SDL_GPU: post-processing not available");
 		}
 
+		// Glow path for spell effects (res/shaders/glow.*). Built
+		// unconditionally when the GPU comes up - unlike the renderer
+		// itself the gpu_fancy_effects option is checked per draw, so it
+		// toggles at runtime without a restart.
+		// Batched primitive path: circles, arcs, rings and AA lines all
+		// stream 1x1 rects, so without this each plotted pixel is a draw
+		// call. Falls back to that unbatched path when unavailable.
+		if (!gpu_prim_batch_init()) {
+			note("SDL_GPU: primitive batching not available - primitives draw one rect per call");
+		}
+
+		if (!gpu_glow_init()) {
+			note("SDL_GPU: effect glows not available - effects keep their plain falloffs");
+		}
+
 		// Shader-effects sprite path (experimental sub-flag, default off):
 		// base textures + per-draw effects in the fragment shader
 		if (gpu_shaderfx_requested) {
 			if (gpu_shaderfx_init()) {
-				note("SDL_GPU shader effects enabled (experimental)");
+				note("SDL_GPU shader effects enabled");
 			} else {
 				note("SDL_GPU shader effects requested but unavailable - staying on the CPU-baked path");
 			}
@@ -677,6 +694,8 @@ void sdl_exit(void)
 	// Shutdown sprite batching first (before GPU device is destroyed)
 	gpu_text_reset();
 	gpu_shaderfx_shutdown();
+	gpu_glow_shutdown();
+	gpu_prim_batch_shutdown();
 	gpu_atlas_shutdown();
 
 	// Shutdown GPU drawing (before GPU device is destroyed)

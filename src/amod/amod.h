@@ -145,6 +145,29 @@ DLL_IMPORT void render_gradient_rect_v(
 DLL_IMPORT void render_gradient_circle(
     int cx, int cy, int radius, unsigned short inner_color, unsigned short outer_color, unsigned char alpha);
 
+// --- Render: Glows (SDL_GPU only) ---
+//
+// Additive capsule glows with a real radial falloff, batched across the
+// whole frame. These replace the usual ways of faking a glow by hand -
+// stacking translucent circles, drawing a line several times at
+// decreasing width and alpha, or plotting a bright pixel with dimmer
+// neighbours - with one call and one batched instance.
+//
+// render_glow_available() is 0 on the SDL_Renderer path and whenever the
+// player turns Glowing Spell Effects off, so ALWAYS branch on it and keep
+// a fallback; the calls are simply no-ops otherwise.
+//
+// radius is in logical pixels, core weights the tight centre lobe
+// (0 = soft halo only, ~1.5-2.5 = hot middle), intensity is 0..1.
+//
+// Prefer render_glow_line() over render_line_aa() for beams and bolts:
+// the AA line costs one draw call per plotted pixel in GPU mode, the glow
+// costs one batched instance for the whole segment.
+DLL_IMPORT int render_glow_available(void);
+DLL_IMPORT void render_glow(int x, int y, unsigned short color, float radius, float core, float intensity);
+DLL_IMPORT void render_glow_line(
+    int fx, int fy, int tx, int ty, unsigned short color, float radius, float core, float intensity);
+
 // --- Render: Screen Effects ---
 DLL_IMPORT void render_vignette(unsigned char intensity);
 DLL_IMPORT void render_screen_flash(unsigned short color, unsigned char intensity);

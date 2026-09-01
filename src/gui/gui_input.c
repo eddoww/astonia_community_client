@@ -474,8 +474,13 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
-		if (mousex >= dotx(DOT_SKL) && mousex < dotx(DOT_SK2) && mousey >= doty(DOT_SKL) &&
-		    mousey < doty(DOT_SK2)) { // skill / depot / merchant
+		/* scroll wherever the pointer is inside the window, not just over
+		 * the text column - the rails and the first item column used to be
+		 * dead zones */
+		int wx1, wy1, wx2, wy2;
+
+		if (panel_content_shown(PANEL_SKILLS) && panel_content_rect(PANEL_SKILLS, &wx1, &wy1, &wx2, &wy2) &&
+		    mousex >= wx1 && mousex <= wx2 && mousey >= wy1 && mousey <= wy2) { // skill / depot / merchant
 			while (delta > 0) {
 				if (!con_cnt) {
 					set_skloff(0, skloff - 1);
@@ -495,8 +500,8 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
-		if (mousex >= dotx(DOT_TXT) && mousex < dotx(DOT_TX2) && mousey >= doty(DOT_TXT) &&
-		    mousey < doty(DOT_TX2)) { // chat
+		if (panel_content_shown(PANEL_CHAT) && mousex >= dotx(DOT_TXT) && mousex < dotx(DOT_TX2) &&
+		    mousey >= doty(DOT_TXT) && mousey < doty(DOT_TX2)) { // chat
 			while (delta > 0) {
 				render_text_lineup();
 				render_text_lineup();
@@ -512,8 +517,8 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
-		if (mousex >= dotx(DOT_IN1) && mousex < dotx(DOT_IN2) && mousey >= doty(DOT_IN1) &&
-		    mousey < doty(DOT_IN2)) { // inventory
+		if (panel_content_shown(PANEL_INVENTORY) && panel_content_rect(PANEL_INVENTORY, &wx1, &wy1, &wx2, &wy2) &&
+		    mousex >= wx1 && mousex <= wx2 && mousey >= wy1 && mousey <= wy2) { // inventory
 			while (delta > 0) {
 				set_invoff(0, invoff - 1);
 				delta--;

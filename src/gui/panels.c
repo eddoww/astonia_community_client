@@ -3,12 +3,16 @@
  *
  * GUI panel system - see panels.h for the overview.
  *
- * Layout model: init_dots() always computes the pristine default layout,
- * then panels_apply_offsets() shifts each panel's dots and buttons by the
- * panel's stored (dx,dy). Dragging updates the stored offset and shifts the
- * live dots/buttons by the same delta, so a later init_dots() (resolution
- * change, small-bottom toggle, hotbar resize) reproduces the moved layout
- * instead of losing it.
+ * Layout model: init_dots() always computes the pristine default layout and
+ * publishes each panel's content rectangle, then panels_apply_offsets()
+ * shifts each panel's dots, buttons and content rect by the panel's stored
+ * (dx,dy). Dragging updates the stored offset and shifts the live geometry by
+ * the same delta, so a later init_dots() (resolution change, small-bottom
+ * toggle, grid resize) reproduces the moved layout instead of losing it.
+ *
+ * Frames are derived, never stored: the chrome rectangle of a panel is its
+ * content rect grown by the padding its frame kind asks for, so the window
+ * follows whatever the panel's content geometry turns out to be.
  */
 
 #include <stdint.h>
@@ -18,6 +22,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/panels.h"
+#include "gui/ui_draw.h"
 #include "gui/ui_tokens.h"
 #include "client/client.h"
 #include "game/game.h"
@@ -38,45 +43,48 @@ typedef struct {
 	int ndots;
 	const ButRange *buts;
 	int nbuts;
+	int frame; /* PANEL_FRAME_* */
+	int resizable;
 	int visible;
+	int collapsed;
 	int dx, dy;
+	int cx1, cy1, cx2, cy2; /* content rect, published by init_dots() */
 } Panel;
 
 /* dot lists - the first dot is the clamp reference kept on screen */
 static const int skills_dots[] = {DOT_SKL, DOT_SK2, DOT_CON};
 static const int chat_dots[] = {DOT_TXT, DOT_TX2};
-static const int inv_dots[] = {DOT_INV, DOT_IN1, DOT_IN2};
-static const int gold_dots[] = {DOT_GLD, DOT_JNK};
+static const int inv_dots[] = {DOT_INV, DOT_IN1, DOT_IN2, DOT_GLD, DOT_JNK};
 static const int speed_dots[] = {DOT_MOD};
 static const int buffs_dots[] = {DOT_SSP};
 static const int hotbar_dots[] = {DOT_HOTBAR};
 static const int equipment_dots[] = {DOT_WEA};
 
-static const ButRange skills_buts[] = {{BUT_SKL_BEG, BUT_SKL_END}, {BUT_CON_BEG, BUT_CON_END}, {BUT_SCL_UP, BUT_SCL_DW},
-    {BUT_DRAG_SKILLS, BUT_DRAG_SKILLS}};
-static const ButRange chat_buts[] = {{BUT_DRAG_CHAT, BUT_DRAG_CHAT}};
-static const ButRange inv_buts[] = {{BUT_INV_BEG, BUT_INV_END}, {BUT_SCR_UP, BUT_SCR_DW}, {BUT_DRAG_INV, BUT_DRAG_INV}};
-static const ButRange gold_buts[] = {{BUT_GLD, BUT_JNK}, {BUT_DRAG_GOLD, BUT_DRAG_GOLD}};
-static const ButRange speed_buts[] = {{BUT_MOD_WALK0, BUT_MOD_WALK2}, {BUT_DRAG_SPEED, BUT_DRAG_SPEED}};
-static const ButRange buffs_buts[] = {{BUT_DRAG_BUFFS, BUT_DRAG_BUFFS}};
-static const ButRange hotbar_buts[] = {{BUT_HOTBAR_BEG, BUT_HOTBAR_END}, {BUT_DRAG_HOTBAR, BUT_DRAG_HOTBAR}};
-static const ButRange equipment_buts[] = {
-    {BUT_WEA_BEG, BUT_WEA_END}, {BUT_WEA_LCK, BUT_WEA_LCK}, {BUT_DRAG_EQUIPMENT, BUT_DRAG_EQUIPMENT}};
+static const ButRange skills_buts[] = {
+    {BUT_SKL_BEG, BUT_SKL_END}, {BUT_CON_BEG, BUT_CON_END}, {BUT_SCL_UP, BUT_SCL_DW}};
+static const ButRange chat_buts[] = {{0, -1}};
+static const ButRange inv_buts[] = {{BUT_INV_BEG, BUT_INV_END}, {BUT_SCR_UP, BUT_SCR_DW}, {BUT_GLD, BUT_JNK}};
+static const ButRange speed_buts[] = {{BUT_MOD_WALK0, BUT_MOD_WALK2}};
+static const ButRange buffs_buts[] = {{0, -1}};
+static const ButRange hotbar_buts[] = {{BUT_HOTBAR_BEG, BUT_HOTBAR_END}};
+static const ButRange equipment_buts[] = {{BUT_WEA_BEG, BUT_WEA_END}, {BUT_WEA_LCK, BUT_WEA_LCK}};
 
-#define PANEL_ENTRY(idstr, namestr, d, b) {idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), 1, 0, 0}
+#define PANEL_ENTRY(idstr, namestr, d, b, fr, rs)                                                                      \
+	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, 1, 0, 0, 0, 0, 0, 0, 0}
 
 static Panel panels[MAX_PANEL] = {
-    [PANEL_SKILLS] = PANEL_ENTRY("skills", "Skills Panel", skills_dots, skills_buts),
-    [PANEL_CHAT] = PANEL_ENTRY("chat", "Chat Panel", chat_dots, chat_buts),
-    [PANEL_INVENTORY] = PANEL_ENTRY("inventory", "Inventory Panel", inv_dots, inv_buts),
-    [PANEL_GOLD] = PANEL_ENTRY("gold", "Gold & Trash Panel", gold_dots, gold_buts),
-    [PANEL_SPEED] = PANEL_ENTRY("speed", "Speed Panel", speed_dots, speed_buts),
-    [PANEL_BUFFS] = PANEL_ENTRY("buffs", "Buffs Panel", buffs_dots, buffs_buts),
-    [PANEL_HOTBAR] = PANEL_ENTRY("hotbar", "Hotbar", hotbar_dots, hotbar_buts),
-    [PANEL_EQUIPMENT] = PANEL_ENTRY("equipment", "Equipment Panel", equipment_dots, equipment_buts),
+    [PANEL_SKILLS] = PANEL_ENTRY("skills", "Skills", skills_dots, skills_buts, PANEL_FRAME_WINDOW, 1),
+    [PANEL_CHAT] = PANEL_ENTRY("chat", "Chat", chat_dots, chat_buts, PANEL_FRAME_HUD, 0),
+    [PANEL_INVENTORY] = PANEL_ENTRY("inventory", "Inventory", inv_dots, inv_buts, PANEL_FRAME_WINDOW, 1),
+    [PANEL_SPEED] = PANEL_ENTRY("speed", "Speed", speed_dots, speed_buts, PANEL_FRAME_HUD, 0),
+    [PANEL_BUFFS] = PANEL_ENTRY("buffs", "Effects", buffs_dots, buffs_buts, PANEL_FRAME_HUD, 0),
+    [PANEL_HOTBAR] = PANEL_ENTRY("hotbar", "Hotbar", hotbar_dots, hotbar_buts, PANEL_FRAME_NONE, 0),
+    [PANEL_EQUIPMENT] = PANEL_ENTRY("equipment", "Equipment", equipment_dots, equipment_buts, PANEL_FRAME_WINDOW, 0),
 };
 
-static int drag_dirty; /* a drag moved something since the last save */
+_Static_assert(MAX_PANEL <= PANEL_BUT_SLOTS, "every panel needs a slot in each per-panel button bank");
+
+static int drag_dirty; /* a drag/resize moved something since the last save */
 
 DLL_EXPORT int panel_visible(int p)
 {
@@ -118,6 +126,32 @@ DLL_EXPORT int panel_shown(int p)
 	return 0;
 }
 
+DLL_EXPORT int panel_collapsed(int p)
+{
+	if (p < 0 || p >= MAX_PANEL) {
+		return 0;
+	}
+	/* an open container un-minimizes the skills panel: the shop/grave grid
+	 * is the only place its items can be reached */
+	if (p == PANEL_SKILLS && con_cnt) {
+		return 0;
+	}
+	return panels[p].collapsed;
+}
+
+DLL_EXPORT void panel_set_collapsed(int p, int on)
+{
+	if (p < 0 || p >= MAX_PANEL) {
+		return;
+	}
+	panels[p].collapsed = on ? 1 : 0;
+}
+
+DLL_EXPORT int panel_content_shown(int p)
+{
+	return panel_shown(p) && !panel_collapsed(p);
+}
+
 DLL_EXPORT int panel_dx(int p)
 {
 	if (p < 0 || p >= MAX_PANEL) {
@@ -150,9 +184,175 @@ const char *panel_name(int p)
 	return panels[p].name;
 }
 
+/* The skills window doubles as the shop/grave container view - name it after
+ * whatever it is currently showing. */
+const char *panel_title(int p)
+{
+	if (p == PANEL_SKILLS && con_cnt) {
+		return con_name;
+	}
+	return panel_name(p);
+}
+
+int panel_frame_kind(int p)
+{
+	if (p < 0 || p >= MAX_PANEL) {
+		return PANEL_FRAME_NONE;
+	}
+	return panels[p].frame;
+}
+
+int panel_resizable(int p)
+{
+	if (p < 0 || p >= MAX_PANEL) {
+		return 0;
+	}
+	return panels[p].resizable;
+}
+
+void panel_set_content_rect(int p, int x1, int y1, int x2, int y2)
+{
+	if (p < 0 || p >= MAX_PANEL) {
+		return;
+	}
+	panels[p].cx1 = x1;
+	panels[p].cy1 = y1;
+	panels[p].cx2 = x2;
+	panels[p].cy2 = y2;
+}
+
+int panel_content_rect(int p, int *x1, int *y1, int *x2, int *y2)
+{
+	if (p < 0 || p >= MAX_PANEL || panels[p].cx2 <= panels[p].cx1) {
+		return 0;
+	}
+	*x1 = panels[p].cx1;
+	*y1 = panels[p].cy1;
+	*x2 = panels[p].cx2;
+	*y2 = panels[p].cy2;
+	return 1;
+}
+
+int panel_frame_rect(int p, int *x1, int *y1, int *x2, int *y2)
+{
+	int a, b, c, d;
+
+	if (panel_frame_kind(p) == PANEL_FRAME_NONE || !panel_content_rect(p, &a, &b, &c, &d)) {
+		return 0;
+	}
+	*x1 = a - UI_WIN_PAD;
+	*x2 = c + UI_WIN_PAD;
+	*y2 = d + UI_WIN_PAD;
+	if (panels[p].frame == PANEL_FRAME_WINDOW) {
+		*y1 = b - UI_WIN_TITLE_H;
+		if (panel_collapsed(p)) {
+			*y2 = *y1 + UI_WIN_TITLE_H;
+		}
+	} else {
+		*y1 = b - HUD_GRIP_H;
+	}
+	return 1;
+}
+
+/* ── chrome button geometry ─────────────────────────────────────────────
+ *
+ * Derived from the frame rect so it always tracks the panel. init_dots()
+ * mirrors these into but[] (via panels_place_chrome_buttons) so the shared
+ * capture/click machinery can drive them. */
+
+static int chrome_close_pos(int p, int *cx, int *cy)
+{
+	int x1, y1, x2, y2;
+
+	if (panel_frame_kind(p) != PANEL_FRAME_WINDOW || !panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
+		return 0;
+	}
+	*cx = x2 - UI_WIN_PAD - UI_WIN_GLYPH / 2;
+	*cy = y1 + UI_WIN_TITLE_H / 2;
+	return 1;
+}
+
+static int chrome_min_pos(int p, int *cx, int *cy)
+{
+	if (!chrome_close_pos(p, cx, cy)) {
+		return 0;
+	}
+	*cx -= UI_WIN_GLYPH + 3;
+	return 1;
+}
+
+static int chrome_grip_pos(int p, int *cx, int *cy)
+{
+	int x1, y1, x2, y2;
+
+	if (!panel_resizable(p) || panel_collapsed(p) || !panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
+		return 0;
+	}
+	*cx = x2 - UI_WIN_GRIP / 2 - 1;
+	*cy = y2 - UI_WIN_GRIP / 2 - 1;
+	return 1;
+}
+
+/* Title bar / grab strip: the whole width minus the glyph buttons. */
+static int chrome_grab_rect(int p, int *x1, int *y1, int *x2, int *y2)
+{
+	int fx1, fy1, fx2, fy2;
+
+	if (!panel_frame_rect(p, &fx1, &fy1, &fx2, &fy2)) {
+		return 0;
+	}
+	*x1 = fx1;
+	*y1 = fy1;
+	*x2 = fx2;
+	if (panels[p].frame == PANEL_FRAME_WINDOW) {
+		int cx, cy;
+
+		*y2 = fy1 + UI_WIN_TITLE_H;
+		if (chrome_min_pos(p, &cx, &cy)) {
+			*x2 = cx - UI_WIN_GLYPH / 2 - 2;
+		}
+	} else {
+		*y2 = fy1 + HUD_GRIP_H;
+	}
+	return 1;
+}
+
+void panels_place_chrome_buttons(void (*place)(int bidx, int x, int y, int hitrad, int flags))
+{
+	int p, cx, cy, x1, y1, x2, y2;
+
+	for (p = 0; p < PANEL_BUT_SLOTS; p++) {
+		place(BUT_DRAG_BEG + p, 0, 0, 0, BUTF_NOHIT);
+		place(BUT_PCLOSE_BEG + p, 0, 0, 0, BUTF_NOHIT);
+		place(BUT_PMIN_BEG + p, 0, 0, 0, BUTF_NOHIT);
+		place(BUT_PSIZE_BEG + p, 0, 0, 0, BUTF_NOHIT);
+	}
+	place(BUT_PANEL_BODY, 0, 0, 0, BUTF_NOHIT);
+
+	for (p = 0; p < MAX_PANEL; p++) {
+		if (chrome_grab_rect(p, &x1, &y1, &x2, &y2)) {
+			/* the hit radius is irrelevant - panels_frame_button() does
+			 * the real rectangular hit test - but the button must be at
+			 * the bar's centre so the cursor lands there on release */
+			place(BUT_DRAG_BEG + p, (x1 + x2) / 2, (y1 + y2) / 2, 0, BUTF_CAPTURE | BUTF_MOVEEXEC | BUTF_NOHIT);
+		}
+		if (chrome_close_pos(p, &cx, &cy)) {
+			place(BUT_PCLOSE_BEG + p, cx, cy, 0, BUTF_NOHIT);
+		}
+		if (chrome_min_pos(p, &cx, &cy)) {
+			place(BUT_PMIN_BEG + p, cx, cy, 0, BUTF_NOHIT);
+		}
+		if (chrome_grip_pos(p, &cx, &cy)) {
+			place(BUT_PSIZE_BEG + p, cx, cy, 0, BUTF_CAPTURE | BUTF_MOVEEXEC | BUTF_NOHIT);
+		}
+	}
+}
+
+/* ── movement ───────────────────────────────────────────────────────────── */
+
 static void panel_shift(int p, int dx, int dy)
 {
-	const Panel *pan = &panels[p];
+	Panel *pan = &panels[p];
 
 	if (!dx && !dy) {
 		return;
@@ -167,6 +367,18 @@ static void panel_shift(int p, int dx, int dy)
 			but[b].y += dy;
 		}
 	}
+	but[BUT_DRAG_BEG + p].x += dx;
+	but[BUT_DRAG_BEG + p].y += dy;
+	but[BUT_PCLOSE_BEG + p].x += dx;
+	but[BUT_PCLOSE_BEG + p].y += dy;
+	but[BUT_PMIN_BEG + p].x += dx;
+	but[BUT_PMIN_BEG + p].y += dy;
+	but[BUT_PSIZE_BEG + p].x += dx;
+	but[BUT_PSIZE_BEG + p].y += dy;
+	pan->cx1 += dx;
+	pan->cx2 += dx;
+	pan->cy1 += dy;
+	pan->cy2 += dy;
 }
 
 /* keep the clamp reference dot within the canvas so a panel can never be
@@ -224,6 +436,67 @@ void panels_drag(int p)
 	mousedx = mousedy = 0;
 }
 
+/* Resize grip: turn the captured pointer delta into steps of the panel's
+ * own size setting. The leftovers are kept so a slow drag still moves. */
+int panels_resize(int p)
+{
+	static int accx, accy, accp = -1;
+	int changed = 0;
+
+	if (p < 0 || p >= MAX_PANEL || !panel_resizable(p)) {
+		mousedx = mousedy = 0;
+		return 0;
+	}
+	if (p != accp) {
+		accp = p; /* leftovers belong to the panel that produced them */
+		accx = accy = 0;
+	}
+
+	accx += mousedx;
+	accy += mousedy;
+	mousedx = mousedy = 0;
+
+	if (p == PANEL_INVENTORY) {
+		while (accx >= FDX) {
+			accx -= FDX;
+			inv_grid_set_cols(inv_grid_cols() + 1);
+			changed = 1;
+		}
+		while (accx <= -FDX) {
+			accx += FDX;
+			inv_grid_set_cols(inv_grid_cols() - 1);
+			changed = 1;
+		}
+		while (accy >= FDX) {
+			accy -= FDX;
+			inv_grid_set_rows(inv_grid_rows() ? inv_grid_rows() + 1 : INV_GRID_MIN_ROWS + 1);
+			changed = 1;
+		}
+		while (accy <= -FDX) {
+			accy += FDX;
+			inv_grid_set_rows(inv_grid_rows() ? inv_grid_rows() - 1 : INV_GRID_MIN_ROWS - 1);
+			changed = 1;
+		}
+	} else if (p == PANEL_SKILLS) {
+		while (accy >= LINEHEIGHT) {
+			accy -= LINEHEIGHT;
+			skl_grid_set_rows(skl_grid_rows_effective() + 1);
+			changed = 1;
+		}
+		while (accy <= -LINEHEIGHT) {
+			accy += LINEHEIGHT;
+			skl_grid_set_rows(skl_grid_rows_effective() - 1);
+			changed = 1;
+		}
+		accx = 0;
+	}
+
+	if (changed) {
+		drag_dirty = 1;
+	}
+	return changed;
+}
+
 void panels_drag_finished(void)
 {
 	if (drag_dirty) {
@@ -232,9 +505,33 @@ void panels_drag_finished(void)
 	}
 }
 
+/* ── button ownership ───────────────────────────────────────────────────── */
+
+static int chrome_button_panel(int b)
+{
+	if (b >= BUT_DRAG_BEG && b <= BUT_DRAG_END) {
+		return b - BUT_DRAG_BEG;
+	}
+	if (b >= BUT_PCLOSE_BEG && b <= BUT_PCLOSE_END) {
+		return b - BUT_PCLOSE_BEG;
+	}
+	if (b >= BUT_PMIN_BEG && b <= BUT_PMIN_END) {
+		return b - BUT_PMIN_BEG;
+	}
+	if (b >= BUT_PSIZE_BEG && b <= BUT_PSIZE_END) {
+		return b - BUT_PSIZE_BEG;
+	}
+	return -1;
+}
+
 int panel_owns_button(int b)
 {
-	for (int p = 0; p < MAX_PANEL; p++) {
+	int p = chrome_button_panel(b);
+
+	if (p != -1) {
+		return p < MAX_PANEL ? p : -1;
+	}
+	for (p = 0; p < MAX_PANEL; p++) {
 		for (int i = 0; i < panels[p].nbuts; i++) {
 			if (b >= panels[p].buts[i].beg && b <= panels[p].buts[i].end) {
 				return p;
@@ -242,6 +539,119 @@ int panel_owns_button(int b)
 		}
 	}
 	return -1;
+}
+
+int panel_button_live(int b)
+{
+	int p = panel_owns_button(b);
+
+	if (p == -1) {
+		return 1;
+	}
+	if (!panel_shown(p)) {
+		return 0;
+	}
+	/* the title bar's own controls stay live while minimized - that is how
+	 * you get the window back */
+	if (chrome_button_panel(b) != -1) {
+		return 1;
+	}
+	return !panel_collapsed(p);
+}
+
+/* ── chrome hit testing ─────────────────────────────────────────────────── */
+
+static int in_glyph(int x, int y, int cx, int cy)
+{
+	int h = UI_WIN_GLYPH / 2 + 1;
+
+	return x >= cx - h && x <= cx + h && y >= cy - h && y <= cy + h;
+}
+
+int panels_frame_button(int x, int y)
+{
+	for (int p = 0; p < MAX_PANEL; p++) {
+		int x1, y1, x2, y2, cx, cy;
+
+		if (!panel_shown(p) || !panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
+			continue;
+		}
+		if (x < x1 || x > x2 || y < y1 || y > y2) {
+			continue;
+		}
+		if (chrome_close_pos(p, &cx, &cy) && in_glyph(x, y, cx, cy)) {
+			return BUT_PCLOSE_BEG + p;
+		}
+		if (chrome_min_pos(p, &cx, &cy) && in_glyph(x, y, cx, cy)) {
+			return BUT_PMIN_BEG + p;
+		}
+		if (chrome_grip_pos(p, &cx, &cy)) {
+			int h = UI_WIN_GRIP / 2 + 1;
+
+			if (x >= cx - h && x <= cx + h && y >= cy - h && y <= cy + h) {
+				return BUT_PSIZE_BEG + p;
+			}
+		}
+		if (chrome_grab_rect(p, &x1, &y1, &x2, &y2) && x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+			return BUT_DRAG_BEG + p;
+		}
+	}
+	return -1;
+}
+
+int panels_frame_over(int x, int y)
+{
+	for (int p = 0; p < MAX_PANEL; p++) {
+		int x1, y1, x2, y2;
+
+		if (!panel_shown(p) || !panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
+			continue;
+		}
+		if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* ── chrome drawing ─────────────────────────────────────────────────────── */
+
+void panels_display_frames(void)
+{
+	for (int p = 0; p < MAX_PANEL; p++) {
+		int x1, y1, x2, y2, cx, cy;
+		int collapsed = panel_collapsed(p);
+
+		if (!panel_shown(p) || !panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
+			continue;
+		}
+
+		if (panels[p].frame == PANEL_FRAME_WINDOW) {
+			ui_panel(x1, y1, x2, y2);
+			ui_window_titlebar(x1, y1, x2, panel_title(p), collapsed);
+			if (chrome_close_pos(p, &cx, &cy)) {
+				ui_glyph_button(cx, cy, UI_GLYPH_CLOSE, butsel == BUT_PCLOSE_BEG + p);
+			}
+			if (chrome_min_pos(p, &cx, &cy)) {
+				ui_glyph_button(cx, cy, collapsed ? UI_GLYPH_RESTORE : UI_GLYPH_MINIMIZE, butsel == BUT_PMIN_BEG + p);
+			}
+			if (chrome_grip_pos(p, &cx, &cy)) {
+				ui_resize_grip(cx, cy, butsel == BUT_PSIZE_BEG + p || capbut == BUT_PSIZE_BEG + p);
+			}
+		} else {
+			int hot = (butsel == BUT_DRAG_BEG + p) || (capbut == BUT_DRAG_BEG + p);
+			int mx = (x1 + x2) / 2, my = y1 + HUD_GRIP_H / 2;
+
+			ui_panel_light(x1, y1, x2, y2);
+			/* the grab strip is only marked when the pointer is on it -
+			 * a permanent handle would clutter a HUD widget */
+			if (hot) {
+				render_rect_alpha(mx - 12, my - 1, mx + 12, my + 1, UI_ACCENT, 230);
+			} else {
+				render_rect_alpha(mx - 8, my - 1, mx + 8, my, UI_BORDER_STRONG, UI_A_ROW_HOVER);
+			}
+		}
+	}
 }
 
 void panels_display_handles(void)
@@ -253,7 +663,9 @@ void panels_display_handles(void)
 		int b = BUT_DRAG_BEG + p;
 		int bx, by, dx, dy;
 
-		if (!panel_shown(p) || (but[b].flags & BUTF_NOHIT)) {
+		/* framed panels have real chrome to grab; only the bare ones need
+		 * the proximity hint */
+		if (panels[p].frame != PANEL_FRAME_NONE || !panel_shown(p) || (but[b].flags & BUTF_NOHIT)) {
 			continue;
 		}
 		bx = butx(b);
@@ -272,6 +684,7 @@ void panels_reset_layout(void)
 {
 	for (int p = 0; p < MAX_PANEL; p++) {
 		panels[p].visible = 1;
+		panels[p].collapsed = 0;
 		panels[p].dx = 0;
 		panels[p].dy = 0;
 	}
@@ -302,6 +715,7 @@ void panels_save_json(struct cJSON *root)
 			continue;
 		}
 		cJSON_AddBoolToObject(e, "on", panels[p].visible);
+		cJSON_AddBoolToObject(e, "min", panels[p].collapsed);
 		cJSON_AddNumberToObject(e, "dx", panels[p].dx);
 		cJSON_AddNumberToObject(e, "dy", panels[p].dy);
 		cJSON_AddItemToObject(jp, panels[p].id, e);
@@ -330,6 +744,10 @@ void panels_load_json(const struct cJSON *root)
 		v = cJSON_GetObjectItem(e, "on");
 		if (v && cJSON_IsBool(v)) {
 			panels[p].visible = cJSON_IsTrue(v) ? 1 : 0;
+		}
+		v = cJSON_GetObjectItem(e, "min");
+		if (v && cJSON_IsBool(v)) {
+			panels[p].collapsed = cJSON_IsTrue(v) ? 1 : 0;
 		}
 		v = cJSON_GetObjectItem(e, "dx");
 		if (v && cJSON_IsNumber(v)) {

@@ -16,6 +16,7 @@
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/panels.h"
+#include "gui/ui_tokens.h"
 #include "gui/spellbook_ui.h"
 #include "gui/keybind_ui.h"
 #include "gui/keybind_settings_ui.h"
@@ -26,6 +27,25 @@
 #include "sdl/sdl.h"
 #include "modder/modder.h"
 #include "lib/cjson/cJSON.h"
+
+/* Item sprites are drawn centred in 40px cells but are often taller than
+ * that, so a grid's top row spills over the window's title bar and its edge
+ * columns past the frame. Clip a panel's content to the frame it lives in. */
+static void panel_clip_begin(int p)
+{
+	int x1, y1, x2, y2;
+
+	render_push_clip();
+	if (panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
+		y1 += (panel_frame_kind(p) == PANEL_FRAME_WINDOW) ? UI_WIN_TITLE_H : HUD_GRIP_H;
+		render_more_clip(x1 + 1, y1, x2 - 1, y2 - 1);
+	}
+}
+
+static void panel_clip_end(void)
+{
+	render_pop_clip();
+}
 
 void display_helpandquest(void)
 {
@@ -337,6 +357,20 @@ void display(void)
 	display_game();
 	render_pop_clip();
 
+	/* The skills window is sized for what it shows, and an open container
+	 * replaces the skill list with a 4x4 grid - re-lay the panels out on
+	 * that transition instead of padding the window for the larger of the
+	 * two shapes at all times. */
+	{
+		static int con_open = 0;
+		int now_open = (con_cnt != 0);
+
+		if (now_open != con_open) {
+			con_open = now_open;
+			init_dots();
+		}
+	}
+
 	/* GUI chrome - the master overlay toggle hides all of it for an
 	 * unobstructed view of the world */
 	if (gui_overlay_visible) {
@@ -346,39 +380,47 @@ void display(void)
 		if (game_options & GO_WHEEL) {
 			display_wheel();
 		}
-		if (panel_shown(PANEL_EQUIPMENT)) {
-			display_wear();
-		}
 		display_exp();
 		display_military();
 		display_selfbars();
 
-		if (panel_shown(PANEL_SKILLS)) {
+		/* window chrome first - every framed panel draws its content on
+		 * top of its own frame */
+		panels_display_frames();
+
+		if (panel_content_shown(PANEL_EQUIPMENT)) {
+			panel_clip_begin(PANEL_EQUIPMENT);
+			display_wear();
+			panel_clip_end();
+		}
+		if (panel_content_shown(PANEL_SKILLS)) {
+			panel_clip_begin(PANEL_SKILLS);
 			if (con_cnt) {
 				display_container();
 			} else {
 				display_skill();
 			}
 			display_scrollbar_left();
+			panel_clip_end();
 		}
-		if (panel_shown(PANEL_CHAT)) {
+		if (panel_content_shown(PANEL_CHAT)) {
 			display_text();
 		}
-		if (panel_shown(PANEL_INVENTORY)) {
+		if (panel_content_shown(PANEL_INVENTORY)) {
+			panel_clip_begin(PANEL_INVENTORY);
 			display_inventory();
 			display_scrollbar_right();
-		}
-		if (panel_shown(PANEL_GOLD)) {
 			display_gold();
+			panel_clip_end();
 		}
-		if (panel_shown(PANEL_SPEED)) {
+		if (panel_content_shown(PANEL_SPEED)) {
 			display_mode();
 		}
-		if (panel_shown(PANEL_BUFFS)) {
+		if (panel_content_shown(PANEL_BUFFS)) {
 			display_selfspells();
 			display_rage();
 		}
-		if (panel_shown(PANEL_HOTBAR)) {
+		if (panel_content_shown(PANEL_HOTBAR)) {
 			hotbar_display();
 			spellbook_display();
 		}

@@ -89,8 +89,9 @@ extern SDL_Window *sdlwnd;
 /* Native row counts per tab; mod rows tagged for the tab are appended below
  * them (see amod_option_tab). The Gameplay tab always shows its native Combat
  * rows, mod or not. */
-#define OPT_AUDIO_NATIVE    6
-#define OPT_UI_NATIVE       (17 + MAX_PANEL) /* rows 0..10 classic, 11..13 inventory grid, 14..16+MAX_PANEL panels */
+#define OPT_AUDIO_NATIVE 6
+/* rows 0..10 classic, 11..14 window sizes, 15..17+MAX_PANEL panels */
+#define OPT_UI_NATIVE       (18 + MAX_PANEL)
 #define OPT_GAMEPLAY_NATIVE 2
 
 #define OPT_MAX_MOD_ROWS 64
@@ -764,7 +765,7 @@ static void opt_display_ui(void)
 
 	ry = opt_row_y(11);
 	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Inventory Grid");
+		draw_section_header(opt_lx, ry, opt_content_w, "Window Sizes");
 	}
 
 	ry = opt_row_y(12);
@@ -779,10 +780,15 @@ static void opt_display_ui(void)
 
 	ry = opt_row_y(14);
 	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Panels & World");
+		draw_slider(opt_lx, ry, opt_content_w, skl_grid_rows(), 0, SKL_GRID_MAX_ROWS, "Skill Rows (0 = Auto)");
 	}
 
 	ry = opt_row_y(15);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Panels & World");
+	}
+
+	ry = opt_row_y(16);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, panels_fullscreen_world(), "Fullscreen World View");
 	}
@@ -790,14 +796,14 @@ static void opt_display_ui(void)
 	for (int p = 0; p < MAX_PANEL; p++) {
 		char label[48];
 
-		ry = opt_row_y(16 + p);
+		ry = opt_row_y(17 + p);
 		if (ry >= 0) {
 			snprintf(label, sizeof(label), "Show %s", panel_name(p));
 			draw_checkbox(opt_lx, ry, panel_visible(p), label);
 		}
 	}
 
-	ry = opt_row_y(16 + MAX_PANEL);
+	ry = opt_row_y(17 + MAX_PANEL);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, 0, "Reset Panel Layout");
 	}
@@ -930,7 +936,22 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(15);
+	ry = opt_row_y(14);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		val = (mx - tx) * SKL_GRID_MAX_ROWS / tw; /* 0 = auto */
+		if (val < 0) {
+			val = 0;
+		}
+		if (val > SKL_GRID_MAX_ROWS) {
+			val = SKL_GRID_MAX_ROWS;
+		}
+		skl_grid_set_rows(val);
+		init_dots();
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(16);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		panels_set_fullscreen_world(!panels_fullscreen_world());
 		init_dots();
@@ -942,7 +963,7 @@ static int opt_click_ui(int mx, int my)
 	}
 
 	for (int p = 0; p < MAX_PANEL; p++) {
-		ry = opt_row_y(16 + p);
+		ry = opt_row_y(17 + p);
 		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 			panel_toggle(p);
 			save_options();
@@ -950,7 +971,7 @@ static int opt_click_ui(int mx, int my)
 		}
 	}
 
-	ry = opt_row_y(16 + MAX_PANEL);
+	ry = opt_row_y(17 + MAX_PANEL);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		panels_reset_layout();
 		init_dots();

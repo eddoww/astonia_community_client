@@ -11,6 +11,7 @@
  * rows); the container grid stays fixed at the classic 4-wide layout */
 #define INV_GRID_MIN_COLS  4
 #define INV_GRID_MAX_COLS  8
+#define INV_GRID_MIN_ROWS  3
 #define INV_GRID_MAX_ROWS  6
 #define INV_GRID_MAX_SLOTS (INV_GRID_MAX_COLS * INV_GRID_MAX_ROWS)
 
@@ -18,7 +19,35 @@ DLL_EXPORT int inv_grid_cols(void); /* items per row (4..8) */
 DLL_EXPORT int inv_grid_rows(void); /* visible rows setting; 0 = auto (classic 4/3) */
 DLL_EXPORT void inv_grid_set_cols(int n);
 DLL_EXPORT void inv_grid_set_rows(int n);
-int inv_grid_is_classic(void); /* grid matches the classic bar art layout */
+
+/* visible rows of the skill list; the button range caps it at 16 */
+#define SKL_GRID_MIN_ROWS 6
+#define SKL_GRID_MAX_ROWS 16
+DLL_EXPORT int skl_grid_rows(void); /* setting; 0 = auto (16, or 12 small bottom) */
+DLL_EXPORT int skl_grid_rows_effective(void); /* the row count actually drawn */
+DLL_EXPORT void skl_grid_set_rows(int n);
+
+/* ── Panel content geometry ─────────────────────────────────────────────
+ * Shared by dots.c (which lays the panels out), display.c (which draws
+ * them) and hover.c (which puts tooltips over them). */
+#define INV_RAIL_W    12 /* inventory scrollbar rail column         */
+#define INV_RAIL_GAP  3
+#define INV_FOOT_H    32 /* purse + trashcan row under the grid     */
+#define SKL_RAIL_W    12 /* skill list scrollbar rail column        */
+#define WEA_COLS      3 /* equipment paper doll                    */
+#define WEA_ROWS      5
+#define WEA_FOOT_H    18 /* gear-lock row under the doll            */
+#define SPEED_SEG_W   46 /* one segment of the speed selector       */
+#define SPEED_SEG_H   18
+#define SPEED_SEG_GAP 2
+#define BUFF_CHIP     26 /* one buff chip                          */
+#define BUFF_GAP      3
+#define BUFF_LABEL_H  9
+#define BUFF_COUNT    4
+
+/* centre of worn-equipment slot `slot` in the paper doll; 0 when the slot
+ * has no cell (dots.c) */
+int wea_slot_pos(int slot, int *x, int *y);
 
 #define INVDX      (inv_grid_cols())
 #define INVDY      (__invdy)
@@ -82,20 +111,35 @@ int inv_grid_is_classic(void); /* grid matches the classic bar art layout */
 #define BUT_HOTBAR_BEG 135
 #define BUT_HOTBAR_END 179 /* 45 slots (3×15): 135..179 */
 
-/* panel drag handles - one per panel, in PANEL_* enum order (panels.h):
- * BUT_DRAG_BEG + PANEL_x must be that panel's drag button */
+/* Per-panel button banks. Each bank has PANEL_BUT_SLOTS consecutive ids in
+ * PANEL_* enum order (panels.h): BANK_BEG + PANEL_x is that panel's button.
+ * Slots past MAX_PANEL are unused and set BUTF_NOHIT by init_dots(). */
+#define PANEL_BUT_SLOTS 8
+
+/* window drag handle / titlebar */
 #define BUT_DRAG_BEG       184
 #define BUT_DRAG_SKILLS    184
 #define BUT_DRAG_CHAT      185
 #define BUT_DRAG_INV       186
-#define BUT_DRAG_GOLD      187
-#define BUT_DRAG_SPEED     188
-#define BUT_DRAG_BUFFS     189
-#define BUT_DRAG_HOTBAR    190
-#define BUT_DRAG_EQUIPMENT 191
-#define BUT_DRAG_END       191
+#define BUT_DRAG_SPEED     187
+#define BUT_DRAG_BUFFS     188
+#define BUT_DRAG_HOTBAR    189
+#define BUT_DRAG_EQUIPMENT 190
+#define BUT_DRAG_END       (BUT_DRAG_BEG + PANEL_BUT_SLOTS - 1)
 
-#define MAX_BUT 192 /* keep > the highest BUT_* id (BUT_DRAG_END 191) */
+/* titlebar close / minimize buttons and the bottom-right resize grip */
+#define BUT_PCLOSE_BEG 192
+#define BUT_PCLOSE_END (BUT_PCLOSE_BEG + PANEL_BUT_SLOTS - 1)
+#define BUT_PMIN_BEG   200
+#define BUT_PMIN_END   (BUT_PMIN_BEG + PANEL_BUT_SLOTS - 1)
+#define BUT_PSIZE_BEG  208
+#define BUT_PSIZE_END  (BUT_PSIZE_BEG + PANEL_BUT_SLOTS - 1)
+
+/* not a real button: parks butsel while the pointer is over a framed
+ * panel's body so the full-screen world underneath is not targeted */
+#define BUT_PANEL_BODY 216
+
+#define MAX_BUT 217 /* keep > the highest BUT_* id (BUT_PANEL_BODY 216) */
 
 _Static_assert(
     BUT_INV_END - BUT_INV_BEG + 1 == INV_GRID_MAX_SLOTS, "inventory button range must hold the densest possible grid");
@@ -104,6 +148,9 @@ _Static_assert(BUT_MILBAR < MAX_BUT && BUT_EXPBAR < MAX_BUT && BUT_HOTBAR_END < 
 _Static_assert(
     BUT_EXPBAR > BUT_HOTBAR_END && BUT_MILBAR > BUT_HOTBAR_END, "bar button ids must not fall into the hotbar range");
 _Static_assert(BUT_DRAG_BEG > BUT_MILBAR, "drag handle ids must not collide with the bar button ids");
+_Static_assert(BUT_DRAG_END < BUT_PCLOSE_BEG && BUT_PCLOSE_END < BUT_PMIN_BEG && BUT_PMIN_END < BUT_PSIZE_BEG &&
+                   BUT_PSIZE_END < BUT_PANEL_BODY && BUT_PANEL_BODY < MAX_BUT,
+    "the per-panel button banks must not overlap");
 
 #define BUTF_NOHIT    (1 << 1) // button is ignored int hit processing
 #define BUTF_CAPTURE  (1 << 2) // button captures mouse on lclick
@@ -223,11 +270,14 @@ _Static_assert(BUT_DRAG_BEG > BUT_MILBAR, "drag handle ids must not collide with
 #define CMD_ACTION_LOCK 79
 #define CMD_ACTION_OPEN 80
 
-#define CMD_WEAR_LOCK  81
-#define CMD_HELP_INDEX 82
-#define CMD_EXPBAR     83 /* cycle the numbers printed on the experience bar */
-#define CMD_MILBAR     84 /* cycle the numbers printed on the military bar */
-#define CMD_DRAG_PANEL 85 /* move the panel whose drag handle captured the mouse */
+#define CMD_WEAR_LOCK   81
+#define CMD_HELP_INDEX  82
+#define CMD_EXPBAR      83 /* cycle the numbers printed on the experience bar */
+#define CMD_MILBAR      84 /* cycle the numbers printed on the military bar */
+#define CMD_DRAG_PANEL  85 /* move the panel whose drag handle captured the mouse */
+#define CMD_PANEL_CLOSE 86 /* hide the framed panel whose X was clicked        */
+#define CMD_PANEL_MIN   87 /* collapse/expand the framed panel to its titlebar */
+#define CMD_PANEL_SIZE  88 /* resize the panel whose grip captured the mouse   */
 
 #define STV_EMPTYLINE  -1
 #define STV_JUSTAVALUE -2 // value is in curr

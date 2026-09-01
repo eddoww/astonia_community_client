@@ -17,6 +17,9 @@
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/panels.h"
+#include "gui/ui_tokens.h"
+#include "game/game.h"
+#include "client/client.h"
 
 extern int __textdisplay_sy;
 
@@ -88,6 +91,52 @@ void dots_update(void)
 	set_dot(DOT_TUT, (XRES - 410) / 2, base - 122 - (context_action_enabled() ? 30 : 0), 0);
 }
 
+/* ── Equipment paper doll ────────────────────────────────────────────────
+ *
+ * The worn-equipment slots used to be a 12-wide strip inside the top bar.
+ * They are now a Diablo-style paper doll: the centre column is the body
+ * axis (head, torso, belt, legs, feet) top to bottom, the flanking columns
+ * carry the paired gear, with the two hands and the two rings on matching
+ * rows. Entries are weatab indices (see weaname[] in gui_core.c);
+ * WEA_NONE leaves the cell empty. */
+#define WEA_NONE (-1)
+
+static const int wea_doll[WEA_ROWS][WEA_COLS] = {
+    /*  left        centre        right   */
+    {4, 5, 6}, /* neck    | head   | cloak  */
+    {9, 7, WEA_NONE}, /* arms    | body   |        */
+    {1, 8, 2}, /* r.hand  | belt   | l.hand */
+    {3, 10, 0}, /* l.ring  | legs   | r.ring */
+    {WEA_NONE, 11, WEA_NONE}, /*         | feet   |        */
+};
+
+/* where slot i sits in the doll, or 0 when it is not placed */
+static int wea_doll_cell(int slot, int *col, int *row)
+{
+	for (int r = 0; r < WEA_ROWS; r++) {
+		for (int c = 0; c < WEA_COLS; c++) {
+			if (wea_doll[r][c] == slot) {
+				*col = c;
+				*row = r;
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+int wea_slot_pos(int slot, int *x, int *y)
+{
+	int col, row;
+
+	if (!wea_doll_cell(slot, &col, &row)) {
+		return 0;
+	}
+	*x = dot[DOT_WEA].x + col * FDX;
+	*y = dot[DOT_WEA].y + row * FDX;
+	return 1;
+}
+
 void init_dots(void)
 {
 	int i, x, y, xc, yc;
@@ -105,70 +154,93 @@ void init_dots(void)
 	}
 	set_dot(DOT_BO2, XRES, YRES, 0);
 
-	// equipment, inventory, container. center of first displayed item.
-	/* equipment row is centered between the top bar's left ornament and
-	 * the right control cluster (== 180 on the classic 800px bar) */
-	set_dot(DOT_WEA, (XRES - 480) / 2 + 20, 20, !stop ? 0 : DOTF_TOPOFF);
-	// inventory cluster is anchored to the bottom-right corner (the classic
-	// grid lives in art columns 645-795 of the XRES0-wide bottom bar, which
-	// is drawn right-anchored too); the container keeps the classic 4-wide
-	// count regardless of the inventory grid setting
+	/* every floating panel keeps this much clearance from the canvas edge */
+	const int edge = 6 + UI_WIN_PAD;
+
 	__condy = !sbot ? 4 : 3;
 	__invdy = inv_grid_rows() ? inv_grid_rows() : __condy;
+	__skldy = skl_grid_rows_effective();
 
-	// last row's bottom edge stays flush with the classic bar bottom; extra
-	// rows and columns grow up/left from there. At 4 cols and auto rows this
-	// reproduces the classic positions exactly (XRES-140, BOT+27).
-	set_dot(DOT_IN2, XRES - 5, doty(DOT_BO2) - 2, 0);
-	set_dot(DOT_INV, XRES - 20 - (inv_grid_cols() - 1) * FDX, doty(DOT_IN2) - 1 - __invdy * FDX + FDX / 2, 0);
-	set_dot(DOT_IN1, dotx(DOT_INV) - 15, doty(DOT_INV) - 25, 0);
-	set_dot(DOT_CON, 20, doty(DOT_BOT) + 27, 0);
+	/* ── Inventory window (bottom right) ─────────────────────────────
+	 * DOT_IN1/DOT_IN2 are the window's content rectangle: scrollbar rail,
+	 * item grid and the purse/trashcan footer. DOT_INV stays the centre of
+	 * the first grid cell. */
+	{
+		int cols = inv_grid_cols();
+		int grid_w = cols * FDX;
+		int grid_h = __invdy * FDX;
+		int content_w = INV_RAIL_W + INV_RAIL_GAP + grid_w;
+		int content_h = grid_h + INV_FOOT_H;
 
-	// scroll bars (the right rail hugs the inventory grid's left edge:
-	// XRES-165 for the classic grid, further left for denser grids)
-	set_dot(DOT_SCL, 160 + 5, 0, 0);
-	set_dot(DOT_SCR, dotx(DOT_IN1) - 10, 0, 0);
-	set_dot(DOT_SCU, 0, doty(DOT_BOT) + 15, 0);
-	if (!sbot) {
-		set_dot(DOT_SCD, 0, doty(DOT_BOT) + 160, 0);
-	} else {
-		set_dot(DOT_SCD, 0, doty(DOT_BOT) + 120, 0);
+		set_dot(DOT_IN2, XRES - edge, YRES - edge, 0);
+		set_dot(DOT_IN1, dotx(DOT_IN2) - content_w, doty(DOT_IN2) - content_h, 0);
+		set_dot(DOT_INV, dotx(DOT_IN1) + INV_RAIL_W + INV_RAIL_GAP + FDX / 2, doty(DOT_IN1) + FDX / 2, 0);
+
+		/* purse left, trashcan right, both on the footer row */
+		y = doty(DOT_IN1) + grid_h + INV_FOOT_H / 2;
+		set_dot(DOT_GLD, dotx(DOT_IN1) + INV_RAIL_W + INV_RAIL_GAP + 16, y, 0);
+		set_dot(DOT_JNK, dotx(DOT_IN2) - 16, y, 0);
 	}
 
-	// self spell bars (bless, potion, rage, ...)
-	if (!sbot) {
-		set_dot(DOT_SSP, dotx(DOT_BOT) + 179, doty(DOT_BOT) + 68, 0);
-	} else {
-		set_dot(DOT_SSP, dotx(DOT_BOT) + 179, doty(DOT_BOT) + 52, 0);
+	/* ── Skills window (bottom left) ─────────────────────────────────
+	 * Holds either the skill list or, while a container is open, the 4x4
+	 * shop/grave grid. It is sized for whichever it is currently showing,
+	 * so a short skill list does not leave a container-sized void; display()
+	 * re-runs init_dots() when a container opens or closes. */
+	{
+		int body_w = con_cnt ? CONDX * FDX : SKLWIDTH + 8;
+		int content_h = con_cnt ? CONDY * FDX + 4 : __skldy * LINEHEIGHT + 6;
+
+		set_dot(DOT_SKL, 8 + 4, YRES - edge - content_h + 8, 0);
+		set_dot(DOT_SK2, 8 + body_w, YRES - edge, 0);
+		set_dot(DOT_CON, 8 + FDX / 2 + 2, YRES - edge - content_h + FDX / 2 + 2, 0);
+		panel_set_content_rect(PANEL_SKILLS, 8, YRES - edge - content_h, 8 + body_w + SKL_RAIL_W, YRES - edge);
 	}
 
-	// chat text
-	set_dot(DOT_TXT, 230, doty(DOT_BOT) + 8, 0);
-	if (!sbot) {
-		set_dot(DOT_TX2, 624, doty(DOT_BOT) + 158, 0);
-		__textdisplay_sy = 150;
-	} else {
-		set_dot(DOT_TX2, 624, doty(DOT_BOT) + 118, 0);
-		__textdisplay_sy = 110;
+	/* scroll rails: the skills rail hugs the right edge of its window, the
+	 * inventory rail the left edge of its own */
+	set_dot(DOT_SCL, dotx(DOT_SK2) + SKL_RAIL_W / 2, doty(DOT_SKL), 0);
+	set_dot(DOT_SCR, dotx(DOT_IN1) + INV_RAIL_W / 2, doty(DOT_IN1), 0);
+	set_dot(DOT_SCU, 0, doty(DOT_IN1) + 8, 0);
+	set_dot(DOT_SCD, 0, doty(DOT_IN1) + __invdy * FDX - 8, 0);
+
+	/* ── Chat (bottom centre) ────────────────────────────────────────── */
+	__textdisplay_sy = !sbot ? 150 : 110;
+	set_dot(DOT_TXT, 230, YRES - edge - __textdisplay_sy, 0);
+	set_dot(DOT_TX2, 624, YRES - edge, 0);
+	panel_set_content_rect(PANEL_CHAT, dotx(DOT_TXT), doty(DOT_TXT), dotx(DOT_TX2), doty(DOT_TX2));
+
+	/* ── Speed selector, stacked above the skills window ─────────────── */
+	{
+		int w = SPEED_SEG_W * 3 + SPEED_SEG_GAP * 2;
+		int y2, y1;
+
+		y2 = (YRES - edge - (doty(DOT_SK2) - doty(DOT_SKL)) - 8) - UI_WIN_TITLE_H - UI_WIN_PAD * 2 - 4;
+		y1 = y2 - SPEED_SEG_H;
+		set_dot(DOT_MOD, 8, y1, 0);
+		panel_set_content_rect(PANEL_SPEED, 8, y1, 8 + w, y2);
 	}
 
-	// skill list
-	set_dot(DOT_SKL, 8, doty(DOT_BOT) + 12, 0);
-	set_dot(DOT_SK2, 156, doty(DOT_BO2) - 2, 0);
-	if (!sbot) {
-		__skldy = 16;
-	} else {
-		__skldy = 12;
+	/* ── Buff chips, stacked above the speed selector ────────────────── */
+	{
+		int w = BUFF_CHIP * BUFF_COUNT + BUFF_GAP * (BUFF_COUNT - 1);
+		int h = BUFF_CHIP + BUFF_LABEL_H;
+		int y1 = doty(DOT_MOD) - HUD_GRIP_H - UI_WIN_PAD - h - 4;
+
+		set_dot(DOT_SSP, 8, y1, 0);
+		panel_set_content_rect(PANEL_BUFFS, 8, y1, 8 + w, y1 + h);
 	}
 
-	// gold
-	set_dot(DOT_GLD, 195, doty(DOT_BO2) - 22, 0);
+	/* ── Equipment paper doll (upper right, clear of the minimap) ─────── */
+	{
+		int content_w = WEA_COLS * FDX;
+		int content_h = WEA_ROWS * FDX + WEA_FOOT_H;
+		int x1 = XRES - edge - content_w;
+		int y1 = 150;
 
-	// trashcan (right-anchored, next to the inventory)
-	set_dot(DOT_JNK, XRES - 190, doty(DOT_BO2) - 22, 0);
-
-	// speed options: stealth/normal/fast
-	set_dot(DOT_MOD, 181, doty(DOT_BOT) + 24, 0);
+		set_dot(DOT_WEA, x1 + FDX / 2, y1 + FDX / 2, 0);
+		panel_set_content_rect(PANEL_EQUIPMENT, x1, y1, x1 + content_w, y1 + content_h);
+	}
 
 	// map top left, bottom right, center
 	if (panels_fullscreen_world()) {
@@ -192,8 +264,6 @@ void init_dots(void)
 		}
 		set_dot(DOT_MCT, dotx(DOT_MTL) + xc, doty(DOT_MTL) - (!stop ? 0 : 40) + yc, 0);
 	}
-	// note("map: %dx%d, center: %d,%d, origin: %d,%d,
-	// (%d,%d)",x,y,dotx(DOT_MCT),doty(DOT_MCT),dotx(DOT_MTL),doty(DOT_MTL),dotx(DOT_MBR),doty(DOT_MBR));
 
 	// help and quest window
 	set_dot(DOT_HLP, 0, !stop ? 40 : 0, 0);
@@ -229,22 +299,23 @@ void init_dots(void)
 
 	set_but(BUT_MAP, XRES / 2, YRES / 2, 0, BUTF_NOHIT);
 
-	// note to self: do not use dotx(),doty() here because the moving top bar logic is built into the
-	// button flags as well
+	/* worn equipment: paper-doll cells, empty cells stay unhittable */
 	for (i = 0; i < 12; i++) {
-		set_but(BUT_WEA_BEG + i, dot[DOT_WEA].x + i * FDX, dot[DOT_WEA].y + 0, 40, !stop ? 0 : BUTF_TOPOFF);
+		if (wea_slot_pos(i, &x, &y)) {
+			set_but(BUT_WEA_BEG + i, x, y, 20, 0);
+		} else {
+			set_but(BUT_WEA_BEG + i, 0, 0, 0, BUTF_NOHIT);
+		}
 	}
 	{
 		int cols = inv_grid_cols();
-		/* the classic grid sits inside the bar art, so its generous radius-40
-		 * hit circles only overreach onto chrome; denser grids border the
-		 * open map and use the hotbar's pad-sized radius instead so slots
-		 * don't grab hovers from map tiles above the grid */
-		int hitrad = inv_grid_is_classic() ? 40 : 23;
 
 		for (x = 0; x < cols; x++) {
 			for (y = 0; y < __invdy; y++) {
-				set_but(BUT_INV_BEG + x + y * cols, dot[DOT_INV].x + x * FDX, dot[DOT_INV].y + y * FDX, hitrad, 0);
+				/* hitrad 20: half the cell. The grid borders the open world
+				 * on every side now, so the classic radius-40 circles would
+				 * steal hovers from map tiles well outside the window. */
+				set_but(BUT_INV_BEG + x + y * cols, dot[DOT_INV].x + x * FDX, dot[DOT_INV].y + y * FDX, 20, 0);
 			}
 		}
 		/* disable hit testing on the unused part of the button range */
@@ -252,52 +323,63 @@ void init_dots(void)
 			set_but(BUT_INV_BEG + i, 0, 0, 0, BUTF_NOHIT);
 		}
 	}
-	for (x = 0; x < 4; x++) {
-		for (y = 0; y < 4; y++) {
-			set_but(BUT_CON_BEG + x + y * 4, dot[DOT_CON].x + x * FDX, dot[DOT_CON].y + y * FDX, 40, 0);
+	for (x = 0; x < CONDX; x++) {
+		for (y = 0; y < CONDY; y++) {
+			set_but(BUT_CON_BEG + x + y * CONDX, dot[DOT_CON].x + x * FDX, dot[DOT_CON].y + y * FDX, 20, 0);
 		}
 	}
-	for (i = 0; i < 16; i++) {
-		set_but(BUT_SKL_BEG + i, dot[DOT_SKL].x, dot[DOT_SKL].y + i * LINEHEIGHT, 10, 0);
+	for (i = CONDX * CONDY; i <= BUT_CON_END - BUT_CON_BEG; i++) {
+		set_but(BUT_CON_BEG + i, 0, 0, 0, BUTF_NOHIT);
+	}
+	for (i = 0; i <= BUT_SKL_END - BUT_SKL_BEG; i++) {
+		if (i < __skldy) {
+			set_but(BUT_SKL_BEG + i, dot[DOT_SKL].x, dot[DOT_SKL].y + i * LINEHEIGHT, 10, 0);
+		} else {
+			set_but(BUT_SKL_BEG + i, 0, 0, 0, BUTF_NOHIT);
+		}
 	}
 	/* Legacy action bar: display_action() is empty, so nothing draws here -
-	 * and an invisible control must not be clickable. The row sits 3px below
-	 * the hotbar's home position and belongs to no panel, so it neither
-	 * moves nor hides with the hotbar: moving (or shrinking) the hotbar used
-	 * to expose 16 ghost hit boxes over the bare world that still cast
-	 * spells, toggled the minimap and flipped the key-binding lock. The
-	 * positions stay for reference; the hit boxes are dead. */
+	 * and an invisible control must not be clickable. The positions stay for
+	 * reference; the hit boxes are dead. */
 	for (i = 0; i < LEGACY_ACTIONBAR_SLOTS; i++) {
 		set_but(BUT_ACT_BEG + i, dot[DOT_ACT].x + i * 40, dot[DOT_ACT].y, 18, BUTF_NOHIT);
 	}
 
-	/* gear lock sits flush against the right-anchored Menu cluster, as it
-	 * did on the classic 800px bar - not floating after the equipment row */
-	set_but(BUT_WEA_LCK, XRES - XRES0 + 648, dot[DOT_WEA].y + 4, 18, !stop ? 0 : BUTF_TOPOFF);
+	/* gear lock: bottom-left of the equipment window's footer */
+	{
+		int cx1, cy1, cx2, cy2;
+
+		if (panel_content_rect(PANEL_EQUIPMENT, &cx1, &cy1, &cx2, &cy2)) {
+			set_but(BUT_WEA_LCK, cx1 + 10, cy2 - WEA_FOOT_H / 2, 18, 0);
+		}
+	}
 	/* the action bar's padlock and open chevron are just as invisible as its
 	 * slots - see above */
 	set_but(BUT_ACT_LCK, dot[DOT_ACT].x - 40, dot[DOT_ACT].y, 18, BUTF_NOHIT);
 	set_but(BUT_ACT_OPN, dot[DOT_ACT].x + LEGACY_ACTIONBAR_SLOTS * 40, dot[DOT_ACT].y, 18, BUTF_NOHIT);
 
-	set_but(BUT_SCL_UP, dot[DOT_SCL].x + 0, dot[DOT_SCU].y + 0, 30, 0);
-	set_but(BUT_SCL_TR, dot[DOT_SCL].x + 0, dot[DOT_SCU].y + 10, 40, BUTF_CAPTURE | BUTF_MOVEEXEC);
-	set_but(BUT_SCL_DW, dot[DOT_SCL].x + 0, dot[DOT_SCD].y + 0, 30, 0);
+	/* skills rail spans the skill list, inventory rail spans its grid */
+	set_but(BUT_SCL_UP, dot[DOT_SCL].x, doty(DOT_SKL) - 2, 8, 0);
+	set_but(BUT_SCL_TR, dot[DOT_SCL].x, doty(DOT_SKL) + 8, 10, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	set_but(BUT_SCL_DW, dot[DOT_SCL].x, doty(DOT_SK2) - 8, 8, 0);
 
-	set_but(BUT_SCR_UP, dot[DOT_SCR].x + 0, dot[DOT_SCU].y + 0, 30, 0);
-	set_but(BUT_SCR_TR, dot[DOT_SCR].x + 0, dot[DOT_SCU].y + 10, 40, BUTF_CAPTURE | BUTF_MOVEEXEC);
-	set_but(BUT_SCR_DW, dot[DOT_SCR].x + 0, dot[DOT_SCD].y + 0, 30, 0);
+	set_but(BUT_SCR_UP, dot[DOT_SCR].x, doty(DOT_IN1) + 8, 8, 0);
+	set_but(BUT_SCR_TR, dot[DOT_SCR].x, doty(DOT_IN1) + 18, 10, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	set_but(BUT_SCR_DW, dot[DOT_SCR].x, doty(DOT_IN1) + __invdy * FDX - 8, 8, 0);
 
-	if (!stop) {
-		set_but(BUT_GLD, dot[DOT_GLD].x + 0, dot[DOT_GLD].y + 10, 30, BUTF_CAPTURE);
-	} else {
-		set_but(BUT_GLD, dot[DOT_GLD].x + 0, dot[DOT_GLD].y + 10, 15, BUTF_CAPTURE);
+	set_but(BUT_GLD, dot[DOT_GLD].x, dot[DOT_GLD].y, 14, BUTF_CAPTURE);
+	set_but(BUT_JNK, dot[DOT_JNK].x, dot[DOT_JNK].y, 14, 0);
+
+	/* speed selector: stealth | normal | fast, slowest first */
+	{
+		static const int seg_but[3] = {BUT_MOD_WALK2, BUT_MOD_WALK0, BUT_MOD_WALK1};
+
+		for (i = 0; i < 3; i++) {
+			set_but(seg_but[i], dot[DOT_MOD].x + i * (SPEED_SEG_W + SPEED_SEG_GAP) + SPEED_SEG_W / 2,
+			    dot[DOT_MOD].y + SPEED_SEG_H / 2, 20, 0);
+		}
 	}
 
-	set_but(BUT_JNK, dot[DOT_JNK].x + 0, dot[DOT_JNK].y + 0, 30, 0);
-
-	set_but(BUT_MOD_WALK0, dot[DOT_MOD].x + 1 * 14, dot[DOT_MOD].y + 0 * 30, 30, 0);
-	set_but(BUT_MOD_WALK1, dot[DOT_MOD].x + 0 * 14, dot[DOT_MOD].y + 0 * 30, 30, 0);
-	set_but(BUT_MOD_WALK2, dot[DOT_MOD].x + 2 * 14, dot[DOT_MOD].y + 0 * 30, 30, 0);
 	set_but(BUT_HELP_DRAG, (dotx(DOT_HLP) + dotx(DOT_HL2)) / 2, doty(DOT_HLP) + 6, 0, BUTF_CAPTURE | BUTF_MOVEEXEC);
 
 	{
@@ -311,9 +393,7 @@ void init_dots(void)
 			int by = dot[DOT_HOTBAR].y + row * (FDX + 2);
 			/* hitrad 23: just past the pad's half-diagonal (22.6), so the
 			 * whole 32x32 pad is clickable - at FDX/2 (20) the corners and a
-			 * band between rows were dead. NOT the inventory's 40: unlike
-			 * the inventory grid, the hotbar borders the open map, and a
-			 * 40-radius circle hovered slots from 24px above the pads. */
+			 * band between rows were dead. */
 			set_but(BUT_HOTBAR_BEG + i, bx, by, 23, 0);
 		}
 		/* disable hit testing on inactive slots */
@@ -322,23 +402,14 @@ void init_dots(void)
 		}
 	}
 
-	// panel drag handles (small hit radius, mouse-capture drag)
-	set_but(
-	    BUT_DRAG_SKILLS, (dot[DOT_SKL].x + dot[DOT_SK2].x) / 2, dot[DOT_SKL].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
-	set_but(BUT_DRAG_CHAT, (dot[DOT_TXT].x + dot[DOT_TX2].x) / 2, dot[DOT_TXT].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
-	set_but(BUT_DRAG_INV, (dot[DOT_IN1].x + dot[DOT_IN2].x) / 2, dot[DOT_IN1].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
-	set_but(BUT_DRAG_GOLD, dot[DOT_GLD].x, dot[DOT_GLD].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
-	set_but(BUT_DRAG_SPEED, dot[DOT_MOD].x + 14, dot[DOT_MOD].y - 16, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
-	set_but(BUT_DRAG_BUFFS, dot[DOT_SSP].x + 15, dot[DOT_SSP].y - 6, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
-	if (hotbar_rows() > 0) {
-		set_but(BUT_DRAG_HOTBAR, dot[DOT_HOTBAR].x - FDX / 2 - 8, dot[DOT_HOTBAR].y, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
-	} else {
-		set_but(BUT_DRAG_HOTBAR, 0, 0, 0, BUTF_NOHIT);
-	}
-	/* equipment drag handle sits left of the first worn slot; it needs the
-	 * same TOPOFF flag as the slots so it slides with the small top bar */
-	set_but(BUT_DRAG_EQUIPMENT, dot[DOT_WEA].x - FDX / 2 - 8, dot[DOT_WEA].y, 12,
-	    BUTF_CAPTURE | BUTF_MOVEEXEC | (!stop ? 0 : BUTF_TOPOFF));
+	/* the remaining panels publish their content rect from the geometry
+	 * above; the inventory rect doubles as DOT_IN1/DOT_IN2 */
+	panel_set_content_rect(PANEL_INVENTORY, dotx(DOT_IN1), doty(DOT_IN1), dotx(DOT_IN2), doty(DOT_IN2));
+	panel_set_content_rect(PANEL_HOTBAR, 0, 0, 0, 0);
+
+	/* title bars, close/minimize glyphs and resize grips derive from the
+	 * content rects, so they are placed last - and before the offsets */
+	panels_place_chrome_buttons(set_but);
 
 	// shift every panel by its stored drag offset - must stay the last
 	// step so it sees the complete default layout

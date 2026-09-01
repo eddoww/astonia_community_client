@@ -620,11 +620,40 @@ DLL_EXPORT void inv_grid_set_rows(int n)
 	inv_rows = n;
 }
 
-int inv_grid_is_classic(void)
-{
-	int auto_rows = (game_options & GO_SMALLBOT) ? 3 : 4;
+/* ── Skill list height ──────────────────────────────────────────────────
+ *
+ * Visible rows of the skill list, driven either from Options or by dragging
+ * the Skills window's resize grip. 0 = auto (the classic 16 rows, 12 with
+ * the small bottom window). */
 
-	return inv_cols == 4 && (inv_rows == 0 || inv_rows == auto_rows);
+static int skl_rows;
+
+DLL_EXPORT int skl_grid_rows(void)
+{
+	return skl_rows;
+}
+
+DLL_EXPORT int skl_grid_rows_effective(void)
+{
+	if (skl_rows) {
+		return skl_rows;
+	}
+	return (game_options & GO_SMALLBOT) ? 12 : SKL_GRID_MAX_ROWS;
+}
+
+DLL_EXPORT void skl_grid_set_rows(int n)
+{
+	if (n == 0) {
+		skl_rows = 0; /* auto */
+		return;
+	}
+	if (n < SKL_GRID_MIN_ROWS) {
+		n = SKL_GRID_MIN_ROWS;
+	}
+	if (n > SKL_GRID_MAX_ROWS) {
+		n = SKL_GRID_MAX_ROWS;
+	}
+	skl_rows = n;
 }
 
 DLL_EXPORT int hotbar_visible_slots(void)
@@ -1526,16 +1555,32 @@ static void register_all(void)
 	reg("ui.toggle_hotbar_names", "Toggle Hotbar Names", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_names);
 	reg("ui.toggle_hotbar_keys", "Toggle Hotbar Key Labels", INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_hotbar_keys);
 
-	/* master GUI overlay + per-panel visibility (panels toggles unbound by
-	 * default - bind them in Settings / Keybindings) */
+	/* master GUI overlay + per-panel visibility. The windows that have a
+	 * close button need a way back, so those get a default key (the rest
+	 * stay unbound - bind them in Settings / Keybindings). */
 	reg("ui.toggle_overlay", "Toggle GUI Overlay", INPUT_CAT_UI, 'z', INPUT_MOD_ALT, on_toggle_overlay);
 	for (int p = 0; p < MAX_PANEL; p++) {
 		static char panel_bind_ids[MAX_PANEL][32];
 		static char panel_bind_names[MAX_PANEL][40];
+		SDL_Keycode key = SDLK_UNKNOWN;
+
+		switch (p) {
+		case PANEL_INVENTORY:
+			key = 'i';
+			break;
+		case PANEL_EQUIPMENT:
+			key = 'o';
+			break;
+		case PANEL_SKILLS:
+			key = 'k';
+			break;
+		default:
+			break;
+		}
 
 		snprintf(panel_bind_ids[p], sizeof(panel_bind_ids[p]), "ui.panel_%s", panel_id(p));
 		snprintf(panel_bind_names[p], sizeof(panel_bind_names[p]), "Toggle %s", panel_name(p));
-		b = reg(panel_bind_ids[p], panel_bind_names[p], INPUT_CAT_UI, SDLK_UNKNOWN, 0, on_toggle_panel);
+		b = reg(panel_bind_ids[p], panel_bind_names[p], INPUT_CAT_UI, key, 0, on_toggle_panel);
 		if (b) {
 			b->param = p;
 		}
@@ -2261,6 +2306,10 @@ int input_load_config(const char *path)
 		if (v && cJSON_IsNumber(v)) {
 			inv_grid_set_rows((int)cJSON_GetNumberValue(v));
 		}
+		v = cJSON_GetObjectItem(jsettings, "skl_rows");
+		if (v && cJSON_IsNumber(v)) {
+			skl_grid_set_rows((int)cJSON_GetNumberValue(v));
+		}
 		v = cJSON_GetObjectItem(jsettings, "go_override_mask");
 		if (v && cJSON_IsNumber(v)) {
 			go_override_mask = (uint32_t)cJSON_GetNumberValue(v);
@@ -2458,6 +2507,7 @@ int input_save_config(const char *path)
 	cJSON_AddNumberToObject(jsettings, "hotbar_rows", active_rows);
 	cJSON_AddNumberToObject(jsettings, "inv_cols", inv_cols);
 	cJSON_AddNumberToObject(jsettings, "inv_rows", inv_rows);
+	cJSON_AddNumberToObject(jsettings, "skl_rows", skl_rows);
 	if (go_override_mask) {
 		cJSON_AddNumberToObject(jsettings, "go_override_mask", go_override_mask);
 		cJSON_AddNumberToObject(jsettings, "go_override_value", go_override_value);

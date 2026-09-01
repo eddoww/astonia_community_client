@@ -38,12 +38,20 @@
 #define UI_A_BORDER_REST 160
 #define UI_A_BORDER_HOV  220
 #define UI_A_TOOLTIP     250
+#define UI_A_PANEL_HUD   190 /* small always-on HUD widgets stay see-through */
+#define UI_A_SOCKET      150 /* empty item slot / inactive buff socket       */
 /* geometry */
 #define UI_PAD         8
 #define UI_PAD_TIGHT   4
 #define UI_ROW_H       18
 #define UI_ROW_H_DENSE 14
 #define UI_TITLE_H     26
+/* floating in-world windows use a shorter titlebar than the settings
+ * dialogs; UI_WIN_* are the geometry of the panel window chrome */
+#define UI_WIN_TITLE_H 15
+#define UI_WIN_PAD     5
+#define UI_WIN_GLYPH   11 /* side of a titlebar glyph button */
+#define UI_WIN_GRIP    9 /* side of the bottom-right resize grip */
 #define UI_TAB_H       22
 #define UI_BUTTON_H    24
 #define UI_SCROLLBAR_W 12

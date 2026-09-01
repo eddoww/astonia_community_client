@@ -43,14 +43,12 @@ int get_near_button(int x, int y)
 	}
 
 	for (b = 0; b < MAX_BUT; b++) {
-		int p;
-
 		if (but[b].flags & BUTF_NOHIT) {
 			continue;
 		}
-		/* buttons of hidden panels are not there to be hit */
-		p = panel_owns_button(b);
-		if (p != -1 && !panel_shown(p)) {
+		/* buttons of hidden panels - and the contents of minimized ones -
+		 * are not there to be hit */
+		if (!panel_button_live(b)) {
 			continue;
 		}
 
@@ -484,6 +482,12 @@ static void detect_hover_target(void)
 		butsel = BUT_NOLOOK;
 	}
 
+	/* framed panel chrome (title bars, close/minimize glyphs, resize grips)
+	 * are rectangles, not the circular hit boxes get_near_button() does */
+	if (butsel == -1 && gui_overlay_visible) {
+		butsel = panels_frame_button(mousex, mousey);
+	}
+
 	if (butsel == -1 && context_key_enabled()) {
 		butsel = get_near_button(mousex, mousey);
 
@@ -537,6 +541,13 @@ static void detect_hover_target(void)
 		} else if (butsel >= BUT_SKL_BEG && butsel <= BUT_SKL_END) {
 			sklsel = skloff + butsel - BUT_SKL_BEG;
 		}
+	}
+
+	/* the body of a framed panel swallows the world underneath it: with the
+	 * fullscreen world view every window sits on map tiles, and clicking
+	 * one's background used to walk the character */
+	if (!hitsel[0] && butsel == -1 && gui_overlay_visible && panels_frame_over(mousex, mousey)) {
+		butsel = BUT_PANEL_BODY;
 	}
 
 	// hit map
@@ -906,6 +917,29 @@ void exec_cmd(int cmd, int a)
 			panels_drag(capbut - BUT_DRAG_BEG);
 		}
 		return;
+	case CMD_PANEL_CLOSE:
+		if (butsel >= BUT_PCLOSE_BEG && butsel <= BUT_PCLOSE_END) {
+			panel_set_visible(butsel - BUT_PCLOSE_BEG, 0);
+			save_options();
+		}
+		return;
+	case CMD_PANEL_MIN:
+		if (butsel >= BUT_PMIN_BEG && butsel <= BUT_PMIN_END) {
+			int p = butsel - BUT_PMIN_BEG;
+
+			panel_set_collapsed(p, !panel_collapsed(p));
+			init_dots(); /* the grip moves with the collapsed frame */
+			save_options();
+		}
+		return;
+	case CMD_PANEL_SIZE:
+		/* the grip owns the capture, like the drag handles above */
+		if (capbut >= BUT_PSIZE_BEG && capbut <= BUT_PSIZE_END) {
+			if (panels_resize(capbut - BUT_PSIZE_BEG)) {
+				init_dots();
+			}
+		}
+		return;
 	case CMD_HELP:
 		if (display_help) {
 			display_help = 0;
@@ -1262,6 +1296,15 @@ void handle_special_buttons_logic(void)
 		}
 		if (butsel >= BUT_DRAG_BEG && butsel <= BUT_DRAG_END) {
 			lcmd = CMD_DRAG_PANEL;
+		}
+		if (butsel >= BUT_PCLOSE_BEG && butsel <= BUT_PCLOSE_END) {
+			lcmd = CMD_PANEL_CLOSE;
+		}
+		if (butsel >= BUT_PMIN_BEG && butsel <= BUT_PMIN_END) {
+			lcmd = CMD_PANEL_MIN;
+		}
+		if (butsel >= BUT_PSIZE_BEG && butsel <= BUT_PSIZE_END) {
+			lcmd = CMD_PANEL_SIZE;
 		}
 		if (butsel == BUT_EXIT) {
 			lcmd = CMD_EXIT;

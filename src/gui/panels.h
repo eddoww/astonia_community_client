@@ -4,12 +4,14 @@
  * GUI panel system
  *
  * The classic bottom window is split into independent panels (skills, chat,
- * inventory, gold, speed, buffs, hotbar). Each panel can be hidden and moved;
- * layout is stored as a per-panel offset from the default position so it
- * survives init_dots() re-runs (resolution / option changes) and persists in
- * the keybind config. A master overlay toggle hides the whole GUI chrome for
- * an unobstructed view of the game world; interaction windows (teleporter,
- * context menu, help, ...) stay usable.
+ * inventory, speed, buffs, hotbar) plus the equipment paper doll. Each panel
+ * can be hidden and moved; the bigger ones are framed windows with a title
+ * bar, a close button, a minimize button and - where a size setting exists -
+ * a resize grip. Layout is stored as a per-panel offset from the default
+ * position so it survives init_dots() re-runs (resolution / option changes)
+ * and persists in the keybind config. A master overlay toggle hides the whole
+ * GUI chrome for an unobstructed view of the game world; interaction windows
+ * (teleporter, context menu, help, ...) stay usable.
  */
 
 #ifndef PANELS_H
@@ -18,16 +20,24 @@
 #include "../dll.h"
 
 enum {
-	PANEL_SKILLS, /* skill list / open container + left scrollbar */
-	PANEL_CHAT, /* chat text + input line                     */
-	PANEL_INVENTORY, /* inventory grid + right scrollbar           */
-	PANEL_GOLD, /* gold purse + trashcan                      */
-	PANEL_SPEED, /* stealth/normal/fast walk mode              */
-	PANEL_BUFFS, /* self-spell bars + rage meter               */
-	PANEL_HOTBAR, /* hotbar rows + spellbook chevron            */
-	PANEL_EQUIPMENT, /* worn-equipment slots + gear lock           */
+	PANEL_SKILLS, /* skill list / open container + scrollbar     */
+	PANEL_CHAT, /* chat text + input line                      */
+	PANEL_INVENTORY, /* inventory grid + scrollbar + purse + trash  */
+	PANEL_SPEED, /* stealth/normal/fast walk mode               */
+	PANEL_BUFFS, /* self-spell timers + rage meter              */
+	PANEL_HOTBAR, /* hotbar rows + spellbook chevron             */
+	PANEL_EQUIPMENT, /* worn-equipment paper doll + gear lock       */
 	MAX_PANEL
 };
+
+/* slim grab strip above a HUD plate - the only draggable part of it, so
+ * clicks still reach the controls inside */
+#define HUD_GRIP_H 9
+
+/* frame_kind(): how much chrome a panel draws around its content */
+#define PANEL_FRAME_NONE   0 /* none - the panel draws its own look entirely */
+#define PANEL_FRAME_HUD    1 /* translucent plate with a slim drag strip     */
+#define PANEL_FRAME_WINDOW 2 /* title bar + close + minimize (+ resize grip) */
 
 /* master GUI overlay toggle - session only, always starts visible */
 DLL_EXPORT extern int gui_overlay_visible;
@@ -41,15 +51,39 @@ DLL_EXPORT void panel_toggle(int p);
  * forces the skills panel, an active chat line forces the chat panel) */
 DLL_EXPORT int panel_shown(int p);
 
+/* minimized to its title bar: the frame is still there, the content is not */
+DLL_EXPORT int panel_collapsed(int p);
+DLL_EXPORT void panel_set_collapsed(int p, int on);
+
+/* shown and not collapsed - the guard for drawing a panel's content */
+DLL_EXPORT int panel_content_shown(int p);
+
 /* persistent drag offset from the default layout position */
 DLL_EXPORT int panel_dx(int p);
 DLL_EXPORT int panel_dy(int p);
 
 const char *panel_id(int p); /* config key, e.g. "skills" */
-const char *panel_name(int p); /* display name, e.g. "Skills Panel" */
+const char *panel_name(int p); /* display name, e.g. "Skills" */
+const char *panel_title(int p); /* live window title (container name, ...) */
+int panel_frame_kind(int p);
+int panel_resizable(int p);
 
-/* shift the panel's dots/buttons by the stored offsets; call at the very
- * end of init_dots() (after every set_dot/set_but) */
+/* content rectangle, published by init_dots() and moved with the panel */
+void panel_set_content_rect(int p, int x1, int y1, int x2, int y2);
+int panel_content_rect(int p, int *x1, int *y1, int *x2, int *y2);
+
+/* outer frame rectangle (content plus chrome); 0 when the panel is
+ * unframed. Honors the collapsed state. */
+int panel_frame_rect(int p, int *x1, int *y1, int *x2, int *y2);
+
+/* Mirror the derived chrome geometry into but[]: init_dots() hands in its
+ * set_but() so the shared capture/click machinery can drive the title bars,
+ * glyph buttons and resize grips. Call it after the content rects are
+ * published and before panels_apply_offsets(). */
+void panels_place_chrome_buttons(void (*place)(int bidx, int x, int y, int hitrad, int flags));
+
+/* shift the panel's dots/buttons/content rect by the stored offsets; call at
+ * the very end of init_dots() (after every set_dot/set_but) */
 void panels_apply_offsets(void);
 
 /* drag-handle mouse capture: apply mousedx/mousedy to the panel that owns
@@ -58,13 +92,28 @@ void panels_apply_offsets(void);
 void panels_drag(int p);
 void panels_drag_finished(void);
 
-/* which panel owns button b, or -1 (drag handles included) */
-int panel_owns_button(int b);
+/* resize-grip mouse capture: turn mousedx/mousedy into size-setting steps
+ * (inventory columns/rows, skill list rows). Returns 1 when the layout
+ * changed and init_dots() has to run again. */
+int panels_resize(int p);
 
-/* subtle drag-handle indicator near the mouse; call late in display() */
+/* which panel owns button b, or -1 (chrome buttons included) */
+int panel_owns_button(int b);
+/* 0 when b belongs to a hidden panel, or to the content of a collapsed one */
+int panel_button_live(int b);
+
+/* window chrome: draw the frames (before the panel contents), hit-test the
+ * title bars and glyph buttons, and tell whether the pointer is over a
+ * framed panel at all (so the world below is not targeted) */
+void panels_display_frames(void);
+int panels_frame_button(int x, int y);
+int panels_frame_over(int x, int y);
+
+/* subtle drag-handle indicator near the mouse for unframed panels; call
+ * late in display() */
 void panels_display_handles(void);
 
-/* forget all offsets and visibility toggles (does not touch the
+/* forget all offsets, visibility and collapse toggles (does not touch the
  * fullscreen-world setting); caller re-runs init_dots() + saves */
 void panels_reset_layout(void);
 

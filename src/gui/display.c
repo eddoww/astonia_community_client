@@ -44,6 +44,11 @@ void display_wear_lock(void)
 	save_options();
 }
 
+/* Which slots the carried/hovered item could be worn in, so the paper doll
+ * can highlight them. Mirrors the IF_WN* flag order of weaname[]. */
+static const unsigned int wea_slot_flag[12] = {IF_WNRRING, IF_WNRHAND, IF_WNLHAND, IF_WNLRING, IF_WNNECK, IF_WNHEAD,
+    IF_WNCLOAK, IF_WNBODY, IF_WNBELT, IF_WNARMS, IF_WNLEGS, IF_WNFEET};
+
 void display_wear(void)
 {
 	int b;
@@ -51,12 +56,19 @@ void display_wear(void)
 	unsigned short c1, c2, c3, shine;
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
+	int cx1, cy1, cx2, cy2;
 
 	for (b = BUT_WEA_BEG; b <= BUT_WEA_END; b++) {
 		int i = b - BUT_WEA_BEG;
 		int x = butx(b);
 		int y = buty(b);
-		int yt = y + 23;
+		int yt = y + 13;
+		unsigned short namecol = UI_TEXT_MUTED;
+		int named = 0;
+
+		if (but[b].flags & BUTF_NOHIT) {
+			continue; /* slot has no cell in the doll */
+		}
 
 		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
 		if (i == weasel) {
@@ -83,50 +95,26 @@ void display_wear(void)
 			fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = i == weasel ? FX_ITEMBRIGHT : FX_ITEMLIGHT;
 
 			render_sprite_fx(&fx, x, y);
+		} else {
+			/* an empty cell says what belongs in it - the doll is only
+			 * readable as a body once the slots are labelled */
+			named = 1;
 		}
 
-		if (butsel >= BUT_WEA_BEG && butsel <= BUT_WEA_END && !vk_item && capbut == -1) {
-			render_text(x, yt, textcolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
+		/* the carried (or hovered) item fits here: call the slot out */
+		if (cflags & wea_slot_flag[i]) {
+			named = 1;
+			namecol = whitecolor;
+			if (i == 2 && (cflags & IF_WNTWOHANDED)) {
+				namecol = redcolor;
+			}
 		}
-
-		if ((cflags & IF_WNRRING) && i == 0) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
+		if (butsel >= BUT_WEA_BEG && butsel <= BUT_WEA_END && !vk_item && capbut == -1 && i == weasel) {
+			named = 1;
+			namecol = textcolor;
 		}
-		if ((cflags & IF_WNRHAND) && i == 1) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNLHAND) && i == 2 && !(cflags & IF_WNTWOHANDED)) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNTWOHANDED) && i == 2) {
-			render_text(x, yt, redcolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNLRING) && i == 3) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNNECK) && i == 4) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNHEAD) && i == 5) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNCLOAK) && i == 6) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNBODY) && i == 7) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNBELT) && i == 8) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNARMS) && i == 9) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNLEGS) && i == 10) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNFEET) && i == 11) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
+		if (named) {
+			render_text(x, yt, namecol, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
 		}
 
 		if (i == 2 && item[weatab[1]] && (item_flags[weatab[1]] & IF_WNTWOHANDED)) {
@@ -143,9 +131,13 @@ void display_wear(void)
 		}
 	}
 
+	/* gear lock in the window's footer */
+	if (panel_content_rect(PANEL_EQUIPMENT, &cx1, &cy1, &cx2, &cy2)) {
+		render_rect_alpha(cx1, cy2 - WEA_FOOT_H, cx2, cy2 - WEA_FOOT_H + 1, UI_BORDER, UI_A_RULE);
+	}
 	dx_copysprite_emerald(butx(BUT_WEA_LCK), buty(BUT_WEA_LCK), 2 - gear_lock, 2);
-	render_text(butx(BUT_WEA_LCK) + 6, buty(BUT_WEA_LCK) - 4, textcolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED,
-	    gear_lock ? "Gear locked" : "Gear free");
+	render_text(butx(BUT_WEA_LCK) + 8, buty(BUT_WEA_LCK) - 4, gear_lock ? UI_TEXT : UI_TEXT_MUTED,
+	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, gear_lock ? "Gear locked" : "Gear free");
 }
 
 void display_look(void)
@@ -158,9 +150,11 @@ void display_look(void)
 
 	render_sprite(opt_sprite(994), dotx(DOT_LOK), doty(DOT_LOK), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 
+	/* the look window keeps the classic 12-wide strip - it is a fixed-size
+	 * sprite window, not the paper doll */
 	for (b = BUT_WEA_BEG; b <= BUT_WEA_END; b++) {
 		int i = b - BUT_WEA_BEG;
-		int x = dotx(DOT_LOK) + but[b].x - dotx(DOT_WEA) + 30;
+		int x = dotx(DOT_LOK) + 30 + i * FDX;
 		int y = doty(DOT_LOK) + 20;
 
 		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
@@ -246,20 +240,10 @@ void display_inventory(void)
 
 	// fkey[0]=fkey[1]=fkey[2]=fkey[3]=0;
 
-	/* non-classic grids don't match the bar art's recess: back the tiled
-	 * slot cells (and the scrollbar rail) with a plain panel instead */
-	if (!inv_grid_is_classic()) {
-		int y1 = doty(DOT_IN1);
-		int y2 = doty(DOT_IN2);
-
-		if (buty(BUT_SCR_UP) - 12 < y1) {
-			y1 = buty(BUT_SCR_UP) - 12;
-		}
-		if (buty(BUT_SCR_DW) + 12 > y2) {
-			y2 = buty(BUT_SCR_DW) + 12;
-		}
-		ui_panel(butx(BUT_SCR_UP) - 10, y1, dotx(DOT_IN2), y2);
-	}
+	/* sunken trough behind the scrollbar rail; the window frame itself is
+	 * drawn by panels_display_frames() */
+	render_rounded_rect_filled_alpha(dotx(DOT_IN1), doty(DOT_IN1), dotx(DOT_IN1) + INV_RAIL_W,
+	    doty(DOT_IN1) + __invdy * FDX, UI_R_CHIP, UI_BG_SUNKEN, UI_A_SOCKET);
 
 	for (b = BUT_INV_BEG; b <= BUT_INV_END; b++) {
 		int i;
@@ -273,9 +257,6 @@ void display_inventory(void)
 		int c = (i - 2) % 4;
 		int x = butx(b);
 		int y = buty(b);
-		if (y > doty(DOT_IN2) - 20) {
-			break;
-		}
 		int yt = y + 12;
 
 		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
@@ -323,17 +304,14 @@ void display_container(void)
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
 
-	render_sprite(
-	    opt_sprite(SPR_TEXTF), dot[DOT_CON].x - 20, dot[DOT_CON].y - 55, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	if (con_type == 1) {
-		render_text(dot[DOT_CON].x, dot[DOT_CON].y - 50 + 2, textcolor, RENDER_TEXT_LEFT | RENDER_TEXT_LARGE, con_name);
-	} else {
-		render_text_fmt(dot[DOT_CON].x, dot[DOT_CON].y - 50 + 2, textcolor, RENDER_TEXT_LEFT | RENDER_TEXT_LARGE,
-		    "%s's Shop", con_name);
-	}
-
+	/* the container's name lives in the skills window's title bar
+	 * (panel_title()), so no separate header plate is drawn here */
 	for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
 		int i = conoff * CONDX + b - BUT_CON_BEG;
+
+		if (but[b].flags & BUTF_NOHIT) {
+			continue;
+		}
 		int x = butx(b);
 		int y = buty(b);
 		int yt = y + 12;
@@ -383,26 +361,37 @@ void display_container(void)
 	}
 }
 
+/* Purse and trashcan sit on the inventory window's footer row: the purse is
+ * both the gold readout and the handle you grab to take/drop coins, the
+ * trashcan is where a carried item goes to be destroyed. */
 void display_gold(void)
 {
-	int x, y;
+	int x = butx(BUT_GLD), y = buty(BUT_GLD);
+	int cx1, cy1, cx2, cy2;
 
-	x = but[BUT_GLD].x;
-	y = but[BUT_GLD].y;
+	if (panel_content_rect(PANEL_INVENTORY, &cx1, &cy1, &cx2, &cy2)) {
+		render_rect_alpha(cx1, cy2 - INV_FOOT_H, cx2, cy2 - INV_FOOT_H + 1, UI_BORDER, UI_A_RULE);
+	}
 
-	/* The purse is the money panel's only icon - it is also what you grab to
-	 * take/drop gold, so it must be there in every bottom-bar mode. The old
-	 * small-bar (GO_SMALLBOT) exception left the panel as a bare number; the
-	 * buff bars sit 24px lower in that mode and clip their last few pixels
-	 * over the purse's top edge, which is the lesser evil. */
-	render_sprite(SPR_GOLD_BEG + 7, x, y - 10,
+	render_sprite(SPR_GOLD_BEG + 7, x, y,
 	    lcmd == CMD_TAKE_GOLD || lcmd == CMD_DROP_GOLD ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
 
 	if (capbut == BUT_GLD) {
-		dx_drawtext_gold(x, y - 10, textcolor, (int)takegold);
-		dx_drawtext_gold(x, y + 2, textcolor, (int)(gold - takegold));
+		/* splitting a stack: what you are pulling out over what stays */
+		dx_drawtext_gold(x + 34, y - 5, whitecolor, (int)takegold);
+		dx_drawtext_gold(x + 34, y + 5, UI_TEXT_MUTED, (int)(gold - takegold));
 	} else {
-		dx_drawtext_gold(x, y + 2, textcolor, (int)gold);
+		dx_drawtext_gold(x + 34, y, UI_TEXT_GOLD, (int)gold);
+	}
+
+	/* trashcan: dimmed until there is something to throw away */
+	x = butx(BUT_JNK);
+	y = buty(BUT_JNK);
+	if (vk_item || csprite) {
+		render_sprite(25, x, y, lcmd == CMD_JUNK_ITEM ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+	} else {
+		render_sprite(25, x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+		render_rect_alpha(x - 13, y - 13, x + 13, y + 13, UI_BG_BASE, 120);
 	}
 }
 
@@ -414,14 +403,7 @@ void display_citem(void)
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
 
-	// trashcan
-	if (vk_item || csprite) {
-		x = but[BUT_JNK].x;
-		y = but[BUT_JNK].y;
-		render_sprite(25, x, y, lcmd == CMD_JUNK_ITEM ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
-	}
-
-	// citem
+	// citem (the trashcan is part of the inventory window - display_gold())
 	if (!csprite) {
 		return;
 	}
@@ -471,24 +453,38 @@ void display_citem(void)
 	render_pop_clip();
 }
 
+/* Slim scrollbar rail matching the window chrome: a sunken trough, two
+ * triangle arrows and a rounded thumb. The classic SPR_SCR* sprites are far
+ * wider than the 12px rail the panels reserve - they used to spill over the
+ * first item column and the skill values. */
+static void draw_scroll_rail(int b_up, int b_tr, int b_dw, int maxoff)
+{
+	int cx = butx(b_up);
+	int x1 = cx - UI_SCROLLBAR_W / 2 + 1, x2 = cx + UI_SCROLLBAR_W / 2 - 1;
+	int top = buty(b_up), bot = buty(b_dw);
+	int ty = buty(b_tr);
+	int hot_up = (butsel == b_up), hot_dw = (butsel == b_dw);
+	int hot_tr = (butsel == b_tr) || (capbut == b_tr);
+	unsigned short thumb = (maxoff > 0) ? (hot_tr ? UI_ACCENT : UI_BORDER_STRONG) : UI_BG_ROW_ACTIVE;
+
+	render_rounded_rect_filled_alpha(x1, top, x2, bot, UI_R_CHIP, UI_BG_SUNKEN, UI_A_CONTROL);
+
+	render_triangle_filled_alpha(cx, top - 4, cx - 4, top + 2, cx + 4, top + 2,
+	    hot_up ? UI_ACCENT : (maxoff > 0 ? UI_TEXT_LABEL : UI_TEXT_DISABLED), 255);
+	render_triangle_filled_alpha(cx, bot + 4, cx - 4, bot - 2, cx + 4, bot - 2,
+	    hot_dw ? UI_ACCENT : (maxoff > 0 ? UI_TEXT_LABEL : UI_TEXT_DISABLED), 255);
+
+	render_rounded_rect_filled_alpha(x1, ty - 5, x2, ty + 5, UI_R_CHIP, thumb, hot_tr ? 255 : UI_A_CONTROL);
+}
+
 void display_scrollbar_left(void)
 {
-	render_sprite(SPR_SCRUP, but[BUT_SCL_UP].x, but[BUT_SCL_UP].y, butsel == BUT_SCL_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRLT, but[BUT_SCL_TR].x, but[BUT_SCL_TR].y, butsel == BUT_SCL_TR ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRDW, but[BUT_SCL_DW].x, but[BUT_SCL_DW].y, butsel == BUT_SCL_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
+	draw_scroll_rail(BUT_SCL_UP, BUT_SCL_TR, BUT_SCL_DW, con_cnt ? max_conoff : max_skloff);
 }
 
 void display_scrollbar_right(void)
 {
-	render_sprite(SPR_SCRUP, but[BUT_SCR_UP].x, but[BUT_SCR_UP].y, butsel == BUT_SCR_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRRT, but[BUT_SCR_TR].x, but[BUT_SCR_TR].y, butsel == BUT_SCR_TR ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRDW, but[BUT_SCR_DW].x, but[BUT_SCR_DW].y, butsel == BUT_SCR_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
+	draw_scroll_rail(BUT_SCR_UP, BUT_SCR_TR, BUT_SCR_DW, max_invoff);
 }
 
 void display_scrollbars(void)
@@ -743,80 +739,24 @@ static void draw_bar_region(unsigned int sprite, int by, int sx0, int sx1, int a
 	render_pop_clip();
 }
 
-/* Top bars (999/309) on a wider canvas. The chain plates read as item
- * slots, so plates are drawn ONLY under the 12 equipment slots (centered
- * between the ornament and the control cluster); the remaining stretches
- * use a plain plate-free slice of the art (plate-interior rock between
- * the rails, art columns 212-228). Art geometry: left ornament [0,160), 12 plates
- * [160,640), right controls [640,800). At XRES0 with the panel in its home
- * position this reproduces the original single blit exactly.
- *
- * The plate band is the equipment panel's slice of the bar art: it follows
- * the panel's drag offset and hides with it, mirroring how the bottom bar
- * art is cut into per-panel slices. While the panel sits in its home spot
- * the band is left out of the filler pass so transparent plate pixels never
- * show filler behind them (keeps the default pixel-identical). */
+/* Top bar (999/309) on a wider canvas. The art is drawn for 800px: left
+ * ornament [0,160) carries the experience/military bars, the right section
+ * [640,800) the gear lock, menu and clock. The middle used to hold twelve
+ * chain plates for the worn-equipment strip; the equipment is its own paper
+ * doll window now, so the gap is filled with the plate-free rock between the
+ * rails (art columns 212-228) all the way across. */
 static void render_top_bar(unsigned int sprite, int bx, int by)
 {
-	int wea_left = bx + (XRES - 480) / 2; /* home plate band (matches DOT_WEA - 20) */
 	int right_x = bx + XRES - 160;
-	int eq_home = panel_shown(PANEL_EQUIPMENT) && !panel_dx(PANEL_EQUIPMENT) && !panel_dy(PANEL_EQUIPMENT);
 	int x, e;
 
 	draw_bar_region(sprite, by, bx, bx + 160, 0); /* ornament + exp bars */
-	draw_bar_region(sprite, by, right_x, bx + XRES, 640); /* gear lock + menu + clock */
+	draw_bar_region(sprite, by, right_x, bx + XRES, 640); /* menu + clock  */
 
-	if (eq_home) {
-		for (x = bx + 160; x < wea_left; x += 16) { /* plain filler, left of the slots */
-			e = (x + 16 < wea_left) ? x + 16 : wea_left;
-			draw_bar_region(sprite, by, x, e, 212);
-		}
-		for (x = wea_left + 480; x < right_x; x += 16) { /* plain filler, right of the slots */
-			e = (x + 16 < right_x) ? x + 16 : right_x;
-			draw_bar_region(sprite, by, x, e, 212);
-		}
-	} else {
-		for (x = bx + 160; x < right_x; x += 16) { /* the panel left home: filler all across */
-			e = (x + 16 < right_x) ? x + 16 : right_x;
-			draw_bar_region(sprite, by, x, e, 212);
-		}
+	for (x = bx + 160; x < right_x; x += 16) {
+		e = (x + 16 < right_x) ? x + 16 : right_x;
+		draw_bar_region(sprite, by, x, e, 212);
 	}
-
-	/* equipment plates at the (possibly dragged) panel position */
-	if (panel_shown(PANEL_EQUIPMENT)) {
-		draw_bar_region(sprite, doty(DOT_WEA) - 20, dotx(DOT_WEA) - 20, dotx(DOT_WEA) - 20 + 480, 160);
-	}
-}
-
-/* Bottom bars (998/991) on a wider canvas: left section as-is, right
- * section anchored to the right edge, and the tileable middle repeated to
- * fill the space between. Tiles are laid right-to-left so the single cut
- * tile meets the left section, where the art has a natural break. The
- * tile [232,620) is strictly inside the rock texture: the art's strut
- * columns (220-221, 629-640) must appear exactly once, not per tile. */
-static void render_bar_tiled(unsigned int sprite, int bx, int by, int left_w, int right_x0, int tile_x0, int tile_x1)
-{
-	if (XRES <= XRES0) {
-		render_sprite(sprite, bx, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-		return;
-	}
-
-	int right_w = XRES0 - right_x0;
-	int gap_l = bx + left_w;
-	int gap_r = bx + XRES - right_w;
-	int tw = tile_x1 - tile_x0;
-	int x, x0;
-
-	draw_bar_region(sprite, by, bx, gap_l, 0); /* left section */
-
-	/* middle tiles, right to left; art column tile_x1 meets the right
-	 * section's first column so that junction is always seamless */
-	for (x = gap_r; x > gap_l; x -= tw) {
-		x0 = (x - tw > gap_l) ? x - tw : gap_l;
-		draw_bar_region(sprite, by, x0, x, tile_x0 + (x0 - (x - tw)));
-	}
-
-	draw_bar_region(sprite, by, gap_r, bx + XRES, right_x0); /* right section */
 }
 
 static void trans_date(int t, int *phour, int *pmin)
@@ -884,61 +824,11 @@ void display_screen(void)
 
 	sprintf(hover_time_text, "%02d:%02d Astonia Standard Time", h, m);
 
-	/* Bottom bar art in independently moveable slices, one per panel. Each
-	 * slice draws the whole bar shifted by its panel's drag offset, clipped
-	 * to the slice's rectangle, so the art follows the panel and hidden
-	 * slices leave the world visible.
-	 *
-	 * Slice map (art columns of the XRES0-wide bar):
-	 *   [0 .. 173)    skills list + left scrollbar rails
-	 *   [173 .. 222)  the framed column, cut into three bands:
-	 *                   top    (.. BOT+38)     speed-mode inset box
-	 *                   middle (.. BO2-32)     buff-bar tubes
-	 *                   bottom                 gold readout rock
-	 *   [222 .. -173) chat (tiled rock)
-	 *   [-173 .. end) inventory + right scrollbar (right-anchored)
-	 * All boundaries are computed from non-panel dots so they describe the
-	 * default layout even while panels are moved. */
-	{
-		unsigned int spr = opt_sprite((game_options & GO_SMALLBOT) ? 991 : 998);
-		int bx = dotx(DOT_BOT), by = doty(DOT_BOT), bot = doty(DOT_BO2);
-		int split_l = dotx(DOT_SCL) + 8;
-		int col_r = bx + 222;
-		int split_r = dotx(DOT_SCR) - 8;
-		int speed_cut = by + 38;
-		int gold_cut = bot - 32;
-
-		struct {
-			int panel;
-			int x1, y1, x2, y2;
-		} slice[] = {
-		    {PANEL_SKILLS, bx, by, split_l, bot},
-		    {PANEL_SPEED, split_l, by, col_r, speed_cut},
-		    {PANEL_BUFFS, split_l, speed_cut, col_r, gold_cut},
-		    {PANEL_GOLD, split_l, gold_cut, col_r, bot},
-		    {PANEL_CHAT, col_r, by, split_r, bot},
-		    {PANEL_INVENTORY, split_r, by, bx + XRES, bot},
-		};
-
-		for (int i = 0; i < (int)ARRAYSIZE(slice); i++) {
-			int dx, dy;
-
-			if (!panel_shown(slice[i].panel)) {
-				continue;
-			}
-			/* a non-classic inventory grid doesn't fit the art's 4-wide
-			 * recess; display_inventory() draws its own panel instead */
-			if (slice[i].panel == PANEL_INVENTORY && !inv_grid_is_classic()) {
-				continue;
-			}
-			dx = panel_dx(slice[i].panel);
-			dy = panel_dy(slice[i].panel);
-			render_push_clip();
-			render_more_clip(slice[i].x1 + dx, slice[i].y1 + dy, slice[i].x2 + dx, slice[i].y2 + dy);
-			render_bar_tiled(spr, bx + dx, by + dy, 222, 629, 232, 620);
-			render_pop_clip();
-		}
-	}
+	/* The bottom bar art is gone: skills, chat, inventory, speed and the
+	 * buff chips each draw their own frame now (panels_display_frames()),
+	 * so a single fixed slab of rock across the bottom would only fight
+	 * them - and it could not follow a panel that had been dragged away.
+	 */
 }
 
 void display_text(void)
@@ -956,51 +846,89 @@ void display_text(void)
 	display_cmd();
 }
 
+/* Speed selector: a three-segment control, slowest first. The bound key is
+ * printed under each label so the F-key shortcuts stay discoverable. */
 void display_mode(void)
 {
-	static char *speedtext[3] = {"NORMAL", "FAST", "STEALTH"};
-	int sel;
-	unsigned short int col;
+	static const struct {
+		int but;
+		int mode;
+		const char *label;
+		const char *bind;
+	} seg[3] = {
+	    {BUT_MOD_WALK2, 2, "Stealth", "move.speed_stealth"},
+	    {BUT_MOD_WALK0, 0, "Normal", "move.speed_normal"},
+	    {BUT_MOD_WALK1, 1, "Fast", "move.speed_fast"},
+	};
 
-	// walk
-	if (butsel >= BUT_MOD_WALK0 && butsel <= BUT_MOD_WALK2) {
-		sel = butsel - BUT_MOD_WALK0;
-		col = sel == pspeed ? lightbluecolor : bluecolor;
-	} else {
-		sel = pspeed;
-		col = lightbluecolor;
+	int i;
+
+	for (i = 0; i < 3; i++) {
+		int x = butx(seg[i].but) - SPEED_SEG_W / 2;
+		int y = buty(seg[i].but) - SPEED_SEG_H / 2;
+		int active = (pspeed == seg[i].mode);
+		int hot = (butsel == seg[i].but);
+		int state = active ? UI_BTN_ACTIVE : (hot ? (vk_lbut ? UI_BTN_PRESSED : UI_BTN_HOVER) : UI_BTN_REST);
+		InputBinding *b = input_find_by_id(seg[i].bind);
+		const char *key = (b && b->key != SDLK_UNKNOWN) ? input_key_to_string(b->key, b->modifiers) : "";
+
+		ui_button(x, y, SPEED_SEG_W, SPEED_SEG_H, "", state);
+		render_text(x + SPEED_SEG_W / 2, y + 3, active || hot ? UI_TEXT : UI_TEXT_LABEL, UI_FONT_CENTER, seg[i].label);
+		if (*key) {
+			render_text(x + SPEED_SEG_W / 2, y + 13, active ? UI_ACCENT : UI_TEXT_DISABLED, UI_FONT_CENTER, key);
+		}
+	}
+}
+
+/* ── Buff chips ─────────────────────────────────────────────────────────
+ *
+ * One socket per tracked effect (potion, heal/freeze, bless, rage). An
+ * active effect fills its socket from the bottom as time runs out and
+ * prints what is left underneath; an idle one stays a dim empty socket. */
+static void buff_chip(int idx, const char *tag, unsigned short color, int active, int pct, const char *sub)
+{
+	int x1 = dotx(DOT_SSP) + idx * (BUFF_CHIP + BUFF_GAP);
+	int y1 = doty(DOT_SSP);
+	int x2 = x1 + BUFF_CHIP, y2 = y1 + BUFF_CHIP;
+	int fill;
+
+	if (pct < 0) {
+		pct = 0;
+	}
+	if (pct > 100) {
+		pct = 100;
 	}
 
-	dx_copysprite_emerald(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y, 4, sel == 0 ? 2 : pspeed == 0 ? 1 : 0);
-	dx_copysprite_emerald(but[BUT_MOD_WALK1].x, but[BUT_MOD_WALK1].y, 4, sel == 1 ? 2 : pspeed == 1 ? 1 : 0);
-	dx_copysprite_emerald(but[BUT_MOD_WALK2].x, but[BUT_MOD_WALK2].y, 4, sel == 2 ? 2 : pspeed == 2 ? 1 : 0);
-
-	render_text(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y + 7, bluecolor,
-	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "F6");
-	render_text(but[BUT_MOD_WALK1].x, but[BUT_MOD_WALK1].y + 7, bluecolor,
-	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "F5");
-	render_text(but[BUT_MOD_WALK2].x, but[BUT_MOD_WALK2].y + 7, bluecolor,
-	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "F7");
-
-	if (*speedtext[sel]) {
-		render_text(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y - 13, col,
-		    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, speedtext[sel]);
+	render_rounded_rect_filled_alpha(x1, y1, x2, y2, UI_R_ROW, UI_BG_SUNKEN, UI_A_SOCKET);
+	if (active) {
+		fill = (BUFF_CHIP - 2) * pct / 100;
+		if (fill > 0) {
+			render_rect_alpha(x1 + 1, y2 - 1 - fill, x2 - 1, y2 - 1, color, 150);
+		}
+		render_rounded_rect_alpha(x1, y1, x2, y2, UI_R_ROW, color, UI_A_BORDER_HOV);
+	} else {
+		render_rounded_rect_alpha(x1, y1, x2, y2, UI_R_ROW, UI_BORDER, UI_A_BORDER_REST);
+	}
+	render_text((x1 + x2) / 2, y1 + BUFF_CHIP / 2 - 5, active ? UI_TEXT : UI_TEXT_DISABLED, UI_FONT_CENTER, tag);
+	if (active && sub && *sub) {
+		render_text((x1 + x2) / 2, y2 + 1, UI_TEXT_MUTED, UI_FONT_CENTER, sub);
 	}
 }
 
 void display_selfspells(void)
 {
 	int cn = (int)map[mapmn(MAPDX / 2, MAPDY / 2)].cn;
-	if (!cn) {
-		return;
-	}
+	int pot_on = 0, mid_on = 0, bls_on = 0;
+	int pot_pct = 0, mid_pct = 0, bls_pct = 0;
+	char pot_txt[16] = "", mid_txt[16] = "", bls_txt[16] = "";
+	const char *mid_tag = (sv_ver == 35) ? "HEA" : "FRZ";
 
 	sprintf(hover_bless_text, "Bless: Not active");
 	sprintf(hover_freeze_text, "Freeze: Not active");
 	sprintf(hover_heal_text, "Heal: Not active");
 	sprintf(hover_potion_text, "Potion: Not active");
 
-	for (int n = 0; n < 4; n++) {
+	for (int n = 0; cn && n < 4; n++) {
 		int nr = find_cn_ceffect(cn, n);
 		if (nr == -1) {
 			continue;
@@ -1008,62 +936,51 @@ void display_selfspells(void)
 
 		switch (ceffect[nr].generic.type) {
 		case 9: {
-			int step = 50 - 50 * (int)(ceffect[nr].bless.stop - tick) /
-			                    (int)(ceffect[nr].bless.stop - ceffect[nr].bless.start);
-			render_push_clip();
-			render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
-			if (ceffect[nr].bless.stop - tick < 24 * 30 && (tick & 4)) {
-				render_sprite(997, dotx(DOT_SSP) + 2 * 10, doty(DOT_SSP) + step, RENDERFX_BRIGHT, RENDER_ALIGN_NORMAL);
-			} else {
-				render_sprite(
-				    997, dotx(DOT_SSP) + 2 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-			}
-			render_pop_clip();
-			sprintf(hover_bless_text, "Bless: %us to go", (ceffect[nr].bless.stop - tick) / 24);
+			unsigned int left = ceffect[nr].bless.stop - tick;
+
+			bls_on = 1;
+			bls_pct = 100 * (int)left / (int)(ceffect[nr].bless.stop - ceffect[nr].bless.start);
+			snprintf(bls_txt, sizeof(bls_txt), "%us", left / 24);
+			sprintf(hover_bless_text, "Bless: %us to go", left / 24);
 			break;
 		}
 		case 10:
 #define HEALDURATION (TICKS * 8)
 			if (sv_ver == 35) {
-				int step = 50 * (tick - ceffect[nr].heal.start) / HEALDURATION;
-				render_push_clip();
-				render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
-				render_sprite(
-				    997, dotx(DOT_SSP) + 1 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-				render_pop_clip();
+				unsigned int done = tick - ceffect[nr].heal.start;
+
+				mid_on = 1;
+				mid_pct = 100 - 100 * (int)done / HEALDURATION;
+				snprintf(mid_txt, sizeof(mid_txt), "%.0fs", (ceffect[nr].heal.start + HEALDURATION - tick) / 24.0);
 				sprintf(hover_heal_text, "Heal: %.1fs to go", (ceffect[nr].heal.start + HEALDURATION - tick) / 24.0);
 			}
 			break;
 
 		case 11:
 			if (sv_ver == 30) {
-				int step = 50 - 50 * (int)(ceffect[nr].freeze.stop - tick) /
-				                    (int)(ceffect[nr].freeze.stop - ceffect[nr].freeze.start);
-				render_push_clip();
-				render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
-				render_sprite(
-				    997, dotx(DOT_SSP) + 1 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-				render_pop_clip();
-				sprintf(hover_freeze_text, "Freeze: %us to go", (ceffect[nr].freeze.stop - tick) / 24);
+				unsigned int left = ceffect[nr].freeze.stop - tick;
+
+				mid_on = 1;
+				mid_pct = 100 * (int)left / (int)(ceffect[nr].freeze.stop - ceffect[nr].freeze.start);
+				snprintf(mid_txt, sizeof(mid_txt), "%us", left / 24);
+				sprintf(hover_freeze_text, "Freeze: %us to go", left / 24);
 			}
 			break;
 		case 14: {
-			int step = 50 - 50 * (int)(ceffect[nr].potion.stop - tick) /
-			                    (int)(ceffect[nr].potion.stop - ceffect[nr].potion.start);
-			render_push_clip();
-			render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
-			if (step >= 40 && (tick & 4)) {
-				render_sprite(997, dotx(DOT_SSP) + 0 * 10, doty(DOT_SSP) + step, RENDERFX_BRIGHT, RENDER_ALIGN_NORMAL);
-			} else {
-				render_sprite(
-				    997, dotx(DOT_SSP) + 0 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-			}
-			render_pop_clip();
-			sprintf(hover_potion_text, "Potion: %us to go", (ceffect[nr].potion.stop - tick) / 24);
+			unsigned int left = ceffect[nr].potion.stop - tick;
+
+			pot_on = 1;
+			pot_pct = 100 * (int)left / (int)(ceffect[nr].potion.stop - ceffect[nr].potion.start);
+			snprintf(pot_txt, sizeof(pot_txt), "%us", left / 24);
+			sprintf(hover_potion_text, "Potion: %us to go", left / 24);
 			break;
 		}
 		}
 	}
+
+	buff_chip(0, "POT", IRGB(8, 26, 10), pot_on, pot_pct, pot_txt);
+	buff_chip(1, mid_tag, IRGB(10, 18, 28), mid_on, mid_pct, mid_txt);
+	buff_chip(2, "BLS", IRGB(28, 22, 8), bls_on, bls_pct, bls_txt);
 }
 
 /* What the experience / military bars print right below themselves.
@@ -1303,31 +1220,31 @@ void display_military(void)
 	}
 }
 
+/* The rage chip is the fourth socket of the buffs panel; unlike the timed
+ * effects it fills up as rage builds rather than draining. */
 void display_rage(void)
 {
-	int step;
+	int pct, cap;
+	char txt[16] = "";
 
 	sprintf(hover_rage_text, "Rage: Not active");
 
 	if (!value[0][sv_val(V_RAGE)] || !rage) {
+		buff_chip(3, "RGE", IRGB(28, 8, 8), 0, 0, "");
 		return;
 	}
 
 	if (sv_ver == 35) {
-		step = 50 - 50 * rage / (value[0][V35_RAGE] + (int)(value[0][V35_TACTICS] * 0.15 + 0.1));
-	} else {
-		step = (int)(50 - 50 * rage / value[0][V3_RAGE]);
-	}
-	render_push_clip();
-	render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
-	render_sprite(997, dotx(DOT_SSP) + 3 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_pop_clip();
-
-	if (sv_ver == 35) {
+		cap = value[0][V35_RAGE] + (int)(value[0][V35_TACTICS] * 0.15 + 0.1);
 		sprintf(hover_rage_text, "Rage: +%d", rage / 4);
+		snprintf(txt, sizeof(txt), "+%d", rage / 4);
 	} else {
-		sprintf(hover_rage_text, "Rage: %d%%", 100 * rage / value[0][V3_RAGE]);
+		cap = (int)value[0][V3_RAGE];
+		sprintf(hover_rage_text, "Rage: %d%%", 100 * rage / max(1, cap));
+		snprintf(txt, sizeof(txt), "%d%%", 100 * rage / max(1, cap));
 	}
+	pct = 100 * rage / max(1, cap);
+	buff_chip(3, "RGE", IRGB(28, 8, 8), 1, pct, txt);
 }
 
 void display_game_special(void)

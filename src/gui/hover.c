@@ -17,6 +17,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/panels.h"
 #include "game/game.h"
 #include "game/game_private.h"
 #include "client/client.h"
@@ -55,27 +56,16 @@ void display_mouseover(void)
 		return;
 	}
 
-	if (mousey >= doty(DOT_SSP) && mousey <= doty(DOT_SSP) + 53) {
-		if (mousex >= dotx(DOT_SSP) + 28 && mousex <= dotx(DOT_SSP) + 35) {
-			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-			    hover_rage_text);
-		}
-		if (mousex >= dotx(DOT_SSP) + 18 && mousex <= dotx(DOT_SSP) + 25) {
-			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-			    hover_bless_text);
-		}
-		if (mousex >= dotx(DOT_SSP) + 8 && mousex <= dotx(DOT_SSP) + 15) {
-			if (sv_ver == 35) {
-				render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-				    hover_heal_text);
-			} else {
-				render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-				    hover_freeze_text);
-			}
-		}
-		if (mousex >= dotx(DOT_SSP) - 2 && mousex <= dotx(DOT_SSP) + 5) {
-			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-			    hover_potion_text);
+	/* buff chips: potion, heal/freeze, bless, rage - left to right */
+	if (panel_content_shown(PANEL_BUFFS) && mousey >= doty(DOT_SSP) && mousey <= doty(DOT_SSP) + BUFF_CHIP) {
+		const char *chip[BUFF_COUNT] = {
+		    hover_potion_text, (sv_ver == 35) ? hover_heal_text : hover_freeze_text, hover_bless_text, hover_rage_text};
+		int i = (mousex - dotx(DOT_SSP)) / (BUFF_CHIP + BUFF_GAP);
+		int within = (mousex - dotx(DOT_SSP)) % (BUFF_CHIP + BUFF_GAP);
+
+		if (mousex >= dotx(DOT_SSP) && i >= 0 && i < BUFF_COUNT && within < BUFF_CHIP) {
+			render_text_nl(
+			    mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, chip[i]);
 		}
 	}
 

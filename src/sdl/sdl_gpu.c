@@ -15,6 +15,7 @@
 #include "sdl_gpu.h"
 #include "sdl_gpu_post.h"
 #include "sdl_gpu_shaderfx.h"
+#include "sdl_gpu_glow.h"
 #include "sdl_gpu_atlas.h"
 #include "sdl_gpu_text.h"
 #include "astonia.h"
@@ -249,6 +250,7 @@ bool gpu_frame_begin(void)
 			SDL_SetGPUViewport(current_render_pass, &viewport);
 
 			gpu_shaderfx_frame_begin();
+			gpu_glow_frame_begin();
 			return true;
 		}
 		// Post-FX failed, fall through to direct swapchain rendering
@@ -286,6 +288,7 @@ bool gpu_frame_begin(void)
 	SDL_SetGPUViewport(current_render_pass, &viewport);
 
 	gpu_shaderfx_frame_begin();
+	gpu_glow_frame_begin();
 
 	return true;
 }
@@ -296,7 +299,10 @@ void gpu_frame_end(void)
 		return;
 	}
 
-	// Flush any pending batched sprites before ending the render pass
+	// Flush any pending batched glows and sprites before ending the render
+	// pass. Glows first: they are additive and were recorded underneath
+	// whatever sprite run is still pending.
+	gpu_glow_flush();
 	gpu_shaderfx_flush();
 
 	// End the main render pass
@@ -320,6 +326,7 @@ void gpu_frame_end(void)
 	// buffers in submission order, so the copy lands before the draws
 	// without any fence waits.
 	gpu_shaderfx_submit_upload();
+	gpu_glow_submit_upload();
 
 	// Optional A/B instrumentation: ASTONIA_GPU_STATS=1 logs draw-call and
 	// batching counters once per second (~any fps) for perf comparisons.
@@ -334,10 +341,13 @@ void gpu_frame_end(void)
 			static Uint64 render_ns_since;
 			static int frames_since, draws_since, fx_draws_since, fx_sprites_since;
 			static int text_runs_since, text_glyphs_since, text_fallbacks_since;
+			static int glow_draws_since, glow_glows_since;
 			int fxd, fxs, fxt, fxdirect;
 			int truns, tglyphs, tfall;
+			int gdraws, gglows;
 			gpu_shaderfx_get_stats(&fxd, &fxs, &fxt, &fxdirect);
 			gpu_text_get_stats(&truns, &tglyphs, &tfall);
+			gpu_glow_get_stats(&gdraws, &gglows);
 			frames_since++;
 			draws_since += gpu_debug_draw_count;
 			fx_draws_since += fxd;
@@ -345,6 +355,8 @@ void gpu_frame_end(void)
 			text_runs_since += truns;
 			text_glyphs_since += tglyphs;
 			text_fallbacks_since += tfall;
+			glow_draws_since += gdraws;
+			glow_glows_since += gglows;
 			render_ns_since += SDL_GetTicksNS() - gpu_frame_start_ns;
 			Uint64 now = SDL_GetTicks();
 			if (last_report == 0) {
@@ -355,16 +367,17 @@ void gpu_frame_end(void)
 				long long atlas_texels;
 				gpu_atlas_get_stats(&atlas_pages, &atlas_texels);
 				note("GPU_STATS frames=%d avg_draws=%d avg_fx_draws=%d avg_fx_sprites=%d avg_text_runs=%d "
-				     "avg_text_glyphs=%d avg_text_fallbacks=%d atlas_pages=%d "
+				     "avg_text_glyphs=%d avg_text_fallbacks=%d avg_glow_draws=%d avg_glows=%d atlas_pages=%d "
 				     "render_ms=%.2f ms/frame=%.2f",
 				    frames_since, draws_since / frames_since, fx_draws_since / frames_since,
 				    fx_sprites_since / frames_since, text_runs_since / frames_since, text_glyphs_since / frames_since,
-				    text_fallbacks_since / frames_since, atlas_pages,
-				    (double)render_ns_since / 1e6 / (double)frames_since,
+				    text_fallbacks_since / frames_since, glow_draws_since / frames_since,
+				    glow_glows_since / frames_since, atlas_pages, (double)render_ns_since / 1e6 / (double)frames_since,
 				    (double)(now - last_report) / (double)frames_since);
 				last_report = now;
 				frames_since = draws_since = fx_draws_since = fx_sprites_since = 0;
 				text_runs_since = text_glyphs_since = text_fallbacks_since = 0;
+				glow_draws_since = glow_glows_since = 0;
 				render_ns_since = 0;
 			}
 		}
@@ -443,6 +456,7 @@ bool gpu_set_render_target(SDL_GPUTexture *target, int width, int height, bool c
 	// End the current pass and open a new one aimed at the requested target.
 	// The screen target resumes with LOADOP_LOAD so earlier drawing survives.
 	if (current_render_pass) {
+		gpu_glow_flush();
 		gpu_shaderfx_flush();
 		SDL_EndGPURenderPass(current_render_pass);
 		current_render_pass = NULL;

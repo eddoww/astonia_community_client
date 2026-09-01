@@ -397,6 +397,65 @@ DLL_EXPORT void render_line(int fx, int fy, int tx, int ty, unsigned short col)
 	sdl_line(fx, fy, tx, ty, col, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
 }
 
+/* Glow look tuning for the line-drawn effects (radii in logical pixels,
+ * scaled by sdl_scale inside sdl_glow_line). The bolt values mirror the
+ * CPU construction they replace: the nine offset lines spanned +-4 px,
+ * and their pale core was the middle one or two. */
+#define BOLT_HALO_RADIUS    4.0f
+#define BOLT_HALO_INTENSITY 0.45f
+#define BOLT_CORE_RADIUS    1.5f
+#define BOLT_CORE_INTENSITY 0.60f
+#define PULSE_RADIUS        1.6f
+#define PULSE_CORE          1.0f
+#define PULSE_INTENSITY     0.55f
+
+/* Draw a two-segment lightning bolt in the given hue. `base_*` is the
+ * pinned channel triple - (0,0,31) blue for a strike, (0,31,0) green for
+ * a pulseback; the channels left at 0 are the ones that ramp.
+ *
+ * The nine offset lines are a hand-rolled falloff: brightness runs from a
+ * pale core at d=0 out to the pure hue at |d|=4. With glows that is two
+ * additive capsules per segment - a wide one in the hue, a narrow pale
+ * one for the core - i.e. the same two-tone bolt, with a real falloff
+ * instead of nine stacked steps.
+ */
+static void render_bolt(int fx, int fy, int mx, int my, int tx, int ty, int base_r, int base_g, int base_b)
+{
+	int dx, dy, d, l;
+	unsigned short col;
+
+	if (sdl_fancy_effects_active()) {
+		/* the d=0 line of the CPU ramp is the core colour */
+		unsigned short hue = (unsigned short)IRGB(base_r, base_g, base_b);
+		unsigned short core = (unsigned short)IRGB(base_r ? base_r : 16, base_g ? base_g : 16, base_b ? base_b : 16);
+
+		sdl_glow_line(fx, fy, mx, my, hue, BOLT_HALO_RADIUS, 0.0f, BOLT_HALO_INTENSITY, clipsx, clipsy, clipex, clipey,
+		    x_offset, y_offset);
+		sdl_glow_line(mx, my, tx, ty, hue, BOLT_HALO_RADIUS, 0.0f, BOLT_HALO_INTENSITY, clipsx, clipsy, clipex, clipey,
+		    x_offset, y_offset);
+		sdl_glow_line(fx, fy, mx, my, core, BOLT_CORE_RADIUS, 2.0f, BOLT_CORE_INTENSITY, clipsx, clipsy, clipex, clipey,
+		    x_offset, y_offset);
+		sdl_glow_line(mx, my, tx, ty, core, BOLT_CORE_RADIUS, 2.0f, BOLT_CORE_INTENSITY, clipsx, clipsy, clipex, clipey,
+		    x_offset, y_offset);
+		return;
+	}
+
+	dx = abs(tx - fx);
+	dy = abs(ty - fy);
+
+	for (d = -4; d < 5; d++) {
+		l = (4 - abs(d)) * 4;
+		col = (unsigned short)IRGB(base_r ? base_r : l, base_g ? base_g : l, base_b ? base_b : l);
+		if (dx >= dy) {
+			render_line(fx, fy, mx, my + d, col);
+			render_line(mx, my + d, tx, ty, col);
+		} else {
+			render_line(fx, fy, mx + d, my, col);
+			render_line(mx + d, my, tx, ty, col);
+		}
+	}
+}
+
 /**
  * Render a lightning strike effect between two points.
  * Used for spell effects and combat visuals.
@@ -405,57 +464,54 @@ DLL_EXPORT void render_line(int fx, int fy, int tx, int ty, unsigned short col)
 void render_display_strike(int fx, int fy, int tx, int ty)
 {
 	int mx, my;
-	int dx, dy, d, l;
-	unsigned short col;
-
-	dx = abs(tx - fx);
-	dy = abs(ty - fy);
 
 	mx = (fx + tx) / 2 + 15 - rrand(30);
 	my = (fy + ty) / 2 + 15 - rrand(30);
 
-	if (dx >= dy) {
-		for (d = -4; d < 5; d++) {
-			l = (4 - abs(d)) * 4;
-			col = (unsigned short)IRGB(l, l, 31);
-			render_line(fx, fy, mx, my + d, col);
-			render_line(mx, my + d, tx, ty, col);
-		}
-	} else {
-		for (d = -4; d < 5; d++) {
-			l = (4 - abs(d)) * 4;
-			col = (unsigned short)IRGB(l, l, 31);
-			render_line(fx, fy, mx + d, my, col);
-			render_line(mx + d, my, tx, ty, col);
-		}
-	}
+	render_bolt(fx, fy, mx, my, tx, ty, 0, 0, 31);
 }
 
 void render_draw_curve(int cx, int cy, int nr, int size, int col)
 {
 	int n, x, y;
+	int px = 0, py = 0, have_prev = 0;
 	unsigned short ucol = (unsigned short)col;
+	int fancy = sdl_fancy_effects_active();
 
 	for (n = nr * 90; n < nr * 90 + 90; n += 4) {
 		x = (int)(sin(n / 360.0 * M_PI * 2) * size) + cx;
 		y = (int)(cos(n / 360.0 * M_PI * 2) * size * 2 / 3) + cy;
 
-		if (x < clipsx) {
-			continue;
-		}
-		if (y < clipsy) {
-			continue;
-		}
-		if (x >= clipex) {
-			continue;
-		}
-		if (y + 10 >= clipey) {
+		if (x < clipsx || y < clipsy || x >= clipex || y + 10 >= clipey) {
+			have_prev = 0;
 			continue;
 		}
 
-		sdl_pixel(x, y, ucol, x_offset, y_offset);
-		sdl_pixel(x, y + 5, ucol, x_offset, y_offset);
-		sdl_pixel(x, y + 10, ucol, x_offset, y_offset);
+		if (!fancy) {
+			sdl_pixel(x, y, ucol, x_offset, y_offset);
+			sdl_pixel(x, y + 5, ucol, x_offset, y_offset);
+			sdl_pixel(x, y + 10, ucol, x_offset, y_offset);
+			continue;
+		}
+
+		/* join consecutive samples so the three dotted rows become
+		 * three smooth arcs; a lone sample still draws as a dot */
+		if (have_prev) {
+			int row;
+			for (row = 0; row <= 10; row += 5) {
+				sdl_glow_line(px, py + row, x, y + row, ucol, PULSE_RADIUS, PULSE_CORE, PULSE_INTENSITY, clipsx, clipsy,
+				    clipex, clipey, x_offset, y_offset);
+			}
+		} else {
+			int row;
+			for (row = 0; row <= 10; row += 5) {
+				sdl_glow_line(x, y + row, x, y + row, ucol, PULSE_RADIUS, PULSE_CORE, PULSE_INTENSITY, clipsx, clipsy,
+				    clipex, clipey, x_offset, y_offset);
+			}
+		}
+		px = x;
+		py = y;
+		have_prev = 1;
 	}
 }
 
@@ -467,30 +523,11 @@ void render_draw_curve(int cx, int cy, int nr, int size, int col)
 void render_display_pulseback(int fx, int fy, int tx, int ty)
 {
 	int mx, my;
-	int dx, dy, d, l;
-	unsigned short col;
-
-	dx = abs(tx - fx);
-	dy = abs(ty - fy);
 
 	mx = (fx + tx) / 2 + 15 - rrand(30);
 	my = (fy + ty) / 2 + 15 - rrand(30);
 
-	if (dx >= dy) {
-		for (d = -4; d < 5; d++) {
-			l = (4 - abs(d)) * 4;
-			col = (unsigned short)IRGB(l, 31, l);
-			render_line(fx, fy, mx, my + d, col);
-			render_line(mx, my + d, tx, ty, col);
-		}
-	} else {
-		for (d = -4; d < 5; d++) {
-			l = (4 - abs(d)) * 4;
-			col = (unsigned short)IRGB(l, 31, l);
-			render_line(fx, fy, mx + d, my, col);
-			render_line(mx + d, my, tx, ty, col);
-		}
-	}
+	render_bolt(fx, fy, mx, my, tx, ty, 0, 31, 0);
 }
 
 // text

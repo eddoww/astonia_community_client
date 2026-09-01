@@ -26,6 +26,7 @@
 #include "sdl/sdl_gpu_post.h"
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/sdl_gpu_glow.h"
 #include "sdl/sdl_gpu_atlas.h"
 #include "sdl/sdl_gpu_text.h"
 #include "gui/gui.h"
@@ -291,6 +292,14 @@ int sdl_init(int width, int height, char *title, int monitor)
 		// Initialize post-processing system (optional)
 		if (!gpu_postfx_init(width, height)) {
 			note("SDL_GPU: post-processing not available");
+		}
+
+		// Glow path for spell effects (res/shaders/glow.*). Built
+		// unconditionally when the GPU comes up - unlike the renderer
+		// itself the gpu_fancy_effects option is checked per draw, so it
+		// toggles at runtime without a restart.
+		if (!gpu_glow_init()) {
+			note("SDL_GPU: effect glows not available - effects keep their plain falloffs");
 		}
 
 		// Shader-effects sprite path (experimental sub-flag, default off):
@@ -677,6 +686,7 @@ void sdl_exit(void)
 	// Shutdown sprite batching first (before GPU device is destroyed)
 	gpu_text_reset();
 	gpu_shaderfx_shutdown();
+	gpu_glow_shutdown();
 	gpu_atlas_shutdown();
 
 	// Shutdown GPU drawing (before GPU device is destroyed)

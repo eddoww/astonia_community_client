@@ -11,6 +11,7 @@
 #include "../src/astonia.h"
 #include "../src/sdl/sdl_private.h"
 #include "../src/sdl/sdl.h"
+#include "../src/sdl/sdl_gpu_glow.h"
 #include "test.h"
 
 #include <string.h>
@@ -707,6 +708,87 @@ TEST(test_effect_pixels_have_gpu_path)
 }
 
 // ============================================================================
+// Test: Glowing spell effects
+// ============================================================================
+
+// Glow switches owned by test_stubs.c
+extern bool test_glow_available;
+extern int test_glow_count;
+extern gpu_glow_instance_t test_glow_last;
+void test_glow_reset_counters(void);
+
+TEST(test_effect_glows)
+{
+	fprintf(stderr, "  → Testing glowing spell effects...\n");
+
+	int old_scale = sdl_scale;
+	uint64_t old_options = game_options;
+
+	sdl_scale = 2;
+	use_gpu_rendering = true;
+	test_gpu_prim_available = true;
+
+	// off unless the GPU renderer, the pipeline and the option all agree
+	use_gpu_rendering = false;
+	test_glow_available = true;
+	game_options &= ~GO_NOFANCYFX;
+	ASSERT_EQ_INT(0, sdl_fancy_effects_active());
+
+	use_gpu_rendering = true;
+	test_glow_available = false;
+	ASSERT_EQ_INT(0, sdl_fancy_effects_active());
+
+	test_glow_available = true;
+	game_options |= GO_NOFANCYFX;
+	ASSERT_EQ_INT(0, sdl_fancy_effects_active());
+
+	game_options &= ~GO_NOFANCYFX;
+	ASSERT_TRUE(sdl_fancy_effects_active() != 0);
+
+	// a sparkle is one point capsule, not a stack of rects
+	test_glow_reset_counters();
+	test_gpu_reset_counters();
+	sdl_pretty_pixel(100, 100, 0x7FFF, TEST_XOFF, TEST_YOFF);
+	ASSERT_EQ_INT(1, test_glow_count);
+	ASSERT_EQ_INT(0, test_gpu_rect_count);
+	// p0 == p1, positioned in device pixels
+	ASSERT_TRUE(test_glow_last.seg[0] == test_glow_last.seg[2]);
+	ASSERT_TRUE(test_glow_last.seg[1] == test_glow_last.seg[3]);
+	ASSERT_TRUE(test_glow_last.seg[0] == 200.0f);
+	ASSERT_TRUE(test_glow_last.shape[0] > 0.0f);
+
+	// a raindrop is a streak, so the capsule has length
+	test_glow_reset_counters();
+	sdl_rain_pixel(100, 100, 0x7FFF, TEST_XOFF, TEST_YOFF);
+	ASSERT_EQ_INT(1, test_glow_count);
+	ASSERT_TRUE(test_glow_last.seg[1] != test_glow_last.seg[3]);
+
+	// sdl_glow_line drops capsules whose padded box misses the clip rect
+	test_glow_reset_counters();
+	sdl_glow_line(500, 500, 520, 520, 0x7FFF, 4.0f, 0.0f, 0.5f, 0, 0, 100, 100, TEST_XOFF, TEST_YOFF);
+	ASSERT_EQ_INT(0, test_glow_count);
+	sdl_glow_line(10, 10, 30, 30, 0x7FFF, 4.0f, 0.0f, 0.5f, 0, 0, 100, 100, TEST_XOFF, TEST_YOFF);
+	ASSERT_EQ_INT(1, test_glow_count);
+	// radius is given in logical px and scaled to device px here
+	ASSERT_TRUE(test_glow_last.shape[0] == 4.0f * (float)sdl_scale);
+
+	// with the option off the pixels fall back to the rect halo
+	game_options |= GO_NOFANCYFX;
+	test_glow_reset_counters();
+	test_gpu_reset_counters();
+	sdl_pretty_pixel(100, 100, 0x7FFF, TEST_XOFF, TEST_YOFF);
+	ASSERT_EQ_INT(0, test_glow_count);
+	ASSERT_TRUE(test_gpu_rect_count >= 1);
+
+	test_glow_available = false;
+    use_gpu_rendering = false;
+	game_options = old_options;
+	sdl_scale = old_scale;
+
+	fprintf(stderr, "     Glowing spell effects OK\n");
+}
+
+// ============================================================================
 // Main Test Suite
 // ============================================================================
 
@@ -738,6 +820,7 @@ TEST_MAIN(
 	test_thick_line_clipping();
 	test_mod_texture_path_validation();
 	test_effect_pixels_have_gpu_path();
+	test_effect_glows();
 
 	sdl_shutdown_for_tests();
 )

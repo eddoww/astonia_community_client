@@ -22,6 +22,7 @@
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_atlas.h"
 #include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/sdl_gpu_glow.h"
 #include "sdl/sdl_gpu_text.h"
 
 #define RENDER_TEXT_LEFT    0
@@ -822,6 +823,106 @@ static void halo_points(const SDL_FPoint *pt, int n, int r, int g, int b, int a)
 	SDL_RenderPoints(sdlren, pt, n);
 }
 
+/* ====================================================================
+ * Spell-effect glows
+ *
+ * sdl_pretty_pixel() and sdl_rain_pixel() have always been hand-rolled
+ * falloffs - a core pixel plus concentric alpha rings, stepped and capped
+ * at three device pixels because that is all the SDL_Renderer path could
+ * afford. On the GPU the same shapes are one additive capsule each, with
+ * a real radial falloff (res/shaders/glow.*), so they come out round and
+ * smooth at any radius.
+ *
+ * The halo is deliberately NOT clipped against the caller's rect: the
+ * ring stack it replaces was not clipped either (only the centre is,
+ * by the effect code in render.c), so this preserves that behaviour
+ * rather than introducing a new edge case.
+ * ==================================================================== */
+
+/* Look tuning. Sparkle intensity is deliberately well under 1: the effect
+ * code emits five colour steps one animation tick apart at each position,
+ * so five glows overlap and sum additively where the CPU rings simply
+ * painted over one another. */
+#define GLOW_SPARKLE_CORE      2.5f
+#define GLOW_SPARKLE_INTENSITY 0.55f
+#define GLOW_RAIN_RADIUS       1.2f /* logical px, scaled by sdl_scale */
+#define GLOW_RAIN_CORE         1.0f
+#define GLOW_RAIN_INTENSITY    0.55f
+#define GLOW_SATURATION        2.5f /* exponent on the non-dominant channels */
+
+int sdl_fancy_effects_active(void)
+{
+	return use_gpu_rendering && !(game_options & GO_NOFANCYFX) && gpu_glow_ready();
+}
+
+/* Halo radius for a single effect sparkle, in device pixels. The ring
+ * stack reached 2 device px at sdl_scale 2 and 3 at 3/4; a real falloff
+ * needs a little more room to read as light rather than a dot. */
+static float glow_pixel_radius(void)
+{
+	return 0.7f * (float)sdl_scale + 0.6f;
+}
+
+/* Emit one capsule glow in device pixels. Colour is the game's 15-bit
+ * format; intensity scales the additive contribution. */
+/* Push a colour towards its dominant channel.
+ *
+ * The effect palette is deliberately pale - bless is IRGB(24,24,31),
+ * barely off white - because the CPU path PAINTED those pixels, so the
+ * hue read fine against any background. Added light does not behave that
+ * way: over bright ground the red and green channels clip first and a
+ * pale blue sparkle turns into a grey smear. Raising the non-dominant
+ * channels to a power keeps the hue the palette intends, and leaves
+ * genuinely neutral colours alone. */
+static void glow_saturate(float *r, float *g, float *b)
+{
+	float mx = *r;
+
+	if (*g > mx) {
+		mx = *g;
+	}
+	if (*b > mx) {
+		mx = *b;
+	}
+	if (mx <= 0.0f) {
+		return;
+	}
+	*r = mx * powf(*r / mx, GLOW_SATURATION);
+	*g = mx * powf(*g / mx, GLOW_SATURATION);
+	*b = mx * powf(*b / mx, GLOW_SATURATION);
+}
+
+static bool glow_emit(
+    float x0, float y0, float x1, float y1, unsigned short color, float radius, float core, float intensity)
+{
+	float r = (float)R16TO32(color) / 255.0f;
+	float g = (float)G16TO32(color) / 255.0f;
+	float b = (float)B16TO32(color) / 255.0f;
+
+	glow_saturate(&r, &g, &b);
+	return gpu_glow_add(x0, y0, x1, y1, radius, core, r, g, b, intensity);
+}
+
+void sdl_glow_line(int fx, int fy, int tx, int ty, unsigned short color, float radius, float core, float intensity,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	if (!sdl_fancy_effects_active()) {
+		return;
+	}
+
+	/* cheap reject: drop capsules whose padded bounding box misses the
+	 * clip rect entirely */
+	int pad = (int)(radius + 1.0f);
+	if (max(fx, tx) + pad < clipsx || min(fx, tx) - pad >= clipex || max(fy, ty) + pad < clipsy ||
+	    min(fy, ty) - pad >= clipey) {
+		return;
+	}
+
+	glow_emit((float)((fx + x_offset) * sdl_scale), (float)((fy + y_offset) * sdl_scale),
+	    (float)((tx + x_offset) * sdl_scale), (float)((ty + y_offset) * sdl_scale), color, radius * (float)sdl_scale,
+	    core, intensity);
+}
+
 void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_offset)
 {
 	int r, g, b;
@@ -833,12 +934,18 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		return;
 	}
 
+	px = (float)((x + x_offset) * sdl_scale);
+	py = (float)((y + y_offset) * sdl_scale);
+
+	// one soft additive sparkle instead of the ring stack
+	if (sdl_fancy_effects_active() &&
+	    glow_emit(px, py, px, py, color, glow_pixel_radius(), GLOW_SPARKLE_CORE, GLOW_SPARKLE_INTENSITY)) {
+		return;
+	}
+
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
-
-	px = (float)((x + x_offset) * sdl_scale);
-	py = (float)((y + y_offset) * sdl_scale);
 
 	switch (sdl_scale) {
 	case 1:
@@ -992,12 +1099,18 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 		return;
 	}
 
+	px = (float)((x + x_offset) * sdl_scale);
+	py = (float)((y + y_offset) * sdl_scale);
+
+	// the droplet is a streak, so one capsule along its length
+	if (sdl_fancy_effects_active() && glow_emit(px, py, px, py - 3.0f * (float)sdl_scale, color,
+	                                      GLOW_RAIN_RADIUS * (float)sdl_scale, GLOW_RAIN_CORE, GLOW_RAIN_INTENSITY)) {
+		return;
+	}
+
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
-
-	px = (float)((x + x_offset) * sdl_scale);
-	py = (float)((y + y_offset) * sdl_scale);
 
 	switch (sdl_scale) {
 	case 1:

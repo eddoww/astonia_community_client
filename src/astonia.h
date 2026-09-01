@@ -174,6 +174,7 @@ extern char *localdata;
 #define GO_TTF        (1ull << 21) // TTF text rendering (experimental, needs SDL3_ttf)
 #define GO_GPU        (1ull << 22) // SDL_GPU renderer (experimental, opt-in; falls back to SDL_Renderer)
 #define GO_SHADERFX   (1ull << 23) // GPU shader effects sub-flag (experimental; needs GO_GPU, falls back to CPU bake)
+#define GO_NOFANCYFX  (1ull << 24) // Disable GPU effect glows (needs GO_GPU); negative so the nicer look is the default
 
 #define GO_NOTSET (1ull << 63) // No -o given on command line
 

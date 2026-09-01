@@ -544,6 +544,10 @@ static int saved_gpu_rendering = -1;
 /* GPU shader effects sub-flag (experimental, opt-in, needs gpu_rendering):
  * base textures + per-draw effects in the fragment shader. */
 static int saved_gpu_shaderfx = -1;
+/* GPU effect glows (needs gpu_rendering). Default ON: held as the negative
+ * GO_NOFANCYFX bit so nothing has to opt in, checked per draw so the
+ * Options toggle takes effect immediately. */
+static int saved_gpu_fancyfx = -1;
 
 static void save_extra_options(void)
 {
@@ -561,6 +565,7 @@ static void save_extra_options(void)
 	cJSON_AddBoolToObject(root, "ttf_text", (game_options & GO_TTF) != 0);
 	cJSON_AddBoolToObject(root, "gpu_rendering", (game_options & GO_GPU) != 0);
 	cJSON_AddBoolToObject(root, "gpu_shader_effects", (game_options & GO_SHADERFX) != 0);
+	cJSON_AddBoolToObject(root, "gpu_fancy_effects", (game_options & GO_NOFANCYFX) == 0);
 	cJSON_AddNumberToObject(root, "master_volume", sound_volume);
 	cJSON_AddNumberToObject(root, "sfx_volume", sound_volume_sfx);
 	cJSON_AddNumberToObject(root, "ambient_volume", sound_volume_ambient);
@@ -655,6 +660,17 @@ static void load_extra_options(void)
 			game_options |= GO_SHADERFX;
 		} else {
 			game_options &= ~GO_SHADERFX;
+		}
+	}
+	/* effect glows: stored as a positive key but held as a negative bit, so
+	 * an absent key (and any -o mask that predates it) means glows ON */
+	v = cJSON_GetObjectItem(root, "gpu_fancy_effects");
+	if (v && cJSON_IsBool(v)) {
+		saved_gpu_fancyfx = cJSON_IsTrue(v) ? 1 : 0;
+		if (saved_gpu_fancyfx) {
+			game_options &= ~GO_NOFANCYFX;
+		} else {
+			game_options |= GO_NOFANCYFX;
 		}
 	}
 	sound_volume = extra_int(root, "master_volume", sound_volume, 0, 128);
@@ -970,6 +986,11 @@ int main(int argc, char *argv[])
 		game_options |= GO_SHADERFX;
 	} else {
 		game_options &= ~GO_SHADERFX;
+	}
+	if (saved_gpu_fancyfx == 0) {
+		game_options |= GO_NOFANCYFX;
+	} else if (saved_gpu_fancyfx > 0) {
+		game_options &= ~GO_NOFANCYFX;
 	}
 
 	render_init();

@@ -123,7 +123,7 @@ static int opt_tab_total(void)
 	case 1:
 		return 4;
 	case 2:
-		return 7;
+		return 8;
 	case 3:
 		return OPT_UI_NATIVE + opt_mod_row_count(AMOD_TAB_UI);
 	case 4:
@@ -591,6 +591,14 @@ static void opt_display_display(void)
 		}
 		draw_checkbox(opt_lx, ry, (game_options & GO_GPU) != 0, label);
 	}
+
+	ry = opt_row_y(7);
+	if (ry >= 0) {
+		/* the glow pipeline only exists under the GPU renderer; say so
+		 * rather than showing a checkbox that does nothing */
+		draw_checkbox(opt_lx, ry, (game_options & GO_NOFANCYFX) == 0,
+		    use_gpu_rendering ? "Glowing Spell Effects" : "Glowing Spell Effects (needs GPU Renderer)");
+	}
 }
 
 static int opt_click_display(int mx, int my)
@@ -663,6 +671,15 @@ static int opt_click_display(int mx, int my)
 		 * the next start (and silently falls back to SDL_Renderer when the
 		 * GPU path is not usable on this system). */
 		game_options ^= GO_GPU;
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(7);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		/* checked per draw, so unlike the renderer itself this takes
+		 * effect on the very next frame */
+		game_options ^= GO_NOFANCYFX;
 		save_options();
 		return 1;
 	}

@@ -54,7 +54,7 @@ GLSLC ?= glslc
 SHADERCROSS ?= shadercross
 
 # Every shader pair: <name>.vert + <name>.frag -> <name>_vs.* + <name>_ps.*
-SHADER_NAMES := glow line postfx primitive sprite_fx sprite_simple tri
+SHADER_NAMES := glow line postfx primitive prim_batch sprite_fx sprite_simple tri
 
 SPIRV_OUT := $(foreach n,$(SHADER_NAMES),$(SHADER_OUT_DIR)/$(n)_vs.spv $(SHADER_OUT_DIR)/$(n)_ps.spv)
 DXIL_OUT := $(foreach n,$(SHADER_NAMES),$(SHADER_OUT_DIR)/$(n)_vs.dxil $(SHADER_OUT_DIR)/$(n)_ps.dxil)
@@ -109,6 +109,9 @@ $(SHADER_OUT_DIR)/sprite_fx_ps.spv: src/sdl/sdl_gpu_shaderfx.h
 
 # so does the glow instance struct
 $(SHADER_OUT_DIR)/glow_vs.spv: src/sdl/sdl_gpu_glow.h
+
+# and the batched-primitive one
+$(SHADER_OUT_DIR)/prim_batch_vs.spv: src/sdl/sdl_gpu_prim.h
 
 # SPIR-V -> DXIL / MSL via SDL_shadercross, which performs the resource-space
 # remapping SDL_GPU's D3D12 backend expects.

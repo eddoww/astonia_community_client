@@ -27,6 +27,7 @@
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_shaderfx.h"
 #include "sdl/sdl_gpu_glow.h"
+#include "sdl/sdl_gpu_prim.h"
 #include "sdl/sdl_gpu_atlas.h"
 #include "sdl/sdl_gpu_text.h"
 #include "gui/gui.h"
@@ -298,6 +299,13 @@ int sdl_init(int width, int height, char *title, int monitor)
 		// unconditionally when the GPU comes up - unlike the renderer
 		// itself the gpu_fancy_effects option is checked per draw, so it
 		// toggles at runtime without a restart.
+		// Batched primitive path: circles, arcs, rings and AA lines all
+		// stream 1x1 rects, so without this each plotted pixel is a draw
+		// call. Falls back to that unbatched path when unavailable.
+		if (!gpu_prim_batch_init()) {
+			note("SDL_GPU: primitive batching not available - primitives draw one rect per call");
+		}
+
 		if (!gpu_glow_init()) {
 			note("SDL_GPU: effect glows not available - effects keep their plain falloffs");
 		}
@@ -687,6 +695,7 @@ void sdl_exit(void)
 	gpu_text_reset();
 	gpu_shaderfx_shutdown();
 	gpu_glow_shutdown();
+	gpu_prim_batch_shutdown();
 	gpu_atlas_shutdown();
 
 	// Shutdown GPU drawing (before GPU device is destroyed)

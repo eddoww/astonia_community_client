@@ -912,8 +912,13 @@ int main(int argc, char *argv[])
 	game_options_note_launch();
 
 	/* an explicit -o GO_GPU bit is a launch-time request that must survive
-	 * the saved extra option (which load_options may set to off) */
+	 * the saved extra option (which load_options may set to off). The same
+	 * goes for the shader-effects sub-flag - without this, a saved
+	 * gpu_shader_effects:false silently swallowed an explicit -o bit, so
+	 * the sprite batch could not be turned on from the command line at
+	 * all (it did not even log that it had been asked for). */
 	int launch_gpu = (!(game_options & GO_NOTSET) && (game_options & GO_GPU)) ? 1 : 0;
+	int launch_shaderfx = (!(game_options & GO_NOTSET) && (game_options & GO_SHADERFX)) ? 1 : 0;
 
 	load_options();
 
@@ -954,7 +959,7 @@ int main(int argc, char *argv[])
 	/* shader-effects sub-flag: only meaningful when the GPU renderer comes
 	 * up; sdl_init ignores it otherwise */
 	gpu_shaderfx_requested =
-	    gpu_rendering_requested && ((saved_gpu_shaderfx > 0) || ((game_options & GO_SHADERFX) != 0));
+	    gpu_rendering_requested && (launch_shaderfx || (saved_gpu_shaderfx > 0) || ((game_options & GO_SHADERFX) != 0));
 
 	if (!sdl_init(want_width, want_height, buf, want_monitor)) {
 		render_exit();

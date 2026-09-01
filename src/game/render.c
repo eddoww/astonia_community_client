@@ -980,10 +980,61 @@ DLL_EXPORT void render_gradient_circle(
 }
 
 /**
+ * True when additive glows are available (GPU renderer up, glow pipeline
+ * built, and the player has not turned Glowing Spell Effects off).
+ *
+ * Mods should branch on this: draw glows when it is true, keep whatever
+ * they did before when it is false, so the SDL_Renderer path and the
+ * option-off path both keep working.
+ *
+ * @return 1 when render_glow()/render_glow_line() will draw, 0 otherwise
+ */
+DLL_EXPORT int render_glow_available(void)
+{
+	return sdl_fancy_effects_active();
+}
+
+/**
+ * Draw one additive glow point.
+ *
+ * A real radial falloff, batched with every other glow in the frame - the
+ * replacement for stacking several translucent circles or plotting a
+ * bright pixel with dimmer neighbours to fake one.
+ *
+ * @param radius     halo radius in logical pixels (scaled by sdl_scale)
+ * @param core       weight of the tight centre lobe; 0 = pure soft halo,
+ *                   ~1.5-2.5 = a hot middle
+ * @param intensity  additive strength 0..1
+ */
+DLL_EXPORT void render_glow(int x, int y, unsigned short color, float radius, float core, float intensity)
+{
+	sdl_glow_line(x, y, x, y, color, radius, core, intensity, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
+ * Draw one additive glow along a segment (a capsule).
+ *
+ * Same falloff as render_glow(), applied to the distance from the
+ * segment, so a beam or a bolt is ONE call rather than a stack of
+ * thick lines - and one batched instance rather than a draw call per
+ * anti-aliased pixel.
+ *
+ * @see render_glow for the radius/core/intensity parameters
+ */
+DLL_EXPORT void render_glow_line(
+    int fx, int fy, int tx, int ty, unsigned short color, float radius, float core, float intensity)
+{
+	sdl_glow_line(fx, fy, tx, ty, color, radius, core, intensity, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
  * Draw an anti-aliased line with alpha blending.
  * Uses Xiaolin Wu's algorithm for smooth lines without jaggies.
  * Ideal for lightning effects, beams, and trails.
  *
+ * NOTE: in GPU mode every plotted pixel is its own draw call. For beams,
+ * bolts and trails prefer render_glow_line(), which is one batched
+ * instance for the whole segment.
  */
 DLL_EXPORT void render_line_aa(int x0, int y0, int x1, int y1, unsigned short color, unsigned char alpha)
 {

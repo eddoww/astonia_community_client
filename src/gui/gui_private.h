@@ -56,6 +56,17 @@ DLL_EXPORT void con_grid_set_rows(int n);
 #define BUFF_LABEL_H  10
 #define BUFF_COUNT    4
 #define SPB_COLS      7 /* spellbook window columns              */
+/* status panel (level + military progress) */
+#define STAT_W     170
+#define STAT_BAR_H 9
+#define STAT_ROW_H 23 /* bar + info text line                  */
+/* system menu strip (Menu / Help / Quests)  */
+#define SYSM_BTN_W 48
+#define SYSM_BTN_H 18
+#define SYSM_GAP   3
+/* classic flip clock                        */
+#define CLK_W 58
+#define CLK_H 16
 
 /* number of castable spells the spellbook has cells for (spellbook_ui.c) */
 int spellbook_slot_count(void);
@@ -129,33 +140,27 @@ int wea_slot_pos(int slot, int *x, int *y);
 /* Per-panel button banks. Each bank has PANEL_BUT_SLOTS consecutive ids in
  * PANEL_* enum order (panels.h): BANK_BEG + PANEL_x is that panel's button.
  * Slots past MAX_PANEL are unused and set BUTF_NOHIT by init_dots(). */
-#define PANEL_BUT_SLOTS 8
+#define PANEL_BUT_SLOTS 12
 
 /* window drag handle / titlebar */
-#define BUT_DRAG_BEG       184
-#define BUT_DRAG_SKILLS    184
-#define BUT_DRAG_CHAT      185
-#define BUT_DRAG_INV       186
-#define BUT_DRAG_SPEED     187
-#define BUT_DRAG_BUFFS     188
-#define BUT_DRAG_HOTBAR    189
-#define BUT_DRAG_EQUIPMENT 190
-#define BUT_DRAG_END       (BUT_DRAG_BEG + PANEL_BUT_SLOTS - 1)
+#define BUT_DRAG_BEG    184
+#define BUT_DRAG_HOTBAR (BUT_DRAG_BEG + PANEL_HOTBAR)
+#define BUT_DRAG_END    (BUT_DRAG_BEG + PANEL_BUT_SLOTS - 1)
 
 /* titlebar close / minimize buttons and the bottom-right resize grip */
-#define BUT_PCLOSE_BEG 192
+#define BUT_PCLOSE_BEG (BUT_DRAG_END + 1)
 #define BUT_PCLOSE_END (BUT_PCLOSE_BEG + PANEL_BUT_SLOTS - 1)
-#define BUT_PMIN_BEG   200
+#define BUT_PMIN_BEG   (BUT_PCLOSE_END + 1)
 #define BUT_PMIN_END   (BUT_PMIN_BEG + PANEL_BUT_SLOTS - 1)
-#define BUT_PSIZE_BEG  208
+#define BUT_PSIZE_BEG  (BUT_PMIN_END + 1)
 #define BUT_PSIZE_END  (BUT_PSIZE_BEG + PANEL_BUT_SLOTS - 1)
 
 /* not a real button: parks butsel while the pointer is over a framed
  * panel's body so the full-screen world underneath is not targeted */
-#define BUT_PANEL_BODY 216
+#define BUT_PANEL_BODY (BUT_PSIZE_END + 1)
 
 /* container (shop / grave) grid - sized at runtime like the inventory */
-#define BUT_CON_BEG 217
+#define BUT_CON_BEG (BUT_PANEL_BODY + 1)
 #define BUT_CON_END (BUT_CON_BEG + CON_GRID_MAX_SLOTS - 1)
 
 #define MAX_BUT (BUT_CON_END + 1) /* keep > the highest BUT_* id */
@@ -581,7 +586,8 @@ void display_scrollbar_left(void);
 void display_scrollbar_right(void);
 void display_tutor(void);
 int tutor_click(int x, int y);
-void display_screen(void);
+void display_sysmenu(void);
+void display_clock(void);
 void display_text(void);
 void display_mode(void);
 void display_mouseover(void);

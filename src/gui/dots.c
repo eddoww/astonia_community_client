@@ -79,7 +79,6 @@ DLL_EXPORT int buty(int bidx)
 	return but[bidx].y;
 }
 
-#define stop (game_options & GO_SMALLTOP)
 #define sbot (game_options & GO_SMALLBOT)
 
 void dots_update(void)
@@ -146,7 +145,7 @@ void init_dots(void)
 	set_dot(DOT_BR, XRES, YRES, 0);
 
 	// top and bottom window
-	set_dot(DOT_TOP, 0, 0, !stop ? 0 : DOTF_TOPOFF);
+	set_dot(DOT_TOP, 0, 0, 0); /* legacy anchor - the top bar is gone */
 	if (!sbot) {
 		set_dot(DOT_BOT, 0, YRES - 170, 0);
 	} else {
@@ -249,6 +248,33 @@ void init_dots(void)
 		panel_set_content_rect(PANEL_EQUIPMENT, x1, y1, x1 + content_w, y1 + content_h);
 	}
 
+	/* ── Status panel: level + military progress, top-left ───────────── */
+	set_dot(DOT_STAT, 8, 8, 0);
+	panel_set_content_rect(PANEL_STATUS, 8, 8, 8 + STAT_W, 8 + 2 * STAT_ROW_H);
+	set_but(BUT_EXPBAR, 8 + STAT_W / 2, 8 + STAT_BAR_H / 2 + 1, 0, BUTF_NOHIT); /* rect-hit */
+	set_but(BUT_MILBAR, 8 + STAT_W / 2, 8 + STAT_ROW_H + STAT_BAR_H / 2 + 1, 0, BUTF_NOHIT);
+
+	/* ── System menu strip: Menu | Help | Quests, top-right of the world,
+	 *    left of the minimap's column ─────────────────────────────────── */
+	{
+		int w = 3 * SYSM_BTN_W + 2 * SYSM_GAP;
+		int x1 = XRES - 150 - w;
+
+		set_dot(DOT_MENU, x1, 8, 0);
+		panel_set_content_rect(PANEL_SYSMENU, x1, 8, x1 + w, 8 + SYSM_BTN_H);
+		set_but(BUT_EXIT, x1 + SYSM_BTN_W / 2, 8 + SYSM_BTN_H / 2, 14, 0);
+		set_but(BUT_HELP, x1 + SYSM_BTN_W + SYSM_GAP + SYSM_BTN_W / 2, 8 + SYSM_BTN_H / 2, 14, 0);
+		set_but(BUT_QUEST, x1 + 2 * (SYSM_BTN_W + SYSM_GAP) + SYSM_BTN_W / 2, 8 + SYSM_BTN_H / 2, 14, 0);
+	}
+
+	/* ── Classic flip clock, under the system menu (hidden by default) ── */
+	{
+		int x1 = XRES - 150 - CLK_W;
+
+		set_dot(DOT_CLK, x1, 8 + SYSM_BTN_H + HUD_GRIP_H + UI_WIN_PAD + 8, 0);
+		panel_set_content_rect(PANEL_CLOCK, dotx(DOT_CLK), doty(DOT_CLK), dotx(DOT_CLK) + CLK_W, doty(DOT_CLK) + CLK_H);
+	}
+
 	/* ── Spellbook window, centred over the hotbar ───────────────────── */
 	{
 		int avail = spellbook_slot_count();
@@ -280,10 +306,10 @@ void init_dots(void)
 		set_dot(DOT_MBR, XRES, YRES, 0);
 		set_dot(DOT_MCT, XRES / 2, YRES / 2, 0);
 	} else {
-		set_dot(DOT_MTL, 0, 40, !stop ? 0 : DOTF_TOPOFF);
-		set_dot(DOT_MBR, XRES, min(doty(DOT_MTL) + 450 - (!stop ? 0 : 40), doty(DOT_BOT) + 4), 0);
+		set_dot(DOT_MTL, 0, 40, 0);
+		set_dot(DOT_MBR, XRES, min(doty(DOT_MTL) + 450, doty(DOT_BOT) + 4), 0);
 		x = dotx(DOT_MBR) - dotx(DOT_MTL);
-		y = doty(DOT_MBR) - doty(DOT_MTL) + (!stop ? 0 : 40);
+		y = doty(DOT_MBR) - doty(DOT_MTL);
 		xc = x / 2;
 		if (y < 430) {
 			yc = y / 2 + 20;
@@ -292,15 +318,16 @@ void init_dots(void)
 		} else {
 			yc = y / 2;
 		}
-		set_dot(DOT_MCT, dotx(DOT_MTL) + xc, doty(DOT_MTL) - (!stop ? 0 : 40) + yc, 0);
+		set_dot(DOT_MCT, dotx(DOT_MTL) + xc, doty(DOT_MTL) + yc, 0);
 	}
 
 	// help and quest window
-	set_dot(DOT_HLP, 0, !stop ? 40 : 0, 0);
-	set_dot(DOT_HL2, 222, (!stop ? 40 : 0) + 394, 0);
+	set_dot(DOT_HLP, 12, 60, 0);
+	set_dot(DOT_HL2, 12 + 222, 60 + 394, 0);
+	panel_set_content_rect(PANEL_HELP, dotx(DOT_HLP), doty(DOT_HLP), dotx(DOT_HL2), doty(DOT_HL2));
 
 	// teleporter window
-	set_dot(DOT_TEL, (XRES - 520) / 2, (doty(DOT_MBR) - doty(DOT_MTL) - 320 - (!stop ? 0 : 40)) / 2 + doty(DOT_MTL), 0);
+	set_dot(DOT_TEL, (XRES - 520) / 2, (doty(DOT_MBR) - doty(DOT_MTL) - 320) / 2 + doty(DOT_MTL), 0);
 
 	// look at window
 	set_dot(DOT_LOK, 150, 50, 0);
@@ -414,7 +441,6 @@ void init_dots(void)
 		}
 	}
 
-	set_but(BUT_HELP_DRAG, (dotx(DOT_HLP) + dotx(DOT_HL2)) / 2, doty(DOT_HLP) + 6, 0, BUTF_CAPTURE | BUTF_MOVEEXEC);
 
 	{
 		int cols = hotbar_visible_slots();

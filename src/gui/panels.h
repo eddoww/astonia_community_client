@@ -28,6 +28,10 @@ enum {
 	PANEL_HOTBAR, /* hotbar rows                                 */
 	PANEL_EQUIPMENT, /* worn-equipment paper doll + gear lock       */
 	PANEL_SPELLBOOK, /* castable spells, drag them onto the hotbar  */
+	PANEL_STATUS, /* level + military progress bars              */
+	PANEL_SYSMENU, /* Menu / Help / Quests buttons                */
+	PANEL_CLOCK, /* classic flip-digit game clock               */
+	PANEL_HELP, /* help / quest-log window (summoned)          */
 	MAX_PANEL
 };
 
@@ -113,6 +117,7 @@ void panel_container_opened(void);
  * still appears while the classic input line is active, so nothing is ever
  * typed blind) */
 DLL_EXPORT void panel_chat_external(int on);
+DLL_EXPORT int panel_chat_is_external(void);
 
 /* which panel owns button b, or -1 (chrome buttons included) */
 int panel_owns_button(int b);

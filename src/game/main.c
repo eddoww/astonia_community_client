@@ -564,6 +564,8 @@ static int saved_gpu_rendering = -1;
 /* GPU shader effects sub-flag (experimental, opt-in, needs gpu_rendering):
  * base textures + per-draw effects in the fragment shader. */
 static int saved_gpu_shaderfx = -1;
+/* UI/canvas scale (sdl_core.c): 0 = auto, 1..4 forced; applied next start */
+extern int sdl_scale_override;
 /* Bump when a *_requested default flips, so configs written under the old
  * default do not pin the old behaviour forever. Everything the client saves
  * is written on every options change, so an experimental feature that was
@@ -607,6 +609,7 @@ static void save_extra_options(void)
 	cJSON_AddNumberToObject(root, "texture_cache", sdl_cache_size);
 	cJSON_AddNumberToObject(root, "worker_threads", sdl_multi);
 	cJSON_AddNumberToObject(root, "window_mode", saved_window_mode);
+	cJSON_AddNumberToObject(root, "ui_scale", sdl_scale_override);
 
 	json = cJSON_Print(root);
 	cJSON_Delete(root);
@@ -665,6 +668,13 @@ static void load_extra_options(void)
 			game_options |= GO_NOLAG;
 		} else {
 			game_options &= ~GO_NOLAG;
+		}
+	}
+	v = cJSON_GetObjectItem(root, "ui_scale");
+	if (v && cJSON_IsNumber(v)) {
+		sdl_scale_override = (int)cJSON_GetNumberValue(v);
+		if (sdl_scale_override < 0 || sdl_scale_override > 4) {
+			sdl_scale_override = 0;
 		}
 	}
 	v = cJSON_GetObjectItem(root, "ttf_text");

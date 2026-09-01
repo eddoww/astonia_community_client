@@ -35,6 +35,8 @@ static int opt_open;
 static int opt_tab;
 static int opt_scroll;
 
+extern int sdl_scale_override; /* game/main.c - applied at the next start */
+
 static int opt_px, opt_py, opt_pw, opt_ph;
 static int opt_lx, opt_rx, opt_content_w;
 static int opt_tab_bar_y, opt_content_y;
@@ -720,7 +722,7 @@ static void opt_display_ui(void)
 
 	ry = opt_row_y(2);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_SMALLTOP) != 0, "Small Top Window");
+		draw_slider(opt_lx, ry, opt_content_w, sdl_scale_override, 0, 4, "UI Scale (0 = Auto, restart)");
 	}
 
 	ry = opt_row_y(3);
@@ -809,6 +811,12 @@ static void opt_display_ui(void)
 
 		ry = opt_row_y(19 + p);
 		if (ry >= 0) {
+			if (p == PANEL_CHAT && panel_chat_is_external()) {
+				/* the tabbed chat owns chat - a dead toggle would only
+				 * confuse; the row stays so the numbering holds */
+				render_text(opt_lx, ry + 4, UI_TEXT_DISABLED, UI_FONT_BODY, "Chat: handled by the tabbed chat window");
+				continue;
+			}
 			snprintf(label, sizeof(label), "Show %s", panel_name(p));
 			draw_checkbox(opt_lx, ry, panel_visible(p), label);
 		}
@@ -839,9 +847,14 @@ static int opt_click_ui(int mx, int my)
 
 	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		game_options ^= GO_SMALLTOP;
-		game_options_record_override(GO_SMALLTOP);
-		init_dots();
+		val = (mx - tx) * 4 / tw; /* 0 = auto, 1..4 forced */
+		if (val < 0) {
+			val = 0;
+		}
+		if (val > 4) {
+			val = 4;
+		}
+		sdl_scale_override = val;
 		save_options();
 		return 1;
 	}
@@ -1006,6 +1019,9 @@ static int opt_click_ui(int mx, int my)
 	for (int p = 0; p < MAX_PANEL; p++) {
 		ry = opt_row_y(19 + p);
 		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+			if (p == PANEL_CHAT && panel_chat_is_external()) {
+				return 1; /* informational row */
+			}
 			panel_toggle(p);
 			save_options();
 			return 1;

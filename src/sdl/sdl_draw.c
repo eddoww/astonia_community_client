@@ -2455,39 +2455,15 @@ void sdl_circle_filled_alpha(
 		int scy = (cy + y_offset) * sdl_scale;
 		int sr = radius * sdl_scale;
 
-		// Midpoint circle algorithm to draw horizontal scanlines
-		int x = sr;
-		int y = 0;
-		int d = 1 - sr;
-		int prev_x = x + 1; // Track to avoid duplicate lines
+		// One rect per scanline: width from the circle equation. The old
+		// midpoint walk skipped every row on which its x stayed constant
+		// (the "avoid duplicate lines" guard) - filled circles rendered
+		// with horizontal stripes through their middle (weather-widget
+		// dots, the loading spinner, the effect orbs).
+		for (int dy = -sr; dy <= sr; dy++) {
+			int half = (int)sqrtf((float)(sr * sr - dy * dy));
 
-		while (x >= y) {
-			// Draw horizontal lines using midpoint circle symmetry
-			// Only draw when x changes to avoid overdraw
-			if (x != prev_x) {
-				// Horizontal line at y offset from center (top half)
-				gpu_draw_rect((float)(scx - x), (float)(scy - y), (float)(2 * x + 1), 1.0f, nr, ng, nb, na);
-				// Horizontal line at -y offset from center (bottom half)
-				if (y != 0) {
-					gpu_draw_rect((float)(scx - x), (float)(scy + y), (float)(2 * x + 1), 1.0f, nr, ng, nb, na);
-				}
-			}
-
-			// Draw lines at x offset from center (swapped coordinates)
-			// Horizontal line at x offset from center
-			gpu_draw_rect((float)(scx - y), (float)(scy - x), (float)(2 * y + 1), 1.0f, nr, ng, nb, na);
-			if (x != 0) {
-				gpu_draw_rect((float)(scx - y), (float)(scy + x), (float)(2 * y + 1), 1.0f, nr, ng, nb, na);
-			}
-
-			prev_x = x;
-			y++;
-			if (d < 0) {
-				d += 2 * y + 1;
-			} else {
-				x--;
-				d += 2 * (y - x) + 1;
-			}
+			gpu_draw_rect((float)(scx - half), (float)(scy + dy), (float)(2 * half + 1), 1.0f, nr, ng, nb, na);
 		}
 		return;
 	}

@@ -7,6 +7,7 @@
  */
 
 #include <stdint.h>
+#include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -729,36 +730,6 @@ void display_tutor(void)
 #define HOURLEN (DAYLEN / 24)
 #define MINLEN  (HOURLEN / 60)
 
-/* Blit art columns [art_x0, art_x0 + (sx1-sx0)) of a chrome bar sprite to
- * screen [sx0, sx1) at row by. */
-static void draw_bar_region(unsigned int sprite, int by, int sx0, int sx1, int art_x0)
-{
-	render_push_clip();
-	render_more_clip(sx0, by, sx1, by + 200);
-	render_sprite(sprite, sx0 - art_x0, by, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_pop_clip();
-}
-
-/* Top bar (999/309) on a wider canvas. The art is drawn for 800px: left
- * ornament [0,160) carries the experience/military bars, the right section
- * [640,800) the gear lock, menu and clock. The middle used to hold twelve
- * chain plates for the worn-equipment strip; the equipment is its own paper
- * doll window now, so the gap is filled with the plate-free rock between the
- * rails (art columns 212-228) all the way across. */
-static void render_top_bar(unsigned int sprite, int bx, int by)
-{
-	int right_x = bx + XRES - 160;
-	int x, e;
-
-	draw_bar_region(sprite, by, bx, bx + 160, 0); /* ornament + exp bars */
-	draw_bar_region(sprite, by, right_x, bx + XRES, 640); /* menu + clock  */
-
-	for (x = bx + 160; x < right_x; x += 16) {
-		e = (x + 16 < right_x) ? x + 16 : right_x;
-		draw_bar_region(sprite, by, x, e, 212);
-	}
-}
-
 static void trans_date(int t, int *phour, int *pmin)
 {
 	if (pmin) {
@@ -769,14 +740,41 @@ static void trans_date(int t, int *phour, int *pmin)
 	}
 }
 
-void display_screen(void)
+/* System menu strip: the Menu / Help / Quests buttons that lived in the
+ * top bar's right corner. Plain ui_buttons on a HUD plate; the commands
+ * are the classic BUT_EXIT / BUT_HELP / BUT_QUEST ones. */
+void display_sysmenu(void)
+{
+	static const struct {
+		int but;
+		const char *label;
+	} seg[3] = {
+	    {BUT_EXIT, "Menu"},
+	    {BUT_HELP, "Help"},
+	    {BUT_QUEST, "Quests"},
+	};
+
+	for (int i = 0; i < 3; i++) {
+		int x = dotx(DOT_MENU) + i * (SYSM_BTN_W + SYSM_GAP);
+		int y = doty(DOT_MENU);
+		int active = (seg[i].but == BUT_HELP && display_help) || (seg[i].but == BUT_QUEST && display_quest);
+		int hot = (butsel == seg[i].but);
+		int state = active ? UI_BTN_ACTIVE : (hot ? (vk_lbut ? UI_BTN_PRESSED : UI_BTN_HOVER) : UI_BTN_REST);
+
+		ui_button(x, y, SYSM_BTN_W, SYSM_BTN_H, seg[i].label, state);
+	}
+}
+
+/* Classic flip-digit game clock, on its own little HUD plate (hidden by
+ * default - the mod ships a modern clock widget; this one is for the
+ * players who liked the old one). Sprites 200.. are the flip animation
+ * frames the top bar used to show. */
+void display_clock(void)
 {
 	int h, m;
 	int h1, h2, m1, m2;
 	static int rh1 = 0, rh2 = 0, rm1 = 0, rm2 = 0;
-
-	/* use "Menu" sprite variant (309) when in game, original "Exit" (999) otherwise */
-	render_top_bar(opt_sprite((sockstate >= 4) ? 309 : 999), dotx(DOT_TOP), doty(DOT_TOP));
+	int x = dotx(DOT_CLK) + 1, y = doty(DOT_CLK) + 2;
 
 	trans_date((int)realtime, &h, &m);
 
@@ -791,21 +789,18 @@ void display_screen(void)
 	if (rh1 == 30) {
 		rh1 = 0;
 	}
-
 	if (h2 != rh2) {
 		rh2++;
 	}
 	if (rh2 == 30) {
 		rh2 = 0;
 	}
-
 	if (m1 != rm1) {
 		rm1++;
 	}
 	if (rm1 == 18) {
 		rm1 = 0;
 	}
-
 	if (m2 != rm2) {
 		rm2++;
 	}
@@ -813,22 +808,13 @@ void display_screen(void)
 		rm2 = 0;
 	}
 
-	render_sprite((unsigned int)(200 + rh1), dotx(DOT_TOP) + XRES - XRES0 + 730 + 0 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rh2), dotx(DOT_TOP) + XRES - XRES0 + 730 + 1 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rm1), dotx(DOT_TOP) + XRES - XRES0 + 734 + 2 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rm2), dotx(DOT_TOP) + XRES - XRES0 + 734 + 3 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_sprite((unsigned int)(200 + rh1), x + 0 * 10, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_sprite((unsigned int)(200 + rh2), x + 1 * 10, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_text(x + 2 * 10 + 3, y, UI_TEXT_MUTED, UI_FONT_BODY, ":");
+	render_sprite((unsigned int)(200 + rm1), x + 2 * 10 + 8, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_sprite((unsigned int)(200 + rm2), x + 3 * 10 + 8, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 
 	sprintf(hover_time_text, "%02d:%02d Astonia Standard Time", h, m);
-
-	/* The bottom bar art is gone: skills, chat, inventory, speed and the
-	 * buff chips each draw their own frame now (panels_display_frames()),
-	 * so a single fixed slab of rock across the bottom would only fight
-	 * them - and it could not follow a panel that had been dragged away.
-	 */
 }
 
 void display_text(void)
@@ -897,6 +883,12 @@ void display_mode(void)
 			    x + 1, y + 1, x + SPEED_SEG_W - 1, y + SPEED_SEG_H / 2, UI_ACCENT_DIM, UI_BG_BASE, 120);
 			render_rounded_rect_alpha(x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_ACCENT, 255);
 			render_rect_alpha(x + 3, y + SPEED_SEG_H - 3, x + SPEED_SEG_W - 3, y + SPEED_SEG_H - 2, UI_ACCENT, 255);
+			if (render_glow_available()) {
+				/* faint amber underglow on the selected mode - the same
+				 * family as the lit effect orbs next door */
+				render_glow_line(
+				    x + 6, y + SPEED_SEG_H - 2, x + SPEED_SEG_W - 6, y + SPEED_SEG_H - 2, UI_ACCENT, 5.0f, 0.8f, 0.22f);
+			}
 		} else if (hot) {
 			render_rounded_rect_filled_alpha(
 			    x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_BG_ROW_HOVER, UI_A_ROW_HOVER);
@@ -914,18 +906,21 @@ void display_mode(void)
 
 /* ── Buff chips ─────────────────────────────────────────────────────────
  *
- * One socket per tracked effect (potion, heal/freeze, bless, rage). An
- * active effect gets a colored wash, a ring that unwinds clockwise as the
- * time runs out and the seconds printed underneath; an idle one is a dim
- * empty socket. Nearly-expired effects pulse, like the old sliding bar did. */
+ * One orb per tracked effect (potion, heal/freeze, bless, rage). An idle
+ * effect is a dark socket; an active one is a colored orb lit from within
+ * (an additive GPU glow when the fancy-effects pipeline is on, a gradient
+ * fill either way), with the remaining time as a rim ring that unwinds
+ * clockwise - a small hot spark rides its leading edge - and the seconds
+ * printed underneath. Nearly-expired effects pulse hard. */
 static void buff_chip(int idx, const char *tag, unsigned short color, int active, int pct, const char *sub)
 {
 	int x1 = dotx(DOT_SSP) + idx * (BUFF_CHIP + BUFF_GAP);
 	int y1 = doty(DOT_SSP);
-	int x2 = x1 + BUFF_CHIP, y2 = y1 + BUFF_CHIP;
-	int cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+	int cx = x1 + BUFF_CHIP / 2, cy = y1 + BUFF_CHIP / 2;
 	int r = BUFF_CHIP / 2 - 1;
+	int glow = render_glow_available();
 	int urgent;
+	float pulse;
 
 	if (pct < 0) {
 		pct = 0;
@@ -933,26 +928,47 @@ static void buff_chip(int idx, const char *tag, unsigned short color, int active
 	if (pct > 100) {
 		pct = 100;
 	}
-	urgent = active && pct <= 15 && (tick & 8);
+	urgent = active && pct <= 15;
+	/* ~1Hz breath, doubled while the effect is about to run out */
+	pulse = 0.5f + 0.5f * sinf((float)tick * (urgent ? 0.55f : 0.26f));
 
-	/* socket */
-	render_rounded_rect_filled_alpha(x1, y1, x2, y2, UI_R_ROW, UI_BG_SUNKEN, UI_A_SOCKET);
-	render_gradient_rect_v(x1 + 1, y1 + 1, x2 - 1, cy, UI_BG_RAISED, UI_BG_SUNKEN, 150);
+	/* socket: a dark well with a faint raised rim - always there, so the
+	 * row reads as four fixed slots whatever is active */
+	render_circle_filled_alpha(cx, cy, r, UI_BG_SUNKEN, UI_A_SOCKET);
+	render_gradient_circle(cx, cy, r, UI_BG_BASE, 0, 160);
+	render_circle_alpha(cx, cy, r, active ? color : UI_BORDER, active ? 200 : UI_A_BORDER_REST);
 
 	if (active) {
-		/* colored wash, brighter the fuller the effect still is */
-		render_rounded_rect_filled_alpha(
-		    x1 + 1, y1 + 1, x2 - 1, y2 - 1, UI_R_ROW, color, (unsigned char)(40 + 70 * pct / 100));
-		/* remaining-time ring: a full circle at 100%, unwinding clockwise */
-		render_ring_alpha(cx, cy, r - 2, r, -90, -90 + 360 * pct / 100, color, urgent ? 255 : 220);
-		render_rounded_rect_alpha(x1, y1, x2, y2, UI_R_ROW, color, urgent ? 255 : UI_A_BORDER_HOV);
-	} else {
-		render_rounded_rect_alpha(x1, y1, x2, y2, UI_R_ROW, UI_BORDER, UI_A_BORDER_REST);
+		float f = (float)pct / 100.0f;
+		float ang = -(float)M_PI / 2.0f + 2.0f * (float)M_PI * f;
+		int tipx = cx + (int)lroundf(cosf(ang) * (float)(r - 1));
+		int tipy = cy + (int)lroundf(sinf(ang) * (float)(r - 1));
+
+		/* the orb: colored, brighter at the centre - lit from within */
+		render_gradient_circle(cx, cy, r - 2, color, (unsigned char)(150 + 60 * f), 30);
+
+		if (glow) {
+			/* soft halo bleeding past the rim, breathing with the pulse */
+			render_glow(cx, cy, color, (float)BUFF_CHIP * 0.85f, 0.4f,
+			    (0.16f + 0.24f * f) * (0.7f + 0.3f * pulse) * (urgent ? 1.5f : 1.0f));
+			/* hot core so the middle reads as the light source */
+			render_glow(cx, cy, color, (float)r * 0.8f, 2.2f, 0.30f + 0.15f * pulse);
+		}
+
+		/* remaining time as a rim ring, unwinding clockwise from 12
+		 * o'clock, with a spark riding the leading edge */
+		render_ring_alpha(cx, cy, r - 2, r, -90, -90 + (int)(360.0f * f), whitecolor, urgent ? 255 : 210);
+		if (glow) {
+			render_glow(tipx, tipy, color, 5.0f, 2.5f, 0.55f + 0.35f * pulse);
+		} else {
+			render_circle_filled_alpha(tipx, tipy, 1, whitecolor, 255);
+		}
 	}
 
 	render_text(cx, cy - 5, active ? UI_TEXT : UI_TEXT_DISABLED, UI_FONT_CENTER, tag);
 	if (active && sub && *sub) {
-		render_text(cx, y2 + 1, urgent ? UI_TEXT_ERROR : UI_TEXT_MUTED, UI_FONT_CENTER, sub);
+		render_text(
+		    cx, y1 + BUFF_CHIP + 1, urgent && ((tick & 8) != 0U) ? UI_TEXT_ERROR : UI_TEXT_MUTED, UI_FONT_CENTER, sub);
 	}
 }
 
@@ -1078,10 +1094,15 @@ static const char *fmt_thousands(long long v, char *buf, size_t sz)
 	return buf;
 }
 
-static void draw_bar_info(int mode, int y, long long have, long long need, long long togo)
+/* One row of the status panel: a meter with its label inside and the
+ * cycling info text under it (click the bar to change what is printed). */
+static void draw_status_row(
+    int y, int pct, unsigned short color, int flash, int mode, long long have, long long need, long long togo)
 {
-	char a[32], b[32], text[64];
-	int pct = need > 0 ? (int)(100 * have / need) : 0;
+	int x1 = dotx(DOT_STAT), x2 = x1 + STAT_W;
+	char a[32], b[32], text[64] = "";
+
+	ui_meter_h(x1, y, x2, y + STAT_BAR_H, pct, flash ? whitecolor : color);
 
 	switch (mode) {
 	case BAR_INFO_PERCENT:
@@ -1094,10 +1115,11 @@ static void draw_bar_info(int mode, int y, long long have, long long need, long 
 		snprintf(text, sizeof(text), "%s to go", fmt_compact(togo, a, sizeof(a)));
 		break;
 	default:
-		return;
+		break;
 	}
-	render_text(dotx(DOT_TOP) + 31 + 50, y, IRGB(31, 31, 31),
-	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, text);
+	if (text[0]) {
+		render_text((x1 + x2) / 2, y + STAT_BAR_H + 2, UI_TEXT_MUTED, UI_FONT_CENTER, text);
+	}
 }
 
 void display_exp(void)
@@ -1126,20 +1148,12 @@ void display_exp(void)
 			exp_ticker = 3;
 			last_exp = expe;
 		}
-
-		render_push_clip();
-		render_more_clip(0, 0, dotx(DOT_TOP) + 31 + 100 - (int)(100ll * step / total), doty(DOT_TOP) + 8 + 7);
-		render_sprite(996, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 7, exp_ticker ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT,
-		    RENDER_ALIGN_NORMAL);
-		render_pop_clip();
-
 		if (exp_ticker) {
 			exp_ticker--;
 		}
 
-		/* below the bar (the bar itself spans +7..+15) - players found
-		 * text drawn over the bar hard to read */
-		draw_bar_info(exp_info_mode, doty(DOT_TOP) + 15, have, total, step);
+		draw_status_row(doty(DOT_STAT), (int)(100ll * have / total), UI_TEXT_GOLD, exp_ticker != 0, exp_info_mode, have,
+		    total, step);
 
 		snprintf(hover_level_text, 200,
 		    "Level %d to %d: %s / %s (%lld%%)\n%s to go, total %s exp\n(click the bar to change the numbers shown)",
@@ -1238,14 +1252,11 @@ void display_military(void)
 	}
 
 	if (mil_exp && total) {
-		if (rank < maxrank) {
-			render_push_clip();
-			render_more_clip(0, 0, dotx(DOT_TOP) + 31 + 100 * step / total, doty(DOT_TOP) + 8 + 24);
-			render_sprite(993, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 24, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-			render_pop_clip();
+		unsigned short mil_color = IRGB(12, 18, 28);
 
-			/* below the bar (the bar itself spans +24..+32) */
-			draw_bar_info(mil_info_mode, doty(DOT_TOP) + 32, step, total, total - step);
+		if (rank < maxrank) {
+			draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 100 * step / total, mil_color, 0, mil_info_mode, step, total,
+			    total - step);
 
 			snprintf(hover_rank_text, 200,
 			    "Rank %d '%s' to %d '%s': %s / %s (%d%%)\n%s to go, total %s military points", rank,
@@ -1254,7 +1265,7 @@ void display_military(void)
 			    fmt_thousands((long long)mil_exp, n4, sizeof(n4)));
 		} else {
 			/* Highest rank: full bar */
-			render_sprite(993, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 24, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+			draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 100, mil_color, 0, BAR_INFO_NONE, 0, 0, 0);
 			snprintf(hover_rank_text, 200, "Rank %d '%s' (highest rank)\ntotal %s military points", rank,
 			    game_rankname[maxrank], fmt_thousands((long long)mil_exp, n4, sizeof(n4)));
 		}

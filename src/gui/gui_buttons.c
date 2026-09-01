@@ -25,7 +25,6 @@
 // Forward declarations for functions used by exec_cmd
 void cmd_add_text(const char *buf, int typ);
 void cmd_look_skill(int nr);
-void help_drag(void);
 void cmd_action(void);
 
 int get_near_button(int x, int y)
@@ -348,11 +347,6 @@ static void detect_hover_target(void)
 		return;
 	}
 
-	if ((display_help || display_quest) && mousex >= dotx(DOT_HLP) && mousex <= dotx(DOT_HL2) - 40 &&
-	    mousey >= doty(DOT_HLP) && mousey <= doty(DOT_HLP) + 12) {
-		butsel = BUT_HELP_DRAG;
-	}
-
 	if ((display_help || display_quest) && butsel == -1) {
 		if (mousex >= dotx(DOT_HLP) && mousex <= dotx(DOT_HL2) && mousey >= doty(DOT_HLP) && mousey <= doty(DOT_HL2)) {
 			butsel = BUT_HELP_MISC;
@@ -426,36 +420,17 @@ static void detect_hover_target(void)
 				butsel = BUT_HELP_NEXT;
 			}
 		}
-		if (mousex >= dotx(DOT_HLP) + 211 && mousex <= dotx(DOT_HLP) + 224 && mousey >= doty(DOT_HLP) + 2 &&
-		    mousey <= doty(DOT_HLP) + 12) {
-			butsel = BUT_HELP_CLOSE;
-		}
 	}
 
-	/* top bar hit boxes only exist while the GUI overlay is up */
-	if (gui_overlay_visible) {
-		/* Exit/Help/Question live in the right-anchored section of the top
-		 * bar art, so their hit boxes shift with the canvas width */
-		int rx = dotx(DOT_TOP) + XRES - XRES0;
-
-		if (mousex >= rx + 704 && mousex <= rx + 739 && mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
-			butsel = BUT_HELP;
+	/* status panel bars: click cycles the numbers printed under them (the
+	 * bars are wide rectangles, so a circular but[] hit box fits badly) */
+	if (butsel == -1 && panel_content_shown(PANEL_STATUS) && mousex >= dotx(DOT_STAT) &&
+	    mousex <= dotx(DOT_STAT) + STAT_W) {
+		if (mousey >= doty(DOT_STAT) && mousey <= doty(DOT_STAT) + STAT_BAR_H + 2) {
+			butsel = BUT_EXPBAR;
 		}
-		if (mousex >= rx + 741 && mousex <= rx + 775 && mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
-			butsel = BUT_QUEST;
-		}
-		if (mousex >= rx + 704 && mousex <= rx + 723 && mousey >= doty(DOT_TOP) + 7 && mousey <= doty(DOT_TOP) + 18) {
-			butsel = BUT_EXIT;
-		}
-
-		/* experience / military bars (top left): click cycles the numbers shown on them */
-		if (mousex >= dotx(DOT_BOT) + 25 && mousex <= dotx(DOT_BOT) + 135) {
-			if (mousey >= doty(DOT_TOP) + 5 && mousey <= doty(DOT_TOP) + 13) {
-				butsel = BUT_EXPBAR;
-			}
-			if (mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
-				butsel = BUT_MILBAR;
-			}
+		if (mousey >= doty(DOT_STAT) + STAT_ROW_H && mousey <= doty(DOT_STAT) + STAT_ROW_H + STAT_BAR_H + 2) {
+			butsel = BUT_MILBAR;
 		}
 	}
 
@@ -908,9 +883,6 @@ void exec_cmd(int cmd, int a)
 			quest_select(questsel);
 		}
 		return;
-	case CMD_HELP_DRAG:
-		help_drag();
-		return;
 	case CMD_DRAG_PANEL:
 		/* the drag handle owns the mouse capture; its id maps 1:1 to the panel */
 		if (capbut >= BUT_DRAG_BEG && capbut <= BUT_DRAG_END) {
@@ -925,6 +897,10 @@ void exec_cmd(int cmd, int a)
 			 * view, not the panel - the next merchant opens it again */
 			if (p == PANEL_SKILLS && con_cnt) {
 				panel_dismiss_container();
+			} else if (p == PANEL_HELP) {
+				/* summoned window: closing it clears what summoned it */
+				display_help = 0;
+				display_quest = 0;
 			} else {
 				panel_set_visible(p, 0);
 			}
@@ -1018,37 +994,6 @@ void cmd_look_skill(int nr)
 	} else {
 		addline("Unknown.");
 	}
-}
-
-void help_drag(void)
-{
-	int x, y;
-
-	x = dot[DOT_HLP].x + mousedx;
-	y = dot[DOT_HLP].y + mousedy;
-
-	if (x < dotx(DOT_TL)) {
-		mousedx += dotx(DOT_TL) - x;
-	}
-	if (y < doty(DOT_TL)) {
-		mousedy += doty(DOT_TL) - y;
-	}
-
-	if (x > dotx(DOT_BR) + dotx(DOT_HLP) - dotx(DOT_HL2)) {
-		mousedx += dotx(DOT_BR) + dotx(DOT_HLP) - dotx(DOT_HL2) - x;
-	}
-	if (y > doty(DOT_BR) - 20) {
-		mousedy += doty(DOT_BR) - 20 - y;
-	}
-
-	dot[DOT_HLP].x += mousedx;
-	dot[DOT_HLP].y += mousedy;
-	dot[DOT_HL2].x += mousedx;
-	dot[DOT_HL2].y += mousedy;
-	but[BUT_HELP_DRAG].x += mousedx;
-	but[BUT_HELP_DRAG].y += mousedy;
-
-	mousedx = mousedy = 0;
 }
 
 void cmd_action(void)
@@ -1306,9 +1251,6 @@ void handle_special_buttons_logic(void)
 		}
 		if (butsel == BUT_HELP_CLOSE) {
 			lcmd = CMD_HELP_CLOSE;
-		}
-		if (butsel == BUT_HELP_DRAG) {
-			lcmd = CMD_HELP_DRAG;
 		}
 		if (butsel >= BUT_DRAG_BEG && butsel <= BUT_DRAG_END) {
 			lcmd = CMD_DRAG_PANEL;

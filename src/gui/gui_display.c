@@ -49,13 +49,12 @@ static void panel_clip_end(void)
 
 void display_helpandquest(void)
 {
-	if (display_help) {
-		render_sprite(opt_sprite(990), dotx(DOT_HLP), doty(DOT_HLP), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	/* the window chrome (frame, title bar, close, minimize) is the help
+	 * panel's - drawn by panels_display_frames(); the old paper-scroll
+	 * sprites 990/995 are retired */
+	if (!panel_content_shown(PANEL_HELP)) {
+		return;
 	}
-	if (display_quest) {
-		render_sprite(opt_sprite(995), dotx(DOT_HLP), doty(DOT_HLP), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	}
-
 	if (display_help) {
 		do_display_help(display_help);
 	}
@@ -65,49 +64,6 @@ void display_helpandquest(void)
 }
 
 char perf_text[256];
-
-static void display_toplogic(void)
-{
-	static int top_opening = 0, top_closing = 1, top_open = 0;
-	static int topframes = 0;
-
-	if (mousey < 10) {
-		topframes++;
-	} else {
-		topframes = 0;
-	}
-
-	if (topframes > frames_per_second / 2 && !top_opening && !top_open) {
-		top_opening = 1;
-		top_closing = 0;
-	}
-	if (mousey > 60 && !top_closing && top_open) {
-		top_closing = 1;
-		top_opening = 0;
-	}
-
-	if (top_opening) {
-		gui_topoff = -38 + top_opening;
-		top_opening += 6;
-		if (top_opening >= 38) {
-			top_open = 1;
-			top_opening = 0;
-		}
-	}
-
-	if (top_open) {
-		gui_topoff = 0;
-	}
-
-	if (top_closing) {
-		gui_topoff = -top_closing;
-		top_closing += 6;
-		if (top_closing >= 38) {
-			top_open = 0;
-			top_closing = 0;
-		}
-	}
-}
 
 void display_wheel(void)
 {
@@ -281,13 +237,6 @@ void display(void)
 		}
 	}
 
-	display_toplogic();
-	if (game_slowdown) {
-		display_toplogic();
-		display_toplogic();
-		display_toplogic();
-	}
-
 	set_cmd_states();
 
 	/* Startup: one loading screen from window creation until the world is ready */
@@ -309,7 +258,6 @@ void display(void)
 	/* Later (re)connects / area changes: compact world-loading screen */
 	if (sockstate >= 3 && world_loading_active()) {
 		display_world_loading();
-		display_screen();
 		display_text();
 		display_menu_overlays();
 		goto display_graphs;
@@ -317,7 +265,6 @@ void display(void)
 
 	if (sockstate < 4 && ((t = time(NULL) - (time_t)socktimeout) > 10 || !originx)) {
 		render_rect(0, 0, XRES, YRES - 60, blackcolor);
-		display_screen();
 		display_text();
 		if ((now / 1000) & 1) {
 			render_text(
@@ -377,23 +324,30 @@ void display(void)
 		}
 	}
 
+	/* window chrome for every shown panel - outside the overlay gate so the
+	 * summoned help window keeps its frame while the overlay is hidden
+	 * (panel_shown() returns 0 for the HUD panels in that state) */
+	panels_display_frames();
+
 	/* GUI chrome - the master overlay toggle hides all of it for an
 	 * unobstructed view of the world */
 	if (gui_overlay_visible) {
-		display_screen();
-
 		display_keys();
 		if (game_options & GO_WHEEL) {
 			display_wheel();
 		}
-		display_exp();
-		display_military();
 		display_selfbars();
 
-		/* window chrome first - every framed panel draws its content on
-		 * top of its own frame */
-		panels_display_frames();
-
+		if (panel_content_shown(PANEL_STATUS)) {
+			display_exp();
+			display_military();
+		}
+		if (panel_content_shown(PANEL_SYSMENU)) {
+			display_sysmenu();
+		}
+		if (panel_content_shown(PANEL_CLOCK)) {
+			display_clock();
+		}
 		if (panel_content_shown(PANEL_EQUIPMENT)) {
 			panel_clip_begin(PANEL_EQUIPMENT);
 			display_wear();
@@ -495,7 +449,7 @@ display_graphs:;
 		static unsigned char pre1_graph[100], pre2_graph[100], pre3_graph[100];
 		// static int frame_min=99,frame_max=0,frame_step=0;
 		// static int tick_min=99,tick_max=0,tick_step=0;
-		int px = XRES - 110, py = 35 + (!(game_options & GO_SMALLTOP) ? 0 : gui_topoff);
+		int px = XRES - 110, py = 35;
 
 		// render_text_fmt(px,py+=10,0xffff,RENDER_TEXT_SMALL|RENDER_TEXT_LEFT|RENDER_TEXT_FRAMED|RENDER_TEXT_NOCACHE,"skip
 		// %3.0f%%",100.0*skip/tota);

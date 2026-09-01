@@ -69,19 +69,21 @@ void display_mouseover(void)
 		}
 	}
 
-	if (mousex >= dotx(DOT_BOT) + 25 && mousex <= dotx(DOT_BOT) + 135) {
-		if (mousey >= doty(DOT_TOP) + 5 && mousey <= doty(DOT_TOP) + 13) {
-			render_text_nl(mousex + 16, mousey - 4, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_level_text);
+	/* status panel rows: level details over the top bar, rank over the
+	 * military bar */
+	if (panel_content_shown(PANEL_STATUS) && mousex >= dotx(DOT_STAT) && mousex <= dotx(DOT_STAT) + STAT_W) {
+		if (mousey >= doty(DOT_STAT) && mousey <= doty(DOT_STAT) + STAT_BAR_H + 2) {
+			render_text_nl(mousex + 16, mousey + 14, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_level_text);
 		}
-		if (mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
-			render_text_nl(mousex + 16, mousey - 4, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_rank_text);
+		if (mousey >= doty(DOT_STAT) + STAT_ROW_H && mousey <= doty(DOT_STAT) + STAT_ROW_H + STAT_BAR_H + 2) {
+			render_text_nl(mousex + 16, mousey + 14, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_rank_text);
 		}
 	}
 
-	if (mousex >= dotx(DOT_TOP) + 728 && mousex <= dotx(DOT_TOP) + 772 && mousey >= doty(DOT_TOP) + 7 &&
-	    mousey <= doty(DOT_TOP) + 17) {
-		render_text_nl(
-		    mousex - 16, mousey - 4, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_TEXT_RIGHT, hover_time_text);
+	if (panel_content_shown(PANEL_CLOCK) && mousex >= dotx(DOT_CLK) && mousex <= dotx(DOT_CLK) + CLK_W &&
+	    mousey >= doty(DOT_CLK) && mousey <= doty(DOT_CLK) + CLK_H) {
+		render_text_nl(mousex - 16, mousey + 18, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_TEXT_RIGHT,
+		    hover_time_text);
 	}
 
 	display_hover_update();

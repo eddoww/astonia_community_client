@@ -139,7 +139,10 @@ extern DLL_EXPORT unsigned int _client_dist;
 #define DOT_TUT    31 // tutor window top left
 #define DOT_HOTBAR 32 // hotbar (item/spell slots)
 #define DOT_SPB    33 // spellbook window
-#define MAX_DOT    34
+#define DOT_STAT   34 // status panel (level/military bars)
+#define DOT_MENU   35 // system menu strip (menu/help/quests)
+#define DOT_CLK    36 // classic clock
+#define MAX_DOT    37
 
 #ifndef MAX_PATH
 #define MAX_PATH 260

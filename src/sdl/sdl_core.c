@@ -58,6 +58,10 @@ MIX_Track *sdl_tracks[MAX_SOUND_CHANNELS] = {NULL};
 
 // Scale and resolution settings
 DLL_EXPORT int sdl_scale = 1;
+/* Options > Interface > UI Scale: 0 = auto-probe, 1..4 = forced (clamped so
+ * the classic canvas still fits). Loaded from the extra-options file before
+ * sdl_init; a change applies on the next start. */
+DLL_EXPORT int sdl_scale_override = 0;
 DLL_EXPORT int sdl_frames = 0;
 DLL_EXPORT int sdl_multi = 4;
 extern SDL_AtomicInt sdl_tex_jobs_enqueued, sdl_tex_jobs_finished;
@@ -415,6 +419,16 @@ int sdl_init(int width, int height, char *title, int monitor)
 			sdl_scale = probe;
 			break;
 		}
+	}
+	/* Options > Interface > UI Scale: force a scale, clamped to whatever
+	 * still fits the classic canvas in this window */
+	if (sdl_scale_override > 0) {
+		int forced = sdl_scale_override;
+
+		while (forced > 1 && (width / forced < XRES0 || height / forced < YRES3)) {
+			forced--;
+		}
+		sdl_scale = forced;
 	}
 
 	sdl_derive_canvas(width, height);

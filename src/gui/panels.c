@@ -61,6 +61,10 @@ static const int buffs_dots[] = {DOT_SSP};
 static const int hotbar_dots[] = {DOT_HOTBAR};
 static const int equipment_dots[] = {DOT_WEA};
 static const int spellbook_dots[] = {DOT_SPB};
+static const int status_dots[] = {DOT_STAT};
+static const int sysmenu_dots[] = {DOT_MENU};
+static const int clock_dots[] = {DOT_CLK};
+static const int help_dots[] = {DOT_HLP, DOT_HL2};
 
 static const ButRange skills_buts[] = {
     {BUT_SKL_BEG, BUT_SKL_END}, {BUT_CON_BEG, BUT_CON_END}, {BUT_SCL_UP, BUT_SCL_DW}};
@@ -71,6 +75,10 @@ static const ButRange buffs_buts[] = {{0, -1}};
 static const ButRange hotbar_buts[] = {{BUT_HOTBAR_BEG, BUT_HOTBAR_END}};
 static const ButRange equipment_buts[] = {{BUT_WEA_BEG, BUT_WEA_END}, {BUT_WEA_LCK, BUT_WEA_LCK}};
 static const ButRange spellbook_buts[] = {{0, -1}}; /* cells are hit-tested by spellbook_ui.c */
+static const ButRange status_buts[] = {{BUT_EXPBAR, BUT_EXPBAR}, {BUT_MILBAR, BUT_MILBAR}};
+static const ButRange sysmenu_buts[] = {{BUT_EXIT, BUT_HELP}, {BUT_QUEST, BUT_QUEST}};
+static const ButRange clock_buts[] = {{0, -1}};
+static const ButRange help_buts[] = {{0, -1}}; /* page controls are rect-hit in gui_buttons.c */
 
 #define PANEL_ENTRY(idstr, namestr, d, b, fr, rs, vis)                                                                 \
 	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, vis, vis, 0, 0, 0, 0, 0, 0, 0}
@@ -84,6 +92,10 @@ static Panel panels[MAX_PANEL] = {
     [PANEL_HOTBAR] = PANEL_ENTRY("hotbar", "Hotbar", hotbar_dots, hotbar_buts, PANEL_FRAME_NONE, 0, 1),
     [PANEL_EQUIPMENT] = PANEL_ENTRY("equipment", "Equipment", equipment_dots, equipment_buts, PANEL_FRAME_WINDOW, 0, 1),
     [PANEL_SPELLBOOK] = PANEL_ENTRY("spellbook", "Spells", spellbook_dots, spellbook_buts, PANEL_FRAME_WINDOW, 0, 0),
+    [PANEL_STATUS] = PANEL_ENTRY("status", "Progress", status_dots, status_buts, PANEL_FRAME_HUD, 0, 1),
+    [PANEL_SYSMENU] = PANEL_ENTRY("sysmenu", "System Menu", sysmenu_dots, sysmenu_buts, PANEL_FRAME_HUD, 0, 1),
+    [PANEL_CLOCK] = PANEL_ENTRY("clock", "Classic Clock", clock_dots, clock_buts, PANEL_FRAME_HUD, 0, 0),
+    [PANEL_HELP] = PANEL_ENTRY("help", "Help", help_dots, help_buts, PANEL_FRAME_WINDOW, 0, 0),
 };
 
 _Static_assert(MAX_PANEL <= PANEL_BUT_SLOTS, "every panel needs a slot in each per-panel button bank");
@@ -128,6 +140,11 @@ DLL_EXPORT int panel_shown(int p)
 	if (p == PANEL_CHAT && chat_external) {
 		return cmd_is_active();
 	}
+	/* the help / quest-log window is summoned by its buttons and keys, not
+	 * by the visibility toggle - it exists exactly while one is open */
+	if (p == PANEL_HELP) {
+		return display_help || display_quest;
+	}
 	if (panel_visible(p)) {
 		return 1;
 	}
@@ -145,6 +162,11 @@ DLL_EXPORT int panel_shown(int p)
 DLL_EXPORT void panel_chat_external(int on)
 {
 	chat_external = on ? 1 : 0;
+}
+
+DLL_EXPORT int panel_chat_is_external(void)
+{
+	return chat_external;
 }
 
 /* The close button on a merchant/grave view hides that view without turning
@@ -218,6 +240,9 @@ const char *panel_title(int p)
 {
 	if (p == PANEL_SKILLS && con_cnt) {
 		return con_name;
+	}
+	if (p == PANEL_HELP && display_quest) {
+		return "Quest Log";
 	}
 	return panel_name(p);
 }

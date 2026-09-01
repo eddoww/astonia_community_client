@@ -229,7 +229,7 @@ static void draw_check(int x, int y, unsigned short col)
 
 void loading_display(void)
 {
-	int cx = XRES / 2;
+	int cx = UIXRES / 2;
 	int i, y, pct = 0;
 	int bw = 240, bh = 8, bx = cx - bw / 2;
 	int list_w = 200, lx = cx - list_w / 2;
@@ -237,12 +237,12 @@ void loading_display(void)
 	char buf[128];
 
 	/* whole window black, logo on top */
-	render_rect(0, 0, XRES, YRES, blackcolor);
+	render_rect(0, 0, UIXRES, UIYRES, blackcolor);
 	render_sprite(
 	    60, cx, 64, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER); /* centre-aligned; 30 clipped the top of the logo */
 
 	/* step list */
-	y = YRES / 2 - (LS_COUNT * 16) / 2 - 10;
+	y = UIYRES / 2 - (LS_COUNT * 16) / 2 - 10;
 	for (i = 0; i < LS_COUNT; i++, y += 16) {
 		unsigned short col = (step_state[i] == LS_DONE)     ? COL_DONE
 		                     : (step_state[i] == LS_ACTIVE) ? COL_BRIGHT

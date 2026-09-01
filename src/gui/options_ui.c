@@ -35,7 +35,7 @@ static int opt_open;
 static int opt_tab;
 static int opt_scroll;
 
-extern int sdl_scale_override; /* game/main.c - applied at the next start */
+extern int ui_scale_pct; /* sdl_core.c - UI layer scale, percent */
 
 static int opt_px, opt_py, opt_pw, opt_ph;
 static int opt_lx, opt_rx, opt_content_w;
@@ -92,8 +92,8 @@ extern SDL_Window *sdlwnd;
  * them (see amod_option_tab). The Gameplay tab always shows its native Combat
  * rows, mod or not. */
 #define OPT_AUDIO_NATIVE 6
-/* rows 0..10 classic, 11..16 window sizes, 17..19+MAX_PANEL panels */
-#define OPT_UI_NATIVE       (20 + MAX_PANEL)
+/* rows 0..9 classic, 10..15 window sizes, 16..17+MAX_PANEL panels */
+#define OPT_UI_NATIVE       (18 + MAX_PANEL)
 #define OPT_GAMEPLAY_NATIVE 2
 
 #define OPT_MAX_MOD_ROWS 64
@@ -722,94 +722,84 @@ static void opt_display_ui(void)
 
 	ry = opt_row_y(2);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, sdl_scale_override, 0, 4, "UI Scale (0 = Auto, restart)");
+		draw_slider(opt_lx, ry, opt_content_w, ui_scale_pct, 50, 200, "UI Scale %");
 	}
 
 	ry = opt_row_y(3);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, (game_options & GO_SMALLBOT) != 0, "Small Bottom Window");
+		draw_checkbox(opt_lx, ry, !(game_options & GO_NOMAP), "Show Minimap");
 	}
 
 	ry = opt_row_y(4);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, !(game_options & GO_NOMAP), "Show Minimap");
+		draw_checkbox(opt_lx, ry, !(game_options & GO_NOLAG), "Show Lag Warning");
 	}
 
 	ry = opt_row_y(5);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, !(game_options & GO_NOLAG), "Show Lag Warning");
+		draw_section_header(opt_lx, ry, opt_content_w, "Hotbar");
 	}
 
 	ry = opt_row_y(6);
 	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Hotbar");
+		draw_slider(opt_lx, ry, opt_content_w, hotbar_rows(), 0, 3, "Hotbar Rows");
 	}
 
 	ry = opt_row_y(7);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, hotbar_rows(), 0, 3, "Hotbar Rows");
+		draw_slider(opt_lx, ry, opt_content_w, hotbar_visible_slots(), 1, 15, "Visible Slots");
 	}
 
 	ry = opt_row_y(8);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, hotbar_visible_slots(), 1, 15, "Visible Slots");
+		draw_checkbox(opt_lx, ry, hotbar_show_hotkeys(), "Show Hotkey Labels");
 	}
 
 	ry = opt_row_y(9);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, hotbar_show_hotkeys(), "Show Hotkey Labels");
+		draw_checkbox(opt_lx, ry, hotbar_show_names(), "Show Slot Names");
 	}
 
 	ry = opt_row_y(10);
 	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, hotbar_show_names(), "Show Slot Names");
+		draw_section_header(opt_lx, ry, opt_content_w, "Window Sizes");
 	}
 
 	ry = opt_row_y(11);
 	if (ry >= 0) {
-		draw_section_header(opt_lx, ry, opt_content_w, "Window Sizes");
+		draw_slider(opt_lx, ry, opt_content_w, inv_grid_cols(), INV_GRID_MIN_COLS, INV_GRID_MAX_COLS, "Items Per Row");
 	}
 
 	ry = opt_row_y(12);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, inv_grid_cols(), INV_GRID_MIN_COLS, INV_GRID_MAX_COLS, "Items Per Row");
+		draw_slider(opt_lx, ry, opt_content_w, inv_grid_rows(), 0, INV_GRID_MAX_ROWS, "Visible Rows (0 = Auto)");
 	}
 
 	ry = opt_row_y(13);
 	if (ry >= 0) {
-		draw_slider(opt_lx, ry, opt_content_w, inv_grid_rows(), 0, INV_GRID_MAX_ROWS, "Visible Rows (0 = Auto)");
-	}
-
-	ry = opt_row_y(14);
-	if (ry >= 0) {
 		draw_slider(opt_lx, ry, opt_content_w, skl_grid_rows(), 0, SKL_GRID_MAX_ROWS, "Skill Rows (0 = Auto)");
 	}
 
-	ry = opt_row_y(15);
+	ry = opt_row_y(14);
 	if (ry >= 0) {
 		draw_slider(
 		    opt_lx, ry, opt_content_w, con_grid_cols(), CON_GRID_MIN_COLS, CON_GRID_MAX_COLS, "Merchant Items Per Row");
 	}
 
-	ry = opt_row_y(16);
+	ry = opt_row_y(15);
 	if (ry >= 0) {
 		draw_slider(opt_lx, ry, opt_content_w, con_grid_rows(), 0, CON_GRID_MAX_ROWS, "Merchant Rows (0 = Auto)");
 	}
 
-	ry = opt_row_y(17);
+	ry = opt_row_y(16);
 	if (ry >= 0) {
 		draw_section_header(opt_lx, ry, opt_content_w, "Panels & World");
-	}
-
-	ry = opt_row_y(18);
-	if (ry >= 0) {
-		draw_checkbox(opt_lx, ry, panels_fullscreen_world(), "Fullscreen World View");
 	}
 
 	for (int p = 0; p < MAX_PANEL; p++) {
 		char label[48];
 
-		ry = opt_row_y(19 + p);
+		ry = opt_row_y(17 + p);
 		if (ry >= 0) {
 			if (p == PANEL_CHAT && panel_chat_is_external()) {
 				/* the tabbed chat owns chat - a dead toggle would only
@@ -822,7 +812,7 @@ static void opt_display_ui(void)
 		}
 	}
 
-	ry = opt_row_y(19 + MAX_PANEL);
+	ry = opt_row_y(17 + MAX_PANEL);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, 0, "Reset Panel Layout");
 	}
@@ -847,28 +837,22 @@ static int opt_click_ui(int mx, int my)
 
 	ry = opt_row_y(2);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		val = (mx - tx) * 4 / tw; /* 0 = auto, 1..4 forced */
-		if (val < 0) {
-			val = 0;
+		/* snap to 25% steps; applies live (the world never scales) */
+		val = 50 + (mx - tx) * (200 - 50) / tw;
+		val = ((val + 12) / 25) * 25;
+		if (val < 50) {
+			val = 50;
 		}
-		if (val > 4) {
-			val = 4;
+		if (val > 200) {
+			val = 200;
 		}
-		sdl_scale_override = val;
-		save_options();
-		return 1;
-	}
-
-	ry = opt_row_y(3);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		game_options ^= GO_SMALLBOT;
-		game_options_record_override(GO_SMALLBOT);
+		ui_scale_apply(val);
 		init_dots();
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(4);
+	ry = opt_row_y(3);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		game_options ^= GO_NOMAP;
 		game_options_record_override(GO_NOMAP);
@@ -876,7 +860,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(5);
+	ry = opt_row_y(3);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		/* persisted via the extra-options file, not the keybind config
 		 * (game_options_record_override only knows the launcher bits) */
@@ -885,7 +869,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(7);
+	ry = opt_row_y(5);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = (mx - tx) * 3 / tw; /* 0 = hotbar off */
 		if (val < 0) {
@@ -900,7 +884,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(8);
+	ry = opt_row_y(6);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = 1 + (mx - tx) * (15 - 1) / tw;
 		if (val < 1) {
@@ -915,14 +899,14 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(9);
+	ry = opt_row_y(7);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		hotbar_set_show_hotkeys(!hotbar_show_hotkeys());
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(10);
+	ry = opt_row_y(8);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		hotbar_set_show_names(!hotbar_show_names());
 		init_dots();
@@ -930,7 +914,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(12);
+	ry = opt_row_y(10);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = INV_GRID_MIN_COLS + (mx - tx) * (INV_GRID_MAX_COLS - INV_GRID_MIN_COLS) / tw;
 		if (val < INV_GRID_MIN_COLS) {
@@ -945,7 +929,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(13);
+	ry = opt_row_y(11);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = (mx - tx) * INV_GRID_MAX_ROWS / tw; /* 0 = auto (classic row count) */
 		if (val < 0) {
@@ -960,7 +944,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(14);
+	ry = opt_row_y(12);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = (mx - tx) * SKL_GRID_MAX_ROWS / tw; /* 0 = auto */
 		if (val < 0) {
@@ -975,7 +959,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(15);
+	ry = opt_row_y(13);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = CON_GRID_MIN_COLS + (mx - tx) * (CON_GRID_MAX_COLS - CON_GRID_MIN_COLS) / tw;
 		if (val < CON_GRID_MIN_COLS) {
@@ -990,34 +974,8 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(16);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		val = (mx - tx) * CON_GRID_MAX_ROWS / tw; /* 0 = auto */
-		if (val < 0) {
-			val = 0;
-		}
-		if (val > CON_GRID_MAX_ROWS) {
-			val = CON_GRID_MAX_ROWS;
-		}
-		con_grid_set_rows(val);
-		init_dots();
-		save_options();
-		return 1;
-	}
-
-	ry = opt_row_y(18);
-	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-		panels_set_fullscreen_world(!panels_fullscreen_world());
-		init_dots();
-		/* the world projection centers on DOT_MCT, which just moved */
-		init_game(dotx(DOT_MCT), doty(DOT_MCT));
-		minimap_reanchor();
-		save_options();
-		return 1;
-	}
-
 	for (int p = 0; p < MAX_PANEL; p++) {
-		ry = opt_row_y(19 + p);
+		ry = opt_row_y(17 + p);
 		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 			if (p == PANEL_CHAT && panel_chat_is_external()) {
 				return 1; /* informational row */
@@ -1028,7 +986,7 @@ static int opt_click_ui(int mx, int my)
 		}
 	}
 
-	ry = opt_row_y(19 + MAX_PANEL);
+	ry = opt_row_y(17 + MAX_PANEL);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		panels_reset_layout();
 		init_dots();

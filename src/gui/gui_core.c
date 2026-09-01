@@ -416,6 +416,9 @@ int main_loop(void)
 						display_mouseover();
 					}
 				}
+				/* the GUI drew on the UI layer since the world pass -
+				 * composite it, scaled, over the frame */
+				render_ui_layer_end();
 				minimap_update();
 			}
 

@@ -22,6 +22,8 @@
 #include "sdl/sdl.h"
 #include "modder/modder.h"
 
+extern int ui_scale_pct; /* sdl_core.c */
+
 static int c_on = 0, c_x, c_y, d_y, ori_x, ori_y;
 static size_t csel = -1ull, isel = -1ull, msel = -1ull;
 static int lcmd_override = CMD_NONE;
@@ -296,17 +298,17 @@ int context_open(int mx, int my)
 	c_y = my - 10;
 	d_y = 8;
 
-	if (c_x < dotx(DOT_MTL) + 10) {
-		c_x = dotx(DOT_MTL) + 10;
+	if (c_x < 10) {
+		c_x = 10;
 	}
-	if (c_x > dotx(DOT_MBR) - MENUWIDTH - 10) {
-		c_x = dotx(DOT_MBR) - MENUWIDTH - 10;
+	if (c_x > UIXRES - MENUWIDTH - 10) {
+		c_x = UIXRES - MENUWIDTH - 10;
 	}
-	if (c_y < doty(DOT_MTL) + 10) {
-		c_y = doty(DOT_MTL) + 10;
+	if (c_y < 10) {
+		c_y = 10;
 	}
-	if (c_y > doty(DOT_MBR) - MENUHEIGHT - 10) {
-		c_y = doty(DOT_MBR) - MENUHEIGHT - 10;
+	if (c_y > UIYRES - MENUHEIGHT - 10) {
+		c_y = UIYRES - MENUHEIGHT - 10;
 	}
 
 	return 1;
@@ -702,7 +704,7 @@ static void resolve_cursor_targets(size_t *out_csel, size_t *out_isel, size_t *o
 {
 	*out_csel = *out_isel = *out_msel = MAXMN;
 
-	if (mousex < dotx(DOT_MTL) || mousey < doty(DOT_MTL) || mousex >= dotx(DOT_MBR) || mousey >= doty(DOT_MBR)) {
+	if (mousex < 0 || mousey < 0 || mousex >= UIXRES || mousey >= UIYRES) {
 		return;
 	}
 
@@ -714,7 +716,8 @@ static void resolve_cursor_targets(size_t *out_csel, size_t *out_isel, size_t *o
 	 * Same nearest-wins split as context_key_set_cmd. NEAR_NOTSELF stays so
 	 * attack/give/fireball can never resolve to yourself; ACTION_LOOK handles
 	 * the own tile separately. */
-	size_t tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR | NEAR_NOTSELF, 3);
+	size_t tmp = get_near_ex(mousex * ui_scale_pct / 100, mousey * ui_scale_pct / 100,
+	    CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR | NEAR_NOTSELF, 3);
 	if (tmp != MAXMN) {
 		if (map[tmp].csprite) {
 			*out_csel = tmp;
@@ -722,7 +725,7 @@ static void resolve_cursor_targets(size_t *out_csel, size_t *out_isel, size_t *o
 			*out_isel = tmp;
 		}
 	}
-	*out_msel = get_near_ground(mousex, mousey);
+	*out_msel = get_near_ground(mousex * ui_scale_pct / 100, mousey * ui_scale_pct / 100);
 }
 
 /* try to execute an action immediately at whatever is under the cursor.
@@ -834,29 +837,33 @@ int context_key_set_cmd(void)
 
 	chrsel = itmsel = mapsel = MAXMN;
 
+	/* world probes take canvas coordinates, not UI-layer ones */
+	int wmx = mousex * ui_scale_pct / 100;
+	int wmy = mousey * ui_scale_pct / 100;
+
 	switch (lcmd_override) {
 	case CMD_CHR_ATTACK:
 	case CMD_CHR_CAST_K:
-		chrsel = get_near_char(mousex, mousey, 3);
+		chrsel = get_near_char(wmx, wmy, 3);
 		break;
 	case CMD_CHR_CAST_L:
 	case CMD_CHR_CAST_R:
 		/* for fireball/lball: try character first, fall back to map */
-		chrsel = get_near_char(mousex, mousey, 3);
+		chrsel = get_near_char(wmx, wmy, 3);
 		if (chrsel == MAXMN) {
-			mapsel = get_near_ground(mousex, mousey);
+			mapsel = get_near_ground(wmx, wmy);
 			lcmd_override = (lcmd_override == CMD_CHR_CAST_L) ? CMD_MAP_CAST_L : CMD_MAP_CAST_R;
 		}
 		break;
 	case CMD_MAP_CAST_L:
 	case CMD_MAP_CAST_R:
-		mapsel = get_near_ground(mousex, mousey);
+		mapsel = get_near_ground(wmx, wmy);
 		break;
 
 	case CMD_ITM_LOOK:
 	case CMD_CHR_LOOK:
 	case CMD_MAP_LOOK: {
-		map_index_t tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR, 5);
+		map_index_t tmp = get_near_ex(wmx, wmy, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR, 5);
 		if (tmp != MAXMN) {
 			if (map[tmp].csprite) {
 				chrsel = tmp;
@@ -866,7 +873,7 @@ int context_key_set_cmd(void)
 				lcmd_override = CMD_ITM_LOOK;
 			}
 		} else {
-			mapsel = get_near_ground(mousex, mousey);
+			mapsel = get_near_ground(wmx, wmy);
 			lcmd_override = CMD_MAP_LOOK;
 		}
 		break;
@@ -877,7 +884,7 @@ int context_key_set_cmd(void)
 	case CMD_CHR_GIVE:
 	case CMD_MAP_DROP:
 		if (csprite) { // give, use with or drop
-			map_index_t tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR | NEAR_NOTSELF, 2);
+			map_index_t tmp = get_near_ex(wmx, wmy, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR | NEAR_NOTSELF, 2);
 			if (tmp != MAXMN) {
 				if (map[tmp].csprite) {
 					chrsel = tmp;
@@ -887,11 +894,11 @@ int context_key_set_cmd(void)
 					lcmd_override = CMD_ITM_USE_WITH;
 				}
 			} else {
-				mapsel = get_near_ground(mousex, mousey);
+				mapsel = get_near_ground(wmx, wmy);
 				lcmd_override = CMD_MAP_DROP;
 			}
 		} else { // take or use
-			itmsel = get_near_item(mousex, mousey, CMF_TAKE | CMF_USE, 5);
+			itmsel = get_near_item(wmx, wmy, CMF_TAKE | CMF_USE, 5);
 			if (itmsel != MAXMN) {
 				if (map[itmsel].flags & CMF_TAKE) {
 					lcmd_override = CMD_ITM_TAKE;

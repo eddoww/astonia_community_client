@@ -70,7 +70,7 @@ void display_wheel(void)
 	int i;
 
 	render_push_clip();
-	render_more_clip(0, 0, XRES, YRES);
+	render_more_clip(0, 0, UIXRES, UIYRES);
 
 	if (now - vk_special_time < 2000) {
 		int n, panic = 99;
@@ -185,7 +185,7 @@ static void display_menu_overlays(void)
 static void display_world_loading(void)
 {
 	int done = 0, total = 0, pct = 0;
-	int cx = XRES / 2, cy = (YRES - 60) / 2;
+	int cx = UIXRES / 2, cy = (UIYRES - 60) / 2;
 	int bw = 220, bh = 8, bx = cx - bw / 2, by = cy + 10;
 	Uint64 elapsed = SDL_GetTicks() - world_loading_start;
 
@@ -193,8 +193,8 @@ static void display_world_loading(void)
 	if (total > 0) {
 		pct = done * 100 / total;
 	}
-	render_rect(0, 0, XRES, YRES - 60, blackcolor);
-	render_sprite(60, XRES / 2, ((YRES - 60) - 240) / 2, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+	render_rect(0, 0, UIXRES, UIYRES - 60, blackcolor);
+	render_sprite(60, UIXRES / 2, ((UIYRES - 60) - 240) / 2, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
 	render_text(
 	    cx, cy - 14, textcolor, RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, "Loading world...");
 	render_rounded_rect_filled_alpha(bx, by, bx + bw, by + bh, 3, IRGB(4, 4, 4), 230);
@@ -233,7 +233,7 @@ void display(void)
 		if (tmp == -1) {
 			mousey = 0;
 		} else {
-			mousey = YRES / 2;
+			mousey = UIYRES / 2;
 		}
 	}
 
@@ -241,6 +241,7 @@ void display(void)
 
 	/* Startup: one loading screen from window creation until the world is ready */
 	if (loading_active()) {
+		render_ui_layer_begin();
 		if (sockstate >= 4) {
 			int ld = 0, lt = 0;
 			sdl_tex_jobs_progress(&ld, &lt);
@@ -257,6 +258,7 @@ void display(void)
 
 	/* Later (re)connects / area changes: compact world-loading screen */
 	if (sockstate >= 3 && world_loading_active()) {
+		render_ui_layer_begin();
 		display_world_loading();
 		display_text();
 		display_menu_overlays();
@@ -264,19 +266,20 @@ void display(void)
 	}
 
 	if (sockstate < 4 && ((t = time(NULL) - (time_t)socktimeout) > 10 || !originx)) {
-		render_rect(0, 0, XRES, YRES - 60, blackcolor);
+		render_ui_layer_begin();
+		render_rect(0, 0, UIXRES, UIYRES - 60, blackcolor);
 		display_text();
 		if ((now / 1000) & 1) {
 			render_text(
-			    XRES / 2, (YRES - 60) / 2 - 60, redcolor, RENDER_ALIGN_CENTER | RENDER_TEXT_LARGE, "not connected");
+			    UIXRES / 2, (UIYRES - 60) / 2 - 60, redcolor, RENDER_ALIGN_CENTER | RENDER_TEXT_LARGE, "not connected");
 		}
-		render_sprite(60, XRES / 2, ((YRES - 60) - 240) / 2, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+		render_sprite(60, UIXRES / 2, ((UIYRES - 60) - 240) / 2, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
 		if (!kicked_out) {
-			render_text_fmt(XRES / 2, (YRES - 60) / 2 - 40, textcolor,
+			render_text_fmt(UIXRES / 2, (UIYRES - 60) / 2 - 40, textcolor,
 			    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 			    "Trying to establish connection. %ld seconds...", (long)t);
 			if (t > 15) {
-				render_text_fmt(XRES / 2, (YRES - 60) / 2 - 0, textcolor,
+				render_text_fmt(UIXRES / 2, (UIYRES - 60) / 2 - 0, textcolor,
 				    RENDER_TEXT_LARGE | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 				    "Please check %s for troubleshooting advice.", game_url);
 			}
@@ -284,14 +287,14 @@ void display(void)
 			/* the server ended the session (kick, shutdown, idle ...): say why */
 			const char *why = loading_last_exit_reason();
 			if (why[0]) {
-				render_text(XRES / 2, (YRES - 60) / 2 - 40, redcolor,
+				render_text(UIXRES / 2, (UIYRES - 60) / 2 - 40, redcolor,
 				    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, why);
 			}
-			render_text(XRES / 2, (YRES - 60) / 2 - 24, textcolor,
+			render_text(UIXRES / 2, (UIYRES - 60) / 2 - 24, textcolor,
 			    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 			    "The connection was closed by the server. Close the game and start it again from the launcher.");
 		}
-		render_text(XRES / 2, (YRES - 60) / 2 + 30, textcolor,
+		render_text(UIXRES / 2, (UIYRES - 60) / 2 + 30, textcolor,
 		    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, "Press Escape for the menu.");
 		/* the menu must stay reachable here - players were stuck on this
 		 * screen with no way to quit or change settings from inside */
@@ -303,6 +306,10 @@ void display(void)
 	render_more_clip(dotx(DOT_MTL), doty(DOT_MTL), dotx(DOT_MBR), doty(DOT_MBR));
 	display_game();
 	render_pop_clip();
+
+	/* from here on everything is GUI - draw it on the UI layer so the UI
+	 * Scale option can size it independently of the world */
+	render_ui_layer_begin();
 
 	/* Two panels are sized by live game state: the skills window swaps its
 	 * skill list for a container grid, and the spellbook grows with the
@@ -412,12 +419,12 @@ void display(void)
 	// weather, achievements, info window all live in the mod). The server keeps
 	// serving such clients but the experience is incomplete.
 	if (sockstate == 4 && !amod_main_loaded()) {
-		int by = doty(DOT_MTL) + 60;
-		render_text(XRES / 2, by, IRGB(31, 0, 0), RENDER_TEXT_LARGE | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
+		int by = 60;
+		render_text(UIXRES / 2, by, IRGB(31, 0, 0), RENDER_TEXT_LARGE | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 		    "UNSUPPORTED CLIENT - Ugaris mod not loaded");
-		render_text(XRES / 2, by + 22, IRGB(31, 31, 0), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
+		render_text(UIXRES / 2, by + 22, IRGB(31, 31, 0), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 		    "Weather, auction house, achievements and the info window are unavailable.");
-		render_text(XRES / 2, by + 36, IRGB(31, 31, 0), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
+		render_text(UIXRES / 2, by + 36, IRGB(31, 31, 0), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED,
 		    "Please install Ugaris from Steam (it includes the mod): store.steampowered.com/app/1044010");
 	}
 
@@ -426,7 +433,7 @@ void display(void)
 	if (sockstate == 4 && !(game_options & GO_NOLAG) && last_tick_received_time > 0) {
 		uint64_t lag_ms = SDL_GetTicks() - last_tick_received_time;
 		if (lag_ms > 500) {
-			render_text_fmt(XRES / 2, doty(DOT_MTL) + 35, IRGB(31, 0, 0),
+			render_text_fmt(UIXRES / 2, 35, IRGB(31, 0, 0),
 			    RENDER_TEXT_LARGE | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED | RENDER_TEXT_NOCACHE,
 			    "LAG: %" PRIu64 "ms", lag_ms);
 		}
@@ -449,7 +456,7 @@ display_graphs:;
 		static unsigned char pre1_graph[100], pre2_graph[100], pre3_graph[100];
 		// static int frame_min=99,frame_max=0,frame_step=0;
 		// static int tick_min=99,tick_max=0,tick_step=0;
-		int px = XRES - 110, py = 35;
+		int px = UIXRES - 110, py = 35;
 
 		// render_text_fmt(px,py+=10,0xffff,RENDER_TEXT_SMALL|RENDER_TEXT_LEFT|RENDER_TEXT_FRAMED|RENDER_TEXT_NOCACHE,"skip
 		// %3.0f%%",100.0*skip/tota);

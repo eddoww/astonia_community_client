@@ -57,9 +57,13 @@ DLL_EXPORT void con_grid_set_rows(int n);
 #define BUFF_COUNT    4
 #define SPB_COLS      7 /* spellbook window columns              */
 /* status panel (level + military progress) */
-#define STAT_W     170
-#define STAT_BAR_H 9
-#define STAT_ROW_H 23 /* bar + info text line                  */
+/* status panel: two WoW-style full-width bars at the screen bottom */
+#define STAT_BAR_H 11
+#define STAT_ROW_H (STAT_BAR_H + 2)
+/* the bar strip spans this fraction of the UI width, centered */
+#define STAT_W_NUM 3
+#define STAT_W_DEN 5
+#define STAT_MIN_W 420
 /* system menu strip (Menu / Help / Quests)  */
 #define SYSM_BTN_W 48
 #define SYSM_BTN_H 18

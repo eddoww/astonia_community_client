@@ -235,6 +235,8 @@ void sdl_destroy_render_target(int target_id);
 int sdl_set_render_target(int target_id);
 void sdl_render_target_to_screen(int target_id, int x, int y, unsigned char alpha);
 void sdl_clear_render_target(int target_id);
+void sdl_derive_ui_canvas(void);
+void sdl_render_target_to_screen_stretched(int target_id, int x, int y, int w, int h, unsigned char alpha);
 
 void sdl_flush_textinput(void);
 void sdl_dump(FILE *fp);

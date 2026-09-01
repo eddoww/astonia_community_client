@@ -30,8 +30,6 @@
 
 DLL_EXPORT int gui_overlay_visible = 1;
 
-static int fullscreen_world = 1;
-
 typedef struct {
 	int beg, end; /* inclusive button id range */
 } ButRange;
@@ -445,14 +443,14 @@ static void panel_clamp(int p, int *dx, int *dy)
 	if (x < 0) {
 		*dx -= x;
 	}
-	if (x > XRES) {
-		*dx -= x - XRES;
+	if (x > UIXRES) {
+		*dx -= x - UIXRES;
 	}
 	if (y < 0) {
 		*dy -= y;
 	}
-	if (y > YRES) {
-		*dy -= y - YRES;
+	if (y > UIYRES) {
+		*dy -= y - UIYRES;
 	}
 }
 
@@ -782,12 +780,12 @@ void panels_reset_layout(void)
 
 DLL_EXPORT int panels_fullscreen_world(void)
 {
-	return fullscreen_world;
+	return 1; /* the world is always fullscreen - owner decision, Sep 2026 */
 }
 
 void panels_set_fullscreen_world(int on)
 {
-	fullscreen_world = on ? 1 : 0;
+	(void)on; /* retired - there is no windowed-map mode anymore */
 }
 
 void panels_save_json(struct cJSON *root)
@@ -797,7 +795,6 @@ void panels_save_json(struct cJSON *root)
 	if (!jp) {
 		return;
 	}
-	cJSON_AddBoolToObject(jp, "fullscreen_world", fullscreen_world);
 	for (int p = 0; p < MAX_PANEL; p++) {
 		cJSON *e = cJSON_CreateObject();
 
@@ -820,10 +817,6 @@ void panels_load_json(const struct cJSON *root)
 
 	if (!jp || !cJSON_IsObject(jp)) {
 		return;
-	}
-	v = cJSON_GetObjectItem(jp, "fullscreen_world");
-	if (v && cJSON_IsBool(v)) {
-		fullscreen_world = cJSON_IsTrue(v) ? 1 : 0;
 	}
 	for (int p = 0; p < MAX_PANEL; p++) {
 		const cJSON *e = cJSON_GetObjectItem(jp, panels[p].id);

@@ -14,6 +14,8 @@
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/panels.h"
+
+extern int ui_scale_pct; /* sdl_core.c */
 #include "gui/escape_menu_ui.h"
 #include "client/client.h"
 #include "game/game.h"
@@ -32,7 +34,7 @@ int get_near_button(int x, int y)
 	int b;
 	int n = -1, ndist = 1000000, dist;
 
-	if (x < 0 || y < 0 || x >= XRES || y >= YRES) {
+	if (x < 0 || y < 0 || x >= UIXRES || y >= UIYRES) {
 		return -1;
 	}
 
@@ -424,15 +426,19 @@ static void detect_hover_target(void)
 		}
 	}
 
-	/* status panel bars: click cycles the numbers printed under them (the
+	/* status panel bars: click cycles the numbers printed on them (the
 	 * bars are wide rectangles, so a circular but[] hit box fits badly) */
-	if (butsel == -1 && panel_content_shown(PANEL_STATUS) && mousex >= dotx(DOT_STAT) &&
-	    mousex <= dotx(DOT_STAT) + STAT_W) {
-		if (mousey >= doty(DOT_STAT) && mousey <= doty(DOT_STAT) + STAT_BAR_H + 2) {
-			butsel = BUT_EXPBAR;
-		}
-		if (mousey >= doty(DOT_STAT) + STAT_ROW_H && mousey <= doty(DOT_STAT) + STAT_ROW_H + STAT_BAR_H + 2) {
-			butsel = BUT_MILBAR;
+	{
+		int sx1, sy1, sx2, sy2;
+
+		if (butsel == -1 && panel_content_shown(PANEL_STATUS) &&
+		    panel_content_rect(PANEL_STATUS, &sx1, &sy1, &sx2, &sy2) && mousex >= sx1 && mousex <= sx2) {
+			if (mousey >= sy1 && mousey <= sy1 + STAT_BAR_H) {
+				butsel = BUT_EXPBAR;
+			}
+			if (mousey >= sy1 + STAT_ROW_H && mousey <= sy1 + STAT_ROW_H + STAT_BAR_H) {
+				butsel = BUT_MILBAR;
+			}
 		}
 	}
 
@@ -527,11 +533,15 @@ static void detect_hover_target(void)
 		butsel = BUT_PANEL_BODY;
 	}
 
-	// hit map
-	if (!hitsel[0] && butsel == -1 && mousex >= dotx(DOT_MTL) && mousey >= doty(DOT_MTL) && doty(DOT_MBR) &&
-	    mousey < doty(DOT_MBR)) {
+	// hit map - the world renders at the full canvas, not on the UI layer,
+	// so its hit tests take canvas coordinates
+	int wmx = mousex * ui_scale_pct / 100;
+	int wmy = mousey * ui_scale_pct / 100;
+
+	if (!hitsel[0] && butsel == -1 && wmx >= dotx(DOT_MTL) && wmy >= doty(DOT_MTL) && doty(DOT_MBR) &&
+	    wmy < doty(DOT_MBR)) {
 		if (action_ovr == ACTION_LOOK) {
-			map_index_t tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR, 5);
+			map_index_t tmp = get_near_ex(wmx, wmy, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR, 5);
 			if (tmp != MAXMN) {
 				if (map[tmp].csprite) {
 					chrsel = tmp;
@@ -539,18 +549,18 @@ static void detect_hover_target(void)
 					itmsel = tmp;
 				}
 			} else {
-				mapsel = get_near_ground(mousex, mousey);
+				mapsel = get_near_ground(wmx, wmy);
 			}
 		} else {
 			// old style interface (shift/ctrl) first
 			if (vk_char) {
-				chrsel = get_near_char(mousex, mousey, MAPDX);
+				chrsel = get_near_char(wmx, wmy, MAPDX);
 			}
 			if (chrsel == MAXMN && vk_item) {
 				if (csprite) {
-					itmsel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, 0);
+					itmsel = get_near_item(wmx, wmy, CMF_USE | CMF_TAKE, 0);
 				} else {
-					itmsel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, MAPDX);
+					itmsel = get_near_item(wmx, wmy, CMF_USE | CMF_TAKE, MAPDX);
 				}
 			}
 
@@ -572,9 +582,9 @@ static void detect_hover_target(void)
 				}
 				map_index_t tmp;
 				if (csprite) {
-					tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | flags | NEAR_NOTSELF, 2);
+					tmp = get_near_ex(wmx, wmy, CMF_USE | CMF_TAKE | flags | NEAR_NOTSELF, 2);
 				} else {
-					tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | flags, 5);
+					tmp = get_near_ex(wmx, wmy, CMF_USE | CMF_TAKE | flags, 5);
 				}
 				if (tmp != MAXMN) {
 					if (map[tmp].csprite) {
@@ -586,7 +596,7 @@ static void detect_hover_target(void)
 			}
 
 			if (chrsel == MAXMN && itmsel == MAXMN) {
-				mapsel = get_near_ground(mousex, mousey);
+				mapsel = get_near_ground(wmx, wmy);
 			}
 			if (mapsel != MAXMN || itmsel != MAXMN || chrsel != MAXMN) {
 				butsel = BUT_MAP;

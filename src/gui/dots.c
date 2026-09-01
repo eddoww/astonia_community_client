@@ -79,15 +79,13 @@ DLL_EXPORT int buty(int bidx)
 	return but[bidx].y;
 }
 
-#define sbot (game_options & GO_SMALLBOT)
-
 void dots_update(void)
 {
 	/* anchor the tutorial popup above the bottom bar, not the map bottom -
 	 * with the fullscreen world view DOT_MBR is the bottom of the screen */
-	int base = min(doty(DOT_MBR), doty(DOT_BOT) + 4);
+	int base = min(UIYRES, doty(DOT_BOT) + 4);
 
-	set_dot(DOT_TUT, (XRES - 410) / 2, base - 122 - (context_action_enabled() ? 30 : 0), 0);
+	set_dot(DOT_TUT, (UIXRES - 410) / 2, base - 122 - (context_action_enabled() ? 30 : 0), 0);
 }
 
 /* ── Equipment paper doll ────────────────────────────────────────────────
@@ -138,25 +136,21 @@ int wea_slot_pos(int slot, int *x, int *y)
 
 void init_dots(void)
 {
-	int i, x, y, xc, yc;
+	int i, x, y;
 
 	// top left, bottom right of screen
 	set_dot(DOT_TL, 0, 0, 0);
-	set_dot(DOT_BR, XRES, YRES, 0);
+	set_dot(DOT_BR, UIXRES, UIYRES, 0);
 
 	// top and bottom window
 	set_dot(DOT_TOP, 0, 0, 0); /* legacy anchor - the top bar is gone */
-	if (!sbot) {
-		set_dot(DOT_BOT, 0, YRES - 170, 0);
-	} else {
-		set_dot(DOT_BOT, 0, YRES - 130, 0);
-	}
-	set_dot(DOT_BO2, XRES, YRES, 0);
+	set_dot(DOT_BOT, 0, UIYRES - 170, 0);
+	set_dot(DOT_BO2, UIXRES, UIYRES, 0);
 
 	/* every floating panel keeps this much clearance from the canvas edge */
 	const int edge = 6 + UI_WIN_PAD;
 
-	int auto_rows = !sbot ? 4 : 3;
+	int auto_rows = 4;
 
 	__condy = con_grid_rows() ? con_grid_rows() : auto_rows;
 	__invdy = inv_grid_rows() ? inv_grid_rows() : auto_rows;
@@ -173,7 +167,7 @@ void init_dots(void)
 		int content_w = INV_RAIL_W + INV_RAIL_GAP + grid_w;
 		int content_h = grid_h + INV_FOOT_H;
 
-		set_dot(DOT_IN2, XRES - edge, YRES - edge, 0);
+		set_dot(DOT_IN2, UIXRES - edge, UIYRES - edge, 0);
 		set_dot(DOT_IN1, dotx(DOT_IN2) - content_w, doty(DOT_IN2) - content_h, 0);
 		set_dot(DOT_INV, dotx(DOT_IN1) + INV_RAIL_W + INV_RAIL_GAP + FDX / 2, doty(DOT_IN1) + FDX / 2, 0);
 
@@ -193,10 +187,10 @@ void init_dots(void)
 		int body_w = con_cnt ? CONDX * FDX : SKLWIDTH + 8;
 		int content_h = con_cnt ? CONDY * FDX + 4 : skl_list_h;
 
-		set_dot(DOT_SKL, 8 + 4, YRES - edge - content_h + 8, 0);
-		set_dot(DOT_SK2, 8 + body_w, YRES - edge, 0);
-		set_dot(DOT_CON, 8 + FDX / 2 + 2, YRES - edge - content_h + FDX / 2 + 2, 0);
-		panel_set_content_rect(PANEL_SKILLS, 8, YRES - edge - content_h, 8 + body_w + SKL_RAIL_W, YRES - edge);
+		set_dot(DOT_SKL, 8 + 4, UIYRES - edge - content_h + 8, 0);
+		set_dot(DOT_SK2, 8 + body_w, UIYRES - edge, 0);
+		set_dot(DOT_CON, 8 + FDX / 2 + 2, UIYRES - edge - content_h + FDX / 2 + 2, 0);
+		panel_set_content_rect(PANEL_SKILLS, 8, UIYRES - edge - content_h, 8 + body_w + SKL_RAIL_W, UIYRES - edge);
 	}
 
 	/* scroll rails: the skills rail hugs the right edge of its window, the
@@ -207,9 +201,9 @@ void init_dots(void)
 	set_dot(DOT_SCD, 0, doty(DOT_IN1) + __invdy * FDX - 8, 0);
 
 	/* ── Chat (bottom centre) ────────────────────────────────────────── */
-	__textdisplay_sy = !sbot ? 150 : 110;
-	set_dot(DOT_TXT, 230, YRES - edge - __textdisplay_sy, 0);
-	set_dot(DOT_TX2, 624, YRES - edge, 0);
+	__textdisplay_sy = 150;
+	set_dot(DOT_TXT, 230, UIYRES - edge - __textdisplay_sy, 0);
+	set_dot(DOT_TX2, 624, UIYRES - edge, 0);
 	panel_set_content_rect(PANEL_CHAT, dotx(DOT_TXT), doty(DOT_TXT), dotx(DOT_TX2), doty(DOT_TX2));
 
 	/* ── Speed selector, stacked above the skills window ─────────────── */
@@ -220,7 +214,7 @@ void init_dots(void)
 		 * ever bumps these two around - the anchor is a constant of the
 		 * current settings, not of what the window happens to show */
 		int skl_max_h = max(skl_list_h, CONDY * FDX + 4);
-		int y2 = YRES - edge - skl_max_h - UI_WIN_TITLE_H - UI_WIN_PAD * 2 - 4;
+		int y2 = UIYRES - edge - skl_max_h - UI_WIN_TITLE_H - UI_WIN_PAD * 2 - 4;
 		int y1 = y2 - SPEED_SEG_H;
 
 		set_dot(DOT_MOD, 8, y1, 0);
@@ -241,24 +235,35 @@ void init_dots(void)
 	{
 		int content_w = WEA_COLS * FDX;
 		int content_h = WEA_ROWS * FDX + WEA_FOOT_H;
-		int x1 = XRES - edge - content_w;
+		int x1 = UIXRES - edge - content_w;
 		int y1 = 150;
 
 		set_dot(DOT_WEA, x1 + FDX / 2, y1 + FDX / 2, 0);
 		panel_set_content_rect(PANEL_EQUIPMENT, x1, y1, x1 + content_w, y1 + content_h);
 	}
 
-	/* ── Status panel: level + military progress, top-left ───────────── */
-	set_dot(DOT_STAT, 8, 8, 0);
-	panel_set_content_rect(PANEL_STATUS, 8, 8, 8 + STAT_W, 8 + 2 * STAT_ROW_H);
-	set_but(BUT_EXPBAR, 8 + STAT_W / 2, 8 + STAT_BAR_H / 2 + 1, 0, BUTF_NOHIT); /* rect-hit */
-	set_but(BUT_MILBAR, 8 + STAT_W / 2, 8 + STAT_ROW_H + STAT_BAR_H / 2 + 1, 0, BUTF_NOHIT);
+	/* ── Status panel: level + military as two long WoW-style bars at the
+	 *    very bottom of the screen, centered ──────────────────────────── */
+	{
+		int w = UIXRES * STAT_W_NUM / STAT_W_DEN;
+		int x1, y1;
+
+		if (w < STAT_MIN_W) {
+			w = STAT_MIN_W;
+		}
+		x1 = (UIXRES - w) / 2;
+		y1 = UIYRES - 2 * STAT_ROW_H - 2;
+		set_dot(DOT_STAT, x1, y1, 0);
+		panel_set_content_rect(PANEL_STATUS, x1, y1, x1 + w, y1 + 2 * STAT_ROW_H);
+		set_but(BUT_EXPBAR, x1 + w / 2, y1 + STAT_BAR_H / 2, 0, BUTF_NOHIT); /* rect-hit */
+		set_but(BUT_MILBAR, x1 + w / 2, y1 + STAT_ROW_H + STAT_BAR_H / 2, 0, BUTF_NOHIT);
+	}
 
 	/* ── System menu strip: Menu | Help | Quests, top-right of the world,
 	 *    left of the minimap's column ─────────────────────────────────── */
 	{
 		int w = 3 * SYSM_BTN_W + 2 * SYSM_GAP;
-		int x1 = XRES - 150 - w;
+		int x1 = UIXRES - 150 - w;
 
 		set_dot(DOT_MENU, x1, 8, 0);
 		panel_set_content_rect(PANEL_SYSMENU, x1, 8, x1 + w, 8 + SYSM_BTN_H);
@@ -269,7 +274,7 @@ void init_dots(void)
 
 	/* ── Classic flip clock, under the system menu (hidden by default) ── */
 	{
-		int x1 = XRES - 150 - CLK_W;
+		int x1 = UIXRES - 150 - CLK_W;
 
 		set_dot(DOT_CLK, x1, 8 + SYSM_BTN_H + HUD_GRIP_H + UI_WIN_PAD + 8, 0);
 		panel_set_content_rect(PANEL_CLOCK, dotx(DOT_CLK), doty(DOT_CLK), dotx(DOT_CLK) + CLK_W, doty(DOT_CLK) + CLK_H);
@@ -280,7 +285,7 @@ void init_dots(void)
 		int avail = spellbook_slot_count();
 		int cols = avail < SPB_COLS ? avail : SPB_COLS;
 		int rows = (avail + SPB_COLS - 1) / SPB_COLS;
-		int cx = (XRES - hotbar_visible_slots() * FDX) / 2 + hotbar_visible_slots() * FDX / 2;
+		int cx = (UIXRES - hotbar_visible_slots() * FDX) / 2 + hotbar_visible_slots() * FDX / 2;
 		int x1, y1;
 
 		if (cols < 1) {
@@ -298,28 +303,12 @@ void init_dots(void)
 		panel_set_content_rect(PANEL_SPELLBOOK, x1, y1, x1 + cols * FDX, y1 + rows * FDX);
 	}
 
-	// map top left, bottom right, center
-	if (panels_fullscreen_world()) {
-		// fullscreen world view: the map spans the whole canvas, the GUI
-		// overlays it, and the player character sits at the true center
-		set_dot(DOT_MTL, 0, 0, 0);
-		set_dot(DOT_MBR, XRES, YRES, 0);
-		set_dot(DOT_MCT, XRES / 2, YRES / 2, 0);
-	} else {
-		set_dot(DOT_MTL, 0, 40, 0);
-		set_dot(DOT_MBR, XRES, min(doty(DOT_MTL) + 450, doty(DOT_BOT) + 4), 0);
-		x = dotx(DOT_MBR) - dotx(DOT_MTL);
-		y = doty(DOT_MBR) - doty(DOT_MTL);
-		xc = x / 2;
-		if (y < 430) {
-			yc = y / 2 + 20;
-		} else if (y < 450) {
-			yc = y / 2 + 20 - y + 430;
-		} else {
-			yc = y / 2;
-		}
-		set_dot(DOT_MCT, dotx(DOT_MTL) + xc, doty(DOT_MTL) + yc, 0);
-	}
+	// map: the world is always fullscreen - it spans the whole CANVAS (not
+	// the UI layer: the world never scales with the UI), the GUI overlays
+	// it, and the player character sits at the true center
+	set_dot(DOT_MTL, 0, 0, 0);
+	set_dot(DOT_MBR, XRES, YRES, 0);
+	set_dot(DOT_MCT, XRES / 2, YRES / 2, 0);
 
 	// help and quest window
 	set_dot(DOT_HLP, 12, 60, 0);
@@ -327,7 +316,7 @@ void init_dots(void)
 	panel_set_content_rect(PANEL_HELP, dotx(DOT_HLP), doty(DOT_HLP), dotx(DOT_HL2), doty(DOT_HL2));
 
 	// teleporter window
-	set_dot(DOT_TEL, (XRES - 520) / 2, (doty(DOT_MBR) - doty(DOT_MTL) - 320) / 2 + doty(DOT_MTL), 0);
+	set_dot(DOT_TEL, (UIXRES - 520) / 2, (UIYRES - 320) / 2, 0);
 
 	// look at window
 	set_dot(DOT_LOK, 150, 50, 0);
@@ -337,8 +326,8 @@ void init_dots(void)
 
 	// action bar - no longer rendered; DOT_ACT only anchors the overhead
 	// text (display_otext) and the BUT_ACT_* boxes below, which are dead
-	set_dot(
-	    DOT_ACT, XRES - LEGACY_ACTIONBAR_SLOTS * 40 - (XRES - LEGACY_ACTIONBAR_SLOTS * 40) / 2, doty(DOT_BOT) - 12, 0);
+	set_dot(DOT_ACT, UIXRES - LEGACY_ACTIONBAR_SLOTS * 40 - (UIXRES - LEGACY_ACTIONBAR_SLOTS * 40) / 2,
+	    doty(DOT_BOT) - 12, 0);
 
 	// hotbar — centered above the bottom panel
 	// DOT_HOTBAR marks the BOTTOM row (row 0). Additional rows stack upward.
@@ -348,13 +337,13 @@ void init_dots(void)
 	{
 		int shown_rows = hotbar_rows() > 0 ? hotbar_rows() : 1; /* 0 rows: keep a sane anchor */
 		int row_offset = (shown_rows - 1) * (FDX + 2); /* extra rows above */
-		set_dot(DOT_HOTBAR, (XRES - hotbar_visible_slots() * FDX) / 2, doty(DOT_BOT) - 15 - row_offset, 0);
+		set_dot(DOT_HOTBAR, (UIXRES - hotbar_visible_slots() * FDX) / 2, doty(DOT_BOT) - 15 - row_offset, 0);
 	}
 
 	// tutor window
 	dots_update();
 
-	set_but(BUT_MAP, XRES / 2, YRES / 2, 0, BUTF_NOHIT);
+	set_but(BUT_MAP, UIXRES / 2, UIYRES / 2, 0, BUTF_NOHIT);
 
 	/* worn equipment: paper-doll cells, empty cells stay unhittable */
 	for (i = 0; i < 12; i++) {

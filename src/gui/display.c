@@ -416,10 +416,10 @@ void display_citem(void)
 		return;
 	}
 
-	if (x < 0 || x >= XRES) {
+	if (x < 0 || x >= UIXRES) {
 		return;
 	}
-	if (y < 0 || y >= YRES) {
+	if (y < 0 || y >= UIYRES) {
 		return;
 	}
 
@@ -441,7 +441,7 @@ void display_citem(void)
 	fx.align = RENDER_ALIGN_CENTER;
 	fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = FX_ITEMLIGHT;
 	render_push_clip();
-	render_more_clip(0, 0, XRES, YRES);
+	render_more_clip(0, 0, UIXRES, UIYRES);
 	render_sprite_fx(&fx, x, y);
 	if ((sprite = (unsigned int)additional_sprite((unsigned int)csprite, (int)tick)) != 0U) {
 		fx.sprite = sprite;
@@ -1094,15 +1094,26 @@ static const char *fmt_thousands(long long v, char *buf, size_t sz)
 	return buf;
 }
 
-/* One row of the status panel: a meter with its label inside and the
- * cycling info text under it (click the bar to change what is printed). */
+/* One row of the status panel: a long WoW-style bar with its info text
+ * printed ON the bar (click cycles what it says). The width comes from the
+ * panel's content rect so it follows the layout and the UI scale. */
 static void draw_status_row(
     int y, int pct, unsigned short color, int flash, int mode, long long have, long long need, long long togo)
 {
-	int x1 = dotx(DOT_STAT), x2 = x1 + STAT_W;
-	char a[32], b[32], text[64] = "";
+	int x1, y1, x2, y2;
+	char a[32], b[32], text[80] = "";
+
+	if (!panel_content_rect(PANEL_STATUS, &x1, &y1, &x2, &y2)) {
+		return;
+	}
 
 	ui_meter_h(x1, y, x2, y + STAT_BAR_H, pct, flash ? whitecolor : color);
+	/* WoW-style segment ticks every 10% */
+	for (int i = 1; i < 10; i++) {
+		int tx = x1 + (x2 - x1) * i / 10;
+
+		render_rect_alpha(tx, y + 1, tx + 1, y + STAT_BAR_H - 1, UI_BG_BASE, 120);
+	}
 
 	switch (mode) {
 	case BAR_INFO_PERCENT:
@@ -1118,7 +1129,7 @@ static void draw_status_row(
 		break;
 	}
 	if (text[0]) {
-		render_text((x1 + x2) / 2, y + STAT_BAR_H + 2, UI_TEXT_MUTED, UI_FONT_CENTER, text);
+		render_text((x1 + x2) / 2, y + 2, UI_TEXT, UI_FONT_CENTER, text);
 	}
 }
 
@@ -1152,8 +1163,13 @@ void display_exp(void)
 			exp_ticker--;
 		}
 
-		draw_status_row(doty(DOT_STAT), (int)(100ll * have / total), UI_TEXT_GOLD, exp_ticker != 0, exp_info_mode, have,
-		    total, step);
+		char lead[96];
+
+		draw_status_row(doty(DOT_STAT), (int)(100ll * have / total), IRGB(14, 8, 28), exp_ticker != 0, exp_info_mode,
+		    have, total, step);
+		/* the level tag sits at the bar's left end, whatever the mode */
+		snprintf(lead, sizeof(lead), "Lv %d", clevel);
+		render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
 
 		snprintf(hover_level_text, 200,
 		    "Level %d to %d: %s / %s (%lld%%)\n%s to go, total %s exp\n(click the bar to change the numbers shown)",
@@ -1252,11 +1268,14 @@ void display_military(void)
 	}
 
 	if (mil_exp && total) {
-		unsigned short mil_color = IRGB(12, 18, 28);
+		unsigned short mil_color = IRGB(28, 12, 4);
+		char lead[96];
 
 		if (rank < maxrank) {
 			draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 100 * step / total, mil_color, 0, mil_info_mode, step, total,
 			    total - step);
+			snprintf(lead, sizeof(lead), "Honor %d", rank);
+			render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
 
 			snprintf(hover_rank_text, 200,
 			    "Rank %d '%s' to %d '%s': %s / %s (%d%%)\n%s to go, total %s military points", rank,
@@ -1266,6 +1285,8 @@ void display_military(void)
 		} else {
 			/* Highest rank: full bar */
 			draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 100, mil_color, 0, BAR_INFO_NONE, 0, 0, 0);
+			snprintf(lead, sizeof(lead), "Honor %d (max)", rank);
+			render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
 			snprintf(hover_rank_text, 200, "Rank %d '%s' (highest rank)\ntotal %s military points", rank,
 			    game_rankname[maxrank], fmt_thousands((long long)mil_exp, n4, sizeof(n4)));
 		}
@@ -1337,7 +1358,7 @@ void display_game_special(void)
 		render_sprite(50475, 75, 47, 14, 0);
 		break;
 	case 8:
-		render_sprite(50475, XRES - 37, 62, 14, 0);
+		render_sprite(50475, UIXRES - 37, 62, 14, 0);
 		break;
 
 	case 9:
@@ -1369,10 +1390,10 @@ void display_game_special(void)
 		render_sprite(50476, 625, 456, 14, 0);
 		break;
 	case 14:
-		render_sprite(50476, XRES - 100, 456, 14, 0);
+		render_sprite(50476, UIXRES - 100, 456, 14, 0);
 		break;
 	case 15:
-		render_sprite(50476, XRES - 59, 456, 14, 0);
+		render_sprite(50476, UIXRES - 59, 456, 14, 0);
 		break;
 
 	case 16:
@@ -1380,7 +1401,7 @@ void display_game_special(void)
 		break;
 
 	case 17:
-		render_sprite(50473, XRES - 78, 382, 14, 0);
+		render_sprite(50473, UIXRES - 78, 382, 14, 0);
 		render_sprite(50475, 257, 60, 14, 0);
 		break;
 
@@ -1608,10 +1629,8 @@ void display_selfbars(void)
 		return;
 	}
 
-	/* below the top bar - with the fullscreen world view DOT_MTL is the
-	 * screen corner, which the top bar art covers */
-	x = dotx(DOT_MTL) + 7;
-	y = max(doty(DOT_MTL), 40) + 7;
+	x = 7;
+	y = 47;
 
 	lifep = map[plrmn].health;
 	shieldp = map[plrmn].shield;

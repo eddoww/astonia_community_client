@@ -43,7 +43,7 @@ void display_mouseover(void)
 
 	amod_update_hover_texts();
 
-	if (mousex < 0 || mousex >= XRES || mousey < 0 || mousey >= YRES || !sdl_has_focus()) {
+	if (mousex < 0 || mousex >= UIXRES || mousey < 0 || mousey >= UIYRES || !sdl_has_focus()) {
 		return;
 	}
 
@@ -71,12 +71,19 @@ void display_mouseover(void)
 
 	/* status panel rows: level details over the top bar, rank over the
 	 * military bar */
-	if (panel_content_shown(PANEL_STATUS) && mousex >= dotx(DOT_STAT) && mousex <= dotx(DOT_STAT) + STAT_W) {
-		if (mousey >= doty(DOT_STAT) && mousey <= doty(DOT_STAT) + STAT_BAR_H + 2) {
-			render_text_nl(mousex + 16, mousey + 14, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_level_text);
-		}
-		if (mousey >= doty(DOT_STAT) + STAT_ROW_H && mousey <= doty(DOT_STAT) + STAT_ROW_H + STAT_BAR_H + 2) {
-			render_text_nl(mousex + 16, mousey + 14, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_rank_text);
+	{
+		int sx1, sy1, sx2, sy2;
+
+		if (panel_content_shown(PANEL_STATUS) && panel_content_rect(PANEL_STATUS, &sx1, &sy1, &sx2, &sy2) &&
+		    mousex >= sx1 && mousex <= sx2) {
+			/* the bars sit at the screen bottom: tooltips go above them */
+			if (mousey >= sy1 && mousey <= sy1 + STAT_BAR_H) {
+				render_text_nl(
+				    mousex - 20, mousey - 44, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_level_text);
+			}
+			if (mousey >= sy1 + STAT_ROW_H && mousey <= sy1 + STAT_ROW_H + STAT_BAR_H) {
+				render_text_nl(mousex - 20, mousey - 34, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_rank_text);
+			}
 		}
 	}
 
@@ -386,7 +393,7 @@ static int display_hover(void)
 		}
 
 		int sy;
-		if (mousey < YRES / 2) {
+		if (mousey < UIYRES / 2) {
 			sy = mousey + 16;
 		} else {
 			sy = mousey - hi[slot].cnt * 10 - 16;

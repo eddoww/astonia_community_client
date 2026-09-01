@@ -73,11 +73,11 @@ static void *maptex1 = NULL, *maptex2 = NULL;
  * top bar - with the fullscreen world view DOT_MTL is the screen corner */
 void minimap_reanchor(void)
 {
-	sx = dotx(DOT_MBR) - MAXMAP - 6;
-	sy = max(doty(DOT_MTL), 40) + 6;
+	sx = UIXRES - MAXMAP - 6;
+	sy = 46;
 
-	mx = dotx(DOT_MBR) - MINIMAP * 2 - 6;
-	my = max(doty(DOT_MTL), 40) + 6;
+	mx = UIXRES - MINIMAP * 2 - 6;
+	my = 46;
 }
 
 void minimap_init(void)

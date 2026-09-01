@@ -1223,6 +1223,82 @@ DLL_EXPORT void render_screen_flash(unsigned short color, unsigned char intensit
  *
  * @return Target ID (>= 0) on success, -1 on failure
  */
+/* ── UI layer ───────────────────────────────────────────────────────────
+ *
+ * The whole GUI draws into an offscreen canvas of UIXRES x UIYRES and is
+ * composited over the frame scaled by the UI Scale option; the world
+ * renders at the full canvas underneath and never scales. At 100% the
+ * layer is bypassed entirely. */
+
+extern int ui_scale_pct; /* sdl_core.c */
+void sdl_derive_ui_canvas(void);
+void sdl_clear_render_target(int target_id);
+int sdl_set_render_target(int target_id);
+void sdl_render_target_to_screen_stretched(int target_id, int x, int y, int w, int h, unsigned char alpha);
+void sdl_destroy_render_target(int target_id);
+
+static int ui_layer_target = -1;
+static int ui_layer_w, ui_layer_h;
+static int ui_layer_open;
+static int ui_layer_sx, ui_layer_sy; /* saved render offset */
+
+int render_ui_layer_begin(void)
+{
+	if (ui_layer_open) {
+		return 1;
+	}
+	if (UIXRES == XRES && UIYRES == YRES) {
+		return 0; /* 100%: draw straight to the frame */
+	}
+	if (ui_layer_target >= 0 && (ui_layer_w != UIXRES || ui_layer_h != UIYRES)) {
+		sdl_destroy_render_target(ui_layer_target);
+		ui_layer_target = -1;
+	}
+	if (ui_layer_target < 0) {
+		ui_layer_target = render_create_target(UIXRES, UIYRES);
+		if (ui_layer_target < 0) {
+			return 0; /* no target support: unscaled GUI beats no GUI */
+		}
+		ui_layer_w = UIXRES;
+		ui_layer_h = UIYRES;
+	}
+	sdl_clear_render_target(ui_layer_target);
+	if (sdl_set_render_target(ui_layer_target) < 0) {
+		return 0;
+	}
+	/* inside the layer there is no canvas centering - the layer itself is
+	 * placed at the offset when composited */
+	ui_layer_sx = x_offset;
+	ui_layer_sy = y_offset;
+	render_set_offset(0, 0);
+	ui_layer_open = 1;
+	return 1;
+}
+
+void render_ui_layer_end(void)
+{
+	if (!ui_layer_open) {
+		return;
+	}
+	ui_layer_open = 0;
+	sdl_set_render_target(-1);
+	render_set_offset(ui_layer_sx, ui_layer_sy);
+	sdl_render_target_to_screen_stretched(ui_layer_target, x_offset, y_offset, XRES, YRES, 255);
+}
+
+int render_ui_layer_active(void)
+{
+	return ui_layer_open;
+}
+
+/* Options: change the scale mid-session - re-derive the layer dims and
+ * re-lay the GUI out for them */
+void ui_scale_apply(int pct)
+{
+	ui_scale_pct = pct;
+	sdl_derive_ui_canvas();
+}
+
 DLL_EXPORT int render_create_target(int width, int height)
 {
 	return sdl_create_render_target(width, height);

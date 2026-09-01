@@ -36,10 +36,10 @@ static void em_compute_layout(void)
 	em_pw = EM_WIDTH;
 	em_ph = EM_PAD + 16 + EM_BTN_PAD + (EM_BTN_H + EM_BTN_PAD) * EM_COUNT + EM_PAD;
 
-	int map_top = doty(DOT_MTL);
+	int map_top = 0;
 	int map_bot = doty(DOT_HOTBAR) - 10;
-	int map_lx = dotx(DOT_MTL);
-	int map_rx = dotx(DOT_MBR);
+	int map_lx = 0;
+	int map_rx = UIXRES;
 
 	em_px = map_lx + ((map_rx - map_lx) - em_pw) / 2;
 	em_py = map_top + ((map_bot - map_top) - em_ph) / 2;

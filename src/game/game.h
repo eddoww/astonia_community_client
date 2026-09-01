@@ -215,6 +215,13 @@ DLL_EXPORT void render_screen_flash(unsigned short color, unsigned char intensit
 // Render targets for modders (offscreen rendering)
 #define RENDER_TARGET_SCREEN (-1)
 DLL_EXPORT int render_create_target(int width, int height);
+
+/* UI layer: everything between begin and end draws on a UIXRES x UIYRES
+ * canvas composited scaled by the UI Scale option (world stays native) */
+int render_ui_layer_begin(void);
+void render_ui_layer_end(void);
+int render_ui_layer_active(void);
+void ui_scale_apply(int pct);
 DLL_EXPORT void render_destroy_target(int target_id);
 DLL_EXPORT int render_set_target(int target_id);
 DLL_EXPORT void render_target_to_screen(int target_id, int x, int y, unsigned char alpha);

@@ -2192,6 +2192,52 @@ void sdl_render_target_to_screen(int target_id, int x, int y, unsigned char alph
 	}
 }
 
+/* Like sdl_render_target_to_screen, but stretched to a caller-given logical
+ * size - the UI layer composites through this. */
+void sdl_render_target_to_screen_stretched(int target_id, int x, int y, int w, int h, unsigned char alpha)
+{
+	SDL_FRect dr;
+
+	if (target_id < 0 || target_id >= MAX_RENDER_TARGETS) {
+		return;
+	}
+	if (!render_targets[target_id].used) {
+		return;
+	}
+	if (use_gpu_rendering ? !render_targets[target_id].gpu_tex : !render_targets[target_id].tex) {
+		return;
+	}
+
+	dr.x = (float)(x * sdl_scale);
+	dr.y = (float)(y * sdl_scale);
+	dr.w = (float)(w * sdl_scale);
+	dr.h = (float)(h * sdl_scale);
+
+	if (use_gpu_rendering) {
+		if (current_render_target >= 0 && !gpu_set_render_target(NULL, 0, 0, false)) {
+			return;
+		}
+		gpu_draw_texture(render_targets[target_id].gpu_tex, &dr, NULL, render_targets[target_id].width * sdl_scale,
+		    render_targets[target_id].height * sdl_scale, NULL, alpha);
+		if (current_render_target >= 0) {
+			gpu_set_render_target(render_targets[current_render_target].gpu_tex,
+			    render_targets[current_render_target].width * sdl_scale,
+			    render_targets[current_render_target].height * sdl_scale, false);
+		}
+		return;
+	}
+
+	if (current_render_target >= 0) {
+		SDL_SetRenderTarget(sdlren, NULL);
+	}
+	SDL_SetTextureAlphaMod(render_targets[target_id].tex, alpha);
+	SDL_SetTextureScaleMode(render_targets[target_id].tex, SDL_SCALEMODE_LINEAR);
+	SDL_RenderTexture(sdlren, render_targets[target_id].tex, NULL, &dr);
+	if (current_render_target >= 0) {
+		SDL_SetRenderTarget(sdlren, render_targets[current_render_target].tex);
+	}
+}
+
 void sdl_clear_render_target(int target_id)
 {
 	int prev_target = current_render_target;

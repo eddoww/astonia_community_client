@@ -58,10 +58,36 @@ MIX_Track *sdl_tracks[MAX_SOUND_CHANNELS] = {NULL};
 
 // Scale and resolution settings
 DLL_EXPORT int sdl_scale = 1;
-/* Options > Interface > UI Scale: 0 = auto-probe, 1..4 = forced (clamped so
- * the classic canvas still fits). Loaded from the extra-options file before
- * sdl_init; a change applies on the next start. */
-DLL_EXPORT int sdl_scale_override = 0;
+/* Options > Interface > UI Scale, percent (50..200, default 100). The GUI
+ * is laid out on a UIXRES x UIYRES canvas and composited scaled; the world
+ * always renders at the full canvas. Applies live via ui_scale_apply(). */
+DLL_EXPORT int ui_scale_pct = 100;
+DLL_EXPORT int __uixres, __uiyres;
+
+/* derive the UI-layer dims from the canvas + scale, clamped so the classic
+ * 800x450 layout always fits the layer */
+void sdl_derive_ui_canvas(void)
+{
+	int pct = ui_scale_pct;
+	int maxpct;
+
+	if (pct < 50) {
+		pct = 50;
+	}
+	if (pct > 200) {
+		pct = 200;
+	}
+	maxpct = XRES * 100 / XRES0;
+	if (YRES * 100 / YRES3 < maxpct) {
+		maxpct = YRES * 100 / YRES3;
+	}
+	if (pct > maxpct) {
+		pct = maxpct;
+	}
+	__uixres = XRES * 100 / pct;
+	__uiyres = YRES * 100 / pct;
+}
+
 DLL_EXPORT int sdl_frames = 0;
 DLL_EXPORT int sdl_multi = 4;
 extern SDL_AtomicInt sdl_tex_jobs_enqueued, sdl_tex_jobs_finished;
@@ -127,18 +153,12 @@ static void sdl_derive_canvas(int width, int height)
 
 	YRES = height / sdl_scale;
 
-	if (game_options & GO_SMALLTOP) {
-		off += 40;
-	}
-	if (game_options & GO_SMALLBOT) {
-		off += 40;
-	}
-
 	if (YRES > YRES1 - off) {
 		YRES = YRES1 - off;
 	}
 
 	render_set_offset((width / sdl_scale - XRES) / 2, (height / sdl_scale - YRES) / 2);
+	sdl_derive_ui_canvas();
 }
 
 /* Re-derive the canvas from the live window after a window-mode switch -
@@ -420,16 +440,7 @@ int sdl_init(int width, int height, char *title, int monitor)
 			break;
 		}
 	}
-	/* Options > Interface > UI Scale: force a scale, clamped to whatever
-	 * still fits the classic canvas in this window */
-	if (sdl_scale_override > 0) {
-		int forced = sdl_scale_override;
 
-		while (forced > 1 && (width / forced < XRES0 || height / forced < YRES3)) {
-			forced--;
-		}
-		sdl_scale = forced;
-	}
 
 	sdl_derive_canvas(width, height);
 	if (game_options & GO_NOTSET) {

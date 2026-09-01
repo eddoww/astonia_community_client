@@ -77,7 +77,9 @@ map_index_t get_near_ex(int x, int y, unsigned int flags, unsigned int looksize)
 	map_index_t mn, nearest = MAXMN;
 	double dist, nearestdist = 100000000;
 
-	if (!stom(mousex, mousey, &mapx, &mapy)) {
+	/* anchor on the caller's coordinates (canvas space) - reading the
+	 * global mouse here broke callers that pass converted coordinates */
+	if (!stom(x, y, &mapx, &mapy)) {
 		return MAXMN;
 	}
 

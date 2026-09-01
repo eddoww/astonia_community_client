@@ -212,8 +212,8 @@ static void kb_layout(void)
 	if (px < 2) {
 		px = 2;
 	}
-	if (px + pw > XRES - 2) {
-		px = XRES - pw - 2;
+	if (px + pw > UIXRES - 2) {
+		px = UIXRES - pw - 2;
 	}
 	if (py < 2) {
 		py = 2;

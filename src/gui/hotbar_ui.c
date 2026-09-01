@@ -356,20 +356,3 @@ int hotbar_is_dragging(void)
 {
 	return hb_drag_active();
 }
-
-/* The spellbook is its own window now (PANEL_SPELLBOOK, toggled from the
- * keybind or the menu bar), so the hotbar no longer carries a chevron. These
- * two stay as no-ops for the call sites that used to hit-test it. */
-int hotbar_toggle_over(int mx, int my)
-{
-	(void)mx;
-	(void)my;
-	return 0;
-}
-
-int hotbar_toggle_hit(int mx, int my)
-{
-	(void)mx;
-	(void)my;
-	return 0;
-}

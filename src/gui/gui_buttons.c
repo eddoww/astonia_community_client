@@ -343,7 +343,9 @@ static void detect_hover_target(void)
 
 	/* the spellbook toggle chevron and the open spellbook panel are not but[]
 	 * entries - without this the red map-tile cursor kept drawing under them */
-	if (panel_shown(PANEL_HOTBAR) && (hotbar_toggle_over(mousex, mousey) || spellbook_over(mousex, mousey))) {
+	/* the spellbook is its own window - it must block hovers even when the
+	 * hotbar it once hung off is hidden */
+	if (spellbook_over(mousex, mousey)) {
 		return;
 	}
 

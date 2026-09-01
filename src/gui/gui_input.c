@@ -342,9 +342,6 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		}
 
 		/* spellbook toggle button */
-		if (panel_shown(PANEL_HOTBAR) && hotbar_toggle_hit(mousex, mousey)) {
-			break;
-		}
 
 		/* hotbar: assign (drag) or activate (click) */
 		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
@@ -359,7 +356,7 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		}
 
 		/* spellbook panel clicks (pick up spell, or cancel drag) */
-		if (panel_shown(PANEL_HOTBAR) && spellbook_click(mousex, mousey)) {
+		if (spellbook_click(mousex, mousey)) {
 			break;
 		}
 

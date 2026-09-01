@@ -25,6 +25,63 @@ jobs:
         with:
           build-on-miss: 'true'
 
+  build-shaders:
+    needs: build-sdl3-linux
+    name: Compile Shaders
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # Compiled shaders only change when the GLSL sources or the toolchain do.
+      # Keying the cache on both means the expensive SDL_shadercross/DXC build
+      # runs once and virtually every later build restores the outputs and skips
+      # the toolchain entirely.
+      - name: Restore compiled shaders
+        id: cache-shaders
+        uses: actions/cache@v4
+        with:
+          path: res/shaders/compiled
+          key: shaders-${{ hashFiles('res/shaders/*.vert', 'res/shaders/*.frag', 'build/make/Makefile.shaders', '.github/actions/setup-shader-toolchain/action.yml') }}
+
+      # shadercross links against SDL3
+      - name: Setup SDL3 (cached)
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-sdl3-linux
+
+      - name: Setup shader toolchain
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-shader-toolchain
+
+      - name: Compile all shader formats
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        run: make -f build/make/Makefile.shaders all
+
+      # Runs on cache hits too, so a truncated or partial cache entry is caught
+      # rather than shipped.
+      - name: Verify every shader built for every backend
+        run: |
+          missing=0
+          for n in line postfx primitive sprite_fx sprite_simple tri; do
+            for s in vs ps; do
+              for e in spv dxil msl; do
+                f="res/shaders/compiled/${n}_${s}.${e}"
+                [ -s "$f" ] || { echo "MISSING: $f"; missing=1; }
+              done
+            done
+          done
+          ls -la res/shaders/compiled/
+          [ "$missing" = "0" ] || { echo "ERROR: shader set incomplete"; exit 1; }
+
+      - name: Upload compiled shaders
+        uses: actions/upload-artifact@v7
+        with:
+          name: compiled-shaders
+          path: res/shaders/compiled/
+          retention-days: 7
+          overwrite: true
   build-linux:
     needs: build-sdl3-linux
     name: Build Linux
@@ -117,6 +174,7 @@ jobs:
             mingw-w64-clang-x86_64-clang
             mingw-w64-clang-x86_64-sdl3
             mingw-w64-clang-x86_64-sdl3-mixer
+            mingw-w64-clang-x86_64-sdl3-ttf
             mingw-w64-clang-x86_64-libpng
             mingw-w64-clang-x86_64-libzip
             mingw-w64-clang-x86_64-dwarfstack
@@ -173,7 +231,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install sdl3 sdl3_mixer libzip zlib mimalloc imagemagick
+          brew install sdl3 sdl3_mixer sdl3_ttf libzip zlib mimalloc imagemagick
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1

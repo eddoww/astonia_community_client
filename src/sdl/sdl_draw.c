@@ -804,11 +804,34 @@ void sdl_pixel(int x, int y, unsigned short color, int x_offset, int y_offset)
 	SDL_RenderPoints(sdlren, pt, i);
 }
 
+/* Emit one halo ring of a pretty/rain pixel: 1x1 GPU rects in GPU mode,
+ * one batched SDL_RenderPoints call otherwise. Both backends plot the same
+ * device-pixel set, so sdl_pretty_pixel()/sdl_rain_pixel() keep a single copy
+ * of the geometry (same split as aa_plot() in sdl_line_aa). */
+static void halo_points(const SDL_FPoint *pt, int n, int r, int g, int b, int a)
+{
+	if (use_gpu_rendering) {
+		for (int i = 0; i < n; i++) {
+			gpu_draw_rect(pt[i].x, pt[i].y, 1.0f, 1.0f, (float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f,
+			    (float)a / 255.0f);
+		}
+		return;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a);
+	SDL_RenderPoints(sdlren, pt, n);
+}
+
 void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_offset)
 {
 	int r, g, b;
 	float px, py;
 	SDL_FPoint pt[16];
+
+	// GPU path plots the same halo as 1x1 rects (via halo_points)
+	if (use_gpu_rendering && !gpu_draw_prim_is_available()) {
+		return;
+	}
 
 	r = R16TO32(color);
 	g = G16TO32(color);
@@ -819,12 +842,14 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 
 	switch (sdl_scale) {
 	case 1:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)255);
-		SDL_RenderPoint(sdlren, px, py);
+		pt[0].x = px;
+		pt[0].y = py;
+		halo_points(pt, 1, r, g, b, 255);
 		break;
 	case 2:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
-		SDL_RenderPoint(sdlren, px, py);
+		pt[0].x = px;
+		pt[0].y = py;
+		halo_points(pt, 1, min(r + 64, 255), min(g + 64, 255), min(b + 64, 255), 255);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py;
@@ -838,8 +863,7 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[3].x = px;
 		pt[3].y = py - 1.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)128);
-		SDL_RenderPoints(sdlren, pt, 4);
+		halo_points(pt, 4, r, g, b, 128);
 
 		pt[0].x = px + 2.0f;
 		pt[0].y = py;
@@ -865,13 +889,13 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[7].x = px - 1.0f;
 		pt[7].y = py - 1.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)64);
-		SDL_RenderPoints(sdlren, pt, 8);
+		halo_points(pt, 8, r, g, b, 64);
 		break;
 	case 3:
 	case 4:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
-		SDL_RenderPoint(sdlren, px, py);
+		pt[0].x = px;
+		pt[0].y = py;
+		halo_points(pt, 1, min(r + 64, 255), min(g + 64, 255), min(b + 64, 255), 255);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py;
@@ -885,9 +909,7 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[3].x = px;
 		pt[3].y = py - 1.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 32, 255), (Uint8)min(g + 32, 255), (Uint8)min(b + 32, 255),
-		    sdl_scale == 4 ? 192 : 128);
-		SDL_RenderPoints(sdlren, pt, 4);
+		halo_points(pt, 4, min(r + 32, 255), min(g + 32, 255), min(b + 32, 255), sdl_scale == 4 ? 192 : 128);
 
 		pt[0].x = px + 2.0f;
 		pt[0].y = py;
@@ -913,8 +935,7 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[7].x = px - 1.0f;
 		pt[7].y = py - 1.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 128 : 64);
-		SDL_RenderPoints(sdlren, pt, 8);
+		halo_points(pt, 8, r, g, b, sdl_scale == 4 ? 128 : 64);
 
 		pt[0].x = px + 3.0f;
 		pt[0].y = py;
@@ -952,11 +973,10 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[11].x = px - 1.0f;
 		pt[11].y = py - 2.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 64 : 32);
-		SDL_RenderPoints(sdlren, pt, 12);
+		halo_points(pt, 12, r, g, b, sdl_scale == 4 ? 64 : 32);
 		break;
 	default:
-		warn("unsupported scale %d in sdl_pixel()", sdl_scale);
+		warn("unsupported scale %d in sdl_pretty_pixel()", sdl_scale);
 		return;
 	}
 }
@@ -967,6 +987,11 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 	float px, py;
 	SDL_FPoint pt[16];
 
+	// GPU path plots the same droplet as 1x1 rects (via halo_points)
+	if (use_gpu_rendering && !gpu_draw_prim_is_available()) {
+		return;
+	}
+
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
@@ -976,13 +1001,18 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 
 	switch (sdl_scale) {
 	case 1:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)255);
-		SDL_RenderPoint(sdlren, px, py);
+		pt[0].x = px;
+		pt[0].y = py;
+		halo_points(pt, 1, r, g, b, 255);
 		break;
 	case 2:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
-		SDL_RenderPoint(sdlren, px, py);
-		SDL_RenderPoint(sdlren, px, py - 1.0f);
+		pt[0].x = px;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py - 1.0f;
+
+		halo_points(pt, 2, min(r + 64, 255), min(g + 64, 255), min(b + 64, 255), 255);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py;
@@ -996,8 +1026,7 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 		pt[3].x = px;
 		pt[3].y = py - 2.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)128);
-		SDL_RenderPoints(sdlren, pt, 4);
+		halo_points(pt, 4, r, g, b, 128);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py - 1.0f;
@@ -1014,14 +1043,17 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 		pt[4].x = px;
 		pt[4].y = py - 3.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)64);
-		SDL_RenderPoints(sdlren, pt, 5);
+		halo_points(pt, 5, r, g, b, 64);
 		break;
 	case 3:
 	case 4:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
-		SDL_RenderPoint(sdlren, px, py);
-		SDL_RenderPoint(sdlren, px, py - 1.0f);
+		pt[0].x = px;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py - 1.0f;
+
+		halo_points(pt, 2, min(r + 64, 255), min(g + 64, 255), min(b + 64, 255), 255);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py;
@@ -1035,9 +1067,7 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 		pt[3].x = px;
 		pt[3].y = py - 2.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 32, 255), (Uint8)min(g + 32, 255), (Uint8)min(b + 32, 255),
-		    sdl_scale == 4 ? 192 : 128);
-		SDL_RenderPoints(sdlren, pt, 4);
+		halo_points(pt, 4, min(r + 32, 255), min(g + 32, 255), min(b + 32, 255), sdl_scale == 4 ? 192 : 128);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py - 1.0f;
@@ -1054,8 +1084,8 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 		pt[4].x = px;
 		pt[4].y = py - 3.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 128 : 64);
-		SDL_RenderPoints(sdlren, pt, 5);
+		halo_points(pt, 5, r, g, b, sdl_scale == 4 ? 128 : 64);
+
 		pt[0].x = px + 2.0f;
 		pt[0].y = py - 1.0f;
 
@@ -1079,12 +1109,11 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 
 		pt[7].x = px - 2.0f;
 		pt[7].y = py - 3.0f;
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 64 : 32);
-		SDL_RenderPoints(sdlren, pt, 8);
 
+		halo_points(pt, 8, r, g, b, sdl_scale == 4 ? 64 : 32);
 		break;
 	default:
-		warn("unsupported scale %d in sdl_pixel()", sdl_scale);
+		warn("unsupported scale %d in sdl_rain_pixel()", sdl_scale);
 		return;
 	}
 }

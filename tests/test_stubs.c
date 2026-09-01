@@ -327,9 +327,20 @@ bool gpu_draw_is_available(void)
 	return false;
 }
 
+/* Tests flip these to exercise the GPU branches of sdl_draw.c without a real
+ * GPU device: test_gpu_prim_available gates the *_is_available() checks and
+ * test_gpu_rect_count records what the GPU path would have drawn. */
+bool test_gpu_prim_available = false;
+int test_gpu_rect_count = 0;
+
+void test_gpu_reset_counters(void)
+{
+	test_gpu_rect_count = 0;
+}
+
 bool gpu_draw_prim_is_available(void)
 {
-	return false;
+	return test_gpu_prim_available;
 }
 
 bool gpu_draw_line_is_available(void)
@@ -355,6 +366,7 @@ void gpu_draw_rect(float x __attribute__((unused)), float y __attribute__((unuse
     float w __attribute__((unused)), float h __attribute__((unused)), float r __attribute__((unused)),
     float g __attribute__((unused)), float b __attribute__((unused)), float a __attribute__((unused)))
 {
+	test_gpu_rect_count++;
 }
 
 void gpu_draw_line(float x1 __attribute__((unused)), float y1 __attribute__((unused)),

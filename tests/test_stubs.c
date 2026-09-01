@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_keycode.h>
 
@@ -327,9 +328,124 @@ bool gpu_draw_is_available(void)
 	return false;
 }
 
-bool gpu_draw_prim_is_available(void)
+#include "sdl/sdl_gpu_glow.h"
+#include "sdl/sdl_gpu_prim.h"
+
+/* Primitive batch (sdl_gpu_prim.c is not linked into the tests). The
+ * batch is transparent to callers - gpu_draw_rect() falls through to its
+ * unbatched draw when the batch declines - so these stubs decline
+ * everything and the existing rect assertions keep working unchanged. */
+bool gpu_prim_batch_init(void)
 {
 	return false;
+}
+
+void gpu_prim_batch_shutdown(void) {}
+
+bool gpu_prim_batch_ready(void)
+{
+	return false;
+}
+
+void gpu_prim_batch_frame_begin(void) {}
+void gpu_prim_batch_flush(void) {}
+void gpu_prim_batch_submit_upload(void) {}
+void gpu_prim_batch_direct_draw_barrier(void) {}
+
+void gpu_prim_batch_get_stats(int *draws, int *rects)
+{
+	if (draws) {
+		*draws = 0;
+	}
+	if (rects) {
+		*rects = 0;
+	}
+}
+
+bool gpu_prim_batch_add(float x __attribute__((unused)), float y __attribute__((unused)),
+    float w __attribute__((unused)), float h __attribute__((unused)), float r __attribute__((unused)),
+    float g __attribute__((unused)), float b __attribute__((unused)), float a __attribute__((unused)))
+{
+	return false;
+}
+
+
+
+/* Glow batch (sdl_gpu_glow.c is not linked into the tests). Same idea as
+ * the prim switches below: test_glow_available gates gpu_glow_ready() and
+ * the counters record what the glow path would have emitted, so the
+ * effect call sites can be driven without a GPU device. */
+bool test_glow_available = false;
+int test_glow_count = 0;
+gpu_glow_instance_t test_glow_last = {{0}, {0}, {0}};
+
+void test_glow_reset_counters(void)
+{
+	test_glow_count = 0;
+	memset(&test_glow_last, 0, sizeof(test_glow_last));
+}
+
+bool gpu_glow_init(void)
+{
+	return test_glow_available;
+}
+
+void gpu_glow_shutdown(void) {}
+
+bool gpu_glow_ready(void)
+{
+	return test_glow_available;
+}
+
+void gpu_glow_frame_begin(void) {}
+void gpu_glow_flush(void) {}
+void gpu_glow_submit_upload(void) {}
+void gpu_glow_direct_draw_barrier(void) {}
+
+void gpu_glow_get_stats(int *draws, int *glows)
+{
+	if (draws) {
+		*draws = 0;
+	}
+	if (glows) {
+		*glows = test_glow_count;
+	}
+}
+
+bool gpu_glow_add(float x0, float y0, float x1, float y1, float radius, float core, float r, float g, float b,
+    float intensity)
+{
+	if (!test_glow_available) {
+		return false;
+	}
+	test_glow_last.seg[0] = x0;
+	test_glow_last.seg[1] = y0;
+	test_glow_last.seg[2] = x1;
+	test_glow_last.seg[3] = y1;
+	test_glow_last.shape[0] = radius;
+	test_glow_last.shape[1] = core;
+	test_glow_last.color[0] = r;
+	test_glow_last.color[1] = g;
+	test_glow_last.color[2] = b;
+	test_glow_last.color[3] = intensity;
+	test_glow_count++;
+	return true;
+}
+
+/* Tests flip these to exercise the GPU branches of sdl_draw.c without a real
+ * GPU device: test_gpu_prim_available gates the *_is_available() checks and
+ * test_gpu_rect_count records what the GPU path would have drawn. */
+bool test_gpu_prim_available = false;
+int test_gpu_rect_count = 0;
+
+void test_gpu_reset_counters(void)
+{
+	test_gpu_rect_count = 0;
+}
+
+bool gpu_draw_prim_is_available(void)
+{
+	return test_gpu_prim_available;
 }
 
 bool gpu_draw_line_is_available(void)
@@ -355,6 +471,7 @@ void gpu_draw_rect(float x __attribute__((unused)), float y __attribute__((unuse
     float w __attribute__((unused)), float h __attribute__((unused)), float r __attribute__((unused)),
     float g __attribute__((unused)), float b __attribute__((unused)), float a __attribute__((unused)))
 {
+	test_gpu_rect_count++;
 }
 
 void gpu_draw_line(float x1 __attribute__((unused)), float y1 __attribute__((unused)),

@@ -22,6 +22,7 @@
 #include "sdl/sdl_gpu_draw.h"
 #include "sdl/sdl_gpu_atlas.h"
 #include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/sdl_gpu_glow.h"
 #include "sdl/sdl_gpu_text.h"
 
 #define RENDER_TEXT_LEFT    0
@@ -804,27 +805,158 @@ void sdl_pixel(int x, int y, unsigned short color, int x_offset, int y_offset)
 	SDL_RenderPoints(sdlren, pt, i);
 }
 
+/* Emit one halo ring of a pretty/rain pixel: 1x1 GPU rects in GPU mode,
+ * one batched SDL_RenderPoints call otherwise. Both backends plot the same
+ * device-pixel set, so sdl_pretty_pixel()/sdl_rain_pixel() keep a single copy
+ * of the geometry (same split as aa_plot() in sdl_line_aa). */
+static void halo_points(const SDL_FPoint *pt, int n, int r, int g, int b, int a)
+{
+	if (use_gpu_rendering) {
+		for (int i = 0; i < n; i++) {
+			gpu_draw_rect(pt[i].x, pt[i].y, 1.0f, 1.0f, (float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f,
+			    (float)a / 255.0f);
+		}
+		return;
+	}
+
+	SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a);
+	SDL_RenderPoints(sdlren, pt, n);
+}
+
+/* ====================================================================
+ * Spell-effect glows
+ *
+ * sdl_pretty_pixel() and sdl_rain_pixel() have always been hand-rolled
+ * falloffs - a core pixel plus concentric alpha rings, stepped and capped
+ * at three device pixels because that is all the SDL_Renderer path could
+ * afford. On the GPU the same shapes are one additive capsule each, with
+ * a real radial falloff (res/shaders/glow.*), so they come out round and
+ * smooth at any radius.
+ *
+ * The halo is deliberately NOT clipped against the caller's rect: the
+ * ring stack it replaces was not clipped either (only the centre is,
+ * by the effect code in render.c), so this preserves that behaviour
+ * rather than introducing a new edge case.
+ * ==================================================================== */
+
+/* Look tuning. Sparkle intensity is deliberately well under 1: the effect
+ * code emits five colour steps one animation tick apart at each position,
+ * so five glows overlap and sum additively where the CPU rings simply
+ * painted over one another. */
+#define GLOW_SPARKLE_CORE      2.5f
+#define GLOW_SPARKLE_INTENSITY 0.55f
+#define GLOW_RAIN_RADIUS       1.2f /* logical px, scaled by sdl_scale */
+#define GLOW_RAIN_CORE         1.0f
+#define GLOW_RAIN_INTENSITY    0.55f
+#define GLOW_SATURATION        2.5f /* exponent on the non-dominant channels */
+
+int sdl_fancy_effects_active(void)
+{
+	return use_gpu_rendering && !(game_options & GO_NOFANCYFX) && gpu_glow_ready();
+}
+
+/* Halo radius for a single effect sparkle, in device pixels. The ring
+ * stack reached 2 device px at sdl_scale 2 and 3 at 3/4; a real falloff
+ * needs a little more room to read as light rather than a dot. */
+static float glow_pixel_radius(void)
+{
+	return 0.7f * (float)sdl_scale + 0.6f;
+}
+
+/* Emit one capsule glow in device pixels. Colour is the game's 15-bit
+ * format; intensity scales the additive contribution. */
+/* Push a colour towards its dominant channel.
+ *
+ * The effect palette is deliberately pale - bless is IRGB(24,24,31),
+ * barely off white - because the CPU path PAINTED those pixels, so the
+ * hue read fine against any background. Added light does not behave that
+ * way: over bright ground the red and green channels clip first and a
+ * pale blue sparkle turns into a grey smear. Raising the non-dominant
+ * channels to a power keeps the hue the palette intends, and leaves
+ * genuinely neutral colours alone. */
+static void glow_saturate(float *r, float *g, float *b)
+{
+	float mx = *r;
+
+	if (*g > mx) {
+		mx = *g;
+	}
+	if (*b > mx) {
+		mx = *b;
+	}
+	if (mx <= 0.0f) {
+		return;
+	}
+	*r = mx * powf(*r / mx, GLOW_SATURATION);
+	*g = mx * powf(*g / mx, GLOW_SATURATION);
+	*b = mx * powf(*b / mx, GLOW_SATURATION);
+}
+
+static bool glow_emit(
+    float x0, float y0, float x1, float y1, unsigned short color, float radius, float core, float intensity)
+{
+	float r = (float)R16TO32(color) / 255.0f;
+	float g = (float)G16TO32(color) / 255.0f;
+	float b = (float)B16TO32(color) / 255.0f;
+
+	glow_saturate(&r, &g, &b);
+	return gpu_glow_add(x0, y0, x1, y1, radius, core, r, g, b, intensity);
+}
+
+void sdl_glow_line(int fx, int fy, int tx, int ty, unsigned short color, float radius, float core, float intensity,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	if (!sdl_fancy_effects_active()) {
+		return;
+	}
+
+	/* cheap reject: drop capsules whose padded bounding box misses the
+	 * clip rect entirely */
+	int pad = (int)(radius + 1.0f);
+	if (max(fx, tx) + pad < clipsx || min(fx, tx) - pad >= clipex || max(fy, ty) + pad < clipsy ||
+	    min(fy, ty) - pad >= clipey) {
+		return;
+	}
+
+	glow_emit((float)((fx + x_offset) * sdl_scale), (float)((fy + y_offset) * sdl_scale),
+	    (float)((tx + x_offset) * sdl_scale), (float)((ty + y_offset) * sdl_scale), color, radius * (float)sdl_scale,
+	    core, intensity);
+}
+
 void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_offset)
 {
 	int r, g, b;
 	float px, py;
 	SDL_FPoint pt[16];
 
-	r = R16TO32(color);
-	g = G16TO32(color);
-	b = B16TO32(color);
+	// GPU path plots the same halo as 1x1 rects (via halo_points)
+	if (use_gpu_rendering && !gpu_draw_prim_is_available()) {
+		return;
+	}
 
 	px = (float)((x + x_offset) * sdl_scale);
 	py = (float)((y + y_offset) * sdl_scale);
 
+	// one soft additive sparkle instead of the ring stack
+	if (sdl_fancy_effects_active() &&
+	    glow_emit(px, py, px, py, color, glow_pixel_radius(), GLOW_SPARKLE_CORE, GLOW_SPARKLE_INTENSITY)) {
+		return;
+	}
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
 	switch (sdl_scale) {
 	case 1:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)255);
-		SDL_RenderPoint(sdlren, px, py);
+		pt[0].x = px;
+		pt[0].y = py;
+		halo_points(pt, 1, r, g, b, 255);
 		break;
 	case 2:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
-		SDL_RenderPoint(sdlren, px, py);
+		pt[0].x = px;
+		pt[0].y = py;
+		halo_points(pt, 1, min(r + 64, 255), min(g + 64, 255), min(b + 64, 255), 255);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py;
@@ -838,8 +970,7 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[3].x = px;
 		pt[3].y = py - 1.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)128);
-		SDL_RenderPoints(sdlren, pt, 4);
+		halo_points(pt, 4, r, g, b, 128);
 
 		pt[0].x = px + 2.0f;
 		pt[0].y = py;
@@ -865,13 +996,13 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[7].x = px - 1.0f;
 		pt[7].y = py - 1.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)64);
-		SDL_RenderPoints(sdlren, pt, 8);
+		halo_points(pt, 8, r, g, b, 64);
 		break;
 	case 3:
 	case 4:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
-		SDL_RenderPoint(sdlren, px, py);
+		pt[0].x = px;
+		pt[0].y = py;
+		halo_points(pt, 1, min(r + 64, 255), min(g + 64, 255), min(b + 64, 255), 255);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py;
@@ -885,9 +1016,7 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[3].x = px;
 		pt[3].y = py - 1.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 32, 255), (Uint8)min(g + 32, 255), (Uint8)min(b + 32, 255),
-		    sdl_scale == 4 ? 192 : 128);
-		SDL_RenderPoints(sdlren, pt, 4);
+		halo_points(pt, 4, min(r + 32, 255), min(g + 32, 255), min(b + 32, 255), sdl_scale == 4 ? 192 : 128);
 
 		pt[0].x = px + 2.0f;
 		pt[0].y = py;
@@ -913,8 +1042,7 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[7].x = px - 1.0f;
 		pt[7].y = py - 1.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 128 : 64);
-		SDL_RenderPoints(sdlren, pt, 8);
+		halo_points(pt, 8, r, g, b, sdl_scale == 4 ? 128 : 64);
 
 		pt[0].x = px + 3.0f;
 		pt[0].y = py;
@@ -952,11 +1080,10 @@ void sdl_pretty_pixel(int x, int y, unsigned short color, int x_offset, int y_of
 		pt[11].x = px - 1.0f;
 		pt[11].y = py - 2.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 64 : 32);
-		SDL_RenderPoints(sdlren, pt, 12);
+		halo_points(pt, 12, r, g, b, sdl_scale == 4 ? 64 : 32);
 		break;
 	default:
-		warn("unsupported scale %d in sdl_pixel()", sdl_scale);
+		warn("unsupported scale %d in sdl_pretty_pixel()", sdl_scale);
 		return;
 	}
 }
@@ -967,22 +1094,38 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 	float px, py;
 	SDL_FPoint pt[16];
 
-	r = R16TO32(color);
-	g = G16TO32(color);
-	b = B16TO32(color);
+	// GPU path plots the same droplet as 1x1 rects (via halo_points)
+	if (use_gpu_rendering && !gpu_draw_prim_is_available()) {
+		return;
+	}
 
 	px = (float)((x + x_offset) * sdl_scale);
 	py = (float)((y + y_offset) * sdl_scale);
 
+	// the droplet is a streak, so one capsule along its length
+	if (sdl_fancy_effects_active() && glow_emit(px, py, px, py - 3.0f * (float)sdl_scale, color,
+	                                      GLOW_RAIN_RADIUS * (float)sdl_scale, GLOW_RAIN_CORE, GLOW_RAIN_INTENSITY)) {
+		return;
+	}
+
+	r = R16TO32(color);
+	g = G16TO32(color);
+	b = B16TO32(color);
+
 	switch (sdl_scale) {
 	case 1:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)255);
-		SDL_RenderPoint(sdlren, px, py);
+		pt[0].x = px;
+		pt[0].y = py;
+		halo_points(pt, 1, r, g, b, 255);
 		break;
 	case 2:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
-		SDL_RenderPoint(sdlren, px, py);
-		SDL_RenderPoint(sdlren, px, py - 1.0f);
+		pt[0].x = px;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py - 1.0f;
+
+		halo_points(pt, 2, min(r + 64, 255), min(g + 64, 255), min(b + 64, 255), 255);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py;
@@ -996,8 +1139,7 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 		pt[3].x = px;
 		pt[3].y = py - 2.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)128);
-		SDL_RenderPoints(sdlren, pt, 4);
+		halo_points(pt, 4, r, g, b, 128);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py - 1.0f;
@@ -1014,14 +1156,17 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 		pt[4].x = px;
 		pt[4].y = py - 3.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)64);
-		SDL_RenderPoints(sdlren, pt, 5);
+		halo_points(pt, 5, r, g, b, 64);
 		break;
 	case 3:
 	case 4:
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 64, 255), (Uint8)min(g + 64, 255), (Uint8)min(b + 64, 255), 255);
-		SDL_RenderPoint(sdlren, px, py);
-		SDL_RenderPoint(sdlren, px, py - 1.0f);
+		pt[0].x = px;
+		pt[0].y = py;
+
+		pt[1].x = px;
+		pt[1].y = py - 1.0f;
+
+		halo_points(pt, 2, min(r + 64, 255), min(g + 64, 255), min(b + 64, 255), 255);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py;
@@ -1035,9 +1180,7 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 		pt[3].x = px;
 		pt[3].y = py - 2.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)min(r + 32, 255), (Uint8)min(g + 32, 255), (Uint8)min(b + 32, 255),
-		    sdl_scale == 4 ? 192 : 128);
-		SDL_RenderPoints(sdlren, pt, 4);
+		halo_points(pt, 4, min(r + 32, 255), min(g + 32, 255), min(b + 32, 255), sdl_scale == 4 ? 192 : 128);
 
 		pt[0].x = px + 1.0f;
 		pt[0].y = py - 1.0f;
@@ -1054,8 +1197,8 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 		pt[4].x = px;
 		pt[4].y = py - 3.0f;
 
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 128 : 64);
-		SDL_RenderPoints(sdlren, pt, 5);
+		halo_points(pt, 5, r, g, b, sdl_scale == 4 ? 128 : 64);
+
 		pt[0].x = px + 2.0f;
 		pt[0].y = py - 1.0f;
 
@@ -1079,12 +1222,11 @@ void sdl_rain_pixel(int x, int y, unsigned short color, int x_offset, int y_offs
 
 		pt[7].x = px - 2.0f;
 		pt[7].y = py - 3.0f;
-		SDL_SetRenderDrawColor(sdlren, (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)sdl_scale == 4 ? 64 : 32);
-		SDL_RenderPoints(sdlren, pt, 8);
 
+		halo_points(pt, 8, r, g, b, sdl_scale == 4 ? 64 : 32);
 		break;
 	default:
-		warn("unsupported scale %d in sdl_pixel()", sdl_scale);
+		warn("unsupported scale %d in sdl_rain_pixel()", sdl_scale);
 		return;
 	}
 }

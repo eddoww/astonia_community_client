@@ -390,11 +390,13 @@ void display_gold(void)
 	x = but[BUT_GLD].x;
 	y = but[BUT_GLD].y;
 
-	if (!(game_options & GO_SMALLBOT)) {
-		render_sprite(SPR_GOLD_BEG + 7, x, y - 10,
-		    lcmd == CMD_TAKE_GOLD || lcmd == CMD_DROP_GOLD ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT,
-		    RENDER_ALIGN_CENTER);
-	}
+	/* The purse is the money panel's only icon - it is also what you grab to
+	 * take/drop gold, so it must be there in every bottom-bar mode. The old
+	 * small-bar (GO_SMALLBOT) exception left the panel as a bare number; the
+	 * buff bars sit 24px lower in that mode and clip their last few pixels
+	 * over the purse's top edge, which is the lesser evil. */
+	render_sprite(SPR_GOLD_BEG + 7, x, y - 10,
+	    lcmd == CMD_TAKE_GOLD || lcmd == CMD_DROP_GOLD ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
 
 	if (capbut == BUT_GLD) {
 		dx_drawtext_gold(x, y - 10, textcolor, (int)takegold);

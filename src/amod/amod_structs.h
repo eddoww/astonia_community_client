@@ -278,6 +278,26 @@ struct skill {
 	int start; // start value, pts up to this value are free
 };
 
+/* Worn-equipment bonus summary entry (client >= v1.8.0). MUST mirror
+ * src/gui/equip_bonus.h exactly (struct and flag values) - mods pass arrays
+ * of these to equip_bonus_set(). Filled by a server mod: per value index,
+ * what the worn items add (raw), what reaches the character (eff) and the
+ * most that could (cap). The flags mirror Ugaris_Protocol's MOD_EQUIP_F_*. */
+#define EQUIP_BONUS_F_HAS_CAP   0x01 /* cap is meaningful: raw > cap is wasted */
+#define EQUIP_BONUS_F_ATTRIBUTE 0x02 /* v is an attribute or power (V_HP..V_STR) */
+#define EQUIP_BONUS_F_NOMAGIC   0x04 /* no-magic tile: the bonus is suppressed */
+#define EQUIP_BONUS_F_UNLEARNED 0x08 /* skill base is 0: the bonus has no effect */
+#define EQUIP_BONUS_F_BEYOND    0x10 /* raw includes an uncapped artifact share */
+#define EQUIP_BONUS_F_NOEFFECT  0x20 /* v ignores item modifiers (V_DEMON) */
+
+struct equip_bonus_entry {
+	int v; /* value index, client space (0..V_MAX-1) */
+	int raw; /* sum of the worn items' modifiers */
+	int eff; /* part of raw that reaches the character */
+	int cap; /* most that could (with EQUIP_BONUS_F_HAS_CAP) */
+	unsigned int flags; /* EQUIP_BONUS_F_* */
+};
+
 struct skltab {
 	int v; // negative v-values indicate a special display (empty lines, negative exp, etc...)
 	int button; // show button

@@ -78,8 +78,9 @@ TEST_LOADING_UI = $(BIN_DIR)/test_loading_ui
 TEST_SHADERFX = $(BIN_DIR)/test_shaderfx_compare
 TEST_TEXT = $(BIN_DIR)/test_text_compare
 TEST_GESTURE = $(BIN_DIR)/test_gesture
+TEST_EQUIP = $(BIN_DIR)/test_equip_bonus
 
-all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT) $(TEST_GESTURE)
+all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT) $(TEST_GESTURE) $(TEST_EQUIP)
 test: run
 
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
@@ -114,6 +115,18 @@ $(TEST_LOADING_UI): test_loading_ui.c ../src/gui/loading_ui.c
 $(TEST_GESTURE): test_gesture.c ../src/gui/gesture.c
 	@mkdir -p $(BIN_DIR)
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
+
+# Worn-equipment bonus table (pure C: no SDL, no client globals)
+$(TEST_EQUIP): test_equip_bonus.c ../src/gui/equip_bonus.c
+	@mkdir -p $(BIN_DIR)
+	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
+
+test_equip_bonus: $(TEST_EQUIP)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running equipment bonus table tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_equip_bonus
 
 test_gesture: $(TEST_GESTURE)
 	@echo ""
@@ -196,13 +209,13 @@ test_text: $(TEST_TEXT)
 	cd .. && ./bin/test_text_compare
 
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_gesture test_shaderfx test_text
+run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_shaderfx test_text
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"
 	@echo "==============================================="
 
 clean:
-	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_GESTURE) *.o
+	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_GESTURE) $(TEST_EQUIP) *.o
 
-.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture
+.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus

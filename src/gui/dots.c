@@ -238,7 +238,7 @@ void init_dots(void)
 
 	/* ── Equipment paper doll (upper right, clear of the minimap) ─────── */
 	{
-		int content_w = WEA_COLS * FDX;
+		int content_w = WEA_COLS * FDX + WEA_BONUS_GAP + WEA_BONUS_W;
 		int content_h = WEA_ROWS * FDX + WEA_FOOT_H;
 		int x1 = UIXRES - edge - content_w;
 		int y1 = 150;

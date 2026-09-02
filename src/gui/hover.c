@@ -67,6 +67,11 @@ void display_mouseover(void)
 		}
 	}
 
+	/* equipment window: the "Bonuses" column rows */
+	if (panel_content_shown(PANEL_EQUIPMENT)) {
+		display_wear_bonus_hover(mousex, mousey);
+	}
+
 	/* status panel rows: level details over the top bar, rank over the
 	 * military bar */
 	{

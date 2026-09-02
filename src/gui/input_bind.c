@@ -330,18 +330,6 @@ static void on_toggle_hotbar_keys(InputBinding *self)
 	save_options();
 }
 
-static void on_chat_pageup(InputBinding *self)
-{
-	(void)self;
-	render_text_pageup();
-}
-
-static void on_chat_pagedown(InputBinding *self)
-{
-	(void)self;
-	render_text_pagedown();
-}
-
 /* movement */
 
 /* ── Keyboard movement (CL_WALK_DIR) ──────────────────────────────────
@@ -1630,8 +1618,6 @@ static void register_all(void)
 			b->param = p;
 		}
 	}
-	reg("ui.chat_pageup", "Chat Page Up", INPUT_CAT_UI, SDLK_PAGEUP, 0, on_chat_pageup);
-	reg("ui.chat_pagedown", "Chat Page Down", INPUT_CAT_UI, SDLK_PAGEDOWN, 0, on_chat_pagedown);
 
 	/* ── Movement ─────────────────────────────────────────────────── */
 

@@ -12,6 +12,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/ui_tokens.h"
 #include "gui/input_bind.h"
 #include "gui/panels.h"
 
@@ -460,8 +461,9 @@ static void detect_hover_target(void)
 		}
 	}
 
-	if (show_look && mousex >= dotx(DOT_LOK) + 493 && mousex <= dotx(DOT_LOK) + 500 && mousey >= doty(DOT_LOK) + 3 &&
-	    mousey <= doty(DOT_LOK) + 10) {
+	if (show_look && mousex >= dotx(DOT_LOK) + LOOK_W - UI_WIN_PAD - UI_WIN_GLYPH &&
+	    mousex <= dotx(DOT_LOK) + LOOK_W - UI_WIN_PAD + 2 && mousey >= doty(DOT_LOK) + 2 &&
+	    mousey <= doty(DOT_LOK) + UI_WIN_TITLE_H) {
 		butsel = BUT_NOLOOK;
 	}
 
@@ -538,8 +540,7 @@ static void detect_hover_target(void)
 	int wmx = mousex * XRES / UIXRES;
 	int wmy = mousey * YRES / UIYRES;
 
-	if (!hitsel[0] && butsel == -1 && wmx >= dotx(DOT_MTL) && wmy >= doty(DOT_MTL) && doty(DOT_MBR) &&
-	    wmy < doty(DOT_MBR)) {
+	if (!hitsel[0] && butsel == -1 && wmx >= 0 && wmy >= 0 && wmx < XRES && wmy < YRES) {
 		if (action_ovr == ACTION_LOOK) {
 			map_index_t tmp = get_near_ex(wmx, wmy, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR, 5);
 			if (tmp != MAXMN) {
@@ -790,7 +791,7 @@ void exec_cmd(int cmd, int a)
 		break;
 
 	case CMD_SAY_HITSEL:
-		cmd_add_text(hitsel, hittype);
+		/* the classic command line is gone - text links land nowhere */
 		break;
 
 	case CMD_USE_FKEYITEM:

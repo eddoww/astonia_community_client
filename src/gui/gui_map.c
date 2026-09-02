@@ -37,7 +37,7 @@ void mtos(unsigned int mapx, unsigned int mapy, int *scrx, int *scry)
 
 int stom(int scrx, int scry, int *mapx, int *mapy)
 {
-	if (scrx < dotx(DOT_MTL) || scrx >= dotx(DOT_MBR) || scry < doty(DOT_MTL) || scry >= doty(DOT_MBR)) {
+	if (scrx < 0 || scrx >= XRES || scry < 0 || scry >= YRES) { /* world coords are native */
 		return 0;
 	}
 

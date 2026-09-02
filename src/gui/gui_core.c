@@ -286,7 +286,7 @@ int main_init(void)
 	set_skloff(0, 0);
 	set_conoff(0, 0);
 
-	init_game(dotx(DOT_MCT), doty(DOT_MCT));
+	init_game(XRES / 2, YRES / 2); /* the world engine centre is native */
 
 	minimap_init();
 
@@ -587,18 +587,6 @@ int vk_special_inc(void)
 		}
 	}
 	return 0;
-}
-
-void gui_insert(void)
-{
-	char *text;
-
-	text = SDL_GetClipboardText();
-
-	if (text != NULL) {
-		cmd_add_text(text, 0);
-		SDL_free(text);
-	}
 }
 
 int gui_keymode(void)

@@ -303,7 +303,7 @@ void display(void)
 	}
 
 	render_push_clip();
-	render_more_clip(dotx(DOT_MTL), doty(DOT_MTL), dotx(DOT_MBR), doty(DOT_MBR));
+	render_more_clip(0, 0, XRES, YRES); /* the world draws in native dims */
 	display_game();
 	render_pop_clip();
 
@@ -370,9 +370,6 @@ void display(void)
 			display_scrollbar_left();
 			panel_clip_end();
 		}
-		if (panel_content_shown(PANEL_CHAT)) {
-			display_text();
-		}
 		if (panel_content_shown(PANEL_INVENTORY)) {
 			panel_clip_begin(PANEL_INVENTORY);
 			display_inventory();
@@ -395,7 +392,9 @@ void display(void)
 			spellbook_display();
 			panel_clip_end();
 		}
-		display_minimap();
+		if (panel_content_shown(PANEL_MINIMAP)) {
+			display_minimap();
+		}
 		panels_display_handles();
 	}
 

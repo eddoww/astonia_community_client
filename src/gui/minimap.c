@@ -14,6 +14,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/panels.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -73,11 +74,28 @@ static void *maptex1 = NULL, *maptex2 = NULL;
  * top bar - with the fullscreen world view DOT_MTL is the screen corner */
 void minimap_reanchor(void)
 {
-	sx = UIXRES - MAXMAP - 6;
-	sy = 46;
+	int x1, y1, x2, y2;
 
-	mx = UIXRES - MINIMAP * 2 - 6;
-	my = 46;
+	if (panel_content_rect(PANEL_MINIMAP, &x1, &y1, &x2, &y2)) {
+		mx = x1;
+		my = y1;
+	} else {
+		mx = UIXRES - MINIMAP * 2 - 6;
+		my = 46;
+	}
+
+	/* the expanded map opens right-aligned to the circle, kept on canvas */
+	sx = mx + MINIMAP * 2 - MAXMAP;
+	if (sx < 0) {
+		sx = 0;
+	}
+	if (sx > UIXRES - MAXMAP) {
+		sx = UIXRES - MAXMAP;
+	}
+	sy = my;
+	if (sy > UIYRES - MAXMAP) {
+		sy = UIYRES - MAXMAP;
+	}
 }
 
 void minimap_init(void)

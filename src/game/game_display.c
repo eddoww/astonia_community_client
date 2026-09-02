@@ -1446,7 +1446,7 @@ static void display_otext(void)
 		if (context_action_enabled()) {
 			y = doty(DOT_ACT) - 30;
 		} else {
-			y = doty(DOT_MBR) - 20;
+			y = YRES - 20; /* drawn outside the UI layer: native dims */
 		}
 
 		render_text(400, y - cnt * 12, col, RENDER_TEXT_LARGE | RENDER_TEXT_FRAMED | RENDER_TEXT_CENTER, otext[n].text);

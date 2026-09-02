@@ -23,6 +23,15 @@ DLL_EXPORT void inv_grid_set_rows(int n);
 /* visible rows of the skill list; the button range caps it at 16 */
 #define SKL_GRID_MIN_ROWS 6
 #define SKL_GRID_MAX_ROWS 16
+#define MINIMAP_D         80 /* minimap circle diameter (minimap.c draws MINIMAP*2 = this) */
+
+/* look-at window geometry: title bar + portrait/description body + the
+ * classic 12-slot gear strip along the bottom */
+#define LOOK_W          500
+#define LOOK_H          168
+#define LOOK_STRIP_X    ((LOOK_W - 12 * FDX) / 2)
+#define LOOK_PORTRAIT_W 92
+#define LOOK_PORTRAIT_H 94
 DLL_EXPORT int skl_grid_rows(void); /* setting; 0 = auto (16, or 12 small bottom) */
 DLL_EXPORT int skl_grid_rows_effective(void); /* the row count actually drawn */
 DLL_EXPORT void skl_grid_set_rows(int n);
@@ -144,7 +153,7 @@ int wea_slot_pos(int slot, int *x, int *y);
 /* Per-panel button banks. Each bank has PANEL_BUT_SLOTS consecutive ids in
  * PANEL_* enum order (panels.h): BANK_BEG + PANEL_x is that panel's button.
  * Slots past MAX_PANEL are unused and set BUTF_NOHIT by init_dots(). */
-#define PANEL_BUT_SLOTS 12
+#define PANEL_BUT_SLOTS 13
 
 /* window drag handle / titlebar */
 #define BUT_DRAG_BEG    184
@@ -521,7 +530,6 @@ void gui_sdl_draghack(void);
 // ============================================================================
 
 // From gui_core.c
-void gui_insert(void);
 int gui_keymode(void);
 int vk_special_inc(void);
 int vk_special_dec(void);
@@ -578,7 +586,6 @@ int help_index_page_for_entry(int entry);
 // int stom(int s, int o, int a, int *xm, int *ym);
 
 void dx_copysprite_emerald(int scrx, int scry, int emx, int emy);
-void display_cmd(void);
 
 void display_wear(void);
 void display_look(void);

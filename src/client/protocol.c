@@ -1049,7 +1049,7 @@ void sv_protocol(unsigned char *buf)
 	}
 	if (reset) {
 		exit_game();
-		init_game(dotx(DOT_MCT), doty(DOT_MCT));
+		init_game(XRES / 2, YRES / 2); /* the world engine centre is native */
 		note("Astonia Protocol Version %d established, engine reset.", protocol_version);
 	}
 }

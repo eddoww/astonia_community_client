@@ -89,67 +89,24 @@ void gui_sdl_keyproc(SDL_Keycode key, SDL_Keymod mod)
 		return;
 	}
 
-	/* text editing keys — always go to the command line, never through bindings */
+	/* movement keys. The classic command line is gone (the tabbed chat
+	 * window owns chat), so no key routes to it anymore - Return, Tab and
+	 * the editing keys fall through to the binding system instead. */
 	switch (key) {
-	case SDLK_RETURN:
-	case SDLK_KP_ENTER:
-		cmd_proc(CMD_RETURN);
-		return;
-	case SDLK_DELETE:
-		cmd_proc(CMD_DELETE);
-		return;
-	case SDLK_BACKSPACE:
-		cmd_proc(CMD_BACK);
-		return;
 	case SDLK_LEFT:
-		if (cmd_is_active()) {
-			cmd_proc(CMD_LEFT);
-			return;
-		}
 		keyboard_move_press(KMOVE_LEFT);
 		return;
 	case SDLK_RIGHT:
-		if (cmd_is_active()) {
-			cmd_proc(CMD_RIGHT);
-			return;
-		}
 		keyboard_move_press(KMOVE_RIGHT);
 		return;
-	case SDLK_HOME:
-		cmd_proc(CMD_HOME);
-		return;
-	case SDLK_END:
-		cmd_proc(CMD_END);
-		return;
 	case SDLK_UP:
-		if (cmd_is_active()) {
-			cmd_proc(CMD_UP);
-			return;
-		}
 		keyboard_move_press(KMOVE_UP);
 		return;
 	case SDLK_DOWN:
-		if (cmd_is_active()) {
-			cmd_proc(CMD_DOWN);
-			return;
-		}
 		keyboard_move_press(KMOVE_DOWN);
-		return;
-	case SDLK_TAB:
-		cmd_proc(9);
-		return;
-	case SDLK_INSERT:
-		if (vk_shift && !vk_control && !vk_alt) {
-			gui_insert();
-		}
 		return;
 	default:
 		break;
-	}
-
-	/* if chat is active, all keys go to chat - no hotkeys fire */
-	if (cmd_is_active()) {
-		return;
 	}
 
 	/* check hotbar extra binds first (modifier combos take priority) */

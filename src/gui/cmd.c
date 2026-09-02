@@ -389,52 +389,6 @@ DLL_EXPORT void cmd_add_text(const char *buf, int typ __attribute__((unused)))
 	}
 }
 
-void display_cmd(void)
-{
-	int n, x, tmp;
-
-	if (!context_key_isset()) {
-		return;
-	}
-
-	if (cmdcursor < cmddisplay) {
-		cmddisplay = 0;
-	}
-
-	for (x = 0, n = cmdcursor; n > cmddisplay; n--) {
-		x += render_char_len(cmdline[n]);
-		if (x > dotx(DOT_TX2) - dotx(DOT_TXT) - 16) {
-			cmddisplay = n;
-			break;
-		}
-	}
-	if (context_key_enabled()) {
-		render_shaded_rect(
-		    dotx(DOT_TXT) - 1, doty(DOT_TX2) - 2, dotx(DOT_TX2) + 1, doty(DOT_TX2) + 8, IRGB(15, 15, 15), 95);
-	}
-
-	for (x = 0, n = cmddisplay; n < MAXCMDLINE; n++) {
-		if (cmdline[n]) {
-			tmp = render_text_char(dotx(DOT_TXT) + x, doty(DOT_TX2) - 1, cmdline[n], IRGB(31, 31, 31));
-		} else {
-			tmp = 0;
-		}
-		if (n == cmdcursor) {
-			if (cmdline[n]) {
-				render_shaded_rect(dotx(DOT_TXT) + x - 1, doty(DOT_TX2) - 2, dotx(DOT_TXT) + x + tmp + 1,
-				    doty(DOT_TX2) + 8, 0xffe0, 95);
-			} else {
-				render_shaded_rect(
-				    dotx(DOT_TXT) + x, doty(DOT_TX2) - 2, dotx(DOT_TXT) + x + 4, doty(DOT_TX2) + 8, 0xffe0, 95);
-			}
-		}
-		x += tmp;
-		if (x > dotx(DOT_TX2) - dotx(DOT_TXT) - 8) {
-			break;
-		}
-	}
-}
-
 void cmd_reset(void)
 {
 	bzero(cmdline, sizeof(cmdline));

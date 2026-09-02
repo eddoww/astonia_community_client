@@ -144,7 +144,8 @@ extern DLL_EXPORT unsigned int _client_dist;
 #define DOT_STAT   34 // status panel (level/military bars)
 #define DOT_MENU   35 // system menu strip (menu/help/quests)
 #define DOT_CLK    36 // classic clock
-#define MAX_DOT    37
+#define DOT_MMAP   37 // minimap circle, top left
+#define MAX_DOT    38
 
 #ifndef MAX_PATH
 #define MAX_PATH 260

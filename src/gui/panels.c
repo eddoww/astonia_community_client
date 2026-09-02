@@ -77,6 +77,8 @@ static const ButRange spellbook_buts[] = {{0, -1}}; /* cells are hit-tested by s
 static const ButRange status_buts[] = {{BUT_EXPBAR, BUT_EXPBAR}, {BUT_MILBAR, BUT_MILBAR}};
 static const ButRange sysmenu_buts[] = {{BUT_EXIT, BUT_HELP}, {BUT_QUEST, BUT_QUEST}};
 static const ButRange clock_buts[] = {{0, -1}};
+static const int minimap_dots[] = {DOT_MMAP};
+static const ButRange minimap_buts[] = {{0, -1}};
 static const ButRange help_buts[] = {{0, -1}}; /* page controls are rect-hit in gui_buttons.c */
 
 #define PANEL_ENTRY(idstr, namestr, d, b, fr, rs, vis)                                                                 \
@@ -95,6 +97,7 @@ static Panel panels[MAX_PANEL] = {
     [PANEL_SYSMENU] = PANEL_ENTRY("sysmenu", "System Menu", sysmenu_dots, sysmenu_buts, PANEL_FRAME_HUD, 0, 1),
     [PANEL_CLOCK] = PANEL_ENTRY("clock", "Classic Clock", clock_dots, clock_buts, PANEL_FRAME_HUD, 0, 0),
     [PANEL_HELP] = PANEL_ENTRY("help", "Help", help_dots, help_buts, PANEL_FRAME_WINDOW, 0, 0),
+    [PANEL_MINIMAP] = PANEL_ENTRY("minimap", "Minimap", minimap_dots, minimap_buts, PANEL_FRAME_HUD, 0, 1),
 };
 
 _Static_assert(MAX_PANEL <= PANEL_BUT_SLOTS, "every panel needs a slot in each per-panel button bank");
@@ -139,8 +142,8 @@ DLL_EXPORT int panel_shown(int p)
 	if (!gui_overlay_visible) {
 		return 0;
 	}
-	if (p == PANEL_CHAT && chat_external) {
-		return cmd_is_active();
+	if (p == PANEL_CHAT) {
+		return 0; /* the classic chat is gone - the tabbed chat window owns chat */
 	}
 	/* the help / quest-log window is summoned by its buttons and keys, not
 	 * by the visibility toggle - it exists exactly while one is open */
@@ -155,9 +158,7 @@ DLL_EXPORT int panel_shown(int p)
 	if (p == PANEL_SKILLS && con_cnt && !con_dismissed) {
 		return 1;
 	}
-	if (p == PANEL_CHAT && cmd_is_active()) {
-		return 1;
-	}
+
 	return 0;
 }
 
@@ -862,8 +863,11 @@ int panels_frame_button(int x, int y)
 				return BUT_PSIZE_BEG + p;
 			}
 		}
-		if (!panel_locked(p) && chrome_grab_rect(p, &x1, &y1, &x2, &y2) && x >= x1 && x <= x2 && y >= y1 && y <= y2) {
-			return BUT_DRAG_BEG + p;
+		if (chrome_grab_rect(p, &x1, &y1, &x2, &y2) && x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+			/* a locked panel keeps no drag handle, but its title bar must
+			 * still swallow the click - or it falls through to whatever
+			 * sits underneath (skill rows, the world) */
+			return panel_locked(p) ? BUT_PANEL_BODY : BUT_DRAG_BEG + p;
 		}
 	}
 	return -1;

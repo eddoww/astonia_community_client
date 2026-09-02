@@ -149,16 +149,23 @@ void display_look(void)
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
 
-	render_sprite(opt_sprite(994), dotx(DOT_LOK), doty(DOT_LOK), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	/* the shared window chrome instead of the classic stone sprite - the
+	 * one window that still looked like 2003 */
+	int lx1 = dotx(DOT_LOK), ly1 = doty(DOT_LOK);
+	int lw = LOOK_W, lh = LOOK_H;
 
-	/* the look window keeps the classic 12-wide strip - it is a fixed-size
-	 * sprite window, not the paper doll */
+	ui_panel(lx1, ly1, lx1 + lw, ly1 + lh);
+	ui_window_titlebar(lx1, ly1, lx1 + lw, look_name[0] ? look_name : "Look", 0);
+	ui_glyph_button(
+	    lx1 + lw - UI_WIN_PAD - UI_WIN_GLYPH / 2, ly1 + UI_WIN_TITLE_H / 2, UI_GLYPH_CLOSE, butsel == BUT_NOLOOK);
+
+	/* the classic 12-wide gear strip, in slot cells along the bottom */
 	for (b = BUT_WEA_BEG; b <= BUT_WEA_END; b++) {
 		int i = b - BUT_WEA_BEG;
-		int x = dotx(DOT_LOK) + 30 + i * FDX;
-		int y = doty(DOT_LOK) + 20;
+		int x = lx1 + LOOK_STRIP_X + FDX / 2 + i * FDX;
+		int y = ly1 + lh - UI_WIN_PAD - FDX / 2;
 
-		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+		ui_slot_cell(x, y, FDX / 2 - 1, 0, 0);
 		if (lookinv[weatab[i]]) {
 			bzero(&fx, sizeof(fx));
 
@@ -181,8 +188,8 @@ void display_look(void)
 			render_sprite_fx(&fx, x, y);
 		}
 	}
-	render_text(dotx(DOT_LOK) + 70, doty(DOT_LOK) + 50, 0xffff, RENDER_TEXT_LEFT, look_name);
-	render_text_break(dotx(DOT_LOK) + 70, doty(DOT_LOK) + 60, dotx(DOT_LOK) + 270, 0xffff, RENDER_TEXT_LEFT, look_desc);
+	render_text_break(lx1 + LOOK_PORTRAIT_W, ly1 + UI_WIN_TITLE_H + 8, lx1 + lw - UI_WIN_PAD - 4, UI_TEXT,
+	    RENDER_TEXT_LEFT, look_desc);
 
 	{
 		static int look_anim = 4, look_step = 0, look_dir = 0;
@@ -226,7 +233,7 @@ void display_look(void)
 		fx.sink = 0;
 		fx.align = RENDER_ALIGN_OFFSET;
 		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = FX_ITEMLIGHT;
-		render_sprite_fx(&fx, dotx(DOT_LOK) + 40, doty(DOT_LOK) + 110);
+		render_sprite_fx(&fx, lx1 + LOOK_PORTRAIT_W / 2 + 4, ly1 + UI_WIN_TITLE_H + LOOK_PORTRAIT_H);
 	}
 }
 
@@ -828,8 +835,6 @@ void display_text(void)
 	} else {
 		hitsel[0] = 0;
 	}
-
-	display_cmd();
 }
 
 /* Speed selector.
@@ -1271,18 +1276,26 @@ void display_military(void)
 		/* no military points yet: the bar still exists, empty - players
 		 * kept reporting it "missing" when it only appeared with honor */
 		draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 0, IRGB(28, 12, 4), 0, BAR_INFO_NONE, 0, 0, 0);
-		render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY, "Honor 0");
-		snprintf(hover_rank_text, 200, "Rank: none yet - military points come from fighting for your realm");
+		render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY,
+		    "Military Standing - no rank yet");
+		snprintf(hover_rank_text, 200, "No rank yet - military points come from fighting for your realm");
 		return;
 	}
 	{
 		unsigned short mil_color = IRGB(28, 12, 4);
 		char lead[96];
 
+		/* the rank table can have unnamed gaps - say so instead of %s-ing null */
+		const char *rname = game_rankname[rank] && game_rankname[rank][0] ? game_rankname[rank] : NULL;
+
 		if (rank < maxrank) {
 			draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 100 * step / total, mil_color, 0, mil_info_mode, step, total,
 			    total - step);
-			snprintf(lead, sizeof(lead), "Honor %d", rank);
+			if (rname) {
+				snprintf(lead, sizeof(lead), "Military Standing - %s", rname);
+			} else {
+				snprintf(lead, sizeof(lead), "Military Standing - unnamed rank %d", rank);
+			}
 			render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
 
 			snprintf(hover_rank_text, 200,
@@ -1293,7 +1306,11 @@ void display_military(void)
 		} else {
 			/* Highest rank: full bar */
 			draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 100, mil_color, 0, BAR_INFO_NONE, 0, 0, 0);
-			snprintf(lead, sizeof(lead), "Honor %d (max)", rank);
+			if (rname) {
+				snprintf(lead, sizeof(lead), "Military Standing - %s (max)", rname);
+			} else {
+				snprintf(lead, sizeof(lead), "Military Standing - unnamed rank %d (max)", rank);
+			}
 			render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
 			snprintf(hover_rank_text, 200, "Rank %d '%s' (highest rank)\ntotal %s military points", rank,
 			    game_rankname[maxrank], fmt_thousands((long long)mil_exp, n4, sizeof(n4)));

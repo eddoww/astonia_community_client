@@ -806,11 +806,8 @@ static void opt_display_ui(void)
 
 		ry = opt_row_y(18 + p);
 		if (ry >= 0) {
-			if (p == PANEL_CHAT && panel_chat_is_external()) {
-				/* the tabbed chat owns chat - a dead toggle would only
-				 * confuse; the row stays so the numbering holds */
-				render_text(opt_lx, ry + 4, UI_TEXT_DISABLED, UI_FONT_BODY, "Chat: handled by the tabbed chat window");
-				continue;
+			if (p == PANEL_CHAT) {
+				continue; /* the classic chat panel is gone */
 			}
 			snprintf(label, sizeof(label), "Show %s", panel_name(p));
 			draw_checkbox(opt_lx, ry, panel_visible(p), label);
@@ -990,8 +987,8 @@ static int opt_click_ui(int mx, int my)
 	for (int p = 0; p < MAX_PANEL; p++) {
 		ry = opt_row_y(18 + p);
 		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-			if (p == PANEL_CHAT && panel_chat_is_external()) {
-				return 1; /* informational row */
+			if (p == PANEL_CHAT) {
+				return 1; /* no classic chat row */
 			}
 			panel_toggle(p);
 			save_options();

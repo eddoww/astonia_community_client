@@ -204,7 +204,9 @@ void init_dots(void)
 	__textdisplay_sy = 150;
 	set_dot(DOT_TXT, 230, UIYRES - edge - __textdisplay_sy, 0);
 	set_dot(DOT_TX2, 624, UIYRES - edge, 0);
-	panel_set_content_rect(PANEL_CHAT, dotx(DOT_TXT), doty(DOT_TXT), dotx(DOT_TX2), doty(DOT_TX2));
+	/* no PANEL_CHAT content rect: the classic chat panel is gone (the
+	 * tabbed chat window owns chat); the text dots stay for the loading
+	 * screens' line display */
 
 	/* ── Speed selector, stacked above the skills window ─────────────── */
 	{
@@ -213,7 +215,10 @@ void init_dots(void)
 		 * list or merchant grid) so neither opening a shop nor closing one
 		 * ever bumps these two around - the anchor is a constant of the
 		 * current settings, not of what the window happens to show */
-		int skl_max_h = max(skl_list_h, CONDY * FDX + 4);
+		/* anchored to the DEFAULT window heights, not the live ones -
+		 * resizing the skills list or a merchant grid must never bump
+		 * these two around */
+		int skl_max_h = max(SKL_GRID_MAX_ROWS * LINEHEIGHT + 6, 4 * FDX + 4);
 		int y2 = UIYRES - edge - skl_max_h - UI_WIN_TITLE_H - UI_WIN_PAD * 2 - 4;
 		int y1 = y2 - SPEED_SEG_H;
 
@@ -306,9 +311,17 @@ void init_dots(void)
 	// map: the world is always fullscreen - it spans the whole CANVAS (not
 	// the UI layer: the world never scales with the UI), the GUI overlays
 	// it, and the player character sits at the true center
+	/* the world fills the window, so in UI space the "map area" is the whole
+	 * canvas - mods and overlays treat these as the screen box. The world
+	 * renderer itself works in native dims and uses XRES/YRES directly. */
 	set_dot(DOT_MTL, 0, 0, 0);
-	set_dot(DOT_MBR, XRES, YRES, 0);
-	set_dot(DOT_MCT, XRES / 2, YRES / 2, 0);
+	set_dot(DOT_MBR, UIXRES, UIYRES, 0);
+	set_dot(DOT_MCT, UIXRES / 2, UIYRES / 2, 0);
+
+	/* ── Minimap (top right) ─────────────────────────────────────────── */
+	set_dot(DOT_MMAP, UIXRES - MINIMAP_D - edge, 46, 0);
+	panel_set_content_rect(
+	    PANEL_MINIMAP, dotx(DOT_MMAP), doty(DOT_MMAP), dotx(DOT_MMAP) + MINIMAP_D, doty(DOT_MMAP) + MINIMAP_D);
 
 	// help and quest window
 	set_dot(DOT_HLP, 12, 60, 0);
@@ -480,4 +493,7 @@ void init_dots(void)
 	// shift every panel by its stored drag offset - must stay the last
 	// step so it sees the complete default layout
 	panels_apply_offsets();
+
+	/* the minimap caches its anchors - refresh them from the moved panel */
+	minimap_reanchor();
 }

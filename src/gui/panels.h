@@ -32,6 +32,7 @@ enum {
 	PANEL_SYSMENU, /* Menu / Help / Quests buttons                */
 	PANEL_CLOCK, /* classic flip-digit game clock               */
 	PANEL_HELP, /* help / quest-log window (summoned)          */
+	PANEL_MINIMAP, /* round minimap                               */
 	MAX_PANEL
 };
 

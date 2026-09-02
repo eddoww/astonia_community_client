@@ -46,6 +46,7 @@ typedef struct {
 	int default_visible; /* summoned windows start closed */
 	int visible;
 	int collapsed;
+	int locked; /* position/size lock (per panel)   */
 	int dx, dy;
 	int cx1, cy1, cx2, cy2; /* content rect, published by init_dots() */
 } Panel;
@@ -79,7 +80,7 @@ static const ButRange clock_buts[] = {{0, -1}};
 static const ButRange help_buts[] = {{0, -1}}; /* page controls are rect-hit in gui_buttons.c */
 
 #define PANEL_ENTRY(idstr, namestr, d, b, fr, rs, vis)                                                                 \
-	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, vis, vis, 0, 0, 0, 0, 0, 0, 0}
+	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, vis, vis, 0, 0, 0, 0, 0, 0, 0, 0}
 
 static Panel panels[MAX_PANEL] = {
     [PANEL_SKILLS] = PANEL_ENTRY("skills", "Skills", skills_dots, skills_buts, PANEL_FRAME_WINDOW, 1, 1),
@@ -99,6 +100,9 @@ static Panel panels[MAX_PANEL] = {
 _Static_assert(MAX_PANEL <= PANEL_BUT_SLOTS, "every panel needs a slot in each per-panel button bank");
 
 static int drag_dirty; /* a drag/resize moved something since the last save */
+
+/* Options > "Lock GUI Layout": freezes every panel in place at once */
+static int layout_locked;
 
 /* the skills window's container view was closed by hand; cleared when the
  * next shop/grave opens so the window comes back on its own */
@@ -195,6 +199,45 @@ DLL_EXPORT void panel_set_collapsed(int p, int on)
 	panels[p].collapsed = on ? 1 : 0;
 }
 
+DLL_EXPORT int panels_layout_locked(void)
+{
+	return layout_locked;
+}
+
+DLL_EXPORT void panels_set_layout_locked(int on)
+{
+	layout_locked = on ? 1 : 0;
+}
+
+DLL_EXPORT int panel_locked(int p)
+{
+	if (layout_locked) {
+		return 1;
+	}
+	if (p < 0 || p >= MAX_PANEL) {
+		return 0;
+	}
+	return panels[p].locked;
+}
+
+DLL_EXPORT void panel_set_locked(int p, int on)
+{
+	if (p < 0 || p >= MAX_PANEL) {
+		return;
+	}
+	panels[p].locked = on ? 1 : 0;
+}
+
+/* the padlock glyph flips the panel's OWN flag (the global Options lock is
+ * a separate layer on top) */
+DLL_EXPORT void panel_toggle_locked(int p)
+{
+	if (p < 0 || p >= MAX_PANEL) {
+		return;
+	}
+	panels[p].locked = !panels[p].locked;
+}
+
 DLL_EXPORT int panel_content_shown(int p)
 {
 	return panel_shown(p) && !panel_collapsed(p);
@@ -284,6 +327,23 @@ int panel_content_rect(int p, int *x1, int *y1, int *x2, int *y2)
 	return 1;
 }
 
+/* mod-facing: how many panels exist, and the on-screen footprint of a shown
+ * one - the mod's windows snap against these */
+DLL_EXPORT int panel_count(void)
+{
+	return MAX_PANEL;
+}
+
+static int panel_bounds_rect(int p, int *x1, int *y1, int *x2, int *y2);
+
+DLL_EXPORT int panel_snap_rect(int p, int *x1, int *y1, int *x2, int *y2)
+{
+	if (p < 0 || p >= MAX_PANEL || !panel_shown(p)) {
+		return 0;
+	}
+	return panel_bounds_rect(p, x1, y1, x2, y2);
+}
+
 int panel_frame_rect(int p, int *x1, int *y1, int *x2, int *y2)
 {
 	int a, b, c, d;
@@ -332,11 +392,20 @@ static int chrome_min_pos(int p, int *cx, int *cy)
 	return 1;
 }
 
+static int chrome_lock_pos(int p, int *cx, int *cy)
+{
+	if (!chrome_min_pos(p, cx, cy)) {
+		return 0;
+	}
+	*cx -= UI_WIN_GLYPH + 3;
+	return 1;
+}
+
 static int chrome_grip_pos(int p, int *cx, int *cy)
 {
 	int x1, y1, x2, y2;
 
-	if (!panel_resizable(p) || panel_collapsed(p) || !panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
+	if (!panel_resizable(p) || panel_collapsed(p) || panel_locked(p) || !panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
 		return 0;
 	}
 	*cx = x2 - UI_WIN_GRIP / 2 - 1;
@@ -359,7 +428,7 @@ static int chrome_grab_rect(int p, int *x1, int *y1, int *x2, int *y2)
 		int cx, cy;
 
 		*y2 = fy1 + UI_WIN_TITLE_H;
-		if (chrome_min_pos(p, &cx, &cy)) {
+		if (chrome_lock_pos(p, &cx, &cy)) {
 			*x2 = cx - UI_WIN_GLYPH / 2 - 2;
 		}
 	} else {
@@ -377,6 +446,7 @@ void panels_place_chrome_buttons(void (*place)(int bidx, int x, int y, int hitra
 		place(BUT_PCLOSE_BEG + p, 0, 0, 0, BUTF_NOHIT);
 		place(BUT_PMIN_BEG + p, 0, 0, 0, BUTF_NOHIT);
 		place(BUT_PSIZE_BEG + p, 0, 0, 0, BUTF_NOHIT);
+		place(BUT_PLOCK_BEG + p, 0, 0, 0, BUTF_NOHIT);
 	}
 	place(BUT_PANEL_BODY, 0, 0, 0, BUTF_NOHIT);
 
@@ -395,6 +465,9 @@ void panels_place_chrome_buttons(void (*place)(int bidx, int x, int y, int hitra
 		}
 		if (chrome_grip_pos(p, &cx, &cy)) {
 			place(BUT_PSIZE_BEG + p, cx, cy, 0, BUTF_CAPTURE | BUTF_MOVEEXEC | BUTF_NOHIT);
+		}
+		if (chrome_lock_pos(p, &cx, &cy)) {
+			place(BUT_PLOCK_BEG + p, cx, cy, 0, BUTF_NOHIT);
 		}
 	}
 }
@@ -426,32 +499,101 @@ static void panel_shift(int p, int dx, int dy)
 	but[BUT_PMIN_BEG + p].y += dy;
 	but[BUT_PSIZE_BEG + p].x += dx;
 	but[BUT_PSIZE_BEG + p].y += dy;
+	but[BUT_PLOCK_BEG + p].x += dx;
+	but[BUT_PLOCK_BEG + p].y += dy;
 	pan->cx1 += dx;
 	pan->cx2 += dx;
 	pan->cy1 += dy;
 	pan->cy2 += dy;
 }
 
-/* keep the clamp reference dot within the canvas so a panel can never be
- * dragged (or left stranded by a resolution change) fully off screen */
+/* the panel's on-screen footprint: the chrome frame for framed panels, the
+ * content rect for frameless ones (the hotbar publishes one that includes
+ * its grab tab) */
+static int panel_bounds_rect(int p, int *x1, int *y1, int *x2, int *y2)
+{
+	if (panel_frame_rect(p, x1, y1, x2, y2)) {
+		return 1;
+	}
+	return panel_content_rect(p, x1, y1, x2, y2);
+}
+
+/* keep the WHOLE footprint on the canvas: a panel can never be dragged (or
+ * left stranded by a resolution / UI-scale change) even partly off screen.
+ * Dragging the hotbar below the bottom edge used to lose it for good. */
 static void panel_clamp(int p, int *dx, int *dy)
 {
 	const Panel *pan = &panels[p];
-	int x = dot[pan->dots[0]].x + *dx;
-	int y = dot[pan->dots[0]].y + *dy;
+	int x1, y1, x2, y2;
 
-	if (x < 0) {
-		*dx -= x;
+	if (!panel_bounds_rect(p, &x1, &y1, &x2, &y2)) {
+		/* no rect published: fall back to the reference dot */
+		x1 = x2 = dot[pan->dots[0]].x;
+		y1 = y2 = dot[pan->dots[0]].y;
 	}
-	if (x > UIXRES) {
-		*dx -= x - UIXRES;
+
+	if (x2 + *dx > UIXRES) {
+		*dx -= x2 + *dx - UIXRES;
 	}
-	if (y < 0) {
-		*dy -= y;
+	if (y2 + *dy > UIYRES) {
+		*dy -= y2 + *dy - UIYRES;
 	}
-	if (y > UIYRES) {
-		*dy -= y - UIYRES;
+	/* left/top win for a panel larger than the screen - the drag handle and
+	 * title bar live there */
+	if (x1 + *dx < 0) {
+		*dx -= x1 + *dx;
 	}
+	if (y1 + *dy < 0) {
+		*dy -= y1 + *dy;
+	}
+}
+
+/* Magnetize a dragged panel's edges to the screen edges and to the other
+ * shown panels' footprints, so hand-built layouts line up without pixel
+ * hunting. Adjusts the delta by at most SNAP_DIST per axis. */
+#define SNAP_DIST 8
+
+static void snap_axis(int a1, int a2, int t1, int t2, int *best, int *adj)
+{
+	int cand[4] = {t1 - a1, t2 - a1, t1 - a2, t2 - a2};
+
+	for (int i = 0; i < 4; i++) {
+		int d = cand[i] < 0 ? -cand[i] : cand[i];
+
+		if (d <= SNAP_DIST && d < *best) {
+			*best = d;
+			*adj = cand[i];
+		}
+	}
+}
+
+static void panel_snap(int p, int *dx, int *dy)
+{
+	int x1, y1, x2, y2;
+	int bestx = SNAP_DIST + 1, besty = SNAP_DIST + 1;
+	int adjx = 0, adjy = 0;
+
+	if (!panel_bounds_rect(p, &x1, &y1, &x2, &y2)) {
+		return;
+	}
+	x1 += *dx;
+	x2 += *dx;
+	y1 += *dy;
+	y2 += *dy;
+
+	snap_axis(x1, x2, 0, UIXRES, &bestx, &adjx);
+	snap_axis(y1, y2, 0, UIYRES, &besty, &adjy);
+	for (int q = 0; q < MAX_PANEL; q++) {
+		int qx1, qy1, qx2, qy2;
+
+		if (q == p || !panel_shown(q) || !panel_bounds_rect(q, &qx1, &qy1, &qx2, &qy2)) {
+			continue;
+		}
+		snap_axis(x1, x2, qx1, qx2, &bestx, &adjx);
+		snap_axis(y1, y2, qy1, qy2, &besty, &adjy);
+	}
+	*dx += adjx;
+	*dy += adjy;
 }
 
 void panels_apply_offsets(void)
@@ -468,23 +610,43 @@ void panels_apply_offsets(void)
 
 void panels_drag(int p)
 {
+	/* The pointer is captured, so deltas are relative - snapping needs the
+	 * UNSNAPPED position accumulated since the drag began, or a magnetized
+	 * panel could never be pulled off its snap line again. */
+	static int vp = -1;
+	static int vx, vy;
 	int dx, dy;
 
-	if (p < 0 || p >= MAX_PANEL) {
+	if (p < 0 || p >= MAX_PANEL || panel_locked(p)) {
+		vp = -1; /* end of gesture (or a locked panel): forget the virtual position */
+		mousedx = mousedy = 0;
 		return;
 	}
 
-	dx = mousedx;
-	dy = mousedy;
+	if (vp != p) {
+		vp = p;
+		vx = panels[p].dx;
+		vy = panels[p].dy;
+	}
+	vx += mousedx;
+	vy += mousedy;
+	mousedx = mousedy = 0;
+
+	/* desired move = virtual position, clamped on-canvas, then snapped to
+	 * the screen edges and the other panels, then clamped once more so a
+	 * snap can never push anything off screen */
+	dx = vx - panels[p].dx;
+	dy = vy - panels[p].dy;
 	panel_clamp(p, &dx, &dy);
+	panel_snap(p, &dx, &dy);
+	panel_clamp(p, &dx, &dy);
+
 	panels[p].dx += dx;
 	panels[p].dy += dy;
 	panel_shift(p, dx, dy);
 	if (dx || dy) {
 		drag_dirty = 1;
 	}
-
-	mousedx = mousedy = 0;
 }
 
 /* Shift a panel so its content rect's top-left lands back on (x1,y1). A
@@ -519,7 +681,7 @@ int panels_resize(int p)
 	static int accp = -1;
 	int cols, rows, changed = 0;
 
-	if (p < 0 || p >= MAX_PANEL || !panel_resizable(p)) {
+	if (p < 0 || p >= MAX_PANEL || !panel_resizable(p) || panel_locked(p)) {
 		mousedx = mousedy = 0;
 		return 0;
 	}
@@ -587,6 +749,8 @@ int panels_resize(int p)
 
 void panels_drag_finished(void)
 {
+	/* next drag starts its virtual position fresh */
+	panels_drag(-1);
 	if (drag_dirty) {
 		drag_dirty = 0;
 		save_options();
@@ -608,6 +772,9 @@ static int chrome_button_panel(int b)
 	}
 	if (b >= BUT_PSIZE_BEG && b <= BUT_PSIZE_END) {
 		return b - BUT_PSIZE_BEG;
+	}
+	if (b >= BUT_PLOCK_BEG && b <= BUT_PLOCK_END) {
+		return b - BUT_PLOCK_BEG;
 	}
 	return -1;
 }
@@ -673,6 +840,9 @@ int panels_frame_button(int x, int y)
 		if (chrome_min_pos(p, &cx, &cy) && in_glyph(x, y, cx, cy)) {
 			return BUT_PMIN_BEG + p;
 		}
+		if (chrome_lock_pos(p, &cx, &cy) && in_glyph(x, y, cx, cy)) {
+			return BUT_PLOCK_BEG + p;
+		}
 		if (chrome_grip_pos(p, &cx, &cy)) {
 			int h = UI_WIN_GRIP / 2 + 1;
 
@@ -680,7 +850,7 @@ int panels_frame_button(int x, int y)
 				return BUT_PSIZE_BEG + p;
 			}
 		}
-		if (chrome_grab_rect(p, &x1, &y1, &x2, &y2) && x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+		if (!panel_locked(p) && chrome_grab_rect(p, &x1, &y1, &x2, &y2) && x >= x1 && x <= x2 && y >= y1 && y <= y2) {
 			return BUT_DRAG_BEG + p;
 		}
 	}
@@ -723,6 +893,9 @@ void panels_display_frames(void)
 			if (chrome_min_pos(p, &cx, &cy)) {
 				ui_glyph_button(cx, cy, collapsed ? UI_GLYPH_RESTORE : UI_GLYPH_MINIMIZE, butsel == BUT_PMIN_BEG + p);
 			}
+			if (chrome_lock_pos(p, &cx, &cy)) {
+				ui_glyph_lock(cx, cy, panels[p].locked, butsel == BUT_PLOCK_BEG + p);
+			}
 			if (chrome_grip_pos(p, &cx, &cy)) {
 				ui_resize_grip(cx, cy, butsel == BUT_PSIZE_BEG + p || capbut == BUT_PSIZE_BEG + p);
 			}
@@ -731,6 +904,9 @@ void panels_display_frames(void)
 			int mx = (x1 + x2) / 2, my = y1 + HUD_GRIP_H / 2;
 
 			ui_panel_light(x1, y1, x2, y2);
+			if (panel_locked(p)) {
+				hot = 0; /* a locked plate offers no grab affordance */
+			}
 			/* the grab strip is only marked when the pointer is on it -
 			 * a permanent handle would clutter a HUD widget */
 			if (hot) {
@@ -752,8 +928,8 @@ void panels_display_handles(void)
 		int bx, by, dx, dy;
 
 		/* framed panels have real chrome to grab; only the bare ones need
-		 * the proximity hint */
-		if (panels[p].frame != PANEL_FRAME_NONE || !panel_shown(p) || (but[b].flags & BUTF_NOHIT)) {
+		 * the proximity hint - and a locked panel offers none */
+		if (panels[p].frame != PANEL_FRAME_NONE || !panel_shown(p) || panel_locked(p) || (but[b].flags & BUTF_NOHIT)) {
 			continue;
 		}
 		bx = butx(b);
@@ -770,9 +946,11 @@ void panels_display_handles(void)
 
 void panels_reset_layout(void)
 {
+	layout_locked = 0;
 	for (int p = 0; p < MAX_PANEL; p++) {
 		panels[p].visible = panels[p].default_visible;
 		panels[p].collapsed = 0;
+		panels[p].locked = 0;
 		panels[p].dx = 0;
 		panels[p].dy = 0;
 	}
@@ -795,6 +973,7 @@ void panels_save_json(struct cJSON *root)
 	if (!jp) {
 		return;
 	}
+	cJSON_AddBoolToObject(jp, "locked", layout_locked);
 	for (int p = 0; p < MAX_PANEL; p++) {
 		cJSON *e = cJSON_CreateObject();
 
@@ -803,6 +982,7 @@ void panels_save_json(struct cJSON *root)
 		}
 		cJSON_AddBoolToObject(e, "on", panels[p].visible);
 		cJSON_AddBoolToObject(e, "min", panels[p].collapsed);
+		cJSON_AddBoolToObject(e, "lk", panels[p].locked);
 		cJSON_AddNumberToObject(e, "dx", panels[p].dx);
 		cJSON_AddNumberToObject(e, "dy", panels[p].dy);
 		cJSON_AddItemToObject(jp, panels[p].id, e);
@@ -818,6 +998,10 @@ void panels_load_json(const struct cJSON *root)
 	if (!jp || !cJSON_IsObject(jp)) {
 		return;
 	}
+	v = cJSON_GetObjectItem(jp, "locked");
+	if (v && cJSON_IsBool(v)) {
+		layout_locked = cJSON_IsTrue(v) ? 1 : 0;
+	}
 	for (int p = 0; p < MAX_PANEL; p++) {
 		const cJSON *e = cJSON_GetObjectItem(jp, panels[p].id);
 
@@ -831,6 +1015,10 @@ void panels_load_json(const struct cJSON *root)
 		v = cJSON_GetObjectItem(e, "min");
 		if (v && cJSON_IsBool(v)) {
 			panels[p].collapsed = cJSON_IsTrue(v) ? 1 : 0;
+		}
+		v = cJSON_GetObjectItem(e, "lk");
+		if (v && cJSON_IsBool(v)) {
+			panels[p].locked = cJSON_IsTrue(v) ? 1 : 0;
 		}
 		v = cJSON_GetObjectItem(e, "dx");
 		if (v && cJSON_IsNumber(v)) {

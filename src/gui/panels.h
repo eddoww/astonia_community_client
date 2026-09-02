@@ -63,6 +63,14 @@ DLL_EXPORT void panel_set_collapsed(int p, int on);
 /* shown and not collapsed - the guard for drawing a panel's content */
 DLL_EXPORT int panel_content_shown(int p);
 
+/* position/size locks: the global Options toggle freezes everything, the
+ * per-panel padlock (titlebar glyph) freezes one window */
+DLL_EXPORT int panels_layout_locked(void);
+DLL_EXPORT void panels_set_layout_locked(int on);
+DLL_EXPORT int panel_locked(int p);
+DLL_EXPORT void panel_set_locked(int p, int on);
+DLL_EXPORT void panel_toggle_locked(int p);
+
 /* persistent drag offset from the default layout position */
 DLL_EXPORT int panel_dx(int p);
 DLL_EXPORT int panel_dy(int p);
@@ -80,6 +88,10 @@ int panel_content_rect(int p, int *x1, int *y1, int *x2, int *y2);
 /* outer frame rectangle (content plus chrome); 0 when the panel is
  * unframed. Honors the collapsed state. */
 int panel_frame_rect(int p, int *x1, int *y1, int *x2, int *y2);
+
+/* mod-facing: panel count + the shown footprint (for cross-family snapping) */
+DLL_EXPORT int panel_count(void);
+DLL_EXPORT int panel_snap_rect(int p, int *x1, int *y1, int *x2, int *y2);
 
 /* Mirror the derived chrome geometry into but[]: init_dots() hands in its
  * set_but() so the shared capture/click machinery can drive the title bars,

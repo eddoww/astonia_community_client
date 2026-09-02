@@ -158,10 +158,12 @@ int wea_slot_pos(int slot, int *x, int *y);
 #define BUT_PMIN_END   (BUT_PMIN_BEG + PANEL_BUT_SLOTS - 1)
 #define BUT_PSIZE_BEG  (BUT_PMIN_END + 1)
 #define BUT_PSIZE_END  (BUT_PSIZE_BEG + PANEL_BUT_SLOTS - 1)
+#define BUT_PLOCK_BEG  (BUT_PSIZE_END + 1)
+#define BUT_PLOCK_END  (BUT_PLOCK_BEG + PANEL_BUT_SLOTS - 1)
 
 /* not a real button: parks butsel while the pointer is over a framed
  * panel's body so the full-screen world underneath is not targeted */
-#define BUT_PANEL_BODY (BUT_PSIZE_END + 1)
+#define BUT_PANEL_BODY (BUT_PLOCK_END + 1)
 
 /* container (shop / grave) grid - sized at runtime like the inventory */
 #define BUT_CON_BEG (BUT_PANEL_BODY + 1)
@@ -179,7 +181,7 @@ _Static_assert(
     BUT_EXPBAR > BUT_HOTBAR_END && BUT_MILBAR > BUT_HOTBAR_END, "bar button ids must not fall into the hotbar range");
 _Static_assert(BUT_DRAG_BEG > BUT_MILBAR, "drag handle ids must not collide with the bar button ids");
 _Static_assert(BUT_DRAG_END < BUT_PCLOSE_BEG && BUT_PCLOSE_END < BUT_PMIN_BEG && BUT_PMIN_END < BUT_PSIZE_BEG &&
-                   BUT_PSIZE_END < BUT_PANEL_BODY && BUT_PANEL_BODY < MAX_BUT,
+                   BUT_PSIZE_END < BUT_PLOCK_BEG && BUT_PLOCK_END < BUT_PANEL_BODY && BUT_PANEL_BODY < MAX_BUT,
     "the per-panel button banks must not overlap");
 
 #define BUTF_NOHIT    (1 << 1) // button is ignored int hit processing
@@ -308,6 +310,7 @@ _Static_assert(BUT_DRAG_END < BUT_PCLOSE_BEG && BUT_PCLOSE_END < BUT_PMIN_BEG &&
 #define CMD_PANEL_CLOSE 86 /* hide the framed panel whose X was clicked        */
 #define CMD_PANEL_MIN   87 /* collapse/expand the framed panel to its titlebar */
 #define CMD_PANEL_SIZE  88 /* resize the panel whose grip captured the mouse   */
+#define CMD_PANEL_LOCK  89 /* toggle the panel's position lock                 */
 
 #define STV_EMPTYLINE  -1
 #define STV_JUSTAVALUE -2 // value is in curr

@@ -929,6 +929,13 @@ void exec_cmd(int cmd, int a)
 			save_options();
 		}
 		return;
+	case CMD_PANEL_LOCK:
+		if (butsel >= BUT_PLOCK_BEG && butsel <= BUT_PLOCK_END) {
+			panel_toggle_locked(butsel - BUT_PLOCK_BEG);
+			init_dots(); /* the grip appears/disappears with the lock */
+			save_options();
+		}
+		return;
 	case CMD_PANEL_SIZE:
 		/* the grip owns the capture, like the drag handles above */
 		if (capbut >= BUT_PSIZE_BEG && capbut <= BUT_PSIZE_END) {
@@ -1275,6 +1282,9 @@ void handle_special_buttons_logic(void)
 		}
 		if (butsel >= BUT_PSIZE_BEG && butsel <= BUT_PSIZE_END) {
 			lcmd = CMD_PANEL_SIZE;
+		}
+		if (butsel >= BUT_PLOCK_BEG && butsel <= BUT_PLOCK_END) {
+			lcmd = CMD_PANEL_LOCK;
 		}
 		if (butsel == BUT_EXIT) {
 			lcmd = CMD_EXIT;

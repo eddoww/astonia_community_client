@@ -454,7 +454,16 @@ void init_dots(void)
 	/* the remaining panels publish their content rect from the geometry
 	 * above; the inventory rect doubles as DOT_IN1/DOT_IN2 */
 	panel_set_content_rect(PANEL_INVENTORY, dotx(DOT_IN1), doty(DOT_IN1), dotx(DOT_IN2), doty(DOT_IN2));
-	panel_set_content_rect(PANEL_HOTBAR, 0, 0, 0, 0);
+	/* the hotbar's footprint (for clamping and snapping) covers the slot
+	 * grid plus its grab tab on the left - dragging it below the screen
+	 * used to strand it beyond recovery */
+	{
+		int rows = hotbar_rows() > 0 ? hotbar_rows() : 1;
+
+		panel_set_content_rect(PANEL_HOTBAR, dot[DOT_HOTBAR].x - FDX / 2 - 20, dot[DOT_HOTBAR].y - FDX / 2,
+		    dot[DOT_HOTBAR].x + hotbar_visible_slots() * FDX - FDX / 2,
+		    dot[DOT_HOTBAR].y + (rows - 1) * (FDX + 2) + FDX / 2 + 10);
+	}
 
 	/* title bars, close/minimize glyphs and resize grips derive from the
 	 * content rects, so they are placed last - and before the offsets */

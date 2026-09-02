@@ -144,6 +144,31 @@ void ui_glyph_button(int cx, int cy, int glyph, int hot)
 	}
 }
 
+/* Titlebar padlock: solid amber body when locked, faint outline when free.
+ * (cx,cy) is the glyph centre; hover gets the shared chip backing. */
+void ui_glyph_lock(int cx, int cy, int locked, int hot)
+{
+	unsigned short col = locked ? UI_ACCENT : (hot ? UI_TEXT : UI_TEXT_LABEL);
+	unsigned char a = locked ? 255 : (hot ? 255 : 170);
+
+	if (hot) {
+		int h = UI_WIN_GLYPH / 2;
+
+		render_rounded_rect_filled_alpha(cx - h, cy - h, cx + h, cy + h, UI_R_CHIP, UI_BG_ROW_HOVER, UI_A_CONTROL);
+		render_rounded_rect_alpha(cx - h, cy - h, cx + h, cy + h, UI_R_CHIP, UI_ACCENT, UI_A_BORDER_HOV);
+	}
+	/* shackle */
+	render_rect_alpha(cx - 2, cy - 4, cx - 1, cy - 1, col, a);
+	render_rect_alpha(cx + 2, cy - 4, cx + 3, cy - 1, col, a);
+	render_rect_alpha(cx - 2, cy - 5, cx + 3, cy - 4, col, a);
+	/* body */
+	if (locked) {
+		render_rect_alpha(cx - 3, cy - 1, cx + 4, cy + 4, col, a);
+	} else {
+		render_rect_outline_alpha(cx - 3, cy - 1, cx + 4, cy + 4, col, a);
+	}
+}
+
 /* Three diagonal ticks in the bottom-right corner, the usual "drag me to
  * resize" affordance. (cx,cy) is the grip's centre. */
 void ui_resize_grip(int cx, int cy, int hot)

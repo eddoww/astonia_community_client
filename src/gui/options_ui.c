@@ -92,8 +92,8 @@ extern SDL_Window *sdlwnd;
  * them (see amod_option_tab). The Gameplay tab always shows its native Combat
  * rows, mod or not. */
 #define OPT_AUDIO_NATIVE 6
-/* rows 0..9 classic, 10..15 window sizes, 16..17+MAX_PANEL panels */
-#define OPT_UI_NATIVE       (18 + MAX_PANEL)
+/* rows 0..9 classic, 10..15 window sizes, 16..18+MAX_PANEL panels */
+#define OPT_UI_NATIVE       (19 + MAX_PANEL)
 #define OPT_GAMEPLAY_NATIVE 2
 
 #define OPT_MAX_MOD_ROWS 64
@@ -796,10 +796,15 @@ static void opt_display_ui(void)
 		draw_section_header(opt_lx, ry, opt_content_w, "Panels & World");
 	}
 
+	ry = opt_row_y(17);
+	if (ry >= 0) {
+		draw_checkbox(opt_lx, ry, panels_layout_locked(), "Lock GUI Layout (freeze all panels)");
+	}
+
 	for (int p = 0; p < MAX_PANEL; p++) {
 		char label[48];
 
-		ry = opt_row_y(17 + p);
+		ry = opt_row_y(18 + p);
 		if (ry >= 0) {
 			if (p == PANEL_CHAT && panel_chat_is_external()) {
 				/* the tabbed chat owns chat - a dead toggle would only
@@ -812,7 +817,7 @@ static void opt_display_ui(void)
 		}
 	}
 
-	ry = opt_row_y(17 + MAX_PANEL);
+	ry = opt_row_y(18 + MAX_PANEL);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, 0, "Reset Panel Layout");
 	}
@@ -974,8 +979,16 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
+	ry = opt_row_y(17);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		panels_set_layout_locked(!panels_layout_locked());
+		init_dots(); /* resize grips follow the lock */
+		save_options();
+		return 1;
+	}
+
 	for (int p = 0; p < MAX_PANEL; p++) {
-		ry = opt_row_y(17 + p);
+		ry = opt_row_y(18 + p);
 		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 			if (p == PANEL_CHAT && panel_chat_is_external()) {
 				return 1; /* informational row */
@@ -986,7 +999,7 @@ static int opt_click_ui(int mx, int my)
 		}
 	}
 
-	ry = opt_row_y(17 + MAX_PANEL);
+	ry = opt_row_y(18 + MAX_PANEL);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		panels_reset_layout();
 		init_dots();

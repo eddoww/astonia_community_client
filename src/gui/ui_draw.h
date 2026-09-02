@@ -31,6 +31,7 @@ int ui_button(int x, int y, int w, int h, const char *label, int state);
 void ui_window_titlebar(int x1, int y1, int x2, const char *title, int collapsed);
 void ui_glyph_button(int cx, int cy, int glyph, int hot);
 void ui_resize_grip(int cx, int cy, int hot);
+void ui_glyph_lock(int cx, int cy, int locked, int hot);
 
 /* Item-slot backing cell (rounded socket) for grids that do not sit on the
  * classic bar art. */

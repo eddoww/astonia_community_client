@@ -103,6 +103,9 @@ static int wea_fallback_build(struct equip_bonus_entry *out, int max)
 		if (sv_ver != 35 && (v == V_ARMOR || v == V_WEAPON || v == V_LIGHT || v == V_SPEED)) {
 			continue;
 		}
+		if (sv_ver != 35 && v >= V_PROFESSION) {
+			break; /* the profession pseudo-value and the profession levels: never gear */
+		}
 		if (!wea_value_name(v) || (!value[1][v] && v >= V_PULSE)) {
 			continue;
 		}

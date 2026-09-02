@@ -33,6 +33,7 @@ DLL_EXPORT void inv_grid_set_rows(int n);
 #define LOOK_STRIP_X    ((LOOK_W - 12 * FDX) / 2)
 #define LOOK_PORTRAIT_W 92
 #define LOOK_PORTRAIT_H 94
+#define LOOK_ANIM_TICKS 2 /* game ticks per animation step of the portrait */
 DLL_EXPORT int skl_grid_rows(void); /* setting; 0 = auto (16, or 12 small bottom) */
 DLL_EXPORT int skl_grid_rows_effective(void); /* the row count actually drawn */
 DLL_EXPORT void skl_grid_set_rows(int n);
@@ -168,7 +169,7 @@ int wea_slot_pos(int slot, int *x, int *y);
 /* Per-panel button banks. Each bank has PANEL_BUT_SLOTS consecutive ids in
  * PANEL_* enum order (panels.h): BANK_BEG + PANEL_x is that panel's button.
  * Slots past MAX_PANEL are unused and set BUTF_NOHIT by init_dots(). */
-#define PANEL_BUT_SLOTS 14
+#define PANEL_BUT_SLOTS 16
 
 /* window drag handle / titlebar */
 #define BUT_DRAG_BEG    184
@@ -735,6 +736,13 @@ void minimap_zoom_in(void);
 void minimap_zoom_out(void);
 void minimap_zoom_reset(void);
 int minimap_wheel_zoom(int x, int y, int delta);
+int minimap_pan_begin(int x, int y);
+void minimap_pan_update(int x, int y);
+void minimap_pan_end(void);
+int minimap_pan_active(void);
+int minimap_is_panned(void);
+int minimap_recenter_hit(int x, int y);
+void minimap_recenter(void);
 void display_minimap(void);
 void minimap_update(void);
 void minimap_display_hover(int x, int y);

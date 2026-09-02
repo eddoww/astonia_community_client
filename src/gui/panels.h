@@ -35,6 +35,8 @@ enum {
 	PANEL_MINIMAP, /* round minimap (frameless, drag anywhere)    */
 	PANEL_CONTAINER, /* shop / grave / depot grid (summoned by the  */
 	/* server, lives beside the inventory)         */
+	PANEL_LOOK, /* "look at" character window (summoned by the   */
+	/* server's look reply, closes with its X)     */
 	MAX_PANEL
 };
 

@@ -357,8 +357,11 @@ void init_dots(void)
 	// teleporter window
 	set_dot(DOT_TEL, (UIXRES - 520) / 2, (UIYRES - 320) / 2, 0);
 
-	// look at window
-	set_dot(DOT_LOK, 150, 50, 0);
+	/* look-at window: a real panel now (draggable, minimizable, remembered);
+	 * the dot is the content's top-left, the title bar sits above it */
+	set_dot(DOT_LOK, 150, 50 + UI_WIN_TITLE_H, 0);
+	panel_set_content_rect(
+	    PANEL_LOOK, dotx(DOT_LOK), doty(DOT_LOK), dotx(DOT_LOK) + LOOK_W, doty(DOT_LOK) + LOOK_H - UI_WIN_TITLE_H);
 
 	// color picker window
 	set_dot(DOT_COL, 340, 210, 0);

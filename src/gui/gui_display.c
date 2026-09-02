@@ -491,7 +491,9 @@ void display(void)
 	/* interaction windows and transient overlays only appear on demand, so
 	 * they stay usable even with the GUI overlay hidden */
 	if (show_look) {
+		panel_clip_begin(PANEL_LOOK); /* the description wraps inside the frame */
 		display_look();
+		panel_clip_end();
 	}
 	keybind_panel_display();
 	display_teleport();

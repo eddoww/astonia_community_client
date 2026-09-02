@@ -32,6 +32,7 @@ extern int ui_scale_pct; /* sdl_core.c */
 /* set on right-button-down when the click cancelled target selection, so the
  * matching button-up doesn't execute the look command on top of the cancel */
 static int rclick_cancelled_targeting;
+static int mm_pan; /* a big-minimap pan gesture is live (either button) */
 
 /* set on right-button-down when the click abandoned a live pointer gesture,
  * so the matching button-up does not execute the look command on top */
@@ -65,10 +66,6 @@ int gui_client_overlay_at(int x, int y)
 	if (options_is_open() || escape_menu_is_open() || keybind_settings_is_open() || keybind_panel_is_open()) {
 		return 1;
 	}
-	if (show_look && x >= dotx(DOT_LOK) && x <= dotx(DOT_LOK) + LOOK_W && y >= doty(DOT_LOK) &&
-	    y <= doty(DOT_LOK) + LOOK_H) {
-		return 1;
-	}
 	if ((teleporter && !teleport_override) || show_color) {
 		return 1;
 	}
@@ -93,7 +90,17 @@ int gui_client_overlay_at(int x, int y)
  * have it before it reaches the world? */
 static int background_may_take(void)
 {
-	return butsel == -1 && !gui_client_overlay_at(mousex, mousey);
+	if (gui_client_overlay_at(mousex, mousey)) {
+		return 0;
+	}
+	if (butsel == -1) {
+		return 1;
+	}
+	/* the hit test tags a mod background surface as BUT_PANEL_BODY so the
+	 * world under it is never targeted - that tag must not also keep the
+	 * event from the surface itself (v1.8.0 shipped exactly that: the chat
+	 * could neither be dragged, minimized nor scrolled) */
+	return butsel == BUT_PANEL_BODY && !panels_frame_over(mousex, mousey) && amod_mouse_over_background(mousex, mousey);
 }
 
 /* a client-button gesture starts: the button keeps the pointer */
@@ -300,6 +307,9 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		if (mm_pan) {
+			minimap_pan_update(mousex, mousey);
+		}
 		amod_mouse_move(mousex, mousey);
 		break;
 
@@ -337,6 +347,19 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		/* a locked minimap cannot be moved, so a drag on its big map pans
+		 * the view instead; the recenter glyph takes a plain click */
+		if (butsel == BUT_PANEL_BODY && panel_locked(PANEL_MINIMAP)) {
+			if (minimap_recenter_hit(mousex, mousey)) {
+				minimap_recenter();
+				break;
+			}
+			if (minimap_pan_begin(mousex, mousey)) {
+				mm_pan = 1;
+				break;
+			}
+		}
+
 		/* nothing of the client's under the pointer: the mod's background
 		 * layer (the chat) gets the press before it would reach the world */
 		if (background_may_take() && amod_mouse_click_background(mousex, mousey, what)) {
@@ -364,9 +387,16 @@ void gui_sdl_mouseproc(float x, float y, int what)
 	case SDL_MOUM_LUP:
 		vk_lbut = 0;
 
+		if (mm_pan) {
+			mm_pan = 0;
+			minimap_pan_end();
+			break;
+		}
+
 		if (grab.kind == GESTURE_BUTTON) {
 			/* a press on the minimap that never moved is a click: flip it
-			 * between the small circle and the big map */
+			 * between the small circle and the big map - or, on the
+			 * recenter glyph, bring the panned view back to the player */
 			int minimap_click = (grab.but == BUT_DRAG_BEG + PANEL_MINIMAP) && !panels_drag_moved();
 
 			/* the client owns this gesture: finish it before anyone else
@@ -377,7 +407,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			}
 			gesture_drop_button(0);
 			if (minimap_click) {
-				minimap_toggle_size();
+				if (minimap_recenter_hit(mousex, mousey)) {
+					minimap_recenter();
+				} else {
+					minimap_toggle_size();
+				}
 			}
 			break;
 		}
@@ -497,6 +531,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
+		/* right-drag on the big minimap pans it (any lock state) */
+		if (minimap_pan_begin(mousex, mousey)) {
+			mm_pan = 1;
+			break;
+		}
 		/* right-click during target selection only cancels the cast - it
 		 * must not fall through to the look command, which popped the
 		 * character description window over the cancel */
@@ -520,6 +559,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 	case SDL_MOUM_RUP:
 		vk_rbut = 0;
 		if (gui_is_loading()) {
+			break;
+		}
+		if (mm_pan) {
+			mm_pan = 0;
+			minimap_pan_end();
 			break;
 		}
 		/* swallow the release of a right-click that cancelled targeting or

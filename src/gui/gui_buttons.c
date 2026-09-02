@@ -459,11 +459,6 @@ static void detect_hover_target(void)
 		}
 	}
 
-	if (show_look && mousex >= dotx(DOT_LOK) + LOOK_W - UI_WIN_PAD - UI_WIN_GLYPH &&
-	    mousex <= dotx(DOT_LOK) + LOOK_W - UI_WIN_PAD + 2 && mousey >= doty(DOT_LOK) + 2 &&
-	    mousey <= doty(DOT_LOK) + UI_WIN_TITLE_H) {
-		butsel = BUT_NOLOOK;
-	}
 
 	/* framed panel chrome (title bars, close/minimize glyphs, resize grips)
 	 * are rectangles, not the circular hit boxes get_near_button() does */
@@ -919,6 +914,8 @@ void exec_cmd(int cmd, int a)
 				/* summoned window: closing it clears what summoned it */
 				display_help = 0;
 				display_quest = 0;
+			} else if (p == PANEL_LOOK) {
+				show_look = 0;
 			} else {
 				panel_set_visible(p, 0);
 			}

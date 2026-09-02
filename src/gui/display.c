@@ -458,15 +458,16 @@ void display_look(void)
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
 
-	/* the shared window chrome instead of the classic stone sprite - the
-	 * one window that still looked like 2003 */
-	int lx1 = dotx(DOT_LOK), ly1 = doty(DOT_LOK);
-	int lw = LOOK_W, lh = LOOK_H;
+	/* the panel system draws the frame (title bar with the name, close,
+	 * minimize, lock); this draws the content into its rect. lx1/ly1 keep
+	 * meaning "frame top-left" so the classic layout math below holds. */
+	int cx1, cy1, cx2, cy2, lx1, ly1, lw = LOOK_W, lh = LOOK_H;
 
-	ui_panel(lx1, ly1, lx1 + lw, ly1 + lh);
-	ui_window_titlebar(lx1, ly1, lx1 + lw, look_name[0] ? look_name : "Look", 0);
-	ui_glyph_button(
-	    lx1 + lw - UI_WIN_PAD - UI_WIN_GLYPH / 2, ly1 + UI_WIN_TITLE_H / 2, UI_GLYPH_CLOSE, butsel == BUT_NOLOOK);
+	if (!panel_content_rect(PANEL_LOOK, &cx1, &cy1, &cx2, &cy2) || !panel_content_shown(PANEL_LOOK)) {
+		return;
+	}
+	lx1 = cx1;
+	ly1 = cy1 - UI_WIN_TITLE_H;
 
 	/* the classic 12-wide gear strip, in slot cells along the bottom */
 	for (b = BUT_WEA_BEG; b <= BUT_WEA_END; b++) {
@@ -502,6 +503,7 @@ void display_look(void)
 
 	{
 		static int look_anim = 4, look_step = 0, look_dir = 0;
+		static unsigned int look_tick = 0;
 		int l_csprite, l_scale, l_cr, l_cg, l_cb, l_light, l_sat, l_c1, l_c2, l_c3, l_shine;
 
 		bzero(&fx, sizeof(fx));
@@ -510,7 +512,13 @@ void display_look(void)
 		    (int)looksprite, &l_scale, &l_cr, &l_cg, &l_cb, &l_light, &l_sat, &l_c1, &l_c2, &l_c3, &l_shine, (int)tick);
 
 		fx.sprite = (unsigned int)get_player_sprite(l_csprite, look_dir, look_anim, look_step, 16, (int)(uint32_t)tick);
-		look_step++;
+		/* advance on game ticks, not frames: at 60+ fps the frame-stepped
+		 * walk ran several times faster than the character walks in the
+		 * world; LOOK_ANIM_TICKS ticks per step gives the classic pace */
+		if (tick - look_tick >= LOOK_ANIM_TICKS) {
+			look_tick = tick;
+			look_step++;
+		}
 		if (look_step == 16) {
 			look_step = 0;
 			look_anim++;

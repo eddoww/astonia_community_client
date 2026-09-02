@@ -68,6 +68,7 @@ static const int status_dots[] = {DOT_STAT};
 static const int sysmenu_dots[] = {DOT_MENU};
 static const int clock_dots[] = {DOT_CLK};
 static const int help_dots[] = {DOT_HLP, DOT_HL2};
+static const int look_dots[] = {DOT_LOK};
 
 static const ButRange skills_buts[] = {{BUT_SKL_BEG, BUT_SKL_END}, {BUT_SCL_UP, BUT_SCL_DW}};
 static const ButRange container_buts[] = {{BUT_CON_BEG, BUT_CON_END}, {BUT_CSC_UP, BUT_CSC_DW}};
@@ -84,6 +85,7 @@ static const ButRange clock_buts[] = {{0, -1}};
 static const int minimap_dots[] = {DOT_MMAP};
 static const ButRange minimap_buts[] = {{0, -1}};
 static const ButRange help_buts[] = {{0, -1}}; /* page controls are rect-hit in gui_buttons.c */
+static const ButRange look_buts[] = {{0, -1}};
 
 #define PANEL_ENTRY(idstr, namestr, d, b, fr, rs, vis)                                                                 \
 	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, vis, vis, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -103,6 +105,7 @@ static Panel panels[MAX_PANEL] = {
     [PANEL_HELP] = PANEL_ENTRY("help", "Help", help_dots, help_buts, PANEL_FRAME_WINDOW, 0, 0),
     [PANEL_MINIMAP] = PANEL_ENTRY("minimap", "Minimap", minimap_dots, minimap_buts, PANEL_FRAME_NONE, 0, 1),
     [PANEL_CONTAINER] = PANEL_ENTRY("container", "Container", container_dots, container_buts, PANEL_FRAME_WINDOW, 1, 1),
+    [PANEL_LOOK] = PANEL_ENTRY("look", "Look", look_dots, look_buts, PANEL_FRAME_WINDOW, 0, 0),
 };
 
 _Static_assert(MAX_PANEL <= PANEL_BUT_SLOTS, "every panel needs a slot in each per-panel button bank");
@@ -163,6 +166,10 @@ DLL_EXPORT int panel_shown(int p)
 	 * toggle has no say in it */
 	if (p == PANEL_CONTAINER) {
 		return con_cnt && !con_dismissed;
+	}
+	/* the look window exists exactly while a look reply is on show */
+	if (p == PANEL_LOOK) {
+		return show_look;
 	}
 	if (panel_visible(p)) {
 		return 1;
@@ -355,6 +362,9 @@ const char *panel_title(int p)
 	}
 	if (p == PANEL_HELP && display_quest) {
 		return "Quest Log";
+	}
+	if (p == PANEL_LOOK && look_name[0]) {
+		return look_name;
 	}
 	return panel_name(p);
 }

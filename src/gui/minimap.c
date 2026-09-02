@@ -54,6 +54,13 @@ static int map_server = 0;
 #define MINIMAP_ZOOM_MAX 4
 static int minimap_zoom = 3;
 
+/* Big-map panning: an offset in map cells added to the player-centred
+ * source window (right-drag, or left-drag on a locked minimap). Zero means
+ * "follow the player"; the recenter glyph in the map's corner clears it. */
+static int pan_x, pan_y;
+static int pan_active, pan_grab_x, pan_grab_y, pan_start_x, pan_start_y;
+#define MM_GLYPH 14 /* recenter glyph edge, bottom-right corner of the big map */
+
 /* Current area id as last announced by the server (SV_AREAINFO / AIC_SETID),
  * 0 until the first area info arrives. Exported for mods, which otherwise
  * have no way to tell which area the player is in. */
@@ -252,13 +259,117 @@ static uint32_t pix_col(int x, int y)
 	}
 }
 
+/* player marker: a red plus with a dark halo and a bright core - readable
+ * on the pale corridor colours and on the near-black unknown alike */
 static void draw_center(int x, int y)
 {
-	render_pixel(x, y, IRGB(31, 8, 8));
+	int i;
+
+	for (i = -2; i <= 2; i++) {
+		render_pixel(x + i, y - 2, IRGB(2, 2, 2));
+		render_pixel(x + i, y + 2, IRGB(2, 2, 2));
+		render_pixel(x - 2, y + i, IRGB(2, 2, 2));
+		render_pixel(x + 2, y + i, IRGB(2, 2, 2));
+	}
+	render_pixel(x, y, IRGB(31, 28, 20));
 	render_pixel(x + 1, y, IRGB(31, 8, 8));
 	render_pixel(x, y + 1, IRGB(31, 8, 8));
 	render_pixel(x - 1, y, IRGB(31, 8, 8));
 	render_pixel(x, y - 1, IRGB(31, 8, 8));
+	render_pixel(x + 1, y + 1, IRGB(18, 4, 4));
+	render_pixel(x - 1, y + 1, IRGB(18, 4, 4));
+	render_pixel(x + 1, y - 1, IRGB(18, 4, 4));
+	render_pixel(x - 1, y - 1, IRGB(18, 4, 4));
+}
+
+/* bottom-right of the big map: the "back to the player" glyph, shown only
+ * while the view is panned away */
+static void recenter_glyph_rect(int *x1, int *y1, int *x2, int *y2)
+{
+	*x2 = sx + MAXMAP - 4;
+	*y2 = sy + MAXMAP - 4;
+	*x1 = *x2 - MM_GLYPH;
+	*y1 = *y2 - MM_GLYPH;
+}
+
+int minimap_is_panned(void)
+{
+	return visible == 2 && minimap_zoom > 1 && (pan_x || pan_y);
+}
+
+int minimap_recenter_hit(int x, int y)
+{
+	int x1, y1, x2, y2;
+
+	if (!minimap_is_panned()) {
+		return 0;
+	}
+	recenter_glyph_rect(&x1, &y1, &x2, &y2);
+	return x >= x1 && x <= x2 && y >= y1 && y <= y2;
+}
+
+void minimap_recenter(void)
+{
+	pan_x = pan_y = 0;
+}
+
+/* a press on the big map starts a pan; returns 1 when it took the press */
+int minimap_pan_begin(int x, int y)
+{
+	if (game_options & GO_NOMAP) {
+		return 0;
+	}
+	if (visible != 2 || minimap_zoom <= 1) {
+		return 0;
+	}
+	if (x < sx || x >= sx + MAXMAP || y < sy || y >= sy + MAXMAP) {
+		return 0;
+	}
+	if (minimap_recenter_hit(x, y)) {
+		return 0; /* the glyph is a click, not a drag */
+	}
+	pan_active = 1;
+	pan_grab_x = x;
+	pan_grab_y = y;
+	pan_start_x = pan_x;
+	pan_start_y = pan_y;
+	return 1;
+}
+
+void minimap_pan_update(int x, int y)
+{
+	int limit;
+
+	if (!pan_active) {
+		return;
+	}
+	/* the view shows MAXMAP/zoom cells across MAXMAP pixels: zoom pixels
+	 * per cell; dragging the map right moves the window left */
+	pan_x = pan_start_x - (x - pan_grab_x) / minimap_zoom;
+	pan_y = pan_start_y - (y - pan_grab_y) / minimap_zoom;
+	limit = MAXMAP;
+	if (pan_x < -limit) {
+		pan_x = -limit;
+	}
+	if (pan_x > limit) {
+		pan_x = limit;
+	}
+	if (pan_y < -limit) {
+		pan_y = -limit;
+	}
+	if (pan_y > limit) {
+		pan_y = limit;
+	}
+}
+
+void minimap_pan_end(void)
+{
+	pan_active = 0;
+}
+
+int minimap_pan_active(void)
+{
+	return pan_active;
 }
 
 static void draw_center2(int x, int y)
@@ -312,8 +423,8 @@ void display_minimap(void)
 		 * up to the full viewport. Zoom 1x shows the whole map. */
 		src_size = MAXMAP / minimap_zoom;
 
-		x = originx - src_size / 2;
-		y = originy - src_size / 2;
+		x = originx + (minimap_zoom > 1 ? pan_x : 0) - src_size / 2;
+		y = originy + (minimap_zoom > 1 ? pan_y : 0) - src_size / 2;
 		if (x < 0) {
 			x = 0;
 		}
@@ -345,17 +456,46 @@ void display_minimap(void)
 			    sy + ((originy - y) * MAXMAP + MAXMAP / 2) / src_size);
 		}
 
-		render_line(sx, sy, sx, sy + MAXMAP, 0xffff);
-		render_line(sx, sy + MAXMAP, sx + MAXMAP, sy + MAXMAP, 0xffff);
-		render_line(sx + MAXMAP, sy + MAXMAP, sx + MAXMAP, sy, 0xffff);
-		render_line(sx + MAXMAP, sy, sx, sy, 0xffff);
+		/* frame: a dark outer line and a warm inner one - the flat white
+		 * box read as a debug overlay against the parchment-toned UI */
+		render_line(sx - 1, sy - 1, sx - 1, sy + MAXMAP + 1, IRGB(2, 2, 2));
+		render_line(sx - 1, sy + MAXMAP + 1, sx + MAXMAP + 1, sy + MAXMAP + 1, IRGB(2, 2, 2));
+		render_line(sx + MAXMAP + 1, sy + MAXMAP + 1, sx + MAXMAP + 1, sy - 1, IRGB(2, 2, 2));
+		render_line(sx + MAXMAP + 1, sy - 1, sx - 1, sy - 1, IRGB(2, 2, 2));
+		render_line(sx, sy, sx, sy + MAXMAP, IRGB(24, 21, 14));
+		render_line(sx, sy + MAXMAP, sx + MAXMAP, sy + MAXMAP, IRGB(24, 21, 14));
+		render_line(sx + MAXMAP, sy + MAXMAP, sx + MAXMAP, sy, IRGB(24, 21, 14));
+		render_line(sx + MAXMAP, sy, sx, sy, IRGB(24, 21, 14));
 
-		render_text(sx + 6, sy + 6, 0xffff, 0, "N");
-
+		/* corner chips: compass north, zoom factor */
+		render_rect_alpha(sx + 2, sy + 2, sx + 16, sy + 16, IRGB(0, 0, 0), 150);
+		render_text(sx + 9, sy + 4, IRGB(30, 27, 18), RENDER_TEXT_CENTER | RENDER_TEXT_SMALL, "N");
 		{
 			char zoombuf[8];
+			int zw;
+
 			sprintf(zoombuf, "%dx", minimap_zoom);
-			render_text(sx + MAXMAP - render_text_length(0, zoombuf) - 6, sy + 6, 0xffff, 0, zoombuf);
+			zw = render_text_length(RENDER_TEXT_SMALL, zoombuf);
+			render_rect_alpha(sx + MAXMAP - zw - 10, sy + 2, sx + MAXMAP - 2, sy + 16, IRGB(0, 0, 0), 150);
+			render_text(
+			    sx + MAXMAP - 6 - zw / 2, sy + 4, IRGB(30, 27, 18), RENDER_TEXT_CENTER | RENDER_TEXT_SMALL, zoombuf);
+		}
+
+		/* panned away from the player: the recenter glyph (a target ring) */
+		if (minimap_is_panned()) {
+			int gx1, gy1, gx2, gy2, gcx, gcy;
+
+			recenter_glyph_rect(&gx1, &gy1, &gx2, &gy2);
+			gcx = (gx1 + gx2) / 2;
+			gcy = (gy1 + gy2) / 2;
+			render_rect_alpha(gx1, gy1, gx2, gy2, IRGB(0, 0, 0), 190);
+			render_line(gx1, gy1, gx2, gy1, IRGB(24, 21, 14));
+			render_line(gx1, gy2, gx2, gy2, IRGB(24, 21, 14));
+			render_line(gx1, gy1, gx1, gy2, IRGB(24, 21, 14));
+			render_line(gx2, gy1, gx2, gy2, IRGB(24, 21, 14));
+			render_line(gcx - 5, gcy, gcx + 5, gcy, IRGB(31, 26, 14));
+			render_line(gcx, gcy - 5, gcx, gcy + 5, IRGB(31, 26, 14));
+			render_pixel(gcx, gcy, IRGB(31, 8, 8));
 		}
 	}
 
@@ -402,11 +542,18 @@ void display_minimap(void)
 		sdl_render_copy_ex(maptex2, &sr, &dr, 45.0);
 		draw_center(mx + MINIMAP, my + MINIMAP);
 
+		/* ring: dark outer edge, warm light rim, soft inner shadow */
 		for (i = 0; i < sdl_scale; i++) {
-			sdl_render_circle((mx + MINIMAP + x_offset) * sdl_scale, (my + MINIMAP + y_offset) * sdl_scale,
-			    (MINIMAP)*sdl_scale + i, 0xffffffff);
+			int ccx = (mx + MINIMAP + x_offset) * sdl_scale, ccy = (my + MINIMAP + y_offset) * sdl_scale;
+			int r = MINIMAP * sdl_scale;
+
+			sdl_render_circle(ccx, ccy, r + 2 * sdl_scale + i, IRGBA(8, 8, 8, 230));
+			sdl_render_circle(ccx, ccy, r + sdl_scale + i, IRGBA(196, 176, 120, 235));
+			sdl_render_circle(ccx, ccy, r + i, IRGBA(196, 176, 120, 235));
+			sdl_render_circle(ccx, ccy, r - sdl_scale + i, IRGBA(0, 0, 0, 90));
 		}
-		render_text(mx + MINIMAP, my + 4, 0xffff, 0, "N");
+		render_rect_alpha(mx + MINIMAP - 6, my + 2, mx + MINIMAP + 6, my + 13, IRGB(0, 0, 0), 150);
+		render_text(mx + MINIMAP, my + 3, IRGB(30, 27, 18), RENDER_TEXT_CENTER | RENDER_TEXT_SMALL, "N");
 	}
 }
 
@@ -418,6 +565,8 @@ static void minimap_clearonly(void)
 
 void minimap_clear(void)
 {
+	pan_x = pan_y = 0;
+	pan_active = 0;
 	if (game_options & GO_MAPSAVE) {
 		map_save();
 	}

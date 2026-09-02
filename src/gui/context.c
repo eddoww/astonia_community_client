@@ -25,6 +25,13 @@
 extern int ui_scale_pct; /* sdl_core.c */
 
 static int c_on = 0, c_x, c_y, d_y, ori_x, ori_y;
+
+/* is the right-click context menu on screen? */
+int context_menu_is_open(void)
+{
+	return (game_options & GO_CONTEXT) && c_on;
+}
+
 static size_t csel = -1ull, isel = -1ull, msel = -1ull;
 static int lcmd_override = CMD_NONE;
 static int hotbar_targeting; /* 1 = targeting was started from hotbar click, not key-hold */

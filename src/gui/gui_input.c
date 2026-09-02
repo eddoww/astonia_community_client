@@ -16,6 +16,7 @@
 #include "gui/input_bind.h"
 #include "gui/panels.h"
 #include "gui/gesture.h"
+#include "gui/ui_tokens.h"
 
 extern int ui_scale_pct; /* sdl_core.c */
 #include "gui/spellbook_ui.h"
@@ -52,6 +53,47 @@ static Gesture grab;
 int gui_pointer_grabbed(void)
 {
 	return gesture_active(&grab);
+}
+
+/* Is a client overlay that butsel does not track sitting under (x,y)? The
+ * modal windows (options, escape menu, keybinding editors) block the whole
+ * screen while open, the rest are tested by their rectangles. Used before
+ * an event that found no client control is offered to the mod's background
+ * layer (the chat) - those surfaces draw UNDER all of this. */
+int gui_client_overlay_at(int x, int y)
+{
+	if (options_is_open() || escape_menu_is_open() || keybind_settings_is_open() || keybind_panel_is_open()) {
+		return 1;
+	}
+	if (show_look && x >= dotx(DOT_LOK) && x <= dotx(DOT_LOK) + LOOK_W && y >= doty(DOT_LOK) &&
+	    y <= doty(DOT_LOK) + LOOK_H) {
+		return 1;
+	}
+	if ((teleporter && !teleport_override) || show_color) {
+		return 1;
+	}
+	if ((display_help || display_quest) && x >= dotx(DOT_HLP) - UI_WIN_PAD && x <= dotx(DOT_HL2) + UI_WIN_PAD &&
+	    y >= doty(DOT_HLP) - UI_WIN_TITLE_H && y <= doty(DOT_HL2) + UI_WIN_PAD) {
+		return 1;
+	}
+	if (show_tutor && x >= dotx(DOT_TUT) && x <= dotx(DOT_TUT) + 410 && y >= doty(DOT_TUT) &&
+	    y <= doty(DOT_TUT) + 122) {
+		return 1;
+	}
+	if (spellbook_over(x, y) || context_menu_is_open()) {
+		return 1;
+	}
+	if (gui_overlay_visible && panels_frame_over(x, y)) {
+		return 1;
+	}
+	return 0;
+}
+
+/* an event nothing of the client's claimed: may the mod's background layer
+ * have it before it reaches the world? */
+static int background_may_take(void)
+{
+	return butsel == -1 && !gui_client_overlay_at(mousex, mousey);
 }
 
 /* a client-button gesture starts: the button keeps the pointer */
@@ -280,12 +322,26 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		/* a press on a spellbook cell picks the spell up right away, so a
+		 * press-drag-release onto the hotbar works like any other drag */
+		if (spellbook_mousedown(mousex, mousey)) {
+			break;
+		}
+
 		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
 			hotbar_mousedown(butsel - BUT_HOTBAR_BEG);
 		}
 
 		if (butsel != -1 && (but[butsel].flags & BUTF_CAPTURE)) {
 			gesture_take_button(butsel);
+			break;
+		}
+
+		/* nothing of the client's under the pointer: the mod's background
+		 * layer (the chat) gets the press before it would reach the world */
+		if (background_may_take() && amod_mouse_click_background(mousex, mousey, what)) {
+			gesture_begin(&grab, GESTURE_MOD, -1, mousex, mousey);
+			break;
 		}
 		break;
 
@@ -309,6 +365,10 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		vk_lbut = 0;
 
 		if (grab.kind == GESTURE_BUTTON) {
+			/* a press on the minimap that never moved is a click: flip it
+			 * between the small circle and the big map */
+			int minimap_click = (grab.but == BUT_DRAG_BEG + PANEL_MINIMAP) && !panels_drag_moved();
+
 			/* the client owns this gesture: finish it before anyone else
 			 * sees the release - a mod window under the pointer used to
 			 * eat it and leave the drag (and a hidden cursor) stuck */
@@ -316,6 +376,9 @@ void gui_sdl_mouseproc(float x, float y, int what)
 				exec_cmd(lcmd, 0); /* the purse: the split is taken on release */
 			}
 			gesture_drop_button(0);
+			if (minimap_click) {
+				minimap_toggle_size();
+			}
 			break;
 		}
 		if (grab.kind == GESTURE_MOD) {
@@ -406,6 +469,12 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		/* nothing of the client's took the click: the mod's background
+		 * layer (the chat) sees it before it becomes a walk or a look */
+		if (background_may_take() && amod_mouse_click_background(mousex, mousey, what)) {
+			break;
+		}
+
 		if ((tmp = context_key_click()) != CMD_NONE) {
 			exec_cmd(tmp, 0);
 		} else {
@@ -438,6 +507,9 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			hotbar_cancel_held();
 			hotbar_cancel_drag();
 			context_stop();
+			break;
+		}
+		if (background_may_take() && amod_mouse_click_background(mousex, mousey, what)) {
 			break;
 		}
 		hotbar_cancel_held();
@@ -477,6 +549,9 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			keybind_panel_open(butsel - BUT_HOTBAR_BEG);
 			break;
 		}
+		if (background_may_take() && amod_mouse_click_background(mousex, mousey, what)) {
+			break;
+		}
 		if (rcmd == CMD_MAP_LOOK && context_open(mousex, mousey)) {
 			break;
 		}
@@ -511,27 +586,39 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		/* the help / quest-log window pages with the wheel */
+		if ((display_help || display_quest) && mousex >= dotx(DOT_HLP) && mousex <= dotx(DOT_HL2) &&
+		    mousey >= doty(DOT_HLP) && mousey <= doty(DOT_HL2)) {
+			exec_cmd(delta > 0 ? CMD_HELP_PREV : CMD_HELP_NEXT, 0);
+			break;
+		}
+
 		/* scroll wherever the pointer is inside the window, not just over
 		 * the text column - the rails and the first item column used to be
 		 * dead zones */
 		int wx1, wy1, wx2, wy2;
 
 		if (panel_content_shown(PANEL_SKILLS) && panel_content_rect(PANEL_SKILLS, &wx1, &wy1, &wx2, &wy2) &&
-		    mousex >= wx1 && mousex <= wx2 && mousey >= wy1 && mousey <= wy2) { // skill / depot / merchant
+		    mousex >= wx1 && mousex <= wx2 && mousey >= wy1 && mousey <= wy2) { // skill list
 			while (delta > 0) {
-				if (!con_cnt) {
-					set_skloff(0, skloff - 1);
-				} else {
-					set_conoff(0, conoff - 1);
-				}
+				set_skloff(0, skloff - 1);
 				delta--;
 			}
 			while (delta < 0) {
-				if (!con_cnt) {
-					set_skloff(0, skloff + 1);
-				} else {
-					set_conoff(0, conoff + 1);
-				}
+				set_skloff(0, skloff + 1);
+				delta++;
+			}
+			break;
+		}
+
+		if (panel_content_shown(PANEL_CONTAINER) && panel_content_rect(PANEL_CONTAINER, &wx1, &wy1, &wx2, &wy2) &&
+		    mousex >= wx1 && mousex <= wx2 && mousey >= wy1 && mousey <= wy2) { // depot / merchant / grave
+			while (delta > 0) {
+				set_conoff(0, conoff - 1);
+				delta--;
+			}
+			while (delta < 0) {
+				set_conoff(0, conoff + 1);
 				delta++;
 			}
 			break;
@@ -564,6 +651,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 				set_invoff(0, invoff + 1);
 				delta++;
 			}
+			break;
+		}
+
+		/* the mod's background layer (the chat scrolls with the wheel) */
+		if (background_may_take() && amod_mouse_click_background(0, delta, what)) {
 			break;
 		}
 

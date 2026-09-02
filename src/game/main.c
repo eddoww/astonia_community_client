@@ -315,6 +315,65 @@ void display_usage(void)
 
 DLL_EXPORT char server_url[256];
 DLL_EXPORT int server_port = 0;
+
+/* ── environment label ────────────────────────────────────────────────
+ * The launcher picks the login host and port per environment (production
+ * login.ugaris.com:5500, pre-production :5600, development :5400, local
+ * 127.0.0.1); everything but production is labelled so a tester can always
+ * tell which world they are in (window title + an in-game tag). */
+static char env_label[16];
+
+DLL_EXPORT const char *client_environment_label(void);
+static void detect_environment(void);
+
+DLL_EXPORT const char *client_environment_label(void)
+{
+	return env_label;
+}
+
+static int str_ieq(const char *a, const char *b)
+{
+	while (*a && *b) {
+		if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) {
+			return 0;
+		}
+		a++;
+		b++;
+	}
+	return *a == *b;
+}
+
+static void detect_environment(void)
+{
+	const char *h = server_url;
+	size_t hl = strlen(h);
+	int port = server_port ? server_port : 5500;
+	int local = !strcmp(h, "127.0.0.1") || str_ieq(h, "localhost") || !strcmp(h, "::1") || !strncmp(h, "192.168.", 8) ||
+	            !strncmp(h, "10.", 3);
+	int official = hl >= 10 && str_ieq(h + hl - 10, "ugaris.com");
+
+	env_label[0] = 0;
+	if (local) {
+		snprintf(env_label, sizeof(env_label), "LOCAL");
+	} else if (official) {
+		switch (port / 100) {
+		case 55:
+			break; /* production - no label */
+		case 56:
+			snprintf(env_label, sizeof(env_label), "PREPROD");
+			break;
+		case 54:
+			snprintf(env_label, sizeof(env_label), "DEV");
+			break;
+		default:
+			snprintf(env_label, sizeof(env_label), "PORT %d", port);
+			break;
+		}
+	} else {
+		snprintf(env_label, sizeof(env_label), "CUSTOM");
+	}
+}
+
 static int dev_mode = 0; // -dev flag: developer conveniences (Lua auto-reload)
 DLL_EXPORT int want_width = 0;
 DLL_EXPORT int want_height = 0;
@@ -999,6 +1058,7 @@ int main(int argc, char *argv[])
 #endif
 
 	target_server = server_url;
+	detect_environment();
 
 	if (server_port) {
 		if (server_port < 0 || server_port > UINT16_MAX) {
@@ -1014,6 +1074,10 @@ int main(int argc, char *argv[])
 	determine_resolution();
 
 	sprintf(buf, "Astonia 3 v%d.%d.%d", (VERSION >> 16) & 255, (VERSION >> 8) & 255, (VERSION) & 255);
+	if (*client_environment_label()) {
+		/* "... [PREPROD]" - the window title names the world too */
+		sprintf(buf + strlen(buf), " [%s]", client_environment_label());
+	}
 	/* SDL_GPU renderer (experimental, opt-in, default OFF): decide BEFORE
 	 * sdl_init creates the renderer. Requested via the saved extra option or
 	 * the GO_GPU -o bit; when neither is set, no GPU code runs at all.

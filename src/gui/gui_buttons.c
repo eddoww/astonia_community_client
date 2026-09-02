@@ -74,24 +74,23 @@ void set_button_flags(void)
 {
 	int b, i;
 
-	if (con_cnt) {
-		for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
+	/* the container grid is live only while its window is up (the cells
+	 * past the visible grid stay dead - init_dots() parked them) */
+	for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
+		if (con_cnt && b - BUT_CON_BEG < CONDX * CONDY) {
 			but[b].flags &= ~BUTF_NOHIT;
-		}
-		for (b = BUT_SKL_BEG; b <= BUT_SKL_END; b++) {
+		} else {
 			but[b].flags |= BUTF_NOHIT;
 		}
-	} else {
-		for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
+	}
+	/* skill rows are their own window now and no longer make way for a
+	 * container - a row is clickable when it has a raise button */
+	for (b = BUT_SKL_BEG; b <= BUT_SKL_END; b++) {
+		i = skloff + b - BUT_SKL_BEG;
+		if (b - BUT_SKL_BEG >= __skldy || i >= skltab_cnt || !skltab[i].button || skltab[i].barsize <= 0) {
 			but[b].flags |= BUTF_NOHIT;
-		}
-		for (b = BUT_SKL_BEG; b <= BUT_SKL_END; b++) {
-			i = skloff + b - BUT_SKL_BEG;
-			if (i >= skltab_cnt || !skltab[i].button || skltab[i].barsize <= 0) {
-				but[b].flags |= BUTF_NOHIT;
-			} else {
-				but[b].flags &= ~BUTF_NOHIT;
-			}
+		} else {
+			but[b].flags &= ~BUTF_NOHIT;
 		}
 	}
 }
@@ -388,6 +387,15 @@ static void detect_hover_target(void)
 				}
 			}
 
+			/* topic pages: a mention of another topic is a link to it */
+			if (display_help > 2) {
+				int pg = help_link_page_at(mousex, mousey);
+
+				if (pg > 0) {
+					helpsel = pg;
+				}
+			}
+
 			if (display_quest && mousex >= dotx(DOT_HLP) + 165 && mousex <= dotx(DOT_HLP) + 199) {
 				int tmp, qy;
 
@@ -402,27 +410,17 @@ static void detect_hover_target(void)
 				}
 			}
 		}
-		if (display_help) {
-			if (mousex >= dotx(DOT_HLP) + 135 && mousex <= dotx(DOT_HLP) + 156 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_PREV;
-			}
-			if (mousex >= dotx(DOT_HLP) + 159 && mousex <= dotx(DOT_HLP) + 194 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_INDEX;
-			}
-			if (mousex >= dotx(DOT_HLP) + 197 && mousex <= dotx(DOT_HLP) + 218 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_NEXT;
-			}
-		} else {
-			if (mousex >= dotx(DOT_HLP) + 177 && mousex <= dotx(DOT_HLP) + 196 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_PREV;
-			}
-			if (mousex >= dotx(DOT_HLP) + 200 && mousex <= dotx(DOT_HLP) + 219 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_NEXT;
+		/* the navigation bar along the bottom: Prev | Index | Next - one
+		 * geometry shared with the renderer (help_nav_rect) */
+		{
+			static const int nav_but[3] = {BUT_HELP_PREV, BUT_HELP_INDEX, BUT_HELP_NEXT};
+			int hx1, hy1, hx2, hy2;
+
+			for (int n = 0; n < 3; n++) {
+				if (help_nav_rect(n, &hx1, &hy1, &hx2, &hy2) && mousex >= hx1 && mousex <= hx2 && mousey >= hy1 &&
+				    mousey <= hy2) {
+					butsel = nav_but[n];
+				}
 			}
 		}
 	}
@@ -498,7 +496,7 @@ static void detect_hover_target(void)
 	}
 
 	// skill text lines for hover text
-	if (!hitsel[0] && butsel == -1 && !con_cnt && panel_shown(PANEL_SKILLS)) {
+	if (!hitsel[0] && butsel == -1 && panel_content_shown(PANEL_SKILLS)) {
 		for (i = 0; i <= BUT_SKL_END - BUT_SKL_BEG; i++) {
 			x = butx(i + BUT_SKL_BEG);
 			y = buty(i + BUT_SKL_BEG);
@@ -532,6 +530,13 @@ static void detect_hover_target(void)
 	 * fullscreen world view every window sits on map tiles, and clicking
 	 * one's background used to walk the character */
 	if (!hitsel[0] && butsel == -1 && gui_overlay_visible && panels_frame_over(mousex, mousey)) {
+		butsel = BUT_PANEL_BODY;
+	}
+
+	/* nothing of the client's under the pointer: a mod background surface
+	 * (the chat) keeps the world beneath it from being targeted */
+	if (!hitsel[0] && butsel == -1 && !gui_client_overlay_at(mousex, mousey) &&
+	    amod_mouse_over_background(mousex, mousey)) {
 		butsel = BUT_PANEL_BODY;
 	}
 
@@ -906,9 +911,9 @@ void exec_cmd(int cmd, int a)
 		if (butsel >= BUT_PCLOSE_BEG && butsel <= BUT_PCLOSE_END) {
 			int p = butsel - BUT_PCLOSE_BEG;
 
-			/* the skills window showing a shop/grave: close the container
-			 * view, not the panel - the next merchant opens it again */
-			if (p == PANEL_SKILLS && con_cnt) {
+			/* the container window: close this shop/grave view, not the
+			 * panel for good - the next merchant opens it again */
+			if (p == PANEL_CONTAINER) {
 				panel_dismiss_container();
 			} else if (p == PANEL_HELP) {
 				/* summoned window: closing it clears what summoned it */
@@ -1088,6 +1093,10 @@ static void update_window_title(void)
 	    (map[plrmn].cn && player[map[plrmn].cn].name[0]) ? player[map[plrmn].cn].name : "Someone",
 	    (VERSION >> 16) & 255, (VERSION >> 8) & 255, (VERSION) & 255);
 #endif
+	if (*client_environment_label()) {
+		/* "... [PREPROD]": the title bar names the world, like the in-game tag */
+		sprintf(buf + strlen(buf), " [%s]", client_environment_label());
+	}
 	if (strcmp(title, buf)) {
 		strcpy(title, buf);
 		sdl_set_title(title);
@@ -1201,23 +1210,23 @@ void handle_special_buttons_logic(void)
 			lcmd = CMD_INV_OFF_TR;
 		}
 
-		if (butsel == BUT_SCL_UP && !con_cnt) {
+		if (butsel == BUT_SCL_UP) {
 			lcmd = CMD_SKL_OFF_UP;
 		}
-		if (butsel == BUT_SCL_DW && !con_cnt) {
+		if (butsel == BUT_SCL_DW) {
 			lcmd = CMD_SKL_OFF_DW;
 		}
-		if (butsel == BUT_SCL_TR && !con_cnt && !vk_lbut) {
+		if (butsel == BUT_SCL_TR && !vk_lbut) {
 			lcmd = CMD_SKL_OFF_TR;
 		}
 
-		if (butsel == BUT_SCL_UP && con_cnt) {
+		if (butsel == BUT_CSC_UP) {
 			lcmd = CMD_CON_OFF_UP;
 		}
-		if (butsel == BUT_SCL_DW && con_cnt) {
+		if (butsel == BUT_CSC_DW) {
 			lcmd = CMD_CON_OFF_DW;
 		}
-		if (butsel == BUT_SCL_TR && con_cnt && !vk_lbut) {
+		if (butsel == BUT_CSC_TR && !vk_lbut) {
 			lcmd = CMD_CON_OFF_TR;
 		}
 
@@ -1321,7 +1330,7 @@ void calculate_rcmd_logic(void)
 	rcmd = CMD_NONE;
 	if (action_ovr == ACTION_NONE) {
 		skl_look_sel = get_skl_look(mousex, mousey);
-		if (con_cnt == 0 && skl_look_sel != -1) {
+		if (skl_look_sel != -1) {
 			rcmd = CMD_SKL_LOOK;
 		} else if (!vk_spell) {
 			if (mapsel != MAXMN) {

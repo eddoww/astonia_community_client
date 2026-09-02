@@ -48,6 +48,21 @@ DLL_EXPORT int amod_mouse_click(int x, int y, int what);
 // cursor or tooltips for the inventory/map underneath a mod window). Clicks are still routed
 // through amod_mouse_click().
 DLL_EXPORT int amod_mouse_over(int x, int y);
+// --- Background layer (optional, client >= 1.8.0) ---
+// A mod surface that must sit UNDER every client panel and every other mod
+// window (the chat). amod_frame_background() is called each frame right after
+// the world is drawn and before any client GUI; amod_mouse_click_background()
+// is offered an event (same `what` codes as amod_mouse_click, wheel with x=0
+// and y=delta) only when the foreground amod_mouse_click() did not consume it
+// AND no client control or overlay is under the pointer - i.e. the event would
+// otherwise reach the world. Return 1 to consume; a consumed LDOWN owns the
+// pointer exactly like a consumed foreground press. amod_mouse_over_background()
+// is asked after the client's own hover tests found nothing: return non-zero
+// to keep the world beneath from being targeted. Older clients never call
+// these - keep such surfaces in the foreground pass until the first call.
+DLL_EXPORT void amod_frame_background(void);
+DLL_EXPORT int amod_mouse_click_background(int x, int y, int what);
+DLL_EXPORT int amod_mouse_over_background(int x, int y);
 DLL_EXPORT int amod_keydown(SDL_Keycode key);
 DLL_EXPORT int amod_keyup(SDL_Keycode key);
 DLL_EXPORT int amod_client_cmd(const char *buf);
@@ -252,6 +267,12 @@ DLL_IMPORT void client_send(void *buf, size_t len);
 DLL_IMPORT const char *client_config_dir(void);
 /* Current area id as announced by the server (0 = unknown yet). client >= 1.2.40 */
 DLL_IMPORT int client_area_id(void);
+/* "" on the production server, else "DEV" / "PREPROD" / "LOCAL" / "CUSTOM" -
+ * derived from the login host and port. client >= 1.8.0 */
+DLL_IMPORT const char *client_environment_label(void);
+/* Options > UI "Minimize Upward" (see panels.h): mod windows must collapse
+ * the same way the client's do. client >= 1.8.0 */
+DLL_IMPORT int panel_collapse_upward(void);
 
 // --- Sound ---
 // Sounds loaded from: sx_mod.zip > sx_patch.zip > sx.zip

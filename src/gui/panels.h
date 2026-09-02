@@ -20,7 +20,7 @@
 #include "../dll.h"
 
 enum {
-	PANEL_SKILLS, /* skill list / open container + scrollbar     */
+	PANEL_SKILLS, /* skill list + scrollbar                      */
 	PANEL_CHAT, /* chat text + input line                      */
 	PANEL_INVENTORY, /* inventory grid + scrollbar + purse + trash  */
 	PANEL_SPEED, /* stealth/normal/fast walk mode               */
@@ -32,7 +32,9 @@ enum {
 	PANEL_SYSMENU, /* Menu / Help / Quests buttons                */
 	PANEL_CLOCK, /* classic flip-digit game clock               */
 	PANEL_HELP, /* help / quest-log window (summoned)          */
-	PANEL_MINIMAP, /* round minimap                               */
+	PANEL_MINIMAP, /* round minimap (frameless, drag anywhere)    */
+	PANEL_CONTAINER, /* shop / grave / depot grid (summoned by the  */
+	/* server, lives beside the inventory)         */
 	MAX_PANEL
 };
 
@@ -57,9 +59,18 @@ DLL_EXPORT void panel_toggle(int p);
  * forces the skills panel, an active chat line forces the chat panel) */
 DLL_EXPORT int panel_shown(int p);
 
-/* minimized to its title bar: the frame is still there, the content is not */
+/* minimized to its title bar: the frame is still there, the content is not.
+ * panel_set_collapsed() honours the collapse direction below: in "upward"
+ * mode the title bar lands where the window's bottom edge was, and restoring
+ * grows the window back up. */
 DLL_EXPORT int panel_collapsed(int p);
 DLL_EXPORT void panel_set_collapsed(int p, int on);
+
+/* Options > UI "Minimize Upward": 0 = a minimized window keeps its title bar
+ * where it is (collapses downward), 1 = the title bar drops to the window's
+ * bottom edge (collapses upward). Mod windows follow the same setting. */
+DLL_EXPORT int panel_collapse_upward(void);
+DLL_EXPORT void panels_set_collapse_upward(int on);
 
 /* shown and not collapsed - the guard for drawing a panel's content */
 DLL_EXPORT int panel_content_shown(int p);
@@ -113,6 +124,9 @@ void panels_drag_begin(int p, int mx, int my);
 void panels_drag_update(int p, int mx, int my);
 void panels_drag_cancel(void);
 void panels_drag_end(void);
+/* 1 when the live drag actually moved its panel (past the click dead zone) -
+ * a press-and-release that never moved is a click on the handle */
+int panels_drag_moved(void);
 
 /* Resize-grip gesture: the grip follows the pointer 1:1 and the panel's size
  * setting follows (inventory / container columns and rows, skill list rows);
@@ -127,8 +141,8 @@ void panels_resize_end(void);
  * pin the corner a resize is NOT dragging */
 void panel_keep_anchor(int p, int x1, int y1);
 
-/* the skills window shows a container: closing it while a shop/grave is open
- * dismisses the view without hiding the panel for good */
+/* the container window is summoned by an open shop/grave/depot: closing it
+ * dismisses the view for this container only - the next one opens it again */
 void panel_dismiss_container(void);
 void panel_container_opened(void);
 

@@ -20,7 +20,14 @@
 
 /* ── State ───────────────────────────────────────────────────────────── */
 
-static int sb_dragging = -1; /* action slot being dragged (-1 = none) */
+static int sb_dragging = -1; /* action slot being carried on the cursor (-1 = none) */
+
+/* the press that picked the spell up: a press-drag-release that travels
+ * past SB_DRAG_DEAD and ends on nothing drops the spell again, while a
+ * plain click (no travel) leaves it on the cursor for a second click */
+static int sb_pressed;
+static int sb_press_x, sb_press_y;
+#define SB_DRAG_DEAD 4
 
 /* ── Layout ──────────────────────────────────────────────────────────── */
 
@@ -154,16 +161,24 @@ void spellbook_display(void)
 			render_text(mousex, mousey - 24, UI_TEXT, UI_FONT_CENTER, name);
 		}
 	}
+}
 
-	/* draw spell on cursor if dragging */
-	if (sb_dragging >= 0) {
-		bzero(&fx, sizeof(fx));
-		fx.sprite = (unsigned int)(SPELL_ICON_SPRITE_BASE + sb_dragging);
-		fx.scale = 80;
-		fx.sat = 14;
-		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = RENDERFX_BRIGHT;
-		render_sprite_fx(&fx, mousex, mousey);
+/* The carried spell rides the cursor everywhere - drawn outside the
+ * spellbook's clip, late in display(), so it does not vanish the moment the
+ * pointer leaves the window on its way to the hotbar. */
+void spellbook_display_carry(void)
+{
+	RenderFX fx;
+
+	if (sb_dragging < 0) {
+		return;
 	}
+	bzero(&fx, sizeof(fx));
+	fx.sprite = (unsigned int)(SPELL_ICON_SPRITE_BASE + sb_dragging);
+	fx.scale = 80;
+	fx.sat = 14;
+	fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = RENDERFX_BRIGHT;
+	render_sprite_fx(&fx, mousex, mousey);
 }
 
 /* ── Toggle / state ──────────────────────────────────────────────────── */
@@ -206,25 +221,60 @@ int spellbook_dragging_slot(void)
 void spellbook_cancel_drag(void)
 {
 	sb_dragging = -1;
+	sb_pressed = 0;
 }
 
 /* ── Click handling ──────────────────────────────────────────────────── */
 
-int spellbook_click(int mx, int my)
+int spellbook_mousedown(int mx, int my)
 {
+	int hit;
+
+	sb_pressed = 0;
 	if (!panel_content_shown(PANEL_SPELLBOOK)) {
 		return 0;
 	}
+	hit = sb_hit(mx, my);
+	if (hit < 0) {
+		return 0;
+	}
+	/* picked up on the press: from here the icon follows the pointer, and
+	 * the release decides whether this was a drag or a click */
+	sb_dragging = hit;
+	sb_pressed = 1;
+	sb_press_x = mx;
+	sb_press_y = my;
+	return 1;
+}
 
-	/* click inside spellbook — pick up spell */
-	int hit = sb_hit(mx, my);
+int spellbook_click(int mx, int my)
+{
+	int hit, moved;
+
+	/* the hotbar takes its release first (hotbar_click assigns the carried
+	 * spell); what arrives here is a release on anything else */
+	moved = sb_pressed && (abs(mx - sb_press_x) >= SB_DRAG_DEAD || abs(my - sb_press_y) >= SB_DRAG_DEAD);
+	sb_pressed = 0;
+
+	if (!panel_content_shown(PANEL_SPELLBOOK)) {
+		if (sb_dragging >= 0) {
+			sb_dragging = -1; /* the window closed under a carried spell */
+			return 1;
+		}
+		return 0;
+	}
+
+	hit = sb_hit(mx, my);
 	if (hit >= 0) {
+		/* a click (or a drag that came back) on a cell: carry that spell */
 		sb_dragging = hit;
 		return 1;
 	}
 
-	/* click outside while dragging — cancel drag */
 	if (sb_dragging >= 0) {
+		/* a drag released on nothing drops the spell; a click anywhere while
+		 * carrying one puts it down too */
+		(void)moved;
 		sb_dragging = -1;
 		return 1;
 	}
@@ -248,6 +298,7 @@ int spellbook_rclick(int mx, int my)
 	/* right-click cancels drag */
 	if (sb_dragging >= 0) {
 		sb_dragging = -1;
+		sb_pressed = 0;
 		return 1;
 	}
 	return 0;

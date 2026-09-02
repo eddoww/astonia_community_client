@@ -117,8 +117,13 @@ int wea_slot_pos(int slot, int *x, int *y);
 /* skill rows moved past the container bank: the classic 83..98 slot gave
  * only 16 rows, the resize ceiling of the skills window (SKL_GRID_MAX_ROWS)
  * needs one button per possible row */
-#define BUT_SKL_BEG   (BUT_CON_END + 1)
-#define BUT_SKL_END   (BUT_SKL_BEG + SKL_GRID_MAX_ROWS - 1)
+#define BUT_SKL_BEG (BUT_CON_END + 1)
+#define BUT_SKL_END (BUT_SKL_BEG + SKL_GRID_MAX_ROWS - 1)
+/* the container window's own scroll rail (it used to share the skills rail
+ * back when the two views took turns in one window) */
+#define BUT_CSC_UP    (BUT_SKL_END + 1)
+#define BUT_CSC_TR    (BUT_SKL_END + 2)
+#define BUT_CSC_DW    (BUT_SKL_END + 3)
 #define BUT_GLD       99
 #define BUT_JNK       100
 #define BUT_MOD_WALK0 101
@@ -157,7 +162,7 @@ int wea_slot_pos(int slot, int *x, int *y);
 /* Per-panel button banks. Each bank has PANEL_BUT_SLOTS consecutive ids in
  * PANEL_* enum order (panels.h): BANK_BEG + PANEL_x is that panel's button.
  * Slots past MAX_PANEL are unused and set BUTF_NOHIT by init_dots(). */
-#define PANEL_BUT_SLOTS 13
+#define PANEL_BUT_SLOTS 14
 
 /* window drag handle / titlebar */
 #define BUT_DRAG_BEG    184
@@ -182,7 +187,7 @@ int wea_slot_pos(int slot, int *x, int *y);
 #define BUT_CON_BEG (BUT_PANEL_BODY + 1)
 #define BUT_CON_END (BUT_CON_BEG + CON_GRID_MAX_SLOTS - 1)
 
-#define MAX_BUT (BUT_SKL_END + 1) /* keep > the highest BUT_* id */
+#define MAX_BUT (BUT_CSC_DW + 1) /* keep > the highest BUT_* id */
 
 _Static_assert(
     BUT_INV_END - BUT_INV_BEG + 1 == INV_GRID_MAX_SLOTS, "inventory button range must hold the densest possible grid");
@@ -518,6 +523,17 @@ void gui_sdl_draghack(void);
  * mouse - gui_input.c */
 int gui_pointer_grabbed(void);
 
+/* 1 when a client overlay that is not tracked through butsel (options,
+ * escape menu, look window, teleporter, help, tutor, spellbook, framed
+ * panels ...) sits under (x,y) - gui_input.c. Used to decide whether an
+ * event that found no client control may fall through to the mod's
+ * background layer (the chat) instead of the world. */
+int gui_client_overlay_at(int x, int y);
+
+/* game/main.c: "" on production, else DEV / PREPROD / LOCAL / CUSTOM,
+ * derived from the login host and port the launcher passed */
+DLL_EXPORT const char *client_environment_label(void);
+
 // ============================================================================
 // Shared variables from gui_map.c (shared for map coordinate functions)
 // ============================================================================
@@ -586,6 +602,11 @@ extern int help_page_count;
 extern int help_index_count;
 
 int help_index_page_for_entry(int entry);
+/* navigation bar geometry (which: 0 = prev, 1 = index, 2 = next); 0 when
+ * that control is not on screen */
+int help_nav_rect(int which, int *x1, int *y1, int *x2, int *y2);
+/* page a hyperlink drawn on the current help page points at, 0 = none */
+int help_link_page_at(int x, int y);
 
 // From gui_map.c (already declared in gui.h but repeated here for clarity)
 // void set_mapoff(int cx, int cy, int mdx, int mdy);
@@ -606,6 +627,9 @@ void display_skill(void);
 void display_scrollbars(void);
 void display_scrollbar_left(void);
 void display_scrollbar_right(void);
+void display_scrollbar_container(void);
+/* small environment tag (DEV / PREPROD / LOCAL) - empty on production */
+void display_environment_tag(void);
 void display_tutor(void);
 int tutor_click(int x, int y);
 void display_sysmenu(void);
@@ -655,6 +679,7 @@ DLL_EXPORT size_t get_near_item(int x, int y, unsigned int flag, unsigned int lo
 DLL_EXPORT size_t get_near_ground(int x, int y);
 
 int context_open(int mx, int my);
+int context_menu_is_open(void);
 void context_display(int mx, int my);
 void context_stop(void);
 int context_click(int mx, int my);
@@ -694,6 +719,11 @@ void minimap_init(void);
 void minimap_reanchor(void);
 void minimap_toggle(void);
 void minimap_hide(void);
+/* small round map <-> big square map (a click on the minimap flips it) */
+void minimap_toggle_size(void);
+int minimap_is_expanded(void);
+/* edge length of the minimap's current footprint (circle box or big map) */
+int minimap_footprint(void);
 void minimap_zoom_in(void);
 void minimap_zoom_out(void);
 void minimap_zoom_reset(void);

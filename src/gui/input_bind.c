@@ -103,6 +103,10 @@ static void on_escape(InputBinding *self)
 		escape_menu_close();
 		return;
 	}
+	if (spellbook_is_dragging()) {
+		spellbook_cancel_drag(); /* put the carried spell down first */
+		return;
+	}
 	if (spellbook_is_open()) {
 		spellbook_toggle();
 		return;
@@ -135,8 +139,8 @@ static void on_escape(InputBinding *self)
 DLL_EXPORT int gui_has_open_window(void)
 {
 	return show_look || display_gfx || teleporter || show_tutor || display_help || display_quest || show_color ||
-	       cmd_is_active() || context_targeting_active() || spellbook_is_open() || action_ovr != ACTION_NONE ||
-	       amod_has_open_window();
+	       cmd_is_active() || context_targeting_active() || spellbook_is_open() || spellbook_is_dragging() ||
+	       action_ovr != ACTION_NONE || amod_has_open_window();
 }
 
 /* Escape deals with dismissables before it opens the menu - players expect
@@ -1593,6 +1597,10 @@ static void register_all(void)
 		static char panel_bind_ids[MAX_PANEL][32];
 		static char panel_bind_names[MAX_PANEL][40];
 		SDL_Keycode key = SDLK_UNKNOWN;
+
+		if (p == PANEL_CONTAINER) {
+			continue; /* summoned by the server, not toggled by hand */
+		}
 
 		switch (p) {
 		case PANEL_INVENTORY:

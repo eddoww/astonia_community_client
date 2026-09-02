@@ -177,20 +177,39 @@ void init_dots(void)
 		set_dot(DOT_JNK, dotx(DOT_IN2) - 16, y, 0);
 	}
 
-	/* ── Skills window (bottom left) ─────────────────────────────────
-	 * Holds either the skill list or, while a container is open, the 4x4
-	 * shop/grave grid. It is sized for whichever it is currently showing,
-	 * so a short skill list does not leave a container-sized void; display()
-	 * re-runs init_dots() when a container opens or closes. */
+	/* ── Skills window (bottom left) ───────────────────────────────── */
 	int skl_list_h = __skldy * LINEHEIGHT + 6;
 	{
-		int body_w = con_cnt ? CONDX * FDX : SKLWIDTH + 8;
-		int content_h = con_cnt ? CONDY * FDX + 4 : skl_list_h;
+		int body_w = SKLWIDTH + 8;
+		int content_h = skl_list_h;
 
 		set_dot(DOT_SKL, 8 + 4, UIYRES - edge - content_h + 8, 0);
 		set_dot(DOT_SK2, 8 + body_w, UIYRES - edge, 0);
-		set_dot(DOT_CON, 8 + FDX / 2 + 2, UIYRES - edge - content_h + FDX / 2 + 2, 0);
 		panel_set_content_rect(PANEL_SKILLS, 8, UIYRES - edge - content_h, 8 + body_w + SKL_RAIL_W, UIYRES - edge);
+	}
+
+	/* ── Container window (shop / grave / depot grid), its own window to
+	 *    the left of the inventory so skills and merchants can be open at
+	 *    the same time; display() re-runs init_dots() when one opens ──── */
+	{
+		int grid_w = CONDX * FDX;
+		int grid_h = CONDY * FDX;
+		int content_w = grid_w + 4 + SKL_RAIL_W;
+		int content_h = grid_h + 4;
+		/* above the hotbar's default row(s) - the hotbar is laid out further
+		 * down in this function, so its top edge is derived here the same way */
+		int hb_rows = hotbar_rows() > 0 ? hotbar_rows() : 1;
+		int hb_top = (UIYRES - 170) - 15 - (hb_rows - 1) * (FDX + 2) - FDX / 2;
+		int x2 = dotx(DOT_IN1) - UI_WIN_PAD * 2 - 10;
+		int x1 = x2 - content_w;
+		int y2 = hb_top - UI_WIN_PAD * 2 - 4;
+		int y1 = y2 - content_h;
+
+		set_dot(DOT_CN1, x1, y1, 0);
+		set_dot(DOT_CN2, x2, y2, 0);
+		set_dot(DOT_CON, x1 + 2 + FDX / 2, y1 + 2 + FDX / 2, 0);
+		set_dot(DOT_CSC, x2 - SKL_RAIL_W / 2, y1, 0);
+		panel_set_content_rect(PANEL_CONTAINER, x1, y1, x2, y2);
 	}
 
 	/* scroll rails: the skills rail hugs the right edge of its window, the
@@ -318,14 +337,21 @@ void init_dots(void)
 	set_dot(DOT_MBR, UIXRES, UIYRES, 0);
 	set_dot(DOT_MCT, UIXRES / 2, UIYRES / 2, 0);
 
-	/* ── Minimap (top right) ─────────────────────────────────────────── */
-	set_dot(DOT_MMAP, UIXRES - MINIMAP_D - edge, 46, 0);
-	panel_set_content_rect(
-	    PANEL_MINIMAP, dotx(DOT_MMAP), doty(DOT_MMAP), dotx(DOT_MMAP) + MINIMAP_D, doty(DOT_MMAP) + MINIMAP_D);
+	/* ── Minimap (top right): no frame, the footprint IS the map - the
+	 *    small circle's box or the big square, whichever is showing. Both
+	 *    hang off the same right-aligned default, so flipping the size
+	 *    keeps the right edge in place. ─────────────────────────────── */
+	{
+		int d = minimap_footprint();
 
-	// help and quest window
-	set_dot(DOT_HLP, 12, 60, 0);
-	set_dot(DOT_HL2, 12 + 222, 60 + 394, 0);
+		set_dot(DOT_MMAP, UIXRES - d - edge, 46, 0);
+		panel_set_content_rect(PANEL_MINIMAP, dotx(DOT_MMAP), doty(DOT_MMAP), dotx(DOT_MMAP) + d, doty(DOT_MMAP) + d);
+	}
+
+	/* help and quest window: clear of the speed / buff plates that sit in
+	 * the bottom-left corner, so its navigation bar is never buried */
+	set_dot(DOT_HLP, 164, 60, 0);
+	set_dot(DOT_HL2, 164 + 222, 60 + 394, 0);
 	panel_set_content_rect(PANEL_HELP, dotx(DOT_HLP), doty(DOT_HLP), dotx(DOT_HL2), doty(DOT_HL2));
 
 	// teleporter window
@@ -430,6 +456,11 @@ void init_dots(void)
 	set_but(BUT_SCR_TR, dot[DOT_SCR].x, doty(DOT_IN1) + 18, 10, BUTF_CAPTURE | BUTF_MOVEEXEC);
 	set_but(BUT_SCR_DW, dot[DOT_SCR].x, doty(DOT_IN1) + __invdy * FDX - 8, 8, 0);
 
+	/* container rail spans its grid */
+	set_but(BUT_CSC_UP, dot[DOT_CSC].x, doty(DOT_CN1) + 8, 8, 0);
+	set_but(BUT_CSC_TR, dot[DOT_CSC].x, doty(DOT_CN1) + 18, 10, BUTF_CAPTURE | BUTF_MOVEEXEC);
+	set_but(BUT_CSC_DW, dot[DOT_CSC].x, doty(DOT_CN2) - 8, 8, 0);
+
 	set_but(BUT_GLD, dot[DOT_GLD].x, dot[DOT_GLD].y, 14, BUTF_CAPTURE);
 	set_but(BUT_JNK, dot[DOT_JNK].x, dot[DOT_JNK].y, 14, 0);
 
@@ -488,6 +519,19 @@ void init_dots(void)
 	if (hotbar_rows() > 0) {
 		set_but(BUT_DRAG_HOTBAR, dot[DOT_HOTBAR].x - FDX / 2 - 8, dot[DOT_HOTBAR].y, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
 		set_but(BUT_PLOCK_BEG + PANEL_HOTBAR, dot[DOT_HOTBAR].x - FDX / 2 - 8, dot[DOT_HOTBAR].y + 18, 8, 0);
+	}
+
+	/* the minimap is grabbed anywhere on its face (panels_frame_button does
+	 * the rectangular test), so its drag button only marks the centre; the
+	 * padlock sits in the bottom-left corner, clear of the "N" label */
+	{
+		int x1, y1, x2, y2;
+
+		if (panel_content_rect(PANEL_MINIMAP, &x1, &y1, &x2, &y2)) {
+			set_but(BUT_DRAG_BEG + PANEL_MINIMAP, (x1 + x2) / 2, (y1 + y2) / 2, 0,
+			    BUTF_CAPTURE | BUTF_MOVEEXEC | BUTF_NOHIT);
+			set_but(BUT_PLOCK_BEG + PANEL_MINIMAP, x1 + 7, y2 - 7, 6, 0);
+		}
 	}
 
 	// shift every panel by its stored drag offset - must stay the last

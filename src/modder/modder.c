@@ -36,6 +36,9 @@ struct mod {
 	void (*_amod_mouse_move)(int x, int y);
 	int (*_amod_mouse_click)(int x, int y, int what);
 	int (*_amod_mouse_over)(int x, int y);
+	void (*_amod_frame_background)(void);
+	int (*_amod_mouse_click_background)(int x, int y, int what);
+	int (*_amod_mouse_over_background)(int x, int y);
 	void (*_amod_mouse_capture)(int onoff);
 	void (*_amod_areachange)(void);
 	int (*_amod_keydown)(SDL_Keycode);
@@ -60,6 +63,9 @@ struct mod mod[MAXMOD] = {{
     NULL, // _amod_mouse_move
     NULL, // _amod_mouse_click
     NULL, // _amod_mouse_over
+    NULL, // _amod_frame_background
+    NULL, // _amod_mouse_click_background
+    NULL, // _amod_mouse_over_background
     NULL, // _amod_mouse_capture
     NULL, // _amod_areachange
     NULL, // _amod_keydown
@@ -144,6 +150,15 @@ int amod_init(void)
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_over"))) {
 			mod[i]._amod_mouse_over = (int (*)(int, int))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_frame_background"))) {
+			mod[i]._amod_frame_background = (void (*)(void))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_click_background"))) {
+			mod[i]._amod_mouse_click_background = (int (*)(int, int, int))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_over_background"))) {
+			mod[i]._amod_mouse_over_background = (int (*)(int, int))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_capture"))) {
 			mod[i]._amod_mouse_capture = (void (*)(int))tmp;
@@ -415,6 +430,42 @@ int amod_mouse_click(int x, int y, int what)
 	}
 #endif
 	return ret;
+}
+
+/* background layer: drawn under every client panel, offered events only when
+ * nothing of the client's GUI is under the pointer (see amod.h) */
+void amod_frame_background(void)
+{
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_frame_background) {
+			mod[i]._amod_frame_background();
+		}
+	}
+}
+
+int amod_mouse_click_background(int x, int y, int what)
+{
+	int ret = 0, tmp;
+
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_mouse_click_background && (tmp = mod[i]._amod_mouse_click_background(x, y, what))) {
+			if (tmp > 0) {
+				return 1;
+			}
+			ret = 1;
+		}
+	}
+	return ret;
+}
+
+int amod_mouse_over_background(int x, int y)
+{
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_mouse_over_background && mod[i]._amod_mouse_over_background(x, y)) {
+			return 1;
+		}
+	}
+	return 0;
 }
 
 int amod_mouse_over(int x, int y)

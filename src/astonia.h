@@ -145,7 +145,10 @@ extern DLL_EXPORT unsigned int _client_dist;
 #define DOT_MENU   35 // system menu strip (menu/help/quests)
 #define DOT_CLK    36 // classic clock
 #define DOT_MMAP   37 // minimap circle, top left
-#define MAX_DOT    38
+#define DOT_CN1    38 // container window content top left
+#define DOT_CN2    39 // container window content bottom right
+#define DOT_CSC    40 // container scrollbar rail
+#define MAX_DOT    41
 
 #ifndef MAX_PATH
 #define MAX_PATH 260

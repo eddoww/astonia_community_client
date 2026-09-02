@@ -70,32 +70,53 @@ static uint32_t map_poi_col(int x, int y);
  * SDL_Renderer and the SDL_GPU path; see sdl_core.c) */
 static void *maptex1 = NULL, *maptex2 = NULL;
 
-/* (re)compute the screen anchors from the current layout; kept below the
- * top bar - with the fullscreen world view DOT_MTL is the screen corner */
+/* (re)compute the screen anchors from the current layout. The minimap panel
+ * publishes a content rect that IS the map's footprint in its current mode
+ * (init_dots() sizes it from minimap_footprint()), so both the small circle
+ * and the big square simply draw at the rect's top-left corner - the panel
+ * system does the clamping, snapping and dragging. */
 void minimap_reanchor(void)
 {
 	int x1, y1, x2, y2;
 
-	if (panel_content_rect(PANEL_MINIMAP, &x1, &y1, &x2, &y2)) {
-		mx = x1;
-		my = y1;
-	} else {
-		mx = UIXRES - MINIMAP * 2 - 6;
-		my = 46;
+	if (!panel_content_rect(PANEL_MINIMAP, &x1, &y1, &x2, &y2)) {
+		x1 = UIXRES - minimap_footprint() - 6;
+		y1 = 46;
 	}
+	mx = sx = x1;
+	my = sy = y1;
+}
 
-	/* the expanded map opens right-aligned to the circle, kept on canvas */
-	sx = mx + MINIMAP * 2 - MAXMAP;
-	if (sx < 0) {
-		sx = 0;
+/* edge length of the footprint the panel system should reserve: the circle's
+ * box, the big square, or nothing while the map is switched off */
+int minimap_footprint(void)
+{
+	if (game_options & GO_NOMAP) {
+		return 0;
 	}
-	if (sx > UIXRES - MAXMAP) {
-		sx = UIXRES - MAXMAP;
+	switch (visible) {
+	case 1:
+		return MINIMAP * 2;
+	case 2:
+		return MAXMAP;
+	default:
+		return 0;
 	}
-	sy = my;
-	if (sy > UIYRES - MAXMAP) {
-		sy = UIYRES - MAXMAP;
+}
+
+int minimap_is_expanded(void)
+{
+	return visible == 2;
+}
+
+/* a click on the map flips it between the small circle and the big square
+ * (the big one zooms with the wheel); hiding stays with the toggle key */
+void minimap_toggle_size(void)
+{
+	if (!visible) {
+		return;
 	}
+	visible = (visible == 2) ? 1 : 2;
 }
 
 void minimap_init(void)

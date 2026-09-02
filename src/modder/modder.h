@@ -18,6 +18,11 @@ int amod_display_skill_line(int v, int base, int curr, int cn, char *buf);
 void amod_mouse_move(int x, int y);
 int amod_mouse_click(int x, int y, int what);
 int amod_mouse_over(int x, int y);
+/* background layer (client >= 1.8.0): drawn under every client panel, and
+ * offered events only when nothing of the client's GUI is under the pointer */
+void amod_frame_background(void);
+int amod_mouse_click_background(int x, int y, int what);
+int amod_mouse_over_background(int x, int y);
 void amod_mouse_capture(int onoff);
 void amod_areachange(void);
 int amod_keydown(SDL_Keycode key);

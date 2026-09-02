@@ -312,8 +312,8 @@ void display_container(void)
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
 
-	/* the container's name lives in the skills window's title bar
-	 * (panel_title()), so no separate header plate is drawn here */
+	/* the container's name lives in its window's title bar (panel_title()),
+	 * so no separate header plate is drawn here */
 	for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
 		int i = conoff * CONDX + b - BUT_CON_BEG;
 
@@ -483,12 +483,32 @@ static void draw_scroll_rail(int b_up, int b_tr, int b_dw, int maxoff)
 
 void display_scrollbar_left(void)
 {
-	draw_scroll_rail(BUT_SCL_UP, BUT_SCL_TR, BUT_SCL_DW, con_cnt ? max_conoff : max_skloff);
+	draw_scroll_rail(BUT_SCL_UP, BUT_SCL_TR, BUT_SCL_DW, max_skloff);
+}
+
+void display_scrollbar_container(void)
+{
+	draw_scroll_rail(BUT_CSC_UP, BUT_CSC_TR, BUT_CSC_DW, max_conoff);
 }
 
 void display_scrollbar_right(void)
 {
 	draw_scroll_rail(BUT_SCR_UP, BUT_SCR_TR, BUT_SCR_DW, max_invoff);
+}
+
+/* Which world is this? Everything but production wears a small amber tag
+ * at the top of the screen so a tester never mistakes pre-production or a
+ * local stack for the live game. */
+void display_environment_tag(void)
+{
+	const char *env = client_environment_label();
+	char buf[40];
+
+	if (!env || !*env) {
+		return;
+	}
+	snprintf(buf, sizeof(buf), "%s SERVER", env);
+	render_text(UIXRES / 2, 3, IRGB(31, 24, 6), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, buf);
 }
 
 void display_scrollbars(void)

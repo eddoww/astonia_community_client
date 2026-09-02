@@ -12,6 +12,15 @@
 /* rendering — call from gui_display after hotbar_display */
 void spellbook_display(void);
 
+/* the spell being carried, drawn on the cursor - call late in display(),
+ * outside every panel clip, so it follows the pointer over the whole screen */
+void spellbook_display_carry(void);
+
+/* left button pressed at (mx,my): picks up the spell under the pointer so a
+ * press-drag-release onto the hotbar works as well as click, move, click.
+ * Returns 1 when the press landed on a spell cell. */
+int spellbook_mousedown(int mx, int my);
+
 /* toggle the spellbook panel open/closed */
 void spellbook_toggle(void);
 int spellbook_is_open(void);

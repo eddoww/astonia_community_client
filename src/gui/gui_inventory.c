@@ -53,10 +53,8 @@ void set_skloff(int bymouse, int ny)
 		skloff = max_skloff;
 	}
 
-	if (!con_cnt) {
-		but[BUT_SCL_TR].y =
-		    but[BUT_SCL_UP].y + 10 + (but[BUT_SCL_DW].y - but[BUT_SCL_UP].y - 20) * skloff / max(1, max_skloff);
-	}
+	but[BUT_SCL_TR].y =
+	    but[BUT_SCL_UP].y + 10 + (but[BUT_SCL_DW].y - but[BUT_SCL_UP].y - 20) * skloff / max(1, max_skloff);
 }
 
 void set_conoff(int bymouse, int ny)
@@ -75,10 +73,8 @@ void set_conoff(int bymouse, int ny)
 		conoff = max_conoff;
 	}
 
-	if (con_cnt) {
-		but[BUT_SCL_TR].y =
-		    but[BUT_SCL_UP].y + 10 + (but[BUT_SCL_DW].y - but[BUT_SCL_UP].y - 20) * conoff / max(1, max_conoff);
-	}
+	but[BUT_CSC_TR].y =
+	    but[BUT_CSC_UP].y + 10 + (but[BUT_CSC_DW].y - but[BUT_CSC_UP].y - 20) * conoff / max(1, max_conoff);
 }
 
 DLL_EXPORT int _get_skltab_index(int n)

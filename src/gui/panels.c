@@ -23,6 +23,7 @@
 #include "gui/gui_private.h"
 #include "gui/panels.h"
 #include "gui/gesture.h"
+#include "gui/input_bind.h"
 #include "gui/ui_draw.h"
 #include "gui/ui_tokens.h"
 #include "client/client.h"
@@ -48,12 +49,14 @@ typedef struct {
 	int visible;
 	int collapsed;
 	int locked; /* position/size lock (per panel)   */
-	int dx, dy;
+	int dx, dy; /* the player's offset from the default layout (persisted) */
+	int cdx, cdy; /* transient clamp shift on top of it, this layout pass only */
 	int cx1, cy1, cx2, cy2; /* content rect, published by init_dots() */
 } Panel;
 
 /* dot lists - the first dot is the clamp reference kept on screen */
-static const int skills_dots[] = {DOT_SKL, DOT_SK2, DOT_CON};
+static const int skills_dots[] = {DOT_SKL, DOT_SK2};
+static const int container_dots[] = {DOT_CN1, DOT_CN2, DOT_CON, DOT_CSC};
 static const int chat_dots[] = {DOT_TXT, DOT_TX2};
 static const int inv_dots[] = {DOT_INV, DOT_IN1, DOT_IN2, DOT_GLD, DOT_JNK};
 static const int speed_dots[] = {DOT_MOD};
@@ -66,8 +69,8 @@ static const int sysmenu_dots[] = {DOT_MENU};
 static const int clock_dots[] = {DOT_CLK};
 static const int help_dots[] = {DOT_HLP, DOT_HL2};
 
-static const ButRange skills_buts[] = {
-    {BUT_SKL_BEG, BUT_SKL_END}, {BUT_CON_BEG, BUT_CON_END}, {BUT_SCL_UP, BUT_SCL_DW}};
+static const ButRange skills_buts[] = {{BUT_SKL_BEG, BUT_SKL_END}, {BUT_SCL_UP, BUT_SCL_DW}};
+static const ButRange container_buts[] = {{BUT_CON_BEG, BUT_CON_END}, {BUT_CSC_UP, BUT_CSC_DW}};
 static const ButRange chat_buts[] = {{0, -1}};
 static const ButRange inv_buts[] = {{BUT_INV_BEG, BUT_INV_END}, {BUT_SCR_UP, BUT_SCR_DW}, {BUT_GLD, BUT_JNK}};
 static const ButRange speed_buts[] = {{BUT_MOD_WALK0, BUT_MOD_WALK2}};
@@ -83,7 +86,7 @@ static const ButRange minimap_buts[] = {{0, -1}};
 static const ButRange help_buts[] = {{0, -1}}; /* page controls are rect-hit in gui_buttons.c */
 
 #define PANEL_ENTRY(idstr, namestr, d, b, fr, rs, vis)                                                                 \
-	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, vis, vis, 0, 0, 0, 0, 0, 0, 0, 0}
+	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, vis, vis, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 static Panel panels[MAX_PANEL] = {
     [PANEL_SKILLS] = PANEL_ENTRY("skills", "Skills", skills_dots, skills_buts, PANEL_FRAME_WINDOW, 1, 1),
@@ -98,7 +101,8 @@ static Panel panels[MAX_PANEL] = {
     [PANEL_SYSMENU] = PANEL_ENTRY("sysmenu", "System Menu", sysmenu_dots, sysmenu_buts, PANEL_FRAME_HUD, 0, 1),
     [PANEL_CLOCK] = PANEL_ENTRY("clock", "Classic Clock", clock_dots, clock_buts, PANEL_FRAME_HUD, 0, 0),
     [PANEL_HELP] = PANEL_ENTRY("help", "Help", help_dots, help_buts, PANEL_FRAME_WINDOW, 0, 0),
-    [PANEL_MINIMAP] = PANEL_ENTRY("minimap", "Minimap", minimap_dots, minimap_buts, PANEL_FRAME_HUD, 0, 1),
+    [PANEL_MINIMAP] = PANEL_ENTRY("minimap", "Minimap", minimap_dots, minimap_buts, PANEL_FRAME_NONE, 0, 1),
+    [PANEL_CONTAINER] = PANEL_ENTRY("container", "Container", container_dots, container_buts, PANEL_FRAME_WINDOW, 1, 1),
 };
 
 _Static_assert(MAX_PANEL <= PANEL_BUT_SLOTS, "every panel needs a slot in each per-panel button bank");
@@ -108,9 +112,12 @@ static int drag_dirty; /* a drag/resize moved something since the last save */
 /* Options > "Lock GUI Layout": freezes every panel in place at once */
 static int layout_locked;
 
-/* the skills window's container view was closed by hand; cleared when the
- * next shop/grave opens so the window comes back on its own */
+/* the container window was closed by hand; cleared when the next shop/grave
+ * opens so the window comes back on its own */
 static int con_dismissed;
+
+/* Options > UI "Minimize Upward" - see panel_set_collapsed() */
+static int collapse_up;
 
 /* an external chat window (the mod's tabbed chat) has taken over: the classic
  * chat panel stays hidden except while the classic input line itself is live,
@@ -151,12 +158,13 @@ DLL_EXPORT int panel_shown(int p)
 	if (p == PANEL_HELP) {
 		return display_help || display_quest;
 	}
-	if (panel_visible(p)) {
-		return 1;
+	/* the container window exists exactly while a shop / grave / depot is
+	 * open (and was not closed by hand for this container) - the Options
+	 * toggle has no say in it */
+	if (p == PANEL_CONTAINER) {
+		return con_cnt && !con_dismissed;
 	}
-	/* auto-show: an open container needs the skills panel area, an active
-	 * chat line needs the chat panel (you must see what you type) */
-	if (p == PANEL_SKILLS && con_cnt && !con_dismissed) {
+	if (panel_visible(p)) {
 		return 1;
 	}
 
@@ -173,8 +181,8 @@ DLL_EXPORT int panel_chat_is_external(void)
 	return chat_external;
 }
 
-/* The close button on a merchant/grave view hides that view without turning
- * the Skills panel off for good - the next shop opens it again. */
+/* The close button on a merchant/grave view hides the container window for
+ * this container only - the next shop opens it again. */
 void panel_dismiss_container(void)
 {
 	con_dismissed = 1;
@@ -193,12 +201,58 @@ DLL_EXPORT int panel_collapsed(int p)
 	return panels[p].collapsed;
 }
 
+static void panel_shift(int p, int dx, int dy);
+static void panel_clamp(int p, int *dx, int *dy);
+static void panel_adopt_clamp(int p);
+
+/* Minimize / restore. In "upward" mode the window collapses towards its
+ * bottom edge: the title bar drops to where the bottom was and comes back up
+ * on restore, so a window parked above the hotbar stays parked there. The
+ * shift is folded into the stored offset, so a layout saved while collapsed
+ * reloads in the same place and still restores upward. */
 DLL_EXPORT void panel_set_collapsed(int p, int on)
 {
+	int x1, y1, x2, y2, full_h = 0;
+
 	if (p < 0 || p >= MAX_PANEL) {
 		return;
 	}
-	panels[p].collapsed = on ? 1 : 0;
+	on = on ? 1 : 0;
+	if (panels[p].collapsed == on) {
+		return;
+	}
+	if (collapse_up && panels[p].frame == PANEL_FRAME_WINDOW) {
+		int was = panels[p].collapsed;
+
+		panels[p].collapsed = 0;
+		if (panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
+			full_h = y2 - y1;
+		}
+		panels[p].collapsed = was;
+	}
+	panels[p].collapsed = on;
+	if (full_h > UI_WIN_TITLE_H) {
+		int dx = 0, dy = full_h - UI_WIN_TITLE_H;
+
+		if (!on) {
+			dy = -dy;
+		}
+		panel_adopt_clamp(p);
+		panel_clamp(p, &dx, &dy);
+		panels[p].dx += dx;
+		panels[p].dy += dy;
+		panel_shift(p, dx, dy);
+	}
+}
+
+DLL_EXPORT int panel_collapse_upward(void)
+{
+	return collapse_up;
+}
+
+DLL_EXPORT void panels_set_collapse_upward(int on)
+{
+	collapse_up = on ? 1 : 0;
 }
 
 DLL_EXPORT int panels_layout_locked(void)
@@ -277,12 +331,27 @@ const char *panel_name(int p)
 	return panels[p].name;
 }
 
-/* The skills window doubles as the shop/grave container view - name it after
- * whatever it is currently showing. */
+/* Live window titles: the container window is named after the shop / grave
+ * it shows, the inventory counts its used slots so a glance at the title bar
+ * (even a minimized one) says how much room is left. */
 const char *panel_title(int p)
 {
-	if (p == PANEL_SKILLS && con_cnt) {
+	if (p == PANEL_CONTAINER && con_cnt) {
 		return con_name;
+	}
+	if (p == PANEL_INVENTORY) {
+		static char buf[48];
+		int used = 0, total = _inventorysize - INVENTORY_EQUIP_SLOTS;
+
+		for (int i = INVENTORY_EQUIP_SLOTS; i < _inventorysize && i < MAX_INVENTORYSIZE; i++) {
+			if (item[i]) {
+				used++;
+			}
+		}
+		if (total > 0) {
+			snprintf(buf, sizeof(buf), "Inventory %d/%d", used, total);
+			return buf;
+		}
 	}
 	if (p == PANEL_HELP && display_quest) {
 		return "Quest Log";
@@ -593,16 +662,36 @@ static void panel_snap(int p, int *dx, int *dy)
 	*dy += adjy;
 }
 
+/* Shift every panel by its stored offset, clamped on-canvas. The clamp is a
+ * presentation correction for THIS layout pass only - it is remembered in
+ * cdx/cdy, never folded into the stored offset. Writing it back used to
+ * wreck layouts for good: init_dots() runs several times while a window is
+ * still being sized at startup (and on every fullscreen switch), each pass
+ * clamped the whole default layout into a canvas that was not final yet,
+ * and the accumulated corrections were then saved as the player's own
+ * arrangement. A stranded panel still heals visually every pass; the
+ * player's intent is only rewritten when they grab the panel themselves
+ * (panels_drag_begin). */
 void panels_apply_offsets(void)
 {
 	for (int p = 0; p < MAX_PANEL; p++) {
 		int dx = panels[p].dx, dy = panels[p].dy;
 
 		panel_clamp(p, &dx, &dy);
-		panels[p].dx = dx;
-		panels[p].dy = dy;
+		panels[p].cdx = dx - panels[p].dx;
+		panels[p].cdy = dy - panels[p].dy;
 		panel_shift(p, dx, dy);
 	}
+}
+
+/* the live position becomes the stored one: called when the player takes
+ * hold of a panel, so a clamp correction turns into intent instead of
+ * snapping back at the first motion */
+static void panel_adopt_clamp(int p)
+{
+	panels[p].dx += panels[p].cdx;
+	panels[p].dy += panels[p].cdy;
+	panels[p].cdx = panels[p].cdy = 0;
 }
 
 /* ── drag gesture ───────────────────────────────────────────────────────
@@ -615,7 +704,12 @@ static struct {
 	int p; /* panel being moved, -1 = none */
 	int grab_x, grab_y; /* pointer at the press         */
 	int start_dx, start_dy; /* stored offset at the press   */
-} drag = {-1, 0, 0, 0, 0};
+	int moved; /* left the click dead zone     */
+} drag = {-1, 0, 0, 0, 0, 0};
+
+/* a press that never travels this far is a click on the handle, not a drag
+ * (the minimap flips between its two sizes on such a click) */
+#define DRAG_DEAD_ZONE 3
 
 /* move panel p so its stored offset becomes (want_dx,want_dy): clamped
  * on-canvas, snapped to the screen edges and the other panels, then clamped
@@ -645,11 +739,13 @@ void panels_drag_begin(int p, int mx, int my)
 	if (p < 0 || p >= MAX_PANEL || panel_locked(p)) {
 		return;
 	}
+	panel_adopt_clamp(p);
 	drag.p = p;
 	drag.grab_x = mx;
 	drag.grab_y = my;
 	drag.start_dx = panels[p].dx;
 	drag.start_dy = panels[p].dy;
+	drag.moved = 0;
 }
 
 void panels_drag_update(int p, int mx, int my)
@@ -661,7 +757,18 @@ void panels_drag_update(int p, int mx, int my)
 		drag.p = -1; /* the panel went away (or got locked) under the pointer */
 		return;
 	}
+	if (!drag.moved) {
+		if (abs(mx - drag.grab_x) < DRAG_DEAD_ZONE && abs(my - drag.grab_y) < DRAG_DEAD_ZONE) {
+			return;
+		}
+		drag.moved = 1;
+	}
 	panel_move_to_offset(p, drag.start_dx + (mx - drag.grab_x), drag.start_dy + (my - drag.grab_y), 1);
+}
+
+int panels_drag_moved(void)
+{
+	return drag.p != -1 && drag.moved;
 }
 
 void panels_drag_cancel(void)
@@ -691,6 +798,7 @@ void panel_keep_anchor(int p, int x1, int y1)
 	if (p < 0 || p >= MAX_PANEL || !panel_content_rect(p, &cx1, &cy1, &cx2, &cy2)) {
 		return;
 	}
+	panel_adopt_clamp(p); /* a resize pins the corner the player sees */
 	dx = x1 - cx1;
 	dy = y1 - cy1;
 	panel_clamp(p, &dx, &dy);
@@ -723,7 +831,7 @@ static int panel_size_cols(int p)
 	if (p == PANEL_INVENTORY) {
 		return inv_grid_cols();
 	}
-	if (p == PANEL_SKILLS && con_cnt) {
+	if (p == PANEL_CONTAINER) {
 		return con_grid_cols();
 	}
 	return 0;
@@ -734,7 +842,7 @@ static int panel_size_rows(int p)
 	if (p == PANEL_INVENTORY) {
 		return __invdy;
 	}
-	if (p == PANEL_SKILLS && con_cnt) {
+	if (p == PANEL_CONTAINER) {
 		return __condy;
 	}
 	return __skldy;
@@ -757,7 +865,7 @@ static int panel_apply_size(int p, int cols, int rows)
 			inv_grid_set_rows(rows);
 			changed = 1;
 		}
-	} else if (p == PANEL_SKILLS && con_cnt) {
+	} else if (p == PANEL_CONTAINER) {
 		cols = clampi(cols, CON_GRID_MIN_COLS, CON_GRID_MAX_COLS);
 		rows = clampi(rows, CON_GRID_MIN_ROWS, CON_GRID_MAX_ROWS);
 		if (cols != con_grid_cols()) {
@@ -827,7 +935,7 @@ int panels_resize_update(int p, int mx, int my)
 	if (p == PANEL_INVENTORY) {
 		cols = (gripx - rsz.originx + FDX / 2) / FDX;
 		rows = (gripy - rsz.originy - INV_FOOT_H + FDX / 2) / FDX;
-	} else if (p == PANEL_SKILLS && con_cnt) {
+	} else if (p == PANEL_CONTAINER) {
 		cols = (gripx - rsz.originx - SKL_RAIL_W + FDX / 2) / FDX;
 		rows = (gripy - rsz.originy + FDX / 2) / FDX;
 	} else if (p == PANEL_SKILLS) {
@@ -967,6 +1075,23 @@ int panels_frame_button(int x, int y)
 		}
 	}
 
+	/* the minimap has no chrome at all: its whole footprint is the handle
+	 * (press and drag moves it, a plain click flips small <-> big), and a
+	 * locked one still swallows the press so the world below is not walked */
+	{
+		int x1, y1, x2, y2;
+
+		if (panel_shown(PANEL_MINIMAP) && panel_content_rect(PANEL_MINIMAP, &x1, &y1, &x2, &y2) && x >= x1 && x <= x2 &&
+		    y >= y1 && y <= y2) {
+			int b = BUT_PLOCK_BEG + PANEL_MINIMAP;
+
+			if (!(but[b].flags & BUTF_NOHIT) && in_glyph(x, y, butx(b), buty(b))) {
+				return b;
+			}
+			return panel_locked(PANEL_MINIMAP) ? BUT_PANEL_BODY : BUT_DRAG_BEG + PANEL_MINIMAP;
+		}
+	}
+
 	/* frameless panels: the grab handle drawn next to the bar is what the
 	 * player aims at, so the whole handle takes the press (a locked panel
 	 * draws no handle and offers none) */
@@ -1062,8 +1187,10 @@ void panels_display_handles(void)
 		int bx, by, dx, dy;
 
 		/* framed panels have real chrome to grab; only the bare ones need
-		 * the proximity hint - and a locked panel offers none */
-		if (panels[p].frame != PANEL_FRAME_NONE || !panel_shown(p) || panel_locked(p) || (but[b].flags & BUTF_NOHIT)) {
+		 * the proximity hint - and a locked panel offers none. The minimap
+		 * is grabbed anywhere on its face, it has no separate handle. */
+		if (panels[p].frame != PANEL_FRAME_NONE || p == PANEL_MINIMAP || !panel_shown(p) || panel_locked(p) ||
+		    (but[b].flags & BUTF_NOHIT)) {
 			continue;
 		}
 		bx = butx(b);
@@ -1097,12 +1224,15 @@ void panels_display_handles(void)
 void panels_reset_layout(void)
 {
 	layout_locked = 0;
+	collapse_up = 0;
 	for (int p = 0; p < MAX_PANEL; p++) {
 		panels[p].visible = panels[p].default_visible;
 		panels[p].collapsed = 0;
 		panels[p].locked = 0;
 		panels[p].dx = 0;
 		panels[p].dy = 0;
+		panels[p].cdx = 0;
+		panels[p].cdy = 0;
 	}
 }
 
@@ -1124,6 +1254,7 @@ void panels_save_json(struct cJSON *root)
 		return;
 	}
 	cJSON_AddBoolToObject(jp, "locked", layout_locked);
+	cJSON_AddBoolToObject(jp, "collapse_up", collapse_up);
 	for (int p = 0; p < MAX_PANEL; p++) {
 		cJSON *e = cJSON_CreateObject();
 
@@ -1151,6 +1282,10 @@ void panels_load_json(const struct cJSON *root)
 	v = cJSON_GetObjectItem(jp, "locked");
 	if (v && cJSON_IsBool(v)) {
 		layout_locked = cJSON_IsTrue(v) ? 1 : 0;
+	}
+	v = cJSON_GetObjectItem(jp, "collapse_up");
+	if (v && cJSON_IsBool(v)) {
+		collapse_up = cJSON_IsTrue(v) ? 1 : 0;
 	}
 	for (int p = 0; p < MAX_PANEL; p++) {
 		const cJSON *e = cJSON_GetObjectItem(jp, panels[p].id);

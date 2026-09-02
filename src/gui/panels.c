@@ -394,6 +394,17 @@ static int chrome_min_pos(int p, int *cx, int *cy)
 
 static int chrome_lock_pos(int p, int *cx, int *cy)
 {
+	int x1, y1, x2, y2;
+
+	if (panel_frame_kind(p) == PANEL_FRAME_HUD) {
+		/* HUD plates: the padlock sits at the grab strip's right end */
+		if (!panel_frame_rect(p, &x1, &y1, &x2, &y2)) {
+			return 0;
+		}
+		*cx = x2 - 9;
+		*cy = y1 + HUD_GRIP_H / 2 + 2;
+		return 1;
+	}
 	if (!chrome_min_pos(p, cx, cy)) {
 		return 0;
 	}
@@ -432,6 +443,7 @@ static int chrome_grab_rect(int p, int *x1, int *y1, int *x2, int *y2)
 			*x2 = cx - UI_WIN_GLYPH / 2 - 2;
 		}
 	} else {
+		*x2 = fx2 - 18; /* keep the strip's padlock corner clickable */
 		*y2 = fy1 + HUD_GRIP_H;
 	}
 	return 1;
@@ -907,6 +919,14 @@ void panels_display_frames(void)
 			if (panel_locked(p)) {
 				hot = 0; /* a locked plate offers no grab affordance */
 			}
+			{
+				int lx, ly;
+
+				if (chrome_lock_pos(p, &lx, &ly) &&
+				    (panels[p].locked || (mousex >= x1 && mousex <= x2 && mousey >= y1 && mousey <= y2))) {
+					ui_glyph_lock(lx, ly, panels[p].locked, butsel == BUT_PLOCK_BEG + p);
+				}
+			}
 			/* the grab strip is only marked when the pointer is on it -
 			 * a permanent handle would clutter a HUD widget */
 			if (hot) {
@@ -940,6 +960,22 @@ void panels_display_handles(void)
 			int hot = (butsel == b) || (capbut == b);
 			render_shaded_rect(bx - handle_w, by - handle_h, bx + handle_w, by + handle_h,
 			    hot ? UI_ACCENT : UI_BORDER_STRONG, hot ? UI_A_BORDER_HOV : UI_A_ROW_HOVER);
+		}
+	}
+
+	/* frameless panels keep their padlock next to the grab tab: always
+	 * visible while locked, on approach otherwise */
+	for (int p = 0; p < MAX_PANEL; p++) {
+		int b = BUT_PLOCK_BEG + p;
+		int dx, dy;
+
+		if (panels[p].frame != PANEL_FRAME_NONE || !panel_shown(p) || (but[b].flags & BUTF_NOHIT)) {
+			continue;
+		}
+		dx = mousex - butx(b);
+		dy = mousey - buty(b);
+		if (panels[p].locked || dx * dx + dy * dy < proximity * proximity) {
+			ui_glyph_lock(butx(b), buty(b), panels[p].locked, butsel == b);
 		}
 	}
 }

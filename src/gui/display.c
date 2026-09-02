@@ -1267,7 +1267,15 @@ void display_military(void)
 		step = 0;
 	}
 
-	if (mil_exp && total) {
+	if (!mil_exp || !total) {
+		/* no military points yet: the bar still exists, empty - players
+		 * kept reporting it "missing" when it only appeared with honor */
+		draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 0, IRGB(28, 12, 4), 0, BAR_INFO_NONE, 0, 0, 0);
+		render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY, "Honor 0");
+		snprintf(hover_rank_text, 200, "Rank: none yet - military points come from fighting for your realm");
+		return;
+	}
+	{
 		unsigned short mil_color = IRGB(28, 12, 4);
 		char lead[96];
 

@@ -470,9 +470,11 @@ void init_dots(void)
 	panels_place_chrome_buttons(set_but);
 
 	/* the hotbar is frameless (it is an action bar, not a window), so it
-	 * keeps the small proximity grab tab left of its first slot */
+	 * keeps the small proximity grab tab left of its first slot, with its
+	 * padlock right below the tab */
 	if (hotbar_rows() > 0) {
 		set_but(BUT_DRAG_HOTBAR, dot[DOT_HOTBAR].x - FDX / 2 - 8, dot[DOT_HOTBAR].y, 12, BUTF_CAPTURE | BUTF_MOVEEXEC);
+		set_but(BUT_PLOCK_BEG + PANEL_HOTBAR, dot[DOT_HOTBAR].x - FDX / 2 - 8, dot[DOT_HOTBAR].y + 18, 8, 0);
 	}
 
 	// shift every panel by its stored drag offset - must stay the last

@@ -231,6 +231,39 @@ SDL_GPUGraphicsPipeline *gpu_get_pipeline(gpu_pipeline_id_t id);
 SDL_GPUTexture *gpu_texture_create(const uint32_t *pixels, int width, int height);
 
 /**
+ * Stage a region upload into the shared staging ring. The copy is recorded
+ * and submitted with every other pending upload at the next flush (frame
+ * begin, frame end before the render submit, ring full, or a release of the
+ * texture), so the texture is safe to draw in the same frame. Returns false
+ * when the ring is unavailable or the region is larger than the ring - the
+ * caller then uploads through a transfer buffer of its own.
+ *
+ * @param texture Destination texture (B8G8R8A8)
+ * @param pixels  Tightly packed ARGB rows, w*h texels
+ * @param x, y    Destination origin
+ * @param w, h    Region size
+ */
+bool gpu_upload_texture(SDL_GPUTexture *texture, const uint32_t *pixels, int x, int y, int w, int h);
+
+/**
+ * Submit every staged upload now (one copy pass, one command buffer).
+ */
+void gpu_upload_flush(void);
+
+/**
+ * Per-frame upload counters (reset in gpu_frame_begin): uploads staged,
+ * flush submits, uploads that had to bypass the ring, and bytes staged.
+ */
+void gpu_upload_get_stats(int *uploads, int *flushes, int *fallbacks, long long *bytes);
+
+/**
+ * Honor the vsync option on the GPU swapchain: VSYNC when on; MAILBOX or
+ * IMMEDIATE (whichever the device supports) when off. Applied between
+ * frames. Returns false when the device cannot present without vsync.
+ */
+bool gpu_set_vsync(bool on);
+
+/**
  * Destroy a GPU texture.
  *
  * @param texture The texture to destroy (safe to pass NULL)

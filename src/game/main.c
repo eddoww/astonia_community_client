@@ -561,6 +561,10 @@ static int saved_ttf_text = -1;
  * be known BEFORE sdl_init (renderer creation), re-applied to game_options
  * after it (same GO_DEFAULTS reset as the TTF option). */
 static int saved_gpu_rendering = -1;
+/* GPU backend override ("auto", "vulkan", "direct3d12", "metal"): the
+ * client prefers Vulkan everywhere; this is the escape hatch, applied as the
+ * SDL_GPU_DRIVER hint before the device is created. */
+static char saved_gpu_driver[32] = "auto";
 /* GPU shader effects sub-flag (experimental, opt-in, needs gpu_rendering):
  * base textures + per-draw effects in the fragment shader. */
 static int saved_gpu_shaderfx = -1;
@@ -597,6 +601,7 @@ static void save_extra_options(void)
 	cJSON_AddBoolToObject(root, "hide_lag_warning", (game_options & GO_NOLAG) != 0);
 	cJSON_AddBoolToObject(root, "ttf_text", (game_options & GO_TTF) != 0);
 	cJSON_AddBoolToObject(root, "gpu_rendering", (game_options & GO_GPU) != 0);
+	cJSON_AddStringToObject(root, "gpu_driver", saved_gpu_driver);
 	cJSON_AddBoolToObject(root, "gpu_shader_effects", (game_options & GO_SHADERFX) != 0);
 	cJSON_AddBoolToObject(root, "gpu_fancy_effects", (game_options & GO_NOFANCYFX) == 0);
 	cJSON_AddNumberToObject(root, "defaults_rev", GPU_DEFAULTS_REV);
@@ -685,6 +690,13 @@ static void load_extra_options(void)
 			game_options |= GO_TTF;
 		} else {
 			game_options &= ~GO_TTF;
+		}
+	}
+	v = cJSON_GetObjectItem(root, "gpu_driver");
+	if (v && cJSON_IsString(v) && v->valuestring) {
+		snprintf(saved_gpu_driver, sizeof(saved_gpu_driver), "%s", v->valuestring);
+		if (!saved_gpu_driver[0]) {
+			snprintf(saved_gpu_driver, sizeof(saved_gpu_driver), "auto");
 		}
 	}
 	v = cJSON_GetObjectItem(root, "gpu_rendering");
@@ -1010,6 +1022,10 @@ int main(int argc, char *argv[])
 	/* DEFAULT ON: only an explicit saved false (0) turns it off. -1 means the
 	 * key is absent, which is a fresh config and gets the default. */
 	gpu_rendering_requested = launch_gpu || saved_gpu_rendering != 0 || ((game_options & GO_GPU) != 0);
+	if (strcmp(saved_gpu_driver, "auto") != 0) {
+		/* an explicit backend choice beats the built-in Vulkan preference */
+		SDL_SetHint(SDL_HINT_GPU_DRIVER, saved_gpu_driver);
+	}
 	/* shader-effects sub-flag: only meaningful when the GPU renderer comes
 	 * up; sdl_init ignores it otherwise */
 	/* DEFAULT ON too, and still only meaningful under the GPU renderer */

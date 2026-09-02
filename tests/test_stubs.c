@@ -328,6 +328,35 @@ SDL_GPUTexture *gpu_texture_create(const uint32_t *pixels, int width, int height
 
 void gpu_texture_destroy(SDL_GPUTexture *texture __attribute__((unused))) {}
 
+bool gpu_upload_texture(SDL_GPUTexture *texture __attribute__((unused)), const uint32_t *pixels __attribute__((unused)),
+    int x __attribute__((unused)), int y __attribute__((unused)), int w __attribute__((unused)),
+    int h __attribute__((unused)))
+{
+	return false;
+}
+
+void gpu_upload_flush(void) {}
+
+void gpu_upload_get_stats(int *uploads, int *flushes, int *fallbacks, long long *bytes)
+{
+	if (uploads) {
+		*uploads = 0;
+	}
+	if (flushes) {
+		*flushes = 0;
+	}
+	if (fallbacks) {
+		*fallbacks = 0;
+	}
+	if (bytes) {
+		*bytes = 0;
+	}
+}
+
+bool gpu_set_vsync(bool on __attribute__((unused)))
+{
+	return false;
+}
 
 bool gpu_draw_init(int screen_width __attribute__((unused)), int screen_height __attribute__((unused)))
 {

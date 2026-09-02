@@ -308,3 +308,46 @@ what was found in `sdl_image.c`/`sdl_texture.c` on `main`.
 - **kwin-virtual measurements**: frame-time numbers in §3 were taken on a
   virtual display; absolute values will differ on real hardware/vsync, the
   draw-count ratios will not.
+
+## 9. Upload staging ring, Vulkan-first and the present mode (client v1.7.0)
+
+Root-caused from the Windows "massive slowdown" reports of September 2026
+(full write-up: the *Ugaris GPU Text-Cache Regression* report):
+
+- **Text cache never hit under the GPU renderer.** `tex_entry_matches_request()`
+  required an `SDL_Texture` on a text entry; GPU mode fills `gpu_tex` and
+  leaves `tex` NULL, so every string was rasterized, uploaded and submitted
+  again every frame (353 TTF rasters, 355 transfer buffers and 360 command
+  buffers *per frame* with the Ugaris mod loaded). The match now accepts
+  `gpu_tex`; `tests/test_text_compare.c` part D guards it.
+- **Uploads are staged.** `gpu_upload_texture()` (sdl_gpu.c) copies a region
+  into one persistent 8 MB transfer buffer (mapped with `cycle=true`, rows
+  padded to a 256-byte pitch, regions at 512-byte offsets so D3D12 copies
+  straight from the staging memory) and records `{texture, offset, region}`.
+  `gpu_upload_flush()` records every pending region in one copy pass and one
+  submit: at `gpu_frame_begin()`, at `gpu_frame_end()` right before the render
+  command buffer (submission order makes the copies land first), when the
+  ring is full, and from `gpu_texture_destroy()` for a texture with a pending
+  upload. `gpu_texture_create()` and the atlas `atlas_upload_region()` go
+  through it; both keep their old per-texture transfer buffer as the fallback
+  (ring unavailable, or an image larger than the ring). `ASTONIA_GPU_STATS`
+  reports `uploads`, `upload_flushes`, `upload_kb`, `upload_fallbacks`.
+- **Why it matters on Windows.** SDL's D3D12 backend creates a committed
+  resource (a kernel allocation) per transfer buffer and per texture, and each
+  submit is `ExecuteCommandLists` + a fence signal + a pending-destroy sweep;
+  the Vulkan backend sub-allocates from 64 MB blocks. libsdl-org/SDL#10632
+  says as much and suggests preferring Vulkan on Windows.
+- **Vulkan first, everywhere.** `gpu_create_device()` tries `"vulkan"` before
+  SDL's platform default (Metal on macOS, D3D12 on Windows). A
+  `SDL_GPU_DRIVER` hint - from the environment or the `gpu_driver` key in
+  `options_extra.json` (`"auto"`, `"vulkan"`, `"direct3d12"`, `"metal"`) -
+  is honored first; if it fails the automatic choice runs.
+- **The vsync option works in GPU mode.** `gpu_set_vsync()` maps on -> VSYNC,
+  off -> MAILBOX (or IMMEDIATE when mailbox is unsupported) through
+  `SDL_SetGPUSwapchainParameters()`, applied at the next `gpu_frame_begin()`
+  so the swapchain is never rebuilt while one of its textures is acquired.
+  Before this the GPU path was always vsync-locked and the checkbox inert.
+- **Animated-variant lookup.** `sprite_config_lookup_animated()` runs once per
+  drawn sprite per frame; `id & 2047` over contiguous variant ids made linear
+  probing walk ~206 slots per miss (10% of the main thread). A Fibonacci hash
+  (`(id * 2654435761u) >> 21`) brings that to ~2.

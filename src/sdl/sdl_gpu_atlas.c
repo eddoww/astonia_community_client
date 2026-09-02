@@ -336,6 +336,12 @@ static int atlas_reserve(int w, int h, int *out_x, int *out_y)
 
 static bool atlas_upload_region(SDL_GPUTexture *tex, const uint32_t *pixels, int x, int y, int w, int h)
 {
+	/* staged with the frame's other uploads: one copy pass and submit for
+	 * all of them instead of a transfer buffer + submit per region */
+	if (gpu_upload_texture(tex, pixels, x, y, w, h)) {
+		return true;
+	}
+
 	size_t size = (size_t)w * (size_t)h * sizeof(uint32_t);
 
 	SDL_GPUTransferBufferCreateInfo ti = {.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, .size = (Uint32)size};

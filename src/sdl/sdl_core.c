@@ -318,6 +318,8 @@ int sdl_init(int width, int height, char *title, int monitor)
 		note("SDL_GPU rendering enabled");
 		// GPU path: sdlren will remain NULL, all rendering goes through GPU API
 		sdlren = NULL;
+		// the swapchain starts vsynced; the saved option is applied after init
+		sdl_vsync = 1;
 
 		// Initialize post-processing system (optional)
 		if (!gpu_postfx_init(width, height)) {
@@ -714,7 +716,17 @@ int sdl_render(void)
 void sdl_set_vsync(int on)
 {
 	sdl_vsync = on ? 1 : 0;
-	SDL_SetRenderVSync(sdlren, sdl_vsync);
+	if (use_gpu_rendering) {
+		/* the GPU swapchain has its own present mode; a device that cannot
+		 * present without vsync keeps the option (and the checkbox) on */
+		if (!gpu_set_vsync(sdl_vsync != 0)) {
+			sdl_vsync = 1;
+		}
+		return;
+	}
+	if (sdlren) {
+		SDL_SetRenderVSync(sdlren, sdl_vsync);
+	}
 }
 
 void sdl_exit(void)

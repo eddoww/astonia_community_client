@@ -1196,8 +1196,6 @@ void lua_api_register(lua_State *L)
 	lua_setfield(L, -2, "PANEL_CHAT");
 	lua_pushinteger(L, PANEL_INVENTORY);
 	lua_setfield(L, -2, "PANEL_INVENTORY");
-	lua_pushinteger(L, PANEL_GOLD);
-	lua_setfield(L, -2, "PANEL_GOLD");
 	lua_pushinteger(L, PANEL_SPEED);
 	lua_setfield(L, -2, "PANEL_SPEED");
 	lua_pushinteger(L, PANEL_BUFFS);
@@ -1206,6 +1204,18 @@ void lua_api_register(lua_State *L)
 	lua_setfield(L, -2, "PANEL_HOTBAR");
 	lua_pushinteger(L, PANEL_EQUIPMENT);
 	lua_setfield(L, -2, "PANEL_EQUIPMENT");
+	lua_pushinteger(L, PANEL_SPELLBOOK);
+	lua_setfield(L, -2, "PANEL_SPELLBOOK");
+	lua_pushinteger(L, PANEL_STATUS);
+	lua_setfield(L, -2, "PANEL_STATUS");
+	lua_pushinteger(L, PANEL_SYSMENU);
+	lua_setfield(L, -2, "PANEL_SYSMENU");
+	lua_pushinteger(L, PANEL_CLOCK);
+	lua_setfield(L, -2, "PANEL_CLOCK");
+	lua_pushinteger(L, PANEL_HELP);
+	lua_setfield(L, -2, "PANEL_HELP");
+	lua_pushinteger(L, PANEL_MINIMAP);
+	lua_setfield(L, -2, "PANEL_MINIMAP");
 	lua_pushinteger(L, MAX_PANEL);
 	lua_setfield(L, -2, "MAX_PANEL");
 

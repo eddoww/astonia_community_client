@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
@@ -312,14 +313,21 @@ void gpu_frame_end(void) {}
 
 void gpu_dump(FILE *fp __attribute__((unused))) {}
 
-SDL_GPUTexture *gpu_texture_create(
-    const uint32_t *pixels __attribute__((unused)), int width __attribute__((unused)),
-    int height __attribute__((unused)))
+/* GPU-mode cache tests: hand out distinct fake handles so entries look
+ * uploaded (nothing dereferences them - the tests link no GPU device). */
+SDL_GPUTexture *gpu_texture_create(const uint32_t *pixels, int width, int height)
 {
-	return NULL;
+	static uintptr_t next_fake_handle = 0x1000;
+
+	if (!use_gpu_rendering || !pixels || width <= 0 || height <= 0) {
+		return NULL;
+	}
+	next_fake_handle += 16;
+	return (SDL_GPUTexture *)next_fake_handle;
 }
 
 void gpu_texture_destroy(SDL_GPUTexture *texture __attribute__((unused))) {}
+
 
 bool gpu_draw_init(int screen_width __attribute__((unused)), int screen_height __attribute__((unused)))
 {

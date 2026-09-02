@@ -41,6 +41,7 @@
 #include "sdl/sdl_private.h"
 #include "sdl/sdl_text_glyph.h"
 #include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/sdl_gpu.h"
 
 /* bitmap fonts (embedded data, src/game/font.c) */
 extern RenderFont fonta[], fontb[], fontc[];
@@ -1241,6 +1242,70 @@ static void run_part_c(void)
  * main
  * ======================================================================== */
 
+/* ========================================================================
+ * Part D: GPU-mode text cache hits
+ *
+ * Under the GPU renderer a cached string lives in gpu_tex (an atlas page or
+ * a standalone texture) and tex stays NULL. The cache lookup used to demand
+ * an SDL_Texture, so every text lookup missed and every visible string was
+ * rasterized, uploaded and submitted again on every frame - the September
+ * 2026 Windows slowdown. The stubbed gpu_texture_create hands out fake
+ * handles while use_gpu_rendering is set, so this needs no GPU device.
+ * ======================================================================== */
+
+static void run_part_d(void)
+{
+	const char *text = "Military Standing - no rank yet";
+	const char *other = "Honor 0";
+	int color = 0x00FFFFFF;
+	bool prev = use_gpu_rendering;
+	int ok = 1;
+
+	if (!sdl_init_for_tests()) {
+		printf("D gpu-mode-text-cache-hit          SKIP (sdl_init_for_tests failed)\n");
+		return;
+	}
+	use_gpu_rendering = true;
+
+	long long hits_before = texc_hit;
+	int first = sdl_tx_load(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, text, color, 0, fonta, 0, 0);
+	int again = sdl_tx_load(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, text, color, 0, fonta, 0, 0);
+	int different = sdl_tx_load(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, other, color, 0, fonta, 0, 0);
+	int checkonly = sdl_tx_load(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, text, color, 0, fonta, 1, 0);
+
+	use_gpu_rendering = prev;
+
+	if (first == STX_NONE) {
+		printf("D   first load returned STX_NONE\n");
+		ok = 0;
+	} else {
+		if (!sdlt[first].gpu_tex || sdlt[first].tex) {
+			printf("D   GPU entry has gpu_tex=%p tex=%p\n", (void *)sdlt[first].gpu_tex, (void *)sdlt[first].tex);
+			ok = 0;
+		}
+		if (again != first) {
+			printf("D   second lookup landed on slot %d, expected %d (cache MISS)\n", again, first);
+			ok = 0;
+		}
+		if (texc_hit != hits_before + 1) {
+			printf("D   texc_hit advanced by %lld, expected 1\n", texc_hit - hits_before);
+			ok = 0;
+		}
+		if (different == first || different == STX_NONE) {
+			printf("D   a different string shares slot %d\n", different);
+			ok = 0;
+		}
+		if (checkonly != 1) {
+			printf("D   checkonly lookup returned %d, expected 1\n", checkonly);
+			ok = 0;
+		}
+	}
+	printf("D gpu-mode-text-cache-hit          %s\n", ok ? "PASS" : "FAIL");
+	if (!ok) {
+		failures++;
+	}
+}
+
 int main(void)
 {
 	/* the offscreen driver supports SDL_GPU (Vulkan) without a display;
@@ -1283,6 +1348,9 @@ int main(void)
 			run_part_b();
 		} else {
 			printf("B (scale %d)                        SKIP (no GPU device)\n", scale);
+		}
+		if (scale == 1) {
+			run_part_d();
 		}
 	}
 

@@ -368,7 +368,11 @@ static int tex_entry_matches_request(int idx, const struct tex_request *r)
 		if (!(flags & SF_TEXT)) {
 			return 0;
 		}
-		if (!(sdlt[idx].tex)) {
+		/* GPU mode stores the string in gpu_tex (standalone or atlas
+		 * region) and leaves tex NULL - requiring an SDL_Texture here made
+		 * EVERY text lookup miss under the GPU renderer, so each visible
+		 * string was rasterized and uploaded again every frame. */
+		if (!(sdlt[idx].tex) && !(sdlt[idx].gpu_tex)) {
 			return 0;
 		}
 		if (!sdlt[idx].text || strcmp(sdlt[idx].text, r->text) != 0) {

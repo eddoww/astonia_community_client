@@ -535,8 +535,8 @@ static void detect_hover_target(void)
 
 	// hit map - the world renders at the full canvas, not on the UI layer,
 	// so its hit tests take canvas coordinates
-	int wmx = mousex * ui_scale_pct / 100;
-	int wmy = mousey * ui_scale_pct / 100;
+	int wmx = mousex * XRES / UIXRES;
+	int wmy = mousey * YRES / UIYRES;
 
 	if (!hitsel[0] && butsel == -1 && wmx >= dotx(DOT_MTL) && wmy >= doty(DOT_MTL) && doty(DOT_MBR) &&
 	    wmy < doty(DOT_MBR)) {

@@ -84,6 +84,11 @@ void sdl_derive_ui_canvas(void)
 	if (pct > maxpct) {
 		pct = maxpct;
 	}
+	/* write the clamp back: the mouse transform, the Options slider and the
+	 * saved value must all agree with the dims derived here - a silently
+	 * clamped layout with an unclamped mouse divisor put every hover a
+	 * scale-factor away from the cursor */
+	ui_scale_pct = pct;
 	__uixres = XRES * 100 / pct;
 	__uiyres = YRES * 100 / pct;
 }

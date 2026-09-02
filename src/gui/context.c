@@ -716,8 +716,8 @@ static void resolve_cursor_targets(size_t *out_csel, size_t *out_isel, size_t *o
 	 * Same nearest-wins split as context_key_set_cmd. NEAR_NOTSELF stays so
 	 * attack/give/fireball can never resolve to yourself; ACTION_LOOK handles
 	 * the own tile separately. */
-	size_t tmp = get_near_ex(mousex * ui_scale_pct / 100, mousey * ui_scale_pct / 100,
-	    CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR | NEAR_NOTSELF, 3);
+	size_t tmp = get_near_ex(
+	    mousex * XRES / UIXRES, mousey * YRES / UIYRES, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR | NEAR_NOTSELF, 3);
 	if (tmp != MAXMN) {
 		if (map[tmp].csprite) {
 			*out_csel = tmp;
@@ -725,7 +725,7 @@ static void resolve_cursor_targets(size_t *out_csel, size_t *out_isel, size_t *o
 			*out_isel = tmp;
 		}
 	}
-	*out_msel = get_near_ground(mousex * ui_scale_pct / 100, mousey * ui_scale_pct / 100);
+	*out_msel = get_near_ground(mousex * XRES / UIXRES, mousey * YRES / UIYRES);
 }
 
 /* try to execute an action immediately at whatever is under the cursor.
@@ -838,8 +838,8 @@ int context_key_set_cmd(void)
 	chrsel = itmsel = mapsel = MAXMN;
 
 	/* world probes take canvas coordinates, not UI-layer ones */
-	int wmx = mousex * ui_scale_pct / 100;
-	int wmy = mousey * ui_scale_pct / 100;
+	int wmx = mousex * XRES / UIXRES;
+	int wmy = mousey * YRES / UIYRES;
 
 	switch (lcmd_override) {
 	case CMD_CHR_ATTACK:

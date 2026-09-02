@@ -215,16 +215,17 @@ void gui_sdl_mouseproc(float x, float y, int what)
 				 * sdl_scale>=2, which made slow scrollbar drags register
 				 * nothing and then jump */
 				/* deltas land in UI-layer pixels: window px scaled down by
-				 * sdl_scale AND the UI scale; raw*100 units + remainder so
-				 * slow drags never drop pixels */
+				 * sdl_scale and the canvas/layer ratio; work in raw*UIRES
+				 * units with a remainder so slow drags never drop pixels */
 				static int capdx_rem, capdy_rem;
-				int denom = sdl_scale * ui_scale_pct;
-				int rawx = (mousex - cwx) * 100 + capdx_rem;
-				int rawy = (mousey - cwy) * 100 + capdy_rem;
-				mousedx += rawx / denom;
-				mousedy += rawy / denom;
-				capdx_rem = rawx % denom;
-				capdy_rem = rawy % denom;
+				int denx = sdl_scale * XRES;
+				int deny = sdl_scale * YRES;
+				int rawx = (mousex - cwx) * UIXRES + capdx_rem;
+				int rawy = (mousey - cwy) * UIYRES + capdy_rem;
+				mousedx += rawx / denx;
+				mousedy += rawy / deny;
+				capdx_rem = rawx % denx;
+				capdy_rem = rawy % deny;
 				sdl_set_cursor_pos(cwx, cwy);
 			}
 		}
@@ -233,9 +234,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		mousey /= sdl_scale;
 		mousex -= render_offset_x();
 		mousey -= render_offset_y();
-		/* GUI coordinates live on the UI layer */
-		mousex = mousex * 100 / ui_scale_pct;
-		mousey = mousey * 100 / ui_scale_pct;
+		/* GUI coordinates live on the UI layer. Derive from the actual
+		 * canvas/layer ratio - the exact inverse of the composite - so the
+		 * pointer can never disagree with where the layer really draws. */
+		mousex = mousex * UIXRES / XRES;
+		mousey = mousey * UIYRES / YRES;
 
 		if (gui_is_loading()) {
 			break; /* hover only feeds the menu overlays while loading */
@@ -370,8 +373,8 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		}
 
 		if (capbut != -1) {
-			sdl_set_cursor_pos((but[capbut].x * ui_scale_pct / 100 + render_offset_x()) * sdl_scale,
-			    (but[capbut].y * ui_scale_pct / 100 + render_offset_y()) * sdl_scale);
+			sdl_set_cursor_pos((but[capbut].x * XRES / UIXRES + render_offset_x()) * sdl_scale,
+			    (but[capbut].y * YRES / UIYRES + render_offset_y()) * sdl_scale);
 			sdl_capture_mouse(0);
 			SDL_ShowCursor();
 			amod_mouse_capture(0);

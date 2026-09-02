@@ -18,6 +18,7 @@
 #include "gui/input_bind.h"
 #include "gui/panels.h"
 #include "gui/ui_draw.h"
+#include "gui/equip_bonus.h"
 #include "game/game.h"
 #include "client/client.h"
 #include "modder/modder.h"
@@ -43,6 +44,313 @@ void display_wear_lock(void)
 {
 	gear_lock = 1 - gear_lock;
 	save_options();
+}
+
+/* ── Bonuses column ──────────────────────────────────────────────────────
+ *
+ * Right of the paper doll: one row per value the worn gear touches, in
+ * |bonus| order, coloured by how much of it reaches the character. That
+ * verdict needs the server's item-modifier cap rule, so it comes in through
+ * a server mod (equip_bonus_set, src/gui/equip_bonus.h). Without a table the
+ * client shows what it can derive alone - the plain difference between the
+ * current value and its base, uncoloured - and says so. The rows drawn last
+ * are kept so the hover tooltip answers for exactly what is on screen. */
+
+#define WEA_BONUS_MODE_SERVER   1
+#define WEA_BONUS_MODE_FALLBACK 2
+
+_Static_assert(EQUIP_BONUS_MAX_V == V_MAX, "equip_bonus.h's value space drifted from V_MAX");
+
+static struct equip_bonus_entry wea_rows[WEA_BONUS_MAX_ROWS];
+static int wea_rows_n = 0, wea_rows_more = 0, wea_rows_mode = 0;
+static int wea_col_x1 = 0, wea_col_x2 = 0, wea_rows_y0 = 0;
+
+static unsigned short wea_verdict_color(int verdict)
+{
+	switch (verdict) {
+	case EQUIP_VERDICT_WASTED:
+		return IRGB(31, 9, 9);
+	case EQUIP_VERDICT_PERFECT:
+		return IRGB(9, 31, 9);
+	case EQUIP_VERDICT_ROOM:
+		return IRGB(31, 29, 8);
+	case EQUIP_VERDICT_SUPPRESSED:
+		return UI_TEXT_MUTED;
+	default:
+		return UI_TEXT;
+	}
+}
+
+static const char *wea_value_name(int v)
+{
+	if (v < 0 || v >= *game_v_max || !game_skill[v].name[0]) {
+		return NULL;
+	}
+	return game_skill[v].name;
+}
+
+/* What the client can tell without the server: a value's total over its
+ * base and attribute-derived part (hover.c's "equipment bonus"), which
+ * also contains spell and profession effects. Derived totals (armor,
+ * weapon, light, speed) are sums of many things and stay out. */
+static int wea_fallback_build(struct equip_bonus_entry *out, int max)
+{
+	int v, n = 0;
+
+	for (v = 0; v < *game_v_max && n < max; v++) {
+		int b1, b2, b3, base = 0, delta;
+
+		if (sv_ver != 35 && (v == V_ARMOR || v == V_WEAPON || v == V_LIGHT || v == V_SPEED)) {
+			continue;
+		}
+		if (sv_ver != 35 && v >= V_PROFESSION) {
+			break; /* the profession pseudo-value and the profession levels: never gear */
+		}
+		if (!wea_value_name(v) || (!value[1][v] && v >= V_PULSE)) {
+			continue;
+		}
+		b1 = game_skill[v].base1;
+		b2 = game_skill[v].base2;
+		b3 = game_skill[v].base3;
+		if (b1 != -1 && b2 != -1 && b3 != -1 && v != V_DEMON) {
+			int cap = max(15, value[1][v] * 2);
+
+			base = (value[0][b1] + value[0][b2] + value[0][b3]) / 5;
+			if (base > cap) {
+				base = cap;
+			}
+		}
+		delta = value[0][v] - value[1][v] - base;
+		if (!delta) {
+			continue;
+		}
+		out[n].v = v;
+		out[n].raw = delta;
+		out[n].eff = delta;
+		out[n].cap = 0;
+		out[n].flags = 0;
+		n++;
+	}
+	equip_bonus_sort(out, n);
+	return n;
+}
+
+static void wea_format_value(const struct equip_bonus_entry *e, char *buf, size_t n)
+{
+	if (wea_rows_mode == WEA_BONUS_MODE_SERVER && (e->flags & EQUIP_BONUS_F_HAS_CAP)) {
+		snprintf(buf, n, "%+d (%d/%d)", e->raw, e->eff, e->cap);
+	} else if (wea_rows_mode == WEA_BONUS_MODE_SERVER && e->eff != e->raw) {
+		snprintf(buf, n, "%+d (%d)", e->raw, e->eff);
+	} else {
+		snprintf(buf, n, "%+d", e->raw);
+	}
+}
+
+/* truncate a name to a pixel width in the small font */
+static void wea_fit_name(const char *src, int max_w, char *dst, size_t n)
+{
+	size_t len;
+
+	snprintf(dst, n, "%s", src ? src : "?");
+	len = strlen(dst);
+	while (len > 1 && render_text_length(RENDER_TEXT_SMALL, dst) > max_w) {
+		dst[--len] = 0;
+	}
+}
+
+static int wea_legend_item(int x, int y, unsigned short color, const char *label)
+{
+	render_rect(x, y + 2, x + 5, y + 7, color);
+	x = render_text(x + 8, y, UI_TEXT_MUTED, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, label);
+	return x + 8;
+}
+
+static void display_wear_bonuses(int cx1, int cy1, int cx2, int cy2)
+{
+	int x1 = cx1 + WEA_COLS * FDX + WEA_BONUS_GAP;
+	int x2 = cx2 - 4;
+	int rows_y0 = cy1 + WEA_BONUS_HEAD_H;
+	int legend_y = cy2 - WEA_BONUS_LEGEND_H;
+	int rows_fit = (legend_y - rows_y0) / WEA_BONUS_ROW_H;
+	struct equip_bonus_entry fb[V_MAX];
+	int i, n, total;
+
+	/* rule between the doll and the column, then the header */
+	render_rect_alpha(x1 - WEA_BONUS_GAP / 2, cy1 + 2, x1 - WEA_BONUS_GAP / 2 + 1, cy2 - 2, UI_BORDER, UI_A_RULE);
+	render_text(x1, cy1 + 2, UI_TEXT_MUTED, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "Bonuses");
+
+	if (rows_fit > WEA_BONUS_MAX_ROWS) {
+		rows_fit = WEA_BONUS_MAX_ROWS;
+	}
+	if (rows_fit < 1) {
+		rows_fit = 1;
+	}
+
+	if (equip_bonus_available()) {
+		wea_rows_mode = WEA_BONUS_MODE_SERVER;
+		total = equip_bonus_count();
+		n = total > rows_fit ? rows_fit - 1 : total; /* keep a line for "+N more" */
+		for (i = 0; i < n; i++) {
+			wea_rows[i] = *equip_bonus_get(i);
+		}
+	} else {
+		wea_rows_mode = WEA_BONUS_MODE_FALLBACK;
+		total = wea_fallback_build(fb, V_MAX);
+		n = total > rows_fit ? rows_fit - 1 : total;
+		for (i = 0; i < n; i++) {
+			wea_rows[i] = fb[i];
+		}
+	}
+	wea_rows_n = n;
+	wea_rows_more = total - n;
+	wea_col_x1 = x1;
+	wea_col_x2 = x2;
+	wea_rows_y0 = rows_y0;
+
+	if (!total) {
+		render_text(x1, rows_y0, UI_TEXT_MUTED, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "no gear bonuses");
+	}
+	for (i = 0; i < n; i++) {
+		const struct equip_bonus_entry *e = &wea_rows[i];
+		int ry = rows_y0 + i * WEA_BONUS_ROW_H;
+		int verdict = wea_rows_mode == WEA_BONUS_MODE_SERVER ? equip_bonus_verdict(e) : EQUIP_VERDICT_NONE;
+		unsigned short col = wea_verdict_color(verdict);
+		char val[32], name[48];
+		int vw;
+
+		wea_format_value(e, val, sizeof(val));
+		vw = render_text_length(RENDER_TEXT_SMALL, val);
+		render_text(x2, ry, col, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_TEXT_RIGHT, val);
+		wea_fit_name(wea_value_name(e->v), x2 - vw - 6 - x1, name, sizeof(name));
+		render_text(x1, ry, col, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, name);
+	}
+	if (wea_rows_more > 0) {
+		render_text_fmt(x1, rows_y0 + n * WEA_BONUS_ROW_H, UI_TEXT_MUTED, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED,
+		    "+%d more", wea_rows_more);
+	}
+
+	/* legend, or the reason there are no colours */
+	if (wea_rows_mode == WEA_BONUS_MODE_SERVER) {
+		int lx = x1;
+
+		lx = wea_legend_item(lx, legend_y + LINEHEIGHT, IRGB(9, 31, 9), "perfect");
+		lx = wea_legend_item(lx, legend_y + LINEHEIGHT, IRGB(31, 29, 8), "room");
+		wea_legend_item(lx, legend_y + LINEHEIGHT, IRGB(31, 9, 9), "wasted");
+	} else {
+		render_text(x1, legend_y, UI_TEXT_MUTED, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, "approximate - no mod data");
+		render_text(x1, legend_y + LINEHEIGHT, UI_TEXT_MUTED, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED,
+		    "Ugaris mod shows the caps");
+	}
+}
+
+void display_wear_bonus_hover(int mx, int my)
+{
+	const struct equip_bonus_entry *e;
+	const char *name;
+	char text[640], line[96];
+	int cx1, cy1, cx2, cy2, row, lines = 1, w = 0, h, x, y, i, start;
+	size_t len;
+
+	if (!wea_rows_n || !panel_content_rect(PANEL_EQUIPMENT, &cx1, &cy1, &cx2, &cy2)) {
+		return;
+	}
+	if (mx < wea_col_x1 || mx > wea_col_x2 || my < wea_rows_y0) {
+		return;
+	}
+	row = (my - wea_rows_y0) / WEA_BONUS_ROW_H;
+	if (row < 0 || row >= wea_rows_n) {
+		return;
+	}
+	e = &wea_rows[row];
+	name = wea_value_name(e->v);
+	if (!name) {
+		name = "?";
+	}
+
+	if (wea_rows_mode == WEA_BONUS_MODE_SERVER) {
+		int verdict = equip_bonus_verdict(e);
+
+		len = (size_t)snprintf(text, sizeof(text), "%s\nGear bonus: %+d", name, e->raw);
+		if (e->flags & EQUIP_BONUS_F_HAS_CAP) {
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nEffective: %+d of at most %d", e->eff, e->cap);
+		} else if (e->eff != e->raw) {
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nEffective: %+d", e->eff);
+		}
+		switch (verdict) {
+		case EQUIP_VERDICT_WASTED:
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nWasted: %+d has no effect", e->raw - e->eff);
+			break;
+		case EQUIP_VERDICT_PERFECT:
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nPerfect: exactly at the cap");
+			break;
+		case EQUIP_VERDICT_ROOM:
+			len +=
+			    (size_t)snprintf(text + len, sizeof(text) - len, "\nRoom: %+d more would still count", e->cap - e->raw);
+			break;
+		case EQUIP_VERDICT_SUPPRESSED:
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nSuppressed: no-magic zone");
+			break;
+		default:
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nNo cap applies to this value");
+			break;
+		}
+		if (e->flags & EQUIP_BONUS_F_UNLEARNED) {
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nSkill not learned - the bonus idles");
+		}
+		if (e->flags & EQUIP_BONUS_F_NOEFFECT) {
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nItems never change this value");
+		}
+		if (e->flags & EQUIP_BONUS_F_BEYOND) {
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nIncludes an uncapped artifact share");
+		}
+		if ((e->flags & EQUIP_BONUS_F_HAS_CAP) &&
+		    !(e->flags & (EQUIP_BONUS_F_UNLEARNED | EQUIP_BONUS_F_NOEFFECT | EQUIP_BONUS_F_BEYOND)) &&
+		    e->v < *game_v_max && value[1][e->v] > 0) {
+			len += (size_t)snprintf(text + len, sizeof(text) - len, "\nCap: %d%% of the base %d",
+			    e->cap * 100 / value[1][e->v], value[1][e->v]);
+		}
+	} else {
+		snprintf(text, sizeof(text),
+		    "%s\nBonus over base: %+d\nApproximate: spells and professions\ncount too. The Ugaris mod shows\nthe "
+		    "exact cap and effect.",
+		    name, e->raw);
+	}
+
+	/* size the box from the longest line */
+	for (i = 0, start = 0;; i++) {
+		if (text[i] == '\n' || !text[i]) {
+			int l = i - start, lw;
+
+			if (l > (int)sizeof(line) - 1) {
+				l = (int)sizeof(line) - 1;
+			}
+			memcpy(line, text + start, (size_t)l);
+			line[l] = 0;
+			lw = render_text_length(0, line);
+			if (lw > w) {
+				w = lw;
+			}
+			if (!text[i]) {
+				break;
+			}
+			lines++;
+			start = i + 1;
+		}
+	}
+	h = lines * LINEHEIGHT;
+	x = mx - w - 20;
+	if (x < 0) {
+		x = mx + 14;
+	}
+	y = my + 14;
+	if (y + h + 8 > UIYRES) {
+		y = UIYRES - h - 8;
+	}
+	if (y < 0) {
+		y = 0;
+	}
+	render_shaded_rect(x, y, x + w + 8, y + h + 8, 0x0000, 150);
+	render_text_nl(x + 4, y + 4, 0xffff, RENDER_TEXT_FRAMED, text);
 }
 
 /* Which slots the carried/hovered item could be worn in, so the paper doll
@@ -132,8 +440,9 @@ void display_wear(void)
 		}
 	}
 
-	/* gear lock in the window's footer */
+	/* the bonuses column, then the gear lock in the window's footer */
 	if (panel_content_rect(PANEL_EQUIPMENT, &cx1, &cy1, &cx2, &cy2)) {
+		display_wear_bonuses(cx1, cy1, cx2, cy2 - WEA_FOOT_H);
 		render_rect_alpha(cx1, cy2 - WEA_FOOT_H, cx2, cy2 - WEA_FOOT_H + 1, UI_BORDER, UI_A_RULE);
 	}
 	dx_copysprite_emerald(butx(BUT_WEA_LCK), buty(BUT_WEA_LCK), 2 - gear_lock, 2);

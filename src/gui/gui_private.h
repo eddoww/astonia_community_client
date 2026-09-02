@@ -51,21 +51,27 @@ DLL_EXPORT void con_grid_set_rows(int n);
 /* ── Panel content geometry ─────────────────────────────────────────────
  * Shared by dots.c (which lays the panels out), display.c (which draws
  * them) and hover.c (which puts tooltips over them). */
-#define INV_RAIL_W    12 /* inventory scrollbar rail column         */
-#define INV_RAIL_GAP  3
-#define INV_FOOT_H    32 /* purse + trashcan row under the grid     */
-#define SKL_RAIL_W    12 /* skill list scrollbar rail column        */
-#define WEA_COLS      3 /* equipment paper doll                    */
-#define WEA_ROWS      5
-#define WEA_FOOT_H    18 /* gear-lock row under the doll            */
-#define SPEED_SEG_W   46 /* one segment of the speed selector       */
-#define SPEED_SEG_H   28
-#define SPEED_SEG_GAP 2
-#define BUFF_CHIP     28 /* one buff chip                          */
-#define BUFF_GAP      3
-#define BUFF_LABEL_H  10
-#define BUFF_COUNT    4
-#define SPB_COLS      7 /* spellbook window columns              */
+#define INV_RAIL_W         12 /* inventory scrollbar rail column         */
+#define INV_RAIL_GAP       3
+#define INV_FOOT_H         32 /* purse + trashcan row under the grid     */
+#define SKL_RAIL_W         12 /* skill list scrollbar rail column        */
+#define WEA_COLS           3 /* equipment paper doll                    */
+#define WEA_ROWS           5
+#define WEA_FOOT_H         18 /* gear-lock row under the doll            */
+#define WEA_BONUS_W        168 /* "Bonuses" column right of the doll     */
+#define WEA_BONUS_GAP      6 /* rule + padding between doll and column   */
+#define WEA_BONUS_HEAD_H   14 /* column header row                    */
+#define WEA_BONUS_ROW_H    LINEHEIGHT
+#define WEA_BONUS_LEGEND_H (2 * LINEHEIGHT + 2) /* legend / mod-less note  */
+#define WEA_BONUS_MAX_ROWS 24
+#define SPEED_SEG_W        46 /* one segment of the speed selector       */
+#define SPEED_SEG_H        28
+#define SPEED_SEG_GAP      2
+#define BUFF_CHIP          28 /* one buff chip                          */
+#define BUFF_GAP           3
+#define BUFF_LABEL_H       10
+#define BUFF_COUNT         4
+#define SPB_COLS           7 /* spellbook window columns              */
 /* status panel (level + military progress) */
 /* status panel: two WoW-style full-width bars at the screen bottom */
 #define STAT_BAR_H 11
@@ -617,6 +623,7 @@ int help_link_page_at(int x, int y);
 void dx_copysprite_emerald(int scrx, int scry, int emx, int emy);
 
 void display_wear(void);
+void display_wear_bonus_hover(int mx, int my); /* row tooltip, from hover.c */
 void display_look(void);
 void display_citem(void);
 void display_gold(void);

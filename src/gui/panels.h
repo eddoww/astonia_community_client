@@ -104,18 +104,24 @@ void panels_place_chrome_buttons(void (*place)(int bidx, int x, int y, int hitra
  * the very end of init_dots() (after every set_dot/set_but) */
 void panels_apply_offsets(void);
 
-/* drag-handle mouse capture: apply mousedx/mousedy to the panel that owns
- * the captured drag button; call panels_drag_finished() on button release
- * to persist the moved layout */
-void panels_drag(int p);
-void panels_drag_finished(void);
+/* Drag-handle gesture, in absolute UI-space pointer positions: begin at the
+ * press, update on every motion, end on the release (persists the moved
+ * layout) - or cancel first to put the panel back where it was. The panel's
+ * offset is always "offset at the press + pointer travel since", so nothing
+ * accumulates and nothing can drift. */
+void panels_drag_begin(int p, int mx, int my);
+void panels_drag_update(int p, int mx, int my);
+void panels_drag_cancel(void);
+void panels_drag_end(void);
 
-/* resize-grip mouse capture: the grip tracks the pointer 1:1 and the panel's
- * size setting follows (inventory / container columns and rows, skill list
- * rows). Returns 1 when the size changed and init_dots() has to run again;
- * the caller then calls panel_keep_anchor() so the window grows under the
- * grip instead of away from it. */
-int panels_resize(int p);
+/* Resize-grip gesture: the grip follows the pointer 1:1 and the panel's size
+ * setting follows (inventory / container columns and rows, skill list rows);
+ * the layout is rebuilt on every change with the corner the grip is NOT
+ * dragging pinned in place. update returns 1 when the layout was rebuilt. */
+int panels_resize_begin(int p, int mx, int my);
+int panels_resize_update(int p, int mx, int my);
+void panels_resize_cancel(void);
+void panels_resize_end(void);
 
 /* shift a panel so its content rect's top-left returns to (x1,y1) - used to
  * pin the corner a resize is NOT dragging */

@@ -77,8 +77,9 @@ TEST_SPRITE_CONFIG = $(BIN_DIR)/test_sprite_config
 TEST_LOADING_UI = $(BIN_DIR)/test_loading_ui
 TEST_SHADERFX = $(BIN_DIR)/test_shaderfx_compare
 TEST_TEXT = $(BIN_DIR)/test_text_compare
+TEST_GESTURE = $(BIN_DIR)/test_gesture
 
-all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT)
+all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT) $(TEST_GESTURE)
 test: run
 
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
@@ -108,6 +109,18 @@ $(TEST_SPRITE_CONFIG): test_sprite_config.c $(SPRITE_CONFIG_SRCS)
 $(TEST_LOADING_UI): test_loading_ui.c ../src/gui/loading_ui.c
 	@mkdir -p $(BIN_DIR)
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src -I../include $(shell pkg-config --cflags sdl3) $^ -o $@ $(shell pkg-config --libs sdl3)
+
+# Pointer gesture core (pure C: no SDL, no client globals)
+$(TEST_GESTURE): test_gesture.c ../src/gui/gesture.c
+	@mkdir -p $(BIN_DIR)
+	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
+
+test_gesture: $(TEST_GESTURE)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running pointer gesture tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_gesture
 
 # Run loading screen tests
 test_loading_ui: $(TEST_LOADING_UI)
@@ -183,13 +196,13 @@ test_text: $(TEST_TEXT)
 	cd .. && ./bin/test_text_compare
 
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_shaderfx test_text
+run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_gesture test_shaderfx test_text
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"
 	@echo "==============================================="
 
 clean:
-	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) *.o
+	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_GESTURE) *.o
 
-.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui
+.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture

@@ -71,6 +71,9 @@ void main_exit(void);
 void gui_dump(FILE *fp);
 void gui_sdl_keyproc(SDL_Keycode key, SDL_Keymod mod);
 void gui_sdl_mouseproc(float x, float y, int what);
+/* left-button state as the OS reports it (motion events, focus loss): ends a
+ * gesture whose release never arrived */
+void gui_sdl_mouse_sync(int lbutton_down);
 
 extern int (*get_skltab_sep)(int i);
 DLL_EXPORT int _get_skltab_sep(int i);

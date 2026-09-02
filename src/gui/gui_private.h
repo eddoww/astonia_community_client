@@ -514,6 +514,10 @@ DLL_EXPORT extern int game_slowdown;
 // Platform-specific GUI functions
 void gui_sdl_draghack(void);
 
+/* non-zero while a pointer gesture (client button or mod surface) owns the
+ * mouse - gui_input.c */
+int gui_pointer_grabbed(void);
+
 // ============================================================================
 // Shared variables from gui_map.c (shared for map coordinate functions)
 // ============================================================================

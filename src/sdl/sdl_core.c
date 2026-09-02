@@ -864,6 +864,9 @@ void sdl_loop(void)
 			amod_textinput((SDL_Keycode)(unsigned char)event.text.text[0]);
 			break;
 		case SDL_EVENT_MOUSE_MOTION:
+			/* the button state riding on the motion is the truth: a release
+			 * that never arrived as an event ends the gesture here */
+			gui_sdl_mouse_sync((event.motion.state & SDL_BUTTON_MASK(SDL_BUTTON_LEFT)) != 0);
 			gui_sdl_mouseproc(event.motion.x, event.motion.y, SDL_MOUM_NONE);
 			break;
 		case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -903,6 +906,10 @@ void sdl_loop(void)
 		case SDL_EVENT_MOUSE_WHEEL:
 			gui_sdl_mouseproc(event.wheel.x, event.wheel.y, SDL_MOUM_WHEEL);
 			break;
+		case SDL_EVENT_WINDOW_FOCUS_LOST:
+			/* alt-tab mid-drag: the release goes to another window */
+			gui_sdl_mouse_sync(0);
+			break;
 		case SDL_EVENT_WINDOW_FOCUS_GAINED:
 #ifdef ENABLE_DRAGHACK
 			float x, y;
@@ -937,11 +944,6 @@ void sdl_loop(void)
 void sdl_set_cursor_pos(int x, int y)
 {
 	SDL_WarpMouseInWindow(sdlwnd, (float)x, (float)y);
-}
-
-void sdl_capture_mouse(int flag)
-{
-	SDL_CaptureMouse(flag ? true : false);
 }
 
 /* This function is a hack. It can only load one specific type of

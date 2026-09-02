@@ -88,6 +88,11 @@ void gui_sdl_mouseproc(float x __attribute__((unused)), float y __attribute__((u
 	// No-op in tests
 }
 
+void gui_sdl_mouse_sync(int lbutton_down __attribute__((unused)))
+{
+	// No-op in tests
+}
+
 void gui_sdl_keyproc(SDL_Keycode key __attribute__((unused)), SDL_Keymod mod __attribute__((unused)))
 {
 	// No-op in tests

@@ -36,6 +36,12 @@ DLL_EXPORT void amod_update_hover_texts(void);
 //   1  = processed, client and later mods should ignore
 //  -1  = client should ignore, but allow other mods to process
 //   0  = not processed, continue normal handling
+// Pointer capture: a mod that consumes SDL_MOUM_LDOWN owns the gesture - the client
+// delivers every amod_mouse_move() and the matching SDL_MOUM_LUP to it even when the
+// pointer leaves the mod's surface or the window, and never acts on that release
+// itself. While the client runs one of its own drags (panel title bars, resize grips,
+// scroll thumbs), mods are not offered the release. The pointer is never warped or
+// hidden: implement drags with absolute positions, never by accumulating deltas.
 DLL_EXPORT int amod_mouse_click(int x, int y, int what);
 // Optional: return non-zero if the mod draws an interactive surface (window, bar, ...) at
 // (x,y). While it does, the client suppresses its own hover detection there (no "take"/"use"

@@ -22,6 +22,7 @@
 #include "gui/gui.h"
 #include "gui/gui_private.h"
 #include "gui/panels.h"
+#include "gui/gesture.h"
 #include "gui/ui_draw.h"
 #include "gui/ui_tokens.h"
 #include "client/client.h"
@@ -545,20 +546,9 @@ static void panel_clamp(int p, int *dx, int *dy)
 		y1 = y2 = dot[pan->dots[0]].y;
 	}
 
-	if (x2 + *dx > UIXRES) {
-		*dx -= x2 + *dx - UIXRES;
-	}
-	if (y2 + *dy > UIYRES) {
-		*dy -= y2 + *dy - UIYRES;
-	}
 	/* left/top win for a panel larger than the screen - the drag handle and
 	 * title bar live there */
-	if (x1 + *dx < 0) {
-		*dx -= x1 + *dx;
-	}
-	if (y1 + *dy < 0) {
-		*dy -= y1 + *dy;
-	}
+	gesture_clamp_delta(x1, y1, x2, y2, UIXRES, UIYRES, dx, dy);
 }
 
 /* Magnetize a dragged panel's edges to the screen edges and to the other
@@ -566,19 +556,13 @@ static void panel_clamp(int p, int *dx, int *dy)
  * hunting. Adjusts the delta by at most SNAP_DIST per axis. */
 #define SNAP_DIST 8
 
-static void snap_axis(int a1, int a2, int t1, int t2, int *best, int *adj)
-{
-	int cand[4] = {t1 - a1, t2 - a1, t1 - a2, t2 - a2};
-
-	for (int i = 0; i < 4; i++) {
-		int d = cand[i] < 0 ? -cand[i] : cand[i];
-
-		if (d <= SNAP_DIST && d < *best) {
-			*best = d;
-			*adj = cand[i];
-		}
-	}
-}
+/* the grab handle drawn next to a frameless panel (the hotbar): a bar that
+ * reaches PANEL_HANDLE_L px left of its anchor and PANEL_HANDLE_R px right of
+ * it - up to, never over, the first slot - and the whole bar takes the press,
+ * not only the small circle under its middle */
+#define PANEL_HANDLE_L 20
+#define PANEL_HANDLE_R 7
+#define PANEL_HANDLE_H 5
 
 static void panel_snap(int p, int *dx, int *dy)
 {
@@ -594,16 +578,16 @@ static void panel_snap(int p, int *dx, int *dy)
 	y1 += *dy;
 	y2 += *dy;
 
-	snap_axis(x1, x2, 0, UIXRES, &bestx, &adjx);
-	snap_axis(y1, y2, 0, UIYRES, &besty, &adjy);
+	gesture_snap_axis(x1, x2, 0, UIXRES, SNAP_DIST, &bestx, &adjx);
+	gesture_snap_axis(y1, y2, 0, UIYRES, SNAP_DIST, &besty, &adjy);
 	for (int q = 0; q < MAX_PANEL; q++) {
 		int qx1, qy1, qx2, qy2;
 
 		if (q == p || !panel_shown(q) || !panel_bounds_rect(q, &qx1, &qy1, &qx2, &qy2)) {
 			continue;
 		}
-		snap_axis(x1, x2, qx1, qx2, &bestx, &adjx);
-		snap_axis(y1, y2, qy1, qy2, &besty, &adjy);
+		gesture_snap_axis(x1, x2, qx1, qx2, SNAP_DIST, &bestx, &adjx);
+		gesture_snap_axis(y1, y2, qy1, qy2, SNAP_DIST, &besty, &adjy);
 	}
 	*dx += adjx;
 	*dy += adjy;
@@ -621,44 +605,79 @@ void panels_apply_offsets(void)
 	}
 }
 
-void panels_drag(int p)
-{
-	/* The pointer is captured, so deltas are relative - snapping needs the
-	 * UNSNAPPED position accumulated since the drag began, or a magnetized
-	 * panel could never be pulled off its snap line again. */
-	static int vp = -1;
-	static int vx, vy;
-	int dx, dy;
+/* ── drag gesture ───────────────────────────────────────────────────────
+ *
+ * Absolute pointer positions: the panel's offset is the offset it had at the
+ * press plus the pointer's travel since. Nothing accumulates, so a dropped
+ * event, a re-laid-out default (init_dots() mid-gesture) or a snap can never
+ * make the panel drift or run away - and a cancel puts it back exactly. */
+static struct {
+	int p; /* panel being moved, -1 = none */
+	int grab_x, grab_y; /* pointer at the press         */
+	int start_dx, start_dy; /* stored offset at the press   */
+} drag = {-1, 0, 0, 0, 0};
 
-	if (p < 0 || p >= MAX_PANEL || panel_locked(p)) {
-		vp = -1; /* end of gesture (or a locked panel): forget the virtual position */
-		mousedx = mousedy = 0;
+/* move panel p so its stored offset becomes (want_dx,want_dy): clamped
+ * on-canvas, snapped to the screen edges and the other panels, then clamped
+ * once more so a snap can never push anything off screen */
+static void panel_move_to_offset(int p, int want_dx, int want_dy, int snap)
+{
+	int dx = want_dx - panels[p].dx;
+	int dy = want_dy - panels[p].dy;
+
+	panel_clamp(p, &dx, &dy);
+	if (snap) {
+		panel_snap(p, &dx, &dy);
+		panel_clamp(p, &dx, &dy);
+	}
+	if (!dx && !dy) {
 		return;
 	}
-
-	if (vp != p) {
-		vp = p;
-		vx = panels[p].dx;
-		vy = panels[p].dy;
-	}
-	vx += mousedx;
-	vy += mousedy;
-	mousedx = mousedy = 0;
-
-	/* desired move = virtual position, clamped on-canvas, then snapped to
-	 * the screen edges and the other panels, then clamped once more so a
-	 * snap can never push anything off screen */
-	dx = vx - panels[p].dx;
-	dy = vy - panels[p].dy;
-	panel_clamp(p, &dx, &dy);
-	panel_snap(p, &dx, &dy);
-	panel_clamp(p, &dx, &dy);
-
 	panels[p].dx += dx;
 	panels[p].dy += dy;
 	panel_shift(p, dx, dy);
-	if (dx || dy) {
-		drag_dirty = 1;
+	drag_dirty = 1;
+}
+
+void panels_drag_begin(int p, int mx, int my)
+{
+	drag.p = -1;
+	if (p < 0 || p >= MAX_PANEL || panel_locked(p)) {
+		return;
+	}
+	drag.p = p;
+	drag.grab_x = mx;
+	drag.grab_y = my;
+	drag.start_dx = panels[p].dx;
+	drag.start_dy = panels[p].dy;
+}
+
+void panels_drag_update(int p, int mx, int my)
+{
+	if (p < 0 || p >= MAX_PANEL || drag.p != p) {
+		return;
+	}
+	if (!panel_shown(p) || panel_locked(p)) {
+		drag.p = -1; /* the panel went away (or got locked) under the pointer */
+		return;
+	}
+	panel_move_to_offset(p, drag.start_dx + (mx - drag.grab_x), drag.start_dy + (my - drag.grab_y), 1);
+}
+
+void panels_drag_cancel(void)
+{
+	if (drag.p != -1) {
+		panel_move_to_offset(drag.p, drag.start_dx, drag.start_dy, 0);
+		drag.p = -1;
+	}
+}
+
+void panels_drag_end(void)
+{
+	drag.p = -1;
+	if (drag_dirty) {
+		drag_dirty = 0;
+		save_options();
 	}
 }
 
@@ -680,53 +699,56 @@ void panel_keep_anchor(int p, int x1, int y1)
 	panel_shift(p, dx, dy);
 }
 
-/* Resize grip.
+/* ── resize gesture ─────────────────────────────────────────────────────
  *
- * The pointer is captured (and warped back to the canvas centre every frame),
- * so the grip's position is tracked as a virtual point that the raw deltas
- * accumulate into. The size setting is then read straight off where that
- * point sits relative to the grid's fixed top-left corner - the window
- * follows the pointer 1:1 instead of snapping a step per FDX of travel. */
-int panels_resize(int p)
+ * The grip follows the pointer 1:1: a virtual grip position - the corner of
+ * the content rect at the press plus the pointer's travel since - and the
+ * size setting is read straight off where that point sits relative to the
+ * grid's top-left corner, which stays fixed for the whole gesture. */
+static struct {
+	int p; /* panel being resized, -1 = none          */
+	int grab_x, grab_y; /* pointer at the press                    */
+	int start_x2, start_y2; /* content rect corner at the press        */
+	int originx, originy; /* grid top-left at the press              */
+	int start_cols, start_rows; /* size settings at the press (for cancel) */
+} rsz = {-1, 0, 0, 0, 0, 0, 0, 0, 0};
+
+static int clampi(int v, int lo, int hi)
 {
-	static int gripx, gripy; /* virtual grip position          */
-	static int originx, originy; /* grid top-left, fixed for the drag */
-	static int accp = -1;
-	int cols, rows, changed = 0;
+	return v < lo ? lo : (v > hi ? hi : v);
+}
 
-	if (p < 0 || p >= MAX_PANEL || !panel_resizable(p) || panel_locked(p)) {
-		mousedx = mousedy = 0;
-		return 0;
+static int panel_size_cols(int p)
+{
+	if (p == PANEL_INVENTORY) {
+		return inv_grid_cols();
 	}
-	if (p != accp) {
-		int cx1, cy1, cx2, cy2;
-
-		accp = p;
-		if (!panel_content_rect(p, &cx1, &cy1, &cx2, &cy2)) {
-			mousedx = mousedy = 0;
-			return 0;
-		}
-		gripx = cx2;
-		gripy = cy2;
-		if (p == PANEL_INVENTORY) {
-			originx = cx1 + INV_RAIL_W + INV_RAIL_GAP;
-			originy = cy1;
-		} else if (p == PANEL_SKILLS && con_cnt) {
-			originx = cx1;
-			originy = cy1;
-		} else {
-			originx = cx1;
-			originy = cy1;
-		}
+	if (p == PANEL_SKILLS && con_cnt) {
+		return con_grid_cols();
 	}
+	return 0;
+}
 
-	gripx += mousedx;
-	gripy += mousedy;
-	mousedx = mousedy = 0;
+static int panel_size_rows(int p)
+{
+	if (p == PANEL_INVENTORY) {
+		return __invdy;
+	}
+	if (p == PANEL_SKILLS && con_cnt) {
+		return __condy;
+	}
+	return __skldy;
+}
+
+/* push a size into the panel's settings; 1 when something changed and the
+ * layout has to be rebuilt */
+static int panel_apply_size(int p, int cols, int rows)
+{
+	int changed = 0;
 
 	if (p == PANEL_INVENTORY) {
-		cols = (gripx - originx + FDX / 2) / FDX;
-		rows = (gripy - originy - INV_FOOT_H + FDX / 2) / FDX;
+		cols = clampi(cols, INV_GRID_MIN_COLS, INV_GRID_MAX_COLS);
+		rows = clampi(rows, INV_GRID_MIN_ROWS, INV_GRID_MAX_ROWS);
 		if (cols != inv_grid_cols()) {
 			inv_grid_set_cols(cols);
 			changed = 1;
@@ -736,8 +758,8 @@ int panels_resize(int p)
 			changed = 1;
 		}
 	} else if (p == PANEL_SKILLS && con_cnt) {
-		cols = (gripx - originx - SKL_RAIL_W + FDX / 2) / FDX;
-		rows = (gripy - originy + FDX / 2) / FDX;
+		cols = clampi(cols, CON_GRID_MIN_COLS, CON_GRID_MAX_COLS);
+		rows = clampi(rows, CON_GRID_MIN_ROWS, CON_GRID_MAX_ROWS);
 		if (cols != con_grid_cols()) {
 			con_grid_set_cols(cols);
 			changed = 1;
@@ -747,23 +769,97 @@ int panels_resize(int p)
 			changed = 1;
 		}
 	} else if (p == PANEL_SKILLS) {
-		rows = (gripy - originy + LINEHEIGHT / 2) / LINEHEIGHT;
+		rows = clampi(rows, SKL_GRID_MIN_ROWS, SKL_GRID_MAX_ROWS);
 		if (rows != __skldy) {
 			skl_grid_set_rows(rows);
 			changed = 1;
 		}
 	}
-
-	if (changed) {
-		drag_dirty = 1;
-	}
 	return changed;
 }
 
-void panels_drag_finished(void)
+/* the layout rebuild that follows a size change: the default layout is
+ * re-derived from the settings, then the panel is shifted back so the corner
+ * the grip is not dragging stays put */
+static void panel_relayout_anchored(int p, int x1, int y1)
 {
-	/* next drag starts its virtual position fresh */
-	panels_drag(-1);
+	init_dots();
+	panel_keep_anchor(p, x1, y1);
+}
+
+int panels_resize_begin(int p, int mx, int my)
+{
+	int cx1, cy1, cx2, cy2;
+
+	rsz.p = -1;
+	if (p < 0 || p >= MAX_PANEL || !panel_resizable(p) || panel_locked(p) || panel_collapsed(p)) {
+		return 0;
+	}
+	if (!panel_content_rect(p, &cx1, &cy1, &cx2, &cy2)) {
+		return 0;
+	}
+	rsz.p = p;
+	rsz.grab_x = mx;
+	rsz.grab_y = my;
+	rsz.start_x2 = cx2;
+	rsz.start_y2 = cy2;
+	rsz.originx = cx1 + (p == PANEL_INVENTORY ? INV_RAIL_W + INV_RAIL_GAP : 0);
+	rsz.originy = cy1;
+	rsz.start_cols = panel_size_cols(p);
+	rsz.start_rows = panel_size_rows(p);
+	return 1;
+}
+
+int panels_resize_update(int p, int mx, int my)
+{
+	int gripx, gripy, cols = 0, rows = 0, x1, y1, x2, y2;
+
+	if (p < 0 || p >= MAX_PANEL || rsz.p != p) {
+		return 0;
+	}
+	if (!panel_shown(p) || panel_locked(p) || panel_collapsed(p)) {
+		rsz.p = -1; /* the panel went away under the pointer */
+		return 0;
+	}
+	gripx = rsz.start_x2 + (mx - rsz.grab_x);
+	gripy = rsz.start_y2 + (my - rsz.grab_y);
+
+	if (p == PANEL_INVENTORY) {
+		cols = (gripx - rsz.originx + FDX / 2) / FDX;
+		rows = (gripy - rsz.originy - INV_FOOT_H + FDX / 2) / FDX;
+	} else if (p == PANEL_SKILLS && con_cnt) {
+		cols = (gripx - rsz.originx - SKL_RAIL_W + FDX / 2) / FDX;
+		rows = (gripy - rsz.originy + FDX / 2) / FDX;
+	} else if (p == PANEL_SKILLS) {
+		rows = (gripy - rsz.originy + LINEHEIGHT / 2) / LINEHEIGHT;
+	} else {
+		return 0;
+	}
+
+	if (!panel_content_rect(p, &x1, &y1, &x2, &y2) || !panel_apply_size(p, cols, rows)) {
+		return 0;
+	}
+	drag_dirty = 1;
+	panel_relayout_anchored(p, x1, y1);
+	return 1;
+}
+
+void panels_resize_cancel(void)
+{
+	int p = rsz.p, x1, y1, x2, y2;
+
+	if (p == -1) {
+		return;
+	}
+	rsz.p = -1;
+	if (panel_content_rect(p, &x1, &y1, &x2, &y2) && panel_apply_size(p, rsz.start_cols, rsz.start_rows)) {
+		panel_relayout_anchored(p, x1, y1);
+	}
+}
+
+void panels_resize_end(void)
+{
+	rsz.p = -1;
 	if (drag_dirty) {
 		drag_dirty = 0;
 		save_options();
@@ -870,6 +966,21 @@ int panels_frame_button(int x, int y)
 			return panel_locked(p) ? BUT_PANEL_BODY : BUT_DRAG_BEG + p;
 		}
 	}
+
+	/* frameless panels: the grab handle drawn next to the bar is what the
+	 * player aims at, so the whole handle takes the press (a locked panel
+	 * draws no handle and offers none) */
+	for (int p = 0; p < MAX_PANEL; p++) {
+		int b = BUT_DRAG_BEG + p;
+
+		if (panels[p].frame != PANEL_FRAME_NONE || !panel_shown(p) || panel_locked(p) || (but[b].flags & BUTF_NOHIT)) {
+			continue;
+		}
+		if (x >= butx(b) - PANEL_HANDLE_L && x <= butx(b) + PANEL_HANDLE_R && y >= buty(b) - PANEL_HANDLE_H &&
+		    y <= buty(b) + PANEL_HANDLE_H) {
+			return b;
+		}
+	}
 	return -1;
 }
 
@@ -945,7 +1056,6 @@ void panels_display_frames(void)
 void panels_display_handles(void)
 {
 	const int proximity = 30;
-	const int handle_w = 20, handle_h = 5;
 
 	for (int p = 0; p < MAX_PANEL; p++) {
 		int b = BUT_DRAG_BEG + p;
@@ -962,7 +1072,7 @@ void panels_display_handles(void)
 		dy = mousey - by;
 		if (dx * dx + dy * dy < proximity * proximity) {
 			int hot = (butsel == b) || (capbut == b);
-			render_shaded_rect(bx - handle_w, by - handle_h, bx + handle_w, by + handle_h,
+			render_shaded_rect(bx - PANEL_HANDLE_L, by - PANEL_HANDLE_H, bx + PANEL_HANDLE_R, by + PANEL_HANDLE_H,
 			    hot ? UI_ACCENT : UI_BORDER_STRONG, hot ? UI_A_BORDER_HOV : UI_A_ROW_HOVER);
 		}
 	}

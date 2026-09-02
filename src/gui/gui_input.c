@@ -15,6 +15,7 @@
 #include "gui/gui_private.h"
 #include "gui/input_bind.h"
 #include "gui/panels.h"
+#include "gui/gesture.h"
 
 extern int ui_scale_pct; /* sdl_core.c */
 #include "gui/spellbook_ui.h"
@@ -31,12 +32,84 @@ extern int ui_scale_pct; /* sdl_core.c */
  * matching button-up doesn't execute the look command on top of the cancel */
 static int rclick_cancelled_targeting;
 
+/* set on right-button-down when the click abandoned a live pointer gesture,
+ * so the matching button-up does not execute the look command on top */
+static int rclick_cancelled_gesture;
+
+/* set when a gesture is abandoned (Escape, right-click) while the left
+ * button is still held: the release that eventually comes belongs to the
+ * dead gesture and must not turn into a click on whatever is under it */
+static int lclick_release_pending;
+
+/* The one pointer gesture. Whoever takes the left-button press - a client
+ * button flagged BUTF_CAPTURE, or a mod that consumed the press - owns every
+ * motion event and the matching release, whatever sits under the pointer
+ * then. Positions are absolute: the pointer is never warped or hidden, so a
+ * drag follows the hand 1:1 and can neither drift nor run away, and nothing
+ * under the pointer can eat the release and leave the gesture stuck. */
+static Gesture grab;
+
+int gui_pointer_grabbed(void)
+{
+	return gesture_active(&grab);
+}
+
+/* a client-button gesture starts: the button keeps the pointer */
+static void gesture_take_button(int b)
+{
+	gesture_begin(&grab, GESTURE_BUTTON, b, mousex, mousey);
+	capbut = b;
+	mousedx = mousedy = 0;
+	/* motion and the release keep flowing while the pointer is outside the
+	 * window: SDL auto-captures the mouse for as long as a button is held -
+	 * nothing is warped, nothing is hidden, nothing is grabbed by hand */
+	amod_mouse_capture(1);
+	if (b >= BUT_DRAG_BEG && b <= BUT_DRAG_END) {
+		panels_drag_begin(b - BUT_DRAG_BEG, mousex, mousey);
+	} else if (b >= BUT_PSIZE_BEG && b <= BUT_PSIZE_END) {
+		panels_resize_begin(b - BUT_PSIZE_BEG, mousex, mousey);
+	}
+}
+
+/* the gesture is over: released (cancel=0) or abandoned (cancel=1 - the
+ * panel goes back to where it was at the press) */
+static void gesture_drop_button(int cancel)
+{
+	int b = grab.but;
+
+	gesture_end(&grab);
+	capbut = -1;
+	mousedx = mousedy = 0;
+	amod_mouse_capture(0);
+	if (cancel && vk_lbut) {
+		lclick_release_pending = 1;
+	}
+	if (b >= BUT_DRAG_BEG && b <= BUT_DRAG_END) {
+		if (cancel) {
+			panels_drag_cancel();
+		}
+		panels_drag_end(); /* persists the moved layout */
+	} else if (b >= BUT_PSIZE_BEG && b <= BUT_PSIZE_END) {
+		if (cancel) {
+			panels_resize_cancel();
+		}
+		panels_resize_end();
+	}
+}
+
 void gui_sdl_keyproc(SDL_Keycode key, SDL_Keymod mod)
 {
 	/* modifier state at the time the key event was generated — the live
 	 * SDL_GetModState() may already reflect a later release when a quick
 	 * modifier+key tap was fully pumped before this dispatch runs */
 	Uint8 mods = input_mods_from_sdl(mod);
+
+	/* Escape abandons a live panel drag/resize: the window returns to where
+	 * it was at the press and nothing else happens on this keystroke */
+	if (key == SDLK_ESCAPE && grab.kind == GESTURE_BUTTON) {
+		gesture_drop_button(1);
+		return;
+	}
 
 	if (keybind_settings_capturing()) {
 		if (key == SDLK_ESCAPE) {
@@ -158,39 +231,8 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 	switch (what) {
 	case SDL_MOUM_NONE:
-		mousex = local_x;
-		mousey = local_y;
-
-		if (capbut != -1) {
-			/* canvas centre in window coordinates - mousex/mousey are
-			 * still raw window coords at this point */
-			int cwx = (XRES / 2 + render_offset_x()) * sdl_scale;
-			int cwy = (YRES / 2 + render_offset_y()) * sdl_scale;
-			if (mousex != cwx || mousey != cwy) {
-				/* carry the sub-scale remainder between events - integer
-				 * division alone throws away 1-2 px deltas entirely at
-				 * sdl_scale>=2, which made slow scrollbar drags register
-				 * nothing and then jump */
-				/* deltas land in UI-layer pixels: window px scaled down by
-				 * sdl_scale and the canvas/layer ratio; work in raw*UIRES
-				 * units with a remainder so slow drags never drop pixels */
-				static int capdx_rem, capdy_rem;
-				int denx = sdl_scale * XRES;
-				int deny = sdl_scale * YRES;
-				int rawx = (mousex - cwx) * UIXRES + capdx_rem;
-				int rawy = (mousey - cwy) * UIYRES + capdy_rem;
-				mousedx += rawx / denx;
-				mousedy += rawy / deny;
-				capdx_rem = rawx % denx;
-				capdy_rem = rawy % deny;
-				sdl_set_cursor_pos(cwx, cwy);
-			}
-		}
-
-		mousex /= sdl_scale;
-		mousey /= sdl_scale;
-		mousex -= render_offset_x();
-		mousey -= render_offset_y();
+		mousex = local_x / sdl_scale - render_offset_x();
+		mousey = local_y / sdl_scale - render_offset_y();
 		/* GUI coordinates live on the UI layer. Derive from the actual
 		 * canvas/layer ratio - the exact inverse of the composite - so the
 		 * pointer can never disagree with where the layer really draws. */
@@ -201,8 +243,19 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break; /* hover only feeds the menu overlays while loading */
 		}
 
-		if (butsel != -1 && vk_lbut && (but[butsel].flags & BUTF_MOVEEXEC)) {
-			exec_cmd(lcmd, 0);
+		if (grab.kind == GESTURE_BUTTON) {
+			int dx, dy;
+
+			/* the captured button follows the pointer: absolute positions
+			 * for the panel gestures, plain deltas for the legacy thumbs */
+			gesture_motion(&grab, mousex, mousey, &dx, &dy);
+			mousedx += dx;
+			mousedy += dy;
+			if (but[capbut].flags & BUTF_MOVEEXEC) {
+				exec_cmd(lcmd, 0);
+			}
+			amod_mouse_move(mousex, mousey); /* hover only - the release is ours */
+			break;
 		}
 
 		amod_mouse_move(mousex, mousey);
@@ -215,7 +268,15 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break; /* clicks are handled on release while loading */
 		}
 
+		if (grab.kind != GESTURE_NONE) {
+			break; /* a press while a gesture is live: nothing new starts */
+		}
+		lclick_release_pending = 0; /* a fresh press: its release counts again */
+
 		if (amod_mouse_click(mousex, mousey, what)) {
+			/* the mod owns this press: it gets every motion and the
+			 * release, and the client never acts on that release itself */
+			gesture_begin(&grab, GESTURE_MOD, -1, mousex, mousey);
 			break;
 		}
 
@@ -223,14 +284,8 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			hotbar_mousedown(butsel - BUT_HOTBAR_BEG);
 		}
 
-		if (butsel != -1 && capbut == -1 && (but[butsel].flags & BUTF_CAPTURE)) {
-			amod_mouse_capture(1);
-			SDL_HideCursor();
-			sdl_capture_mouse(1);
-			mousedx = 0;
-			mousedy = 0;
-			sdl_set_cursor_pos((XRES / 2 + render_offset_x()) * sdl_scale, (YRES / 2 + render_offset_y()) * sdl_scale);
-			capbut = butsel;
+		if (butsel != -1 && (but[butsel].flags & BUTF_CAPTURE)) {
+			gesture_take_button(butsel);
 		}
 		break;
 
@@ -252,6 +307,28 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		// fall through intended
 	case SDL_MOUM_LUP:
 		vk_lbut = 0;
+
+		if (grab.kind == GESTURE_BUTTON) {
+			/* the client owns this gesture: finish it before anyone else
+			 * sees the release - a mod window under the pointer used to
+			 * eat it and leave the drag (and a hidden cursor) stuck */
+			if (!(but[capbut].flags & BUTF_MOVEEXEC)) {
+				exec_cmd(lcmd, 0); /* the purse: the split is taken on release */
+			}
+			gesture_drop_button(0);
+			break;
+		}
+		if (grab.kind == GESTURE_MOD) {
+			/* the mod that took the press gets its release, always */
+			amod_mouse_click(mousex, mousey, what);
+			gesture_end(&grab);
+			break;
+		}
+		if (lclick_release_pending) {
+			/* the tail of an abandoned gesture: not a click on anything */
+			lclick_release_pending = 0;
+			break;
+		}
 
 		/* loading screen: only the escape menu and its windows are live */
 		if (gui_is_loading()) {
@@ -329,31 +406,23 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
-		if (capbut != -1) {
-			sdl_set_cursor_pos((but[capbut].x * XRES / UIXRES + render_offset_x()) * sdl_scale,
-			    (but[capbut].y * YRES / UIYRES + render_offset_y()) * sdl_scale);
-			sdl_capture_mouse(0);
-			SDL_ShowCursor();
-			amod_mouse_capture(0);
-			if (!(but[capbut].flags & BUTF_MOVEEXEC)) {
-				exec_cmd(lcmd, 0);
-			}
-			if (capbut >= BUT_DRAG_BEG && capbut <= BUT_DRAG_END) {
-				panels_drag_finished(); /* persist the moved layout */
-			}
-			capbut = -1;
+		if ((tmp = context_key_click()) != CMD_NONE) {
+			exec_cmd(tmp, 0);
 		} else {
-			if ((tmp = context_key_click()) != CMD_NONE) {
-				exec_cmd(tmp, 0);
-			} else {
-				exec_cmd(lcmd, 0);
-			}
+			exec_cmd(lcmd, 0);
 		}
 		break;
 
 	case SDL_MOUM_RDOWN:
 		vk_rbut = 1;
 		if (gui_is_loading()) {
+			break;
+		}
+		if (grab.kind == GESTURE_BUTTON) {
+			/* right-click abandons a panel drag/resize; the release that
+			 * follows must not turn into a look command */
+			gesture_drop_button(1);
+			rclick_cancelled_gesture = 1;
 			break;
 		}
 		if (amod_mouse_click(mousex, mousey, what)) {
@@ -381,9 +450,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		if (gui_is_loading()) {
 			break;
 		}
-		/* swallow the release of a right-click that cancelled targeting */
-		if (rclick_cancelled_targeting) {
+		/* swallow the release of a right-click that cancelled targeting or
+		 * abandoned a gesture */
+		if (rclick_cancelled_targeting || rclick_cancelled_gesture) {
 			rclick_cancelled_targeting = 0;
+			rclick_cancelled_gesture = 0;
 			break;
 		}
 		if (amod_mouse_click(mousex, mousey, what)) {
@@ -587,5 +658,22 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		input_keyup(vk);
 		break;
 	}
+	}
+}
+
+/* Called with the left-button state every motion event carries, and with 0
+ * when the window loses focus. If the OS says the button is up but no
+ * release ever reached us (focus change, dropped event, a compositor that
+ * swallowed it), the gesture is finished where the pointer is rather than
+ * left running until the next click. */
+void gui_sdl_mouse_sync(int lbutton_down)
+{
+	if (lbutton_down) {
+		return;
+	}
+	if (grab.kind != GESTURE_NONE) {
+		gui_sdl_mouseproc(0, 0, SDL_MOUM_LUP);
+	} else {
+		vk_lbut = 0;
 	}
 }

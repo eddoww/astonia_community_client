@@ -50,9 +50,7 @@ void display_mouseover(void)
 	/* a mod window/bar covers the pointer: none of the coordinate-based hover texts
 	 * (spell status, level/rank, time, minimap, item descriptions) may pop through */
 	if (amod_mouse_over(mousex, mousey)) {
-		if (capbut == -1) {
-			SDL_ShowCursor();
-		}
+		SDL_ShowCursor();
 		return;
 	}
 
@@ -96,9 +94,11 @@ void display_mouseover(void)
 	display_hover_update();
 	hide = display_hover();
 	display_hover_skill();
+	/* the pointer stays visible through drags and resizes: a gesture
+	 * follows the real cursor now, nothing warps or hides it */
 	if (hide) {
 		SDL_HideCursor();
-	} else if (capbut == -1) {
+	} else {
 		SDL_ShowCursor();
 	}
 	minimap_display_hover(mousex, mousey);

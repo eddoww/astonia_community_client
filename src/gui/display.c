@@ -416,12 +416,8 @@ void display_citem(void)
 		return;
 	}
 
-	if (capbut == -1) {
-		x = mousex;
-		y = mousey;
-	} else {
-		return;
-	}
+	x = mousex;
+	y = mousey;
 
 	if (x < 0 || x >= UIXRES) {
 		return;

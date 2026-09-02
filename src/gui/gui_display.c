@@ -228,7 +228,8 @@ void display(void)
 	sdl_time_blit=0;
 #endif
 
-	if ((tmp = sdl_check_mouse())) {
+	/* a live drag keeps its real pointer position, even outside the window */
+	if (!gui_pointer_grabbed() && (tmp = sdl_check_mouse())) {
 		mousex = -1;
 		if (tmp == -1) {
 			mousey = 0;

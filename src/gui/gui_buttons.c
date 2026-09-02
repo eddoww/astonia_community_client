@@ -897,9 +897,9 @@ void exec_cmd(int cmd, int a)
 		}
 		return;
 	case CMD_DRAG_PANEL:
-		/* the drag handle owns the mouse capture; its id maps 1:1 to the panel */
+		/* the drag handle owns the pointer; its id maps 1:1 to the panel */
 		if (capbut >= BUT_DRAG_BEG && capbut <= BUT_DRAG_END) {
-			panels_drag(capbut - BUT_DRAG_BEG);
+			panels_drag_update(capbut - BUT_DRAG_BEG, mousex, mousey);
 		}
 		return;
 	case CMD_PANEL_CLOSE:
@@ -938,18 +938,9 @@ void exec_cmd(int cmd, int a)
 		}
 		return;
 	case CMD_PANEL_SIZE:
-		/* the grip owns the capture, like the drag handles above */
+		/* the grip owns the pointer, like the drag handles above */
 		if (capbut >= BUT_PSIZE_BEG && capbut <= BUT_PSIZE_END) {
-			int p = capbut - BUT_PSIZE_BEG;
-			int x1, y1, x2, y2;
-
-			/* pin the corner the grip is NOT dragging: init_dots() rebuilds
-			 * the default layout, and the inventory's is right-anchored, so
-			 * the window would otherwise grow away from the pointer */
-			if (panel_content_rect(p, &x1, &y1, &x2, &y2) && panels_resize(p)) {
-				init_dots();
-				panel_keep_anchor(p, x1, y1);
-			}
+			panels_resize_update(capbut - BUT_PSIZE_BEG, mousex, mousey);
 		}
 		return;
 	case CMD_HELP:

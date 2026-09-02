@@ -108,7 +108,6 @@ void sdl_recompute_canvas(void);
 void sdl_tex_jobs_mark(void);
 void sdl_tex_jobs_progress(int *done, int *total);
 void sdl_set_cursor_pos(int x, int y);
-void sdl_capture_mouse(int flag);
 int sdl_tx_load(unsigned int sprite, signed char sink, unsigned char freeze, unsigned char scale, char cr, char cg,
     char cb, char light, char sat, int c1, int c2, int c3, int shine, char ml, char ll, char rl, char ul, char dl,
     const char *text, int text_color, int text_flags, void *text_font, int checkonly, int preload);

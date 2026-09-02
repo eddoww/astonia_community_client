@@ -150,8 +150,9 @@ DLL_EXPORT void render_clear_clip(void)
 {
 	clipsx = 0;
 	clipsy = 0;
-	clipex = XRES;
-	clipey = YRES;
+	/* "the whole screen" is the UI canvas while the UI layer is open */
+	clipex = render_ui_layer_active() ? UIXRES : XRES;
+	clipey = render_ui_layer_active() ? UIYRES : YRES;
 }
 
 /**
@@ -1271,6 +1272,14 @@ int render_ui_layer_begin(void)
 	ui_layer_sx = x_offset;
 	ui_layer_sy = y_offset;
 	render_set_offset(0, 0);
+	/* the base clip culls at the native frame bounds - inside the layer the
+	 * drawable area is the whole UI canvas, or everything laid out beyond
+	 * XRES/YRES (right and bottom of the canvas at scales below 100%) is
+	 * silently invisible */
+	clipsx = 0;
+	clipsy = 0;
+	clipex = UIXRES;
+	clipey = UIYRES;
 	ui_layer_open = 1;
 	return 1;
 }
@@ -1283,6 +1292,10 @@ void render_ui_layer_end(void)
 	ui_layer_open = 0;
 	sdl_set_render_target(-1);
 	render_set_offset(ui_layer_sx, ui_layer_sy);
+	clipsx = 0;
+	clipsy = 0;
+	clipex = XRES;
+	clipey = YRES;
 	sdl_render_target_to_screen_stretched(ui_layer_target, x_offset, y_offset, XRES, YRES, 255);
 }
 

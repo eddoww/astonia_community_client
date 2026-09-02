@@ -668,7 +668,7 @@ DLL_EXPORT int skl_grid_rows_effective(void)
 	if (skl_rows) {
 		return skl_rows;
 	}
-	return (game_options & GO_SMALLBOT) ? 12 : SKL_GRID_MAX_ROWS;
+	return (game_options & GO_SMALLBOT) ? 12 : SKL_GRID_DEF_ROWS;
 }
 
 DLL_EXPORT void skl_grid_set_rows(int n)

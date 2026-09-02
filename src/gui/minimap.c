@@ -264,6 +264,10 @@ void display_minimap(void)
 		return;
 	}
 
+	/* follow the panel live - a drag shifts the content rect every frame,
+	 * long before the next init_dots() */
+	minimap_reanchor();
+
 	if (visible == 2) { // display big map
 		int src_size;
 

@@ -172,7 +172,9 @@ int spellbook_over(int mx, int my)
 {
 	int x1, y1, x2, y2;
 
-	if (!panel_shown(PANEL_SPELLBOOK) || !panel_frame_rect(PANEL_SPELLBOOK, &x1, &y1, &x2, &y2)) {
+	/* CONTENT rect, not the frame: the title bar and glyphs must reach the
+	 * panel chrome hit-test, or the window can never be dragged or closed */
+	if (!panel_content_shown(PANEL_SPELLBOOK) || !panel_content_rect(PANEL_SPELLBOOK, &x1, &y1, &x2, &y2)) {
 		return 0;
 	}
 	return mx >= x1 && mx <= x2 && my >= y1 && my <= y2;

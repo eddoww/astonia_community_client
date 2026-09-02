@@ -20,9 +20,10 @@ DLL_EXPORT int inv_grid_rows(void); /* visible rows setting; 0 = auto (classic 4
 DLL_EXPORT void inv_grid_set_cols(int n);
 DLL_EXPORT void inv_grid_set_rows(int n);
 
-/* visible rows of the skill list; the button range caps it at 16 */
+/* visible rows of the skill list; the button bank holds MAX rows */
 #define SKL_GRID_MIN_ROWS 6
-#define SKL_GRID_MAX_ROWS 16
+#define SKL_GRID_MAX_ROWS 40 /* resize ceiling: room for the whole list */
+#define SKL_GRID_DEF_ROWS 16 /* the auto/default height */
 #define MINIMAP_D         80 /* minimap circle diameter (minimap.c draws MINIMAP*2 = this) */
 
 /* look-at window geometry: title bar + portrait/description body + the
@@ -107,14 +108,17 @@ int wea_slot_pos(int slot, int *x, int *y);
 #define BUT_INV_END 60 /* INV_GRID_MAX_SLOTS (8×6) button ids: 13..60 */
 /* BUT_CON_* moved to the end of the id space - the container grid is a
  * runtime size now and needs more than the classic 16 slots */
-#define BUT_SCL_UP    77
-#define BUT_SCL_TR    78
-#define BUT_SCL_DW    79
-#define BUT_SCR_UP    80
-#define BUT_SCR_TR    81
-#define BUT_SCR_DW    82
-#define BUT_SKL_BEG   83
-#define BUT_SKL_END   98
+#define BUT_SCL_UP 77
+#define BUT_SCL_TR 78
+#define BUT_SCL_DW 79
+#define BUT_SCR_UP 80
+#define BUT_SCR_TR 81
+#define BUT_SCR_DW 82
+/* skill rows moved past the container bank: the classic 83..98 slot gave
+ * only 16 rows, the resize ceiling of the skills window (SKL_GRID_MAX_ROWS)
+ * needs one button per possible row */
+#define BUT_SKL_BEG   (BUT_CON_END + 1)
+#define BUT_SKL_END   (BUT_SKL_BEG + SKL_GRID_MAX_ROWS - 1)
 #define BUT_GLD       99
 #define BUT_JNK       100
 #define BUT_MOD_WALK0 101
@@ -178,7 +182,7 @@ int wea_slot_pos(int slot, int *x, int *y);
 #define BUT_CON_BEG (BUT_PANEL_BODY + 1)
 #define BUT_CON_END (BUT_CON_BEG + CON_GRID_MAX_SLOTS - 1)
 
-#define MAX_BUT (BUT_CON_END + 1) /* keep > the highest BUT_* id */
+#define MAX_BUT (BUT_SKL_END + 1) /* keep > the highest BUT_* id */
 
 _Static_assert(
     BUT_INV_END - BUT_INV_BEG + 1 == INV_GRID_MAX_SLOTS, "inventory button range must hold the densest possible grid");

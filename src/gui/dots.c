@@ -218,7 +218,7 @@ void init_dots(void)
 		/* anchored to the DEFAULT window heights, not the live ones -
 		 * resizing the skills list or a merchant grid must never bump
 		 * these two around */
-		int skl_max_h = max(SKL_GRID_MAX_ROWS * LINEHEIGHT + 6, 4 * FDX + 4);
+		int skl_max_h = max(SKL_GRID_DEF_ROWS * LINEHEIGHT + 6, 4 * FDX + 4);
 		int y2 = UIYRES - edge - skl_max_h - UI_WIN_TITLE_H - UI_WIN_PAD * 2 - 4;
 		int y1 = y2 - SPEED_SEG_H;
 

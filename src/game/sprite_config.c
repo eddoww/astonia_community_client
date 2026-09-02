@@ -25,7 +25,10 @@
 
 /* Hash macros using bitwise AND for power-of-2 sizes */
 #define CHAR_HASH(id) ((unsigned int)(id) & (CHAR_TABLE_SIZE - 1))
-#define ANIM_HASH(id) ((id) & (ANIM_TABLE_SIZE - 1))
+/* Fibonacci hash: variant ids come in contiguous runs (1024.., 60000..),
+ * so masking the id made linear probing walk hundreds of slots on every
+ * miss - and every drawn sprite performs one lookup per frame. */
+#define ANIM_HASH(id) ((unsigned int)(((id) * 2654435761u) >> 21))
 #define META_HASH(id) ((id) & (META_TABLE_SIZE - 1))
 
 /* Empty slot marker (sprite ID 0 is never used as a variant) */

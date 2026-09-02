@@ -99,7 +99,12 @@
 #define DOT_SSP    30 // self-spell-bars top left
 #define DOT_TUT    31 // tutor window top left
 #define DOT_HOTBAR 32 // hotbar (item/spell slots)
-#define MAX_DOT    33
+#define DOT_SPB    33 // spellbook window
+#define DOT_STAT   34 // status panel (level/military bars)
+#define DOT_MENU   35 // system menu strip (menu/help/quests)
+#define DOT_CLK    36 // classic clock
+#define DOT_MMAP   37 // minimap circle, top left
+#define MAX_DOT    38
 
 #define V_HP        0
 #define V_ENDURANCE 1

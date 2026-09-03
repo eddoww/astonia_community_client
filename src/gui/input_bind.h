@@ -237,6 +237,8 @@ typedef struct {
 
 /* how many hotbar slots are visible per row */
 DLL_EXPORT int hotbar_visible_slots(void);
+/* the key bound to "Toggle <panel>" as a short label ("B", "Shift+O"), "" when unbound */
+DLL_EXPORT const char *input_panel_bind_key(int p);
 DLL_EXPORT int hotbar_rows(void);
 DLL_EXPORT void hotbar_set_rows(int count);
 DLL_EXPORT void hotbar_set_visible_slots(int count);

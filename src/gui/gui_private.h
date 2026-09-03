@@ -65,14 +65,21 @@ DLL_EXPORT void con_grid_set_rows(int n);
 #define WEA_BONUS_ROW_H    LINEHEIGHT
 #define WEA_BONUS_LEGEND_H (2 * LINEHEIGHT + 2) /* legend / mod-less note  */
 #define WEA_BONUS_MAX_ROWS 24
-#define SPEED_SEG_W        46 /* one segment of the speed selector       */
-#define SPEED_SEG_H        28
-#define SPEED_SEG_GAP      2
-#define BUFF_CHIP          28 /* one buff chip                          */
-#define BUFF_GAP           3
+#define SPEED_ORB          12 /* the speed selector: three small orbs with their label above */
+#define SPEED_COL_W        34 /* one orb column                                             */
+#define SPEED_LABEL_H      10
+#define SPEED_PANEL_H      (SPEED_LABEL_H + SPEED_ORB + 4)
+#define BUFF_CHIP          20 /* one effect orb                         */
+#define BUFF_GAP           4
 #define BUFF_LABEL_H       10
 #define BUFF_COUNT         4
-#define SPB_COLS           7 /* spellbook window columns              */
+/* the mod's weather indicator sits in the top-right corner; the client's
+ * own top-right defaults (system menu, minimap) keep clear of this box */
+#define UI_WEATHER_W 84
+#define UI_WEATHER_H 58
+/* the tabbed chat's default width (mod): the hotbar's default sits right of it */
+#define UI_CHAT_DEF_W 520
+#define SPB_COLS      7 /* spellbook window columns              */
 /* status panel (level + military progress) */
 /* status panel: two WoW-style full-width bars at the screen bottom */
 #define STAT_BAR_H 11
@@ -736,6 +743,12 @@ void minimap_zoom_in(void);
 void minimap_zoom_out(void);
 void minimap_zoom_reset(void);
 int minimap_wheel_zoom(int x, int y, int delta);
+/* per-panel size settings (panels.c): scale in percent for the HUD orbs
+ * and the status bars' height, an explicit width for the status bars */
+int panel_scale(int p);
+int panel_status_width(void);
+int stat_bar_h(void);
+int stat_row_h(void);
 int minimap_pan_begin(int x, int y);
 void minimap_pan_update(int x, int y);
 void minimap_pan_end(void);

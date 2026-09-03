@@ -80,11 +80,11 @@ void display_mouseover(void)
 		if (panel_content_shown(PANEL_STATUS) && panel_content_rect(PANEL_STATUS, &sx1, &sy1, &sx2, &sy2) &&
 		    mousex >= sx1 && mousex <= sx2) {
 			/* the bars sit at the screen bottom: tooltips go above them */
-			if (mousey >= sy1 && mousey <= sy1 + STAT_BAR_H) {
+			if (mousey >= sy1 && mousey <= sy1 + stat_bar_h()) {
 				render_text_nl(
 				    mousex - 20, mousey - 44, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_level_text);
 			}
-			if (mousey >= sy1 + STAT_ROW_H && mousey <= sy1 + STAT_ROW_H + STAT_BAR_H) {
+			if (mousey >= sy1 + stat_row_h() && mousey <= sy1 + stat_row_h() + stat_bar_h()) {
 				render_text_nl(mousex - 20, mousey - 34, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_rank_text);
 			}
 		}

@@ -173,13 +173,16 @@ void ui_glyph_lock(int cx, int cy, int locked, int hot)
  * resize" affordance. (cx,cy) is the grip's centre. */
 void ui_resize_grip(int cx, int cy, int hot)
 {
-	unsigned short col = hot ? UI_ACCENT : UI_BORDER_STRONG;
 	int h = UI_WIN_GRIP / 2;
 	int i;
 
+	/* three amber diagonals on a dark pad - the old border-grey lines were
+	 * invisible on most windows, testers never found the grip */
+	render_rounded_rect_filled_alpha(cx - h, cy - h, cx + h + 1, cy + h + 1, 2, UI_BG_SUNKEN, hot ? 200 : 120);
 	for (i = 0; i < 3; i++) {
-		int o = i * 3;
-		render_line_alpha(cx + h - o, cy + h, cx + h, cy + h - o, col, hot ? 255 : 190);
+		int o = 1 + i * 3;
+		render_line_alpha(cx + h - o + 1, cy + h + 1, cx + h + 1, cy + h - o + 1, UI_BG_BASE, 160);
+		render_line_alpha(cx + h - o, cy + h, cx + h, cy + h - o, hot ? UI_TEXT : UI_ACCENT, hot ? 255 : 230);
 	}
 }
 

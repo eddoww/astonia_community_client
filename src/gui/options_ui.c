@@ -870,7 +870,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(3);
+	ry = opt_row_y(4);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		/* persisted via the extra-options file, not the keybind config
 		 * (game_options_record_override only knows the launcher bits) */
@@ -879,7 +879,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(5);
+	ry = opt_row_y(6);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = (mx - tx) * 3 / tw; /* 0 = hotbar off */
 		if (val < 0) {
@@ -894,7 +894,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(6);
+	ry = opt_row_y(7);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = 1 + (mx - tx) * (15 - 1) / tw;
 		if (val < 1) {
@@ -909,14 +909,14 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(7);
+	ry = opt_row_y(8);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		hotbar_set_show_hotkeys(!hotbar_show_hotkeys());
 		save_options();
 		return 1;
 	}
 
-	ry = opt_row_y(8);
+	ry = opt_row_y(9);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		hotbar_set_show_names(!hotbar_show_names());
 		init_dots();
@@ -924,7 +924,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(10);
+	ry = opt_row_y(11);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = INV_GRID_MIN_COLS + (mx - tx) * (INV_GRID_MAX_COLS - INV_GRID_MIN_COLS) / tw;
 		if (val < INV_GRID_MIN_COLS) {
@@ -939,7 +939,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(11);
+	ry = opt_row_y(12);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = (mx - tx) * INV_GRID_MAX_ROWS / tw; /* 0 = auto (classic row count) */
 		if (val < 0) {
@@ -954,7 +954,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(12);
+	ry = opt_row_y(13);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = (mx - tx) * SKL_GRID_MAX_ROWS / tw; /* 0 = auto */
 		if (val < 0) {
@@ -969,7 +969,7 @@ static int opt_click_ui(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(13);
+	ry = opt_row_y(14);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		val = CON_GRID_MIN_COLS + (mx - tx) * (CON_GRID_MAX_COLS - CON_GRID_MIN_COLS) / tw;
 		if (val < CON_GRID_MIN_COLS) {
@@ -979,6 +979,21 @@ static int opt_click_ui(int mx, int my)
 			val = CON_GRID_MAX_COLS;
 		}
 		con_grid_set_cols(val);
+		init_dots();
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(15);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		val = (mx - tx) * CON_GRID_MAX_ROWS / tw; /* 0 = auto */
+		if (val < 0) {
+			val = 0;
+		}
+		if (val > CON_GRID_MAX_ROWS) {
+			val = CON_GRID_MAX_ROWS;
+		}
+		con_grid_set_rows(val);
 		init_dots();
 		save_options();
 		return 1;

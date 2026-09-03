@@ -1170,74 +1170,42 @@ void display_text(void)
 	}
 }
 
-/* Speed selector.
- *
- * A three-segment control, fastest first (dots.c owns the order). Each segment
- * carries chevrons for how quick it is (>>> fast, >> normal, > stealth), its
- * name, and the key bound to it - the F-key captions used to be hardcoded. */
-static void speed_chevrons(int cx, int cy, int n, unsigned short col, unsigned char alpha)
-{
-	int w = 3, h = 4, gap = 1;
-	int total = n * (w + gap) - gap;
-	int x = cx - total / 2;
-
-	for (int i = 0; i < n; i++) {
-		int lx = x + i * (w + gap);
-
-		render_line_alpha(lx, cy - h, lx + w, cy, col, alpha);
-		render_line_alpha(lx + w, cy, lx, cy + h, col, alpha);
-	}
-}
-
 void display_mode(void)
 {
 	static const struct {
 		int but;
 		int mode;
-		int speed;
 		const char *label;
-		const char *bind;
 	} seg[3] = {
-	    {BUT_MOD_WALK1, 1, 3, "Fast", "move.speed_fast"},
-	    {BUT_MOD_WALK0, 0, 2, "Normal", "move.speed_normal"},
-	    {BUT_MOD_WALK2, 2, 1, "Stealth", "move.speed_stealth"},
+	    {BUT_MOD_WALK1, 1, "Fast"},
+	    {BUT_MOD_WALK0, 0, "Normal"},
+	    {BUT_MOD_WALK2, 2, "Stealth"},
 	};
 
+	int sc = panel_scale(PANEL_SPEED);
+	int r = max(4, SPEED_ORB * sc / 200);
 	int i;
 
+	/* three small orbs, the mode's name above each: the classic look,
+	 * without the wide segment buttons that took over the corner */
 	for (i = 0; i < 3; i++) {
-		int x = butx(seg[i].but) - SPEED_SEG_W / 2;
-		int y = buty(seg[i].but) - SPEED_SEG_H / 2;
+		int cx = butx(seg[i].but), cy = buty(seg[i].but);
 		int active = (pspeed == seg[i].mode);
 		int hot = (butsel == seg[i].but);
-		unsigned short text = active ? UI_TEXT : (hot ? UI_TEXT : UI_TEXT_LABEL);
-		InputBinding *b = input_find_by_id(seg[i].bind);
-		const char *key = (b && b->key != SDLK_UNKNOWN) ? input_key_to_string(b->key, b->modifiers) : "";
 
+		render_text(cx, doty(DOT_MOD) + 1, active ? UI_TEXT : (hot ? UI_TEXT : UI_TEXT_LABEL),
+		    UI_FONT_CENTER | (sc < 130 ? RENDER_TEXT_SMALL : 0), seg[i].label);
+
+		render_circle_filled_alpha(cx, cy, r, UI_BG_SUNKEN, UI_A_SOCKET);
+		render_gradient_circle(cx, cy, r, UI_BG_BASE, 0, 160);
 		if (active) {
-			render_rounded_rect_filled_alpha(
-			    x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_BG_ROW_ACTIVE, UI_A_CONTROL);
-			render_gradient_rect_v(
-			    x + 1, y + 1, x + SPEED_SEG_W - 1, y + SPEED_SEG_H / 2, UI_ACCENT_DIM, UI_BG_BASE, 120);
-			render_rounded_rect_alpha(x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_ACCENT, 255);
-			render_rect_alpha(x + 3, y + SPEED_SEG_H - 3, x + SPEED_SEG_W - 3, y + SPEED_SEG_H - 2, UI_ACCENT, 255);
+			render_gradient_circle(cx, cy, r - 1, UI_ACCENT, 230, 40);
+			render_circle_alpha(cx, cy, r, UI_ACCENT, 255);
 			if (render_glow_available()) {
-				/* faint amber underglow on the selected mode - the same
-				 * family as the lit effect orbs next door */
-				render_glow_line(
-				    x + 6, y + SPEED_SEG_H - 2, x + SPEED_SEG_W - 6, y + SPEED_SEG_H - 2, UI_ACCENT, 5.0f, 0.8f, 0.22f);
+				render_glow(cx, cy, UI_ACCENT, (float)r * 2.2f, 0.5f, 0.35f);
 			}
-		} else if (hot) {
-			render_rounded_rect_filled_alpha(
-			    x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_BG_ROW_HOVER, UI_A_ROW_HOVER);
-			render_rounded_rect_alpha(x, y, x + SPEED_SEG_W, y + SPEED_SEG_H, UI_R_BUTTON, UI_ACCENT, UI_A_BORDER_HOV);
-		}
-
-		speed_chevrons(
-		    x + SPEED_SEG_W / 2, y + 5, seg[i].speed, active ? UI_ACCENT : UI_TEXT_MUTED, active ? 255 : 170);
-		render_text(x + SPEED_SEG_W / 2, y + 8, text, UI_FONT_CENTER, seg[i].label);
-		if (*key) {
-			render_text(x + SPEED_SEG_W / 2, y + 17, active ? UI_ACCENT : UI_TEXT_DISABLED, UI_FONT_CENTER, key);
+		} else {
+			render_circle_alpha(cx, cy, r, hot ? UI_ACCENT : UI_BORDER, hot ? UI_A_BORDER_HOV : UI_A_BORDER_REST);
 		}
 	}
 }
@@ -1252,10 +1220,12 @@ void display_mode(void)
  * printed underneath. Nearly-expired effects pulse hard. */
 static void buff_chip(int idx, const char *tag, unsigned short color, int active, int pct, const char *sub)
 {
-	int x1 = dotx(DOT_SSP) + idx * (BUFF_CHIP + BUFF_GAP);
+	int sc = panel_scale(PANEL_BUFFS);
+	int chip = BUFF_CHIP * sc / 100, gap = BUFF_GAP * sc / 100;
+	int x1 = dotx(DOT_SSP) + idx * (chip + gap);
 	int y1 = doty(DOT_SSP);
-	int cx = x1 + BUFF_CHIP / 2, cy = y1 + BUFF_CHIP / 2;
-	int r = BUFF_CHIP / 2 - 1;
+	int cx = x1 + chip / 2, cy = y1 + chip / 2;
+	int r = chip / 2 - 1;
 	int glow = render_glow_available();
 	int urgent;
 	float pulse;
@@ -1287,7 +1257,7 @@ static void buff_chip(int idx, const char *tag, unsigned short color, int active
 
 		if (glow) {
 			/* soft halo bleeding past the rim, breathing with the pulse */
-			render_glow(cx, cy, color, (float)BUFF_CHIP * 0.85f, 0.4f,
+			render_glow(cx, cy, color, (float)chip * 0.85f, 0.4f,
 			    (0.16f + 0.24f * f) * (0.7f + 0.3f * pulse) * (urgent ? 1.5f : 1.0f));
 			/* hot core so the middle reads as the light source */
 			render_glow(cx, cy, color, (float)r * 0.8f, 2.2f, 0.30f + 0.15f * pulse);
@@ -1303,10 +1273,16 @@ static void buff_chip(int idx, const char *tag, unsigned short color, int active
 		}
 	}
 
-	render_text(cx, cy - 5, active ? UI_TEXT : UI_TEXT_DISABLED, UI_FONT_CENTER, tag);
+	/* the tag sits in the orb only when there is room for it; the
+	 * countdown goes on the label row below */
+	if (chip >= 24) {
+		render_text(cx, cy - 4, active ? UI_TEXT : UI_TEXT_DISABLED, UI_FONT_CENTER | RENDER_TEXT_SMALL, tag);
+	}
 	if (active && sub && *sub) {
-		render_text(
-		    cx, y1 + BUFF_CHIP + 1, urgent && ((tick & 8) != 0U) ? UI_TEXT_ERROR : UI_TEXT_MUTED, UI_FONT_CENTER, sub);
+		render_text(cx, y1 + chip + 1, urgent && ((tick & 8) != 0U) ? UI_TEXT_ERROR : UI_TEXT_MUTED,
+		    UI_FONT_CENTER | RENDER_TEXT_SMALL, sub);
+	} else if (chip < 24) {
+		render_text(cx, y1 + chip + 1, active ? UI_TEXT : UI_TEXT_DISABLED, UI_FONT_CENTER | RENDER_TEXT_SMALL, tag);
 	}
 }
 
@@ -1445,12 +1421,12 @@ static void draw_status_row(
 		return;
 	}
 
-	ui_meter_h(x1, y, x2, y + STAT_BAR_H, pct, flash ? whitecolor : color);
+	ui_meter_h(x1, y, x2, y + stat_bar_h(), pct, flash ? whitecolor : color);
 	/* WoW-style segment ticks every 10% */
 	for (int i = 1; i < 10; i++) {
 		int tx = x1 + (x2 - x1) * i / 10;
 
-		render_rect_alpha(tx, y + 1, tx + 1, y + STAT_BAR_H - 1, UI_BG_BASE, 120);
+		render_rect_alpha(tx, y + 1, tx + 1, y + stat_bar_h() - 1, UI_BG_BASE, 120);
 	}
 
 	switch (mode) {
@@ -1466,8 +1442,8 @@ static void draw_status_row(
 	default:
 		break;
 	}
-	if (text[0]) {
-		render_text((x1 + x2) / 2, y + 2, UI_TEXT, UI_FONT_CENTER, text);
+	if (text[0] && stat_bar_h() >= 9) {
+		render_text((x1 + x2) / 2, y + (stat_bar_h() - 7) / 2, UI_TEXT, UI_FONT_CENTER, text);
 	}
 }
 
@@ -1608,9 +1584,11 @@ void display_military(void)
 	if (!mil_exp || !total) {
 		/* no military points yet: the bar still exists, empty - players
 		 * kept reporting it "missing" when it only appeared with honor */
-		draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 0, IRGB(28, 12, 4), 0, BAR_INFO_NONE, 0, 0, 0);
-		render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY,
-		    "Military Standing - no rank yet");
+		draw_status_row(doty(DOT_STAT) + stat_row_h(), 0, IRGB(28, 12, 4), 0, BAR_INFO_NONE, 0, 0, 0);
+		if (stat_bar_h() >= 9) {
+			render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + stat_row_h() + 2, UI_TEXT_MUTED, UI_FONT_BODY,
+			    "Military Standing - no rank yet");
+		}
 		snprintf(hover_rank_text, 200, "No rank yet - military points come from fighting for your realm");
 		return;
 	}
@@ -1622,14 +1600,16 @@ void display_military(void)
 		const char *rname = game_rankname[rank] && game_rankname[rank][0] ? game_rankname[rank] : NULL;
 
 		if (rank < maxrank) {
-			draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 100 * step / total, mil_color, 0, mil_info_mode, step, total,
+			draw_status_row(doty(DOT_STAT) + stat_row_h(), 100 * step / total, mil_color, 0, mil_info_mode, step, total,
 			    total - step);
 			if (rname) {
 				snprintf(lead, sizeof(lead), "Military Standing - %s", rname);
 			} else {
 				snprintf(lead, sizeof(lead), "Military Standing - unnamed rank %d", rank);
 			}
-			render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
+			if (stat_bar_h() >= 9) {
+				render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + stat_row_h() + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
+			}
 
 			snprintf(hover_rank_text, 200,
 			    "Rank %d '%s' to %d '%s': %s / %s (%d%%)\n%s to go, total %s military points", rank,
@@ -1638,13 +1618,15 @@ void display_military(void)
 			    fmt_thousands((long long)mil_exp, n4, sizeof(n4)));
 		} else {
 			/* Highest rank: full bar */
-			draw_status_row(doty(DOT_STAT) + STAT_ROW_H, 100, mil_color, 0, BAR_INFO_NONE, 0, 0, 0);
+			draw_status_row(doty(DOT_STAT) + stat_row_h(), 100, mil_color, 0, BAR_INFO_NONE, 0, 0, 0);
 			if (rname) {
 				snprintf(lead, sizeof(lead), "Military Standing - %s (max)", rname);
 			} else {
 				snprintf(lead, sizeof(lead), "Military Standing - unnamed rank %d (max)", rank);
 			}
-			render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + STAT_ROW_H + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
+			if (stat_bar_h() >= 9) {
+				render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + stat_row_h() + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
+			}
 			snprintf(hover_rank_text, 200, "Rank %d '%s' (highest rank)\ntotal %s military points", rank,
 			    game_rankname[maxrank], fmt_thousands((long long)mil_exp, n4, sizeof(n4)));
 		}

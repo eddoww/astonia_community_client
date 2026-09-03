@@ -52,6 +52,8 @@ typedef struct {
 	int dx, dy; /* the player's offset from the default layout (persisted) */
 	int cdx, cdy; /* transient clamp shift on top of it, this layout pass only */
 	int cx1, cy1, cx2, cy2; /* content rect, published by init_dots() */
+	int sc; /* size scale in percent (0 = 100): the HUD orbs, the status bars' height */
+	int sw; /* explicit width in px (0 = default): the status bars */
 } Panel;
 
 /* dot lists - the first dot is the clamp reference kept on screen */
@@ -88,18 +90,18 @@ static const ButRange help_buts[] = {{0, -1}}; /* page controls are rect-hit in 
 static const ButRange look_buts[] = {{0, -1}};
 
 #define PANEL_ENTRY(idstr, namestr, d, b, fr, rs, vis)                                                                 \
-	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, vis, vis, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	{idstr, namestr, d, ARRAYSIZE(d), b, ARRAYSIZE(b), fr, rs, vis, vis, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 static Panel panels[MAX_PANEL] = {
-    [PANEL_SKILLS] = PANEL_ENTRY("skills", "Skills", skills_dots, skills_buts, PANEL_FRAME_WINDOW, 1, 1),
+    [PANEL_SKILLS] = PANEL_ENTRY("skills", "Skills", skills_dots, skills_buts, PANEL_FRAME_WINDOW, 1, 0),
     [PANEL_CHAT] = PANEL_ENTRY("chat", "Chat", chat_dots, chat_buts, PANEL_FRAME_HUD, 0, 1),
-    [PANEL_INVENTORY] = PANEL_ENTRY("inventory", "Inventory", inv_dots, inv_buts, PANEL_FRAME_WINDOW, 1, 1),
-    [PANEL_SPEED] = PANEL_ENTRY("speed", "Speed", speed_dots, speed_buts, PANEL_FRAME_HUD, 0, 1),
-    [PANEL_BUFFS] = PANEL_ENTRY("buffs", "Effects", buffs_dots, buffs_buts, PANEL_FRAME_HUD, 0, 1),
+    [PANEL_INVENTORY] = PANEL_ENTRY("inventory", "Inventory", inv_dots, inv_buts, PANEL_FRAME_WINDOW, 1, 0),
+    [PANEL_SPEED] = PANEL_ENTRY("speed", "Speed", speed_dots, speed_buts, PANEL_FRAME_HUD, 1, 1),
+    [PANEL_BUFFS] = PANEL_ENTRY("buffs", "Effects", buffs_dots, buffs_buts, PANEL_FRAME_HUD, 1, 1),
     [PANEL_HOTBAR] = PANEL_ENTRY("hotbar", "Hotbar", hotbar_dots, hotbar_buts, PANEL_FRAME_NONE, 0, 1),
-    [PANEL_EQUIPMENT] = PANEL_ENTRY("equipment", "Equipment", equipment_dots, equipment_buts, PANEL_FRAME_WINDOW, 0, 1),
+    [PANEL_EQUIPMENT] = PANEL_ENTRY("equipment", "Equipment", equipment_dots, equipment_buts, PANEL_FRAME_WINDOW, 0, 0),
     [PANEL_SPELLBOOK] = PANEL_ENTRY("spellbook", "Spells", spellbook_dots, spellbook_buts, PANEL_FRAME_WINDOW, 0, 0),
-    [PANEL_STATUS] = PANEL_ENTRY("status", "Progress", status_dots, status_buts, PANEL_FRAME_HUD, 0, 1),
+    [PANEL_STATUS] = PANEL_ENTRY("status", "Progress", status_dots, status_buts, PANEL_FRAME_HUD, 1, 1),
     [PANEL_SYSMENU] = PANEL_ENTRY("sysmenu", "System Menu", sysmenu_dots, sysmenu_buts, PANEL_FRAME_HUD, 0, 1),
     [PANEL_CLOCK] = PANEL_ENTRY("clock", "Classic Clock", clock_dots, clock_buts, PANEL_FRAME_HUD, 0, 0),
     [PANEL_HELP] = PANEL_ENTRY("help", "Help", help_dots, help_buts, PANEL_FRAME_WINDOW, 0, 0),
@@ -306,6 +308,29 @@ DLL_EXPORT int panel_content_shown(int p)
 	return panel_shown(p) && !panel_collapsed(p);
 }
 
+int panel_scale(int p)
+{
+	if (p < 0 || p >= MAX_PANEL || panels[p].sc <= 0) {
+		return 100;
+	}
+	return panels[p].sc;
+}
+
+int panel_status_width(void)
+{
+	return panels[PANEL_STATUS].sw;
+}
+
+int stat_bar_h(void)
+{
+	return max(5, STAT_BAR_H * panel_scale(PANEL_STATUS) / 100);
+}
+
+int stat_row_h(void)
+{
+	return stat_bar_h() + 2;
+}
+
 DLL_EXPORT int panel_dx(int p)
 {
 	if (p < 0 || p >= MAX_PANEL) {
@@ -341,13 +366,32 @@ const char *panel_name(int p)
 /* Live window titles: the container window is named after the shop / grave
  * it shows, the inventory counts its used slots so a glance at the title bar
  * (even a minimized one) says how much room is left. */
+/* "shift+o" -> "Shift+O": the key label the title bars print */
+static const char *title_key_label(const char *raw)
+{
+	static char out[32];
+	int i, start = 1;
+
+	for (i = 0; raw[i] && i < (int)sizeof(out) - 1; i++) {
+		unsigned char c = (unsigned char)raw[i];
+
+		out[i] = (char)(start && c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c);
+		start = (c == '+' || c == ' ');
+	}
+	out[i] = 0;
+	return out;
+}
+
 const char *panel_title(int p)
 {
+	static char buf[80];
+	const char *key = title_key_label(input_panel_bind_key(p));
+	const char *name;
+
 	if (p == PANEL_CONTAINER && con_cnt) {
 		return con_name;
 	}
 	if (p == PANEL_INVENTORY) {
-		static char buf[48];
 		int used = 0, total = _inventorysize - INVENTORY_EQUIP_SLOTS;
 
 		for (int i = INVENTORY_EQUIP_SLOTS; i < _inventorysize && i < MAX_INVENTORYSIZE; i++) {
@@ -356,17 +400,25 @@ const char *panel_title(int p)
 			}
 		}
 		if (total > 0) {
-			snprintf(buf, sizeof(buf), "Inventory %d/%d", used, total);
+			if (*key) {
+				snprintf(buf, sizeof(buf), "Inventory (%s) %d/%d", key, used, total);
+			} else {
+				snprintf(buf, sizeof(buf), "Inventory %d/%d", used, total);
+			}
 			return buf;
 		}
-	}
-	if (p == PANEL_HELP && display_quest) {
-		return "Quest Log";
 	}
 	if (p == PANEL_LOOK && look_name[0]) {
 		return look_name;
 	}
-	return panel_name(p);
+	/* the title carries the key that toggles the window - the one bound
+	 * right now, not the default: "Equipment (O)", "Spells (Shift+S)" */
+	name = (p == PANEL_HELP && display_quest) ? "Quest Log" : panel_name(p);
+	if (*key && p != PANEL_HELP && p != PANEL_CONTAINER) {
+		snprintf(buf, sizeof(buf), "%s (%s)", name, key);
+		return buf;
+	}
+	return name;
 }
 
 int panel_frame_kind(int p)
@@ -844,6 +896,14 @@ static int panel_size_cols(int p)
 	if (p == PANEL_CONTAINER) {
 		return con_grid_cols();
 	}
+	if (p == PANEL_SPEED || p == PANEL_BUFFS) {
+		return panel_scale(p); /* "columns" = the scale in percent */
+	}
+	if (p == PANEL_STATUS) {
+		int x1, y1, x2, y2;
+
+		return panels[p].sw ? panels[p].sw : (panel_content_rect(p, &x1, &y1, &x2, &y2) ? x2 - x1 : 0);
+	}
 	return 0;
 }
 
@@ -854,6 +914,9 @@ static int panel_size_rows(int p)
 	}
 	if (p == PANEL_CONTAINER) {
 		return __condy;
+	}
+	if (p == PANEL_SPEED || p == PANEL_BUFFS || p == PANEL_STATUS) {
+		return panel_scale(p); /* "rows" = the scale in percent */
 	}
 	return __skldy;
 }
@@ -890,6 +953,25 @@ static int panel_apply_size(int p, int cols, int rows)
 		rows = clampi(rows, SKL_GRID_MIN_ROWS, SKL_GRID_MAX_ROWS);
 		if (rows != __skldy) {
 			skl_grid_set_rows(rows);
+			changed = 1;
+		}
+	} else if (p == PANEL_SPEED || p == PANEL_BUFFS) {
+		/* the grip scales the plate as a whole: 75 % .. 200 % */
+		cols = clampi(cols, 75, 200);
+		if (cols != panel_scale(p)) {
+			panels[p].sc = cols;
+			changed = 1;
+		}
+	} else if (p == PANEL_STATUS) {
+		/* width straight from the grip, height as a scale of the bars */
+		cols = clampi(cols, STAT_MIN_W / 2, UIXRES - 16);
+		rows = clampi(rows, 50, 200);
+		if (cols != panels[p].sw) {
+			panels[p].sw = cols;
+			changed = 1;
+		}
+		if (rows != panel_scale(p)) {
+			panels[p].sc = rows;
 			changed = 1;
 		}
 	}
@@ -950,6 +1032,17 @@ int panels_resize_update(int p, int mx, int my)
 		rows = (gripy - rsz.originy + FDX / 2) / FDX;
 	} else if (p == PANEL_SKILLS) {
 		rows = (gripy - rsz.originy + LINEHEIGHT / 2) / LINEHEIGHT;
+	} else if (p == PANEL_SPEED || p == PANEL_BUFFS) {
+		/* the plate follows the grip proportionally, from its size at the press */
+		int base = max(1, rsz.start_x2 - rsz.originx);
+
+		cols = rsz.start_cols * (gripx - rsz.originx) / base;
+		rows = cols;
+	} else if (p == PANEL_STATUS) {
+		int base = max(1, rsz.start_y2 - rsz.originy);
+
+		cols = gripx - rsz.originx;
+		rows = rsz.start_rows * (gripy - rsz.originy) / base;
 	} else {
 		return 0;
 	}
@@ -1184,6 +1277,11 @@ void panels_display_frames(void)
 			} else {
 				render_rect_alpha(mx - 8, my - 1, mx + 8, my, UI_BORDER_STRONG, UI_A_ROW_HOVER);
 			}
+			/* a resizable plate (speed, effects, the status bars) shows its
+			 * grip like a window does */
+			if (chrome_grip_pos(p, &cx, &cy)) {
+				ui_resize_grip(cx, cy, butsel == BUT_PSIZE_BEG + p || capbut == BUT_PSIZE_BEG + p);
+			}
 		}
 	}
 }
@@ -1276,6 +1374,12 @@ void panels_save_json(struct cJSON *root)
 		cJSON_AddBoolToObject(e, "lk", panels[p].locked);
 		cJSON_AddNumberToObject(e, "dx", panels[p].dx);
 		cJSON_AddNumberToObject(e, "dy", panels[p].dy);
+		if (panels[p].sc) {
+			cJSON_AddNumberToObject(e, "sc", panels[p].sc);
+		}
+		if (panels[p].sw) {
+			cJSON_AddNumberToObject(e, "sw", panels[p].sw);
+		}
 		cJSON_AddItemToObject(jp, panels[p].id, e);
 	}
 	cJSON_AddItemToObject(root, "panels", jp);
@@ -1322,6 +1426,14 @@ void panels_load_json(const struct cJSON *root)
 		v = cJSON_GetObjectItem(e, "dy");
 		if (v && cJSON_IsNumber(v)) {
 			panels[p].dy = (int)cJSON_GetNumberValue(v);
+		}
+		v = cJSON_GetObjectItem(e, "sc");
+		if (v && cJSON_IsNumber(v)) {
+			panels[p].sc = clampi((int)cJSON_GetNumberValue(v), 50, 250);
+		}
+		v = cJSON_GetObjectItem(e, "sw");
+		if (v && cJSON_IsNumber(v)) {
+			panels[p].sw = max(0, (int)cJSON_GetNumberValue(v));
 		}
 	}
 }

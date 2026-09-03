@@ -83,6 +83,14 @@ void set_button_flags(void)
 			but[b].flags |= BUTF_NOHIT;
 		}
 	}
+	/* the skills rail exists only while the list is longer than the window */
+	for (b = BUT_SCL_UP; b <= BUT_SCL_DW; b++) {
+		if (max_skloff > 0) {
+			but[b].flags &= ~BUTF_NOHIT;
+		} else {
+			but[b].flags |= BUTF_NOHIT;
+		}
+	}
 	/* skill rows are their own window now and no longer make way for a
 	 * container - a row is clickable when it has a raise button */
 	for (b = BUT_SKL_BEG; b <= BUT_SKL_END; b++) {
@@ -432,10 +440,10 @@ static void detect_hover_target(void)
 
 		if (butsel == -1 && panel_content_shown(PANEL_STATUS) &&
 		    panel_content_rect(PANEL_STATUS, &sx1, &sy1, &sx2, &sy2) && mousex >= sx1 && mousex <= sx2) {
-			if (mousey >= sy1 && mousey <= sy1 + STAT_BAR_H) {
+			if (mousey >= sy1 && mousey <= sy1 + stat_bar_h()) {
 				butsel = BUT_EXPBAR;
 			}
-			if (mousey >= sy1 + STAT_ROW_H && mousey <= sy1 + STAT_ROW_H + STAT_BAR_H) {
+			if (mousey >= sy1 + stat_row_h() && mousey <= sy1 + stat_row_h() + stat_bar_h()) {
 				butsel = BUT_MILBAR;
 			}
 		}

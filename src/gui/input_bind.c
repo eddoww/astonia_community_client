@@ -566,7 +566,10 @@ static const SDL_Keycode row1_alt_keys[HOTBAR_SLOTS_PER_ROW] = {
  */
 
 static HotbarSlot hotbar[HOTBAR_MAX_SLOTS];
-static int visible_slots = HOTBAR_DEFAULT_SLOTS;
+#define HOTBAR_CASTER_SPELLS 9 /* this many castable spells = a caster's bar */
+#define HOTBAR_CASTER_SLOTS  15
+#define HOTBAR_FIGHTER_SLOTS 6
+static int visible_slots = -1; /* -1: class default (6 for fighters, 15 for casters) until the player picks */
 static int active_rows = 1; /* how many hotbar rows are visible (1-3) */
 static int cast_mode = CAST_SMART; /* how targeted spells are cast from hotkeys */
 
@@ -692,7 +695,29 @@ DLL_EXPORT void skl_grid_set_rows(int n)
 
 DLL_EXPORT int hotbar_visible_slots(void)
 {
-	return visible_slots;
+	if (visible_slots > 0) {
+		return visible_slots;
+	}
+	/* no explicit choice: a caster gets the wide bar, a fighter a short
+	 * one - decided by how many spells the character can cast (the skill
+	 * list arrives after login; init_dots() re-runs when it changes) */
+	return spellbook_slot_count() >= HOTBAR_CASTER_SPELLS ? HOTBAR_CASTER_SLOTS : HOTBAR_FIGHTER_SLOTS;
+}
+
+DLL_EXPORT const char *input_panel_bind_key(int p)
+{
+	char id[48];
+	InputBinding *b;
+
+	if (p < 0 || p >= MAX_PANEL) {
+		return "";
+	}
+	snprintf(id, sizeof(id), "ui.panel_%s", panel_id(p));
+	b = input_find_by_id(id);
+	if (!b || b->key == SDLK_UNKNOWN) {
+		return "";
+	}
+	return input_key_to_string(b->key, b->modifiers);
 }
 
 DLL_EXPORT int hotbar_rows(void)
@@ -2341,6 +2366,10 @@ int input_load_config(const char *path)
 		if (v && cJSON_IsNumber(v)) {
 			hotbar_set_rows((int)cJSON_GetNumberValue(v));
 		}
+		v = cJSON_GetObjectItem(jsettings, "hotbar_slots");
+		if (v && cJSON_IsNumber(v)) {
+			hotbar_set_visible_slots((int)cJSON_GetNumberValue(v));
+		}
 		v = cJSON_GetObjectItem(jsettings, "inv_cols");
 		if (v && cJSON_IsNumber(v)) {
 			inv_grid_set_cols((int)cJSON_GetNumberValue(v));
@@ -2556,6 +2585,9 @@ int input_save_config(const char *path)
 	cJSON_AddBoolToObject(jsettings, "show_hotkeys", show_hotkeys);
 	cJSON_AddBoolToObject(jsettings, "show_names", show_names);
 	cJSON_AddNumberToObject(jsettings, "hotbar_rows", active_rows);
+	if (visible_slots > 0) {
+		cJSON_AddNumberToObject(jsettings, "hotbar_slots", visible_slots); /* absent = class default */
+	}
 	cJSON_AddNumberToObject(jsettings, "inv_cols", inv_cols);
 	cJSON_AddNumberToObject(jsettings, "inv_rows", inv_rows);
 	cJSON_AddNumberToObject(jsettings, "skl_rows", skl_rows);

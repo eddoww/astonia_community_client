@@ -451,7 +451,9 @@ void display(void)
 		if (panel_content_shown(PANEL_SKILLS)) {
 			panel_clip_begin(PANEL_SKILLS);
 			display_skill();
-			display_scrollbar_left();
+			if (max_skloff > 0) {
+				display_scrollbar_left(); /* everything fits: no rail */
+			}
 			panel_clip_end();
 		}
 		if (panel_content_shown(PANEL_CONTAINER)) {

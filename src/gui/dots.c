@@ -229,7 +229,9 @@ void init_dots(void)
 
 	/* ── Speed selector, stacked above the skills window ─────────────── */
 	{
-		int w = SPEED_SEG_W * 3 + SPEED_SEG_GAP * 2;
+		int sc = panel_scale(PANEL_SPEED);
+		int w = 3 * SPEED_COL_W * sc / 100;
+		int h = SPEED_PANEL_H * sc / 100;
 		/* stacked above the skills window's TALLER possible shape (skill
 		 * list or merchant grid) so neither opening a shop nor closing one
 		 * ever bumps these two around - the anchor is a constant of the
@@ -239,16 +241,17 @@ void init_dots(void)
 		 * these two around */
 		int skl_max_h = max(SKL_GRID_DEF_ROWS * LINEHEIGHT + 6, 4 * FDX + 4);
 		int y2 = UIYRES - edge - skl_max_h - UI_WIN_TITLE_H - UI_WIN_PAD * 2 - 4;
-		int y1 = y2 - SPEED_SEG_H;
+		int y1 = y2 - h;
 
 		set_dot(DOT_MOD, 8, y1, 0);
 		panel_set_content_rect(PANEL_SPEED, 8, y1, 8 + w, y2);
 	}
 
-	/* ── Buff chips, stacked above the speed selector ────────────────── */
+	/* ── Effect orbs, stacked above the speed selector ───────────────── */
 	{
-		int w = BUFF_CHIP * BUFF_COUNT + BUFF_GAP * (BUFF_COUNT - 1);
-		int h = BUFF_CHIP + BUFF_LABEL_H;
+		int sc = panel_scale(PANEL_BUFFS);
+		int w = (BUFF_CHIP * BUFF_COUNT + BUFF_GAP * (BUFF_COUNT - 1)) * sc / 100;
+		int h = (BUFF_CHIP + BUFF_LABEL_H) * sc / 100;
 		int y1 = doty(DOT_MOD) - HUD_GRIP_H - UI_WIN_PAD - h - 4;
 
 		set_dot(DOT_SSP, 8, y1, 0);
@@ -269,25 +272,25 @@ void init_dots(void)
 	/* ── Status panel: level + military as two long WoW-style bars at the
 	 *    very bottom of the screen, centered ──────────────────────────── */
 	{
-		int w = UIXRES * STAT_W_NUM / STAT_W_DEN;
+		int w = panel_status_width() ? panel_status_width() : UIXRES * STAT_W_NUM / STAT_W_DEN;
 		int x1, y1;
 
-		if (w < STAT_MIN_W) {
+		if (w < STAT_MIN_W && !panel_status_width()) {
 			w = STAT_MIN_W;
 		}
 		x1 = (UIXRES - w) / 2;
-		y1 = UIYRES - 2 * STAT_ROW_H - 2;
+		y1 = UIYRES - 2 * stat_row_h() - 2;
 		set_dot(DOT_STAT, x1, y1, 0);
-		panel_set_content_rect(PANEL_STATUS, x1, y1, x1 + w, y1 + 2 * STAT_ROW_H);
-		set_but(BUT_EXPBAR, x1 + w / 2, y1 + STAT_BAR_H / 2, 0, BUTF_NOHIT); /* rect-hit */
-		set_but(BUT_MILBAR, x1 + w / 2, y1 + STAT_ROW_H + STAT_BAR_H / 2, 0, BUTF_NOHIT);
+		panel_set_content_rect(PANEL_STATUS, x1, y1, x1 + w, y1 + 2 * stat_row_h());
+		set_but(BUT_EXPBAR, x1 + w / 2, y1 + stat_bar_h() / 2, 0, BUTF_NOHIT); /* rect-hit */
+		set_but(BUT_MILBAR, x1 + w / 2, y1 + stat_row_h() + stat_bar_h() / 2, 0, BUTF_NOHIT);
 	}
 
 	/* ── System menu strip: Menu | Help | Quests, top-right of the world,
-	 *    left of the minimap's column ─────────────────────────────────── */
+	 *    left of the weather indicator's corner box ───────────────────── */
 	{
 		int w = 3 * SYSM_BTN_W + 2 * SYSM_GAP;
-		int x1 = UIXRES - 150 - w;
+		int x1 = UIXRES - edge - UI_WEATHER_W - 10 - w;
 
 		set_dot(DOT_MENU, x1, 8, 0);
 		panel_set_content_rect(PANEL_SYSMENU, x1, 8, x1 + w, 8 + SYSM_BTN_H);
@@ -344,7 +347,7 @@ void init_dots(void)
 	{
 		int d = minimap_footprint();
 
-		set_dot(DOT_MMAP, UIXRES - d - edge, 46, 0);
+		set_dot(DOT_MMAP, UIXRES - d - edge, 8 + UI_WEATHER_H + 8, 0); /* under the weather box */
 		panel_set_content_rect(PANEL_MINIMAP, dotx(DOT_MMAP), doty(DOT_MMAP), dotx(DOT_MMAP) + d, doty(DOT_MMAP) + d);
 	}
 
@@ -379,7 +382,9 @@ void init_dots(void)
 	{
 		int shown_rows = hotbar_rows() > 0 ? hotbar_rows() : 1; /* 0 rows: keep a sane anchor */
 		int row_offset = (shown_rows - 1) * (FDX + 2); /* extra rows above */
-		set_dot(DOT_HOTBAR, (UIXRES - hotbar_visible_slots() * FDX) / 2, doty(DOT_BOT) - 15 - row_offset, 0);
+		/* right of the chat's default corner spot (bottom-left), its grab
+		 * tab clear of the chat's edge */
+		set_dot(DOT_HOTBAR, 8 + UI_CHAT_DEF_W + 16 + 20 + FDX / 2, doty(DOT_BOT) - 15 - row_offset, 0);
 	}
 
 	// tutor window
@@ -467,13 +472,15 @@ void init_dots(void)
 	set_but(BUT_GLD, dot[DOT_GLD].x, dot[DOT_GLD].y, 14, BUTF_CAPTURE);
 	set_but(BUT_JNK, dot[DOT_JNK].x, dot[DOT_JNK].y, 14, 0);
 
-	/* speed selector: fast | normal | stealth, left to right */
+	/* speed selector: fast | normal | stealth, left to right - one orb per
+	 * column with its label above, scaled with the plate */
 	{
 		static const int seg_but[3] = {BUT_MOD_WALK1, BUT_MOD_WALK0, BUT_MOD_WALK2};
+		int sc = panel_scale(PANEL_SPEED);
 
 		for (i = 0; i < 3; i++) {
-			set_but(seg_but[i], dot[DOT_MOD].x + i * (SPEED_SEG_W + SPEED_SEG_GAP) + SPEED_SEG_W / 2,
-			    dot[DOT_MOD].y + SPEED_SEG_H / 2, 20, 0);
+			set_but(seg_but[i], dot[DOT_MOD].x + (i * SPEED_COL_W + SPEED_COL_W / 2) * sc / 100,
+			    dot[DOT_MOD].y + (SPEED_LABEL_H + 2 + SPEED_ORB / 2) * sc / 100, max(8, SPEED_COL_W * sc / 200), 0);
 		}
 	}
 

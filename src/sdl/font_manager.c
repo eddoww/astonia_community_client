@@ -48,6 +48,22 @@
 #define FM_MAX_TEXT 1024
 
 static int fm_is_enabled;
+/* Text size in percent of the base point sizes (see fm_set_text_scale) and
+ * the saved face choice - kept outside HAVE_SDL3_TTF so a build without
+ * SDL3_ttf still carries the user's settings through save/load unchanged. */
+static int fm_text_scale_pct = 100;
+static char fm_pref_name[FM_MAX_FONT_NAME];
+
+static int fm_clamp_scale(int pct)
+{
+	if (pct < FM_SCALE_MIN) {
+		return FM_SCALE_MIN;
+	}
+	if (pct > FM_SCALE_MAX) {
+		return FM_SCALE_MAX;
+	}
+	return pct;
+}
 
 #ifdef HAVE_SDL3_TTF
 
@@ -91,7 +107,7 @@ static int fm_size_class(int flags)
 	return FM_SIZE_NORMAL;
 }
 
-static int fm_pt_for_size(int size_class)
+static int fm_base_pt(int size_class)
 {
 	switch (size_class) {
 	case FM_SIZE_SMALL:
@@ -101,6 +117,14 @@ static int fm_pt_for_size(int size_class)
 	default:
 		return FM_PT_NORMAL;
 	}
+}
+
+/* Device point size: base pt, scaled by the Text Size percent and the
+ * window scale. Fractional sizes are deliberate (7pt at 85% is 5.95pt,
+ * not 5pt) - FreeType hints them onto the pixel grid just fine. */
+static float fm_pt_for_size(int size_class)
+{
+	return (float)(fm_base_pt(size_class) * fm_text_scale_pct * sdl_scale) / 100.0f;
 }
 
 static void fm_close_fonts(void)
@@ -181,13 +205,16 @@ static int fm_load_face(int idx)
 	}
 
 	for (s = 0; s < FM_SIZE_COUNT; s++) {
-		float pt = (float)(fm_pt_for_size(s) * sdl_scale);
+		float pt = fm_pt_for_size(s);
 
 		fm_font[s] = fm_open_from_mem(fm_face_mem, mem_size, pt);
 		fm_font_outline[s] = fm_open_from_mem(fm_face_mem, mem_size, pt);
 		if (!fm_font[s] || !fm_font_outline[s]) {
-			warn("font_manager: failed to load %s at %.0fpt: %s", fm_faces[idx].path, (double)pt, SDL_GetError());
+			warn("font_manager: failed to load %s at %.1fpt: %s", fm_faces[idx].path, (double)pt, SDL_GetError());
 			fm_close_fonts();
+			/* no face is loaded now: fm_available() must say so, or the
+			 * renderer dereferences the NULL handles */
+			fm_current = -1;
 			return 0;
 		}
 		/* mono hinting keeps small sizes crisp on the pixel grid */
@@ -217,9 +244,24 @@ static int fm_load_face(int idx)
 
 	fm_current = idx;
 	fm_generation++;
-	note("font_manager: using \"%s\" (%d/%d/%dpt at scale %d)", fm_faces[idx].name, FM_PT_SMALL, FM_PT_NORMAL,
-	    FM_PT_BIG, sdl_scale);
+	note("font_manager: using \"%s\" (%d/%d/%dpt at %d%%, scale %d)", fm_faces[idx].name, FM_PT_SMALL, FM_PT_NORMAL,
+	    FM_PT_BIG, fm_text_scale_pct, sdl_scale);
 	return 1;
+}
+
+static int fm_find_face(const char *name)
+{
+	int i;
+
+	if (!name || !name[0]) {
+		return -1;
+	}
+	for (i = 0; i < fm_face_count; i++) {
+		if (!strcmp(fm_faces[i].name, name)) {
+			return i;
+		}
+	}
+	return -1;
 }
 
 static int fm_face_cmp(const void *a, const void *b)
@@ -272,11 +314,13 @@ int fm_init(void)
 	}
 	SDL_qsort(fm_faces, (size_t)fm_face_count, sizeof(fm_faces[0]), fm_face_cmp);
 
-	for (i = 0; i < fm_face_count; i++) {
-		if (!strcmp(fm_faces[i].name, FM_DEFAULT_FACE)) {
-			idx = i;
-			break;
-		}
+	/* the saved choice first, then the bundled default, then anything */
+	idx = fm_find_face(fm_pref_name);
+	if (idx < 0) {
+		idx = fm_find_face(FM_DEFAULT_FACE);
+	}
+	if (idx < 0) {
+		idx = 0;
 	}
 	if (fm_load_face(idx)) {
 		return 1;
@@ -332,16 +376,57 @@ const char *fm_current_font_name(void)
 	return fm_faces[fm_current].name;
 }
 
+int fm_current_font_index(void)
+{
+	return fm_current;
+}
+
 int fm_select_font(const char *name)
 {
-	int i;
+	int idx = fm_find_face(name);
+	int prev = fm_current;
 
-	for (i = 0; i < fm_face_count; i++) {
-		if (!strcmp(fm_faces[i].name, name)) {
-			return fm_load_face(i);
-		}
+	if (idx < 0) {
+		return 0;
+	}
+	if (fm_load_face(idx)) {
+		snprintf(fm_pref_name, sizeof(fm_pref_name), "%s", name);
+		return 1;
+	}
+	/* a broken file must not leave the client without a face mid-session:
+	 * go back to the one that worked */
+	if (prev >= 0 && prev != idx) {
+		fm_load_face(prev);
 	}
 	return 0;
+}
+
+void fm_set_preferred_font(const char *name)
+{
+	snprintf(fm_pref_name, sizeof(fm_pref_name), "%s", name ? name : "");
+	if (fm_initialized && fm_pref_name[0] && fm_find_face(fm_pref_name) != fm_current) {
+		fm_select_font(fm_pref_name);
+	}
+}
+
+int fm_text_scale(void)
+{
+	return fm_text_scale_pct;
+}
+
+int fm_set_text_scale(int pct)
+{
+	pct = fm_clamp_scale(pct);
+	if (pct == fm_text_scale_pct) {
+		return fm_current >= 0;
+	}
+	fm_text_scale_pct = pct;
+	if (fm_current < 0) {
+		return 0; /* applied when a face gets loaded */
+	}
+	/* same face, new sizes: fm_load_face bumps the cache generation, so
+	 * every cached text texture is rebuilt at the new size on next use */
+	return fm_load_face(fm_current);
 }
 
 int fm_text_width(int flags, const char *text, int n)
@@ -454,9 +539,32 @@ const char *fm_current_font_name(void)
 	return NULL;
 }
 
+int fm_current_font_index(void)
+{
+	return -1;
+}
+
 int fm_select_font(const char *name)
 {
 	(void)name;
+	return 0;
+}
+
+void fm_set_preferred_font(const char *name)
+{
+	/* remembered so the saved choice survives a round trip through a
+	 * build without SDL3_ttf */
+	snprintf(fm_pref_name, sizeof(fm_pref_name), "%s", name ? name : "");
+}
+
+int fm_text_scale(void)
+{
+	return fm_text_scale_pct;
+}
+
+int fm_set_text_scale(int pct)
+{
+	fm_text_scale_pct = fm_clamp_scale(pct);
 	return 0;
 }
 

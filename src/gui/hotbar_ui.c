@@ -5,6 +5,7 @@
  * inventory (items) and spell book (spells) onto hotbar slots.
  */
 
+#include <stdlib.h>
 #include <SDL3/SDL.h>
 
 #include "astonia.h"
@@ -20,10 +21,29 @@
 static int hb_hover_slot = -1;
 static tick_t hb_hover_start;
 
-static int hb_drag_src = -1;
-static tick_t hb_drag_start;
+/* ── Slot-to-slot drag state ───────────────────────────────────────────
+ *
+ * A press on a filled slot remembers the slot and where the pointer was.
+ * Once the pointer travels HB_DRAG_DEAD pixels from there the slot's
+ * content is picked up (its icon rides on the cursor) and the release
+ * decides: on another slot the content MOVES there (the two slots swap
+ * when the target is filled), anywhere else it goes back where it was.
+ * A press released without that movement is a plain click and activates
+ * the slot, exactly as before. The client has no drop-to-clear gesture -
+ * slots are cleared from the right-click keybind panel - so a drop on
+ * nothing must never destroy anything.
+ *
+ * Only the content travels: the extra binds live inside the HotbarSlot
+ * and move with it, while the primary key ("hotbar.N" in the keybinds,
+ * shown in the slot corner) belongs to the slot POSITION and stays put,
+ * like an action bar: key 1 always fires whatever sits in slot 1. */
 
-#define HB_DRAG_THRESHOLD 4
+static int hb_drag_src = -1; /* pressed slot, -1 when none */
+static int hb_press_x, hb_press_y; /* pointer at the press */
+static int hb_drag_moved; /* left the dead zone: this is a drag */
+
+/* same dead zone as the panel drags (DRAG_DEAD_ZONE in panels.c) */
+#define HB_DRAG_DEAD 3
 
 static int hb_drag_active(void);
 
@@ -276,14 +296,18 @@ int hotbar_click(int slot)
 	}
 
 	if (hb_drag_active()) {
+		/* a slot dragged onto another slot moves there (swapping with
+		 * whatever was in the target); dragged back onto itself it just
+		 * settles down again. Either way the release is consumed - it must
+		 * not activate anything. */
 		if (hb_drag_src != slot) {
 			hotbar_swap(hb_drag_src, slot);
 			save_options();
 		}
-		hb_drag_src = -1;
+		hotbar_cancel_drag();
 		return 1;
 	}
-	hb_drag_src = -1;
+	hotbar_cancel_drag(); /* a plain click: the press state is spent */
 
 	if (spellbook_is_dragging()) {
 		int action_slot = spellbook_dragging_slot();
@@ -330,13 +354,23 @@ int hotbar_click(int slot)
 
 int hotbar_mousedown(int slot)
 {
+	hotbar_cancel_drag(); /* whatever an earlier press left behind */
+
 	if (slot < 0 || slot >= hotbar_visible_slots() * hotbar_rows()) {
+		return 0;
+	}
+	/* something already on the cursor (an inventory item, a spell carried
+	 * from the spell book) is dropped INTO the slot on release; that press
+	 * must not pick the slot's own content up instead */
+	if (csprite || spellbook_is_dragging()) {
 		return 0;
 	}
 	const HotbarSlot *hs = hotbar_get(slot);
 	if (hs && hs->type != HOTBAR_EMPTY) {
 		hb_drag_src = slot;
-		hb_drag_start = tick;
+		hb_press_x = mousex;
+		hb_press_y = mousey;
+		hb_drag_moved = 0;
 		return 1;
 	}
 	return 0;
@@ -344,12 +378,21 @@ int hotbar_mousedown(int slot)
 
 static int hb_drag_active(void)
 {
-	return hb_drag_src >= 0 && (tick - hb_drag_start) >= HB_DRAG_THRESHOLD;
+	if (hb_drag_src < 0) {
+		return 0;
+	}
+	/* sticky: once out of the dead zone it stays a drag even when the
+	 * pointer wanders back over the press point */
+	if (!hb_drag_moved && (abs(mousex - hb_press_x) >= HB_DRAG_DEAD || abs(mousey - hb_press_y) >= HB_DRAG_DEAD)) {
+		hb_drag_moved = 1;
+	}
+	return hb_drag_moved;
 }
 
 void hotbar_cancel_drag(void)
 {
 	hb_drag_src = -1;
+	hb_drag_moved = 0;
 }
 
 int hotbar_is_dragging(void)

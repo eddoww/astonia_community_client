@@ -48,11 +48,31 @@ int fm_active(void);
  * carry small/big) this uniquely identifies how a text texture was built. */
 uint32_t fm_cache_generation(void);
 
-/* Font registry (for a future font-choice UI / command). */
+/* Font registry (Options > Display > Font cycles through it). */
 int fm_font_count(void);
 const char *fm_font_name(int idx);
 const char *fm_current_font_name(void);
+int fm_current_font_index(void); /* -1 while no face is loaded */
 int fm_select_font(const char *name); /* reloads all three sizes, bumps generation */
+/* The saved face choice: applied at fm_init instead of the built-in default
+ * (unknown names fall back to it), or right away when already initialized.
+ * NULL/"" clears the preference. */
+void fm_set_preferred_font(const char *name);
+
+/* Text size (Options > Display > Text Size), percent of the base point
+ * sizes 7/9/11pt. Scales the TTF path only - the bitmap fonts have their
+ * own "Large Font" option. Clamped to FM_SCALE_MIN..FM_SCALE_MAX: below
+ * 80% the small face drops under 6px and stops being readable; above 115%
+ * the small face's mono-hinted advance rounds up to the next pixel and the
+ * longest skill rows ("Negative experience 983", "Hitpoints 200+18/200/200")
+ * run into their values - every window keeps its bitmap-era widths, so the
+ * text must fit them, not the other way round. A change reloads the face
+ * live and bumps the cache generation. */
+#define FM_SCALE_MIN  80
+#define FM_SCALE_MAX  115
+#define FM_SCALE_STEP 5
+int fm_text_scale(void);
+int fm_set_text_scale(int pct); /* returns 1 when a face is loaded at the new size */
 
 /* Metrics, all in game pixels (already divided by sdl_scale).
  * Width functions stop at RENDER_TEXT_TERMINATOR and at n characters

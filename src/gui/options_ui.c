@@ -129,7 +129,7 @@ static int opt_tab_total(void)
 	case 1:
 		return 4;
 	case 2:
-		return 9;
+		return 11;
 	case 3:
 		return OPT_UI_NATIVE + opt_mod_row_count(AMOD_TAB_UI);
 	case 4:
@@ -584,7 +584,34 @@ static void opt_display_display(void)
 		    fm_available() ? "TTF Text (experimental)" : "TTF Text (unavailable)");
 	}
 
+	/* Font + Text Size belong to the TTF path (the bitmap fonts have their
+	 * fixed rasters and the Large Font toggle above), so while TTF Text is
+	 * off they show their values muted with a hint instead of hiding */
 	ry = opt_row_y(6);
+	if (ry >= 0) {
+		const char *fname = fm_current_font_name();
+		int hov = draw_row_hover(ry);
+
+		render_text(opt_lx, ry, hov ? UI_TEXT : UI_TEXT_LABEL, UI_FONT_BODY, "Font:");
+		if (!fname) {
+			render_text(opt_lx + 100, ry, UI_TEXT_MUTED, UI_FONT_BODY, "(no fonts in res/fonts)");
+		} else if (game_options & GO_TTF) {
+			render_text(opt_lx + 100, ry, UI_TEXT, UI_FONT_BODY, fname);
+		} else {
+			char buf[96];
+
+			snprintf(buf, sizeof(buf), "%s (needs TTF Text)", fname);
+			render_text(opt_lx + 100, ry, UI_TEXT_MUTED, UI_FONT_BODY, buf);
+		}
+	}
+
+	ry = opt_row_y(7);
+	if (ry >= 0) {
+		draw_slider(opt_lx, ry, opt_content_w, fm_text_scale(), FM_SCALE_MIN, FM_SCALE_MAX,
+		    (game_options & GO_TTF) ? "Text Size %" : "Text Size % (TTF)");
+	}
+
+	ry = opt_row_y(8);
 	if (ry >= 0) {
 		const char *label;
 
@@ -598,14 +625,14 @@ static void opt_display_display(void)
 		draw_checkbox(opt_lx, ry, (game_options & GO_GPU) != 0, label);
 	}
 
-	ry = opt_row_y(7);
+	ry = opt_row_y(9);
 	if (ry >= 0) {
 		draw_checkbox(opt_lx, ry, (game_options & GO_SHADERFX) != 0,
 		    use_gpu_rendering ? "Batched Sprite Effects (needs restart)"
 		                      : "Batched Sprite Effects (needs GPU Renderer)");
 	}
 
-	ry = opt_row_y(8);
+	ry = opt_row_y(10);
 	if (ry >= 0) {
 		/* the glow pipeline only exists under the GPU renderer; say so
 		 * rather than showing a checkbox that does nothing */
@@ -679,6 +706,45 @@ static int opt_click_display(int mx, int my)
 
 	ry = opt_row_y(6);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		/* cycle through the faces found in res/fonts. Persisted via the
+		 * extra-options file like the TTF toggle; the reload bumps the TTF
+		 * cache generation, so cached text textures are simply rebuilt. */
+		int n = fm_font_count();
+
+		if (n > 0) {
+			int idx = (fm_current_font_index() + 1) % n;
+
+			fm_select_font(fm_font_name(idx));
+			save_options();
+		}
+		return 1;
+	}
+
+	ry = opt_row_y(7);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+		/* text size: snap to FM_SCALE_STEP, applied live the same way */
+		int tx = opt_lx + OPT_SLIDER_LBL;
+		int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+		int val;
+
+		if (tw < 10) {
+			tw = 10;
+		}
+		val = FM_SCALE_MIN + (mx - tx) * (FM_SCALE_MAX - FM_SCALE_MIN) / tw;
+		val = ((val + FM_SCALE_STEP / 2) / FM_SCALE_STEP) * FM_SCALE_STEP;
+		if (val < FM_SCALE_MIN) {
+			val = FM_SCALE_MIN;
+		}
+		if (val > FM_SCALE_MAX) {
+			val = FM_SCALE_MAX;
+		}
+		fm_set_text_scale(val);
+		save_options();
+		return 1;
+	}
+
+	ry = opt_row_y(8);
+	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		/* persisted via the extra-options file, like the TTF toggle. The
 		 * renderer cannot be swapped at runtime - the choice takes effect on
 		 * the next start (and silently falls back to SDL_Renderer when the
@@ -688,7 +754,7 @@ static int opt_click_display(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(7);
+	ry = opt_row_y(9);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		/* the sprite batch is built during sdl_init, so like the renderer
 		 * itself this takes effect on the next start */
@@ -697,7 +763,7 @@ static int opt_click_display(int mx, int my)
 		return 1;
 	}
 
-	ry = opt_row_y(8);
+	ry = opt_row_y(10);
 	if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
 		/* checked per draw, so unlike the two above this takes effect on
 		 * the very next frame */

@@ -629,6 +629,10 @@ static char saved_gpu_driver[32] = "auto";
 static int saved_gpu_shaderfx = -1;
 /* UI Scale percent (sdl_core.c); applied live via ui_scale_apply() */
 extern int ui_scale_pct;
+/* TTF face name from the extra-options file (Options > Display > Font).
+ * Kept here as well as in the font manager so the choice survives a round
+ * trip through a build without SDL3_ttf or an install missing the file. */
+static char saved_ttf_font[64] = "";
 /* Bump when a *_requested default flips, so configs written under the old
  * default do not pin the old behaviour forever. Everything the client saves
  * is written on every options change, so an experimental feature that was
@@ -674,6 +678,14 @@ static void save_extra_options(void)
 	cJSON_AddNumberToObject(root, "worker_threads", sdl_multi);
 	cJSON_AddNumberToObject(root, "window_mode", saved_window_mode);
 	cJSON_AddNumberToObject(root, "ui_scale", ui_scale_pct);
+	/* TTF face + text size (Options > Display > Font / Text Size) */
+	if (fm_current_font_name()) {
+		snprintf(saved_ttf_font, sizeof(saved_ttf_font), "%s", fm_current_font_name());
+	}
+	if (saved_ttf_font[0]) {
+		cJSON_AddStringToObject(root, "ttf_font", saved_ttf_font);
+	}
+	cJSON_AddNumberToObject(root, "ttf_text_scale", fm_text_scale());
 
 	json = cJSON_Print(root);
 	cJSON_Delete(root);
@@ -751,6 +763,15 @@ static void load_extra_options(void)
 			game_options &= ~GO_TTF;
 		}
 	}
+	/* face + size go straight to the font manager: before fm_init they are
+	 * the sizes/face it opens with, after it (a reload of the options)
+	 * they re-apply live - either way no second load when nothing changed */
+	v = cJSON_GetObjectItem(root, "ttf_font");
+	if (v && cJSON_IsString(v) && v->valuestring) {
+		snprintf(saved_ttf_font, sizeof(saved_ttf_font), "%s", v->valuestring);
+	}
+	fm_set_preferred_font(saved_ttf_font);
+	fm_set_text_scale(extra_int(root, "ttf_text_scale", 100, FM_SCALE_MIN, FM_SCALE_MAX));
 	v = cJSON_GetObjectItem(root, "gpu_driver");
 	if (v && cJSON_IsString(v) && v->valuestring) {
 		snprintf(saved_gpu_driver, sizeof(saved_gpu_driver), "%s", v->valuestring);

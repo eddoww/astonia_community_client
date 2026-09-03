@@ -427,6 +427,20 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
+		/* a slot picked up from the hotbar is the client's gesture too: it
+		 * ends on this release wherever the pointer is - moved onto another
+		 * slot, or put back - before a window under the pointer can eat the
+		 * release and leave the icon stuck on the cursor */
+		if (hotbar_is_dragging()) {
+			if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+				hotbar_click(butsel - BUT_HOTBAR_BEG);
+			} else {
+				hotbar_cancel_drag();
+			}
+			break;
+		}
+		hotbar_cancel_drag(); /* a press that never became a drag: forget it */
+
 		/* loading screen: only the escape menu and its windows are live */
 		if (gui_is_loading()) {
 			if (options_is_open()) {
@@ -486,16 +500,12 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 		/* spellbook toggle button */
 
-		/* hotbar: assign (drag) or activate (click) */
+		/* hotbar: assign (drop from the spell book / inventory) or activate
+		 * (click) - slot-to-slot drags were settled above */
 		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
 			if (hotbar_click(butsel - BUT_HOTBAR_BEG)) {
 				break;
 			}
-		}
-
-		if (hotbar_is_dragging()) {
-			hotbar_cancel_drag();
-			break;
 		}
 
 		/* spellbook panel clicks (pick up spell, or cancel drag) */

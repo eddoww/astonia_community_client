@@ -198,6 +198,10 @@ DLL_EXPORT void render_texture(int tex_id, int x, int y, unsigned char alpha);
 DLL_EXPORT void render_texture_scaled(int tex_id, int x, int y, float scale, unsigned char alpha);
 DLL_EXPORT int render_texture_width(int tex_id);
 DLL_EXPORT int render_texture_height(int tex_id);
+DLL_EXPORT int render_create_texture(int width, int height);
+DLL_EXPORT int render_update_texture(int tex_id, const uint32_t *pixels);
+DLL_EXPORT void render_texture_region(
+    int tex_id, int src_x, int src_y, int src_w, int src_h, int x, int y, int w, int h, unsigned char alpha);
 
 // Clipping functions
 DLL_EXPORT void render_push_clip(void);

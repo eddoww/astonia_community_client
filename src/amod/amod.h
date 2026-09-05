@@ -211,6 +211,18 @@ DLL_IMPORT void render_texture_scaled(int tex_id, int x, int y, float scale, uns
 DLL_IMPORT int render_texture_width(int tex_id);
 DLL_IMPORT int render_texture_height(int tex_id);
 
+// --- Render: Mod-filled textures (client >= 1.11.0) ---
+// A texture the mod fills from its own pixel buffer (0xAARRGGBB, row-major,
+// width*height entries). Same slot space as render_load_texture, so the
+// render_texture*() calls and render_unload_texture apply. Resolve these via
+// dlsym/GetProcAddress when supporting older clients.
+DLL_IMPORT int render_create_texture(int width, int height);
+DLL_IMPORT int render_update_texture(int tex_id, const uint32_t *pixels);
+// source rectangle (texture pixels) scaled into a destination rectangle (UI
+// pixels), honouring the current clip
+DLL_IMPORT void render_texture_region(
+    int tex_id, int src_x, int src_y, int src_w, int src_h, int x, int y, int w, int h, unsigned char alpha);
+
 // --- Render: Render Targets ---
 DLL_IMPORT int render_create_target(int width, int height);
 DLL_IMPORT void render_destroy_target(int target_id);
@@ -244,6 +256,40 @@ DLL_IMPORT size_t get_near_ground(int x, int y);
 DLL_IMPORT map_index_t get_near_item(int x, int y, unsigned int flag, unsigned int looksize);
 DLL_IMPORT map_index_t get_near_char(int x, int y, unsigned int looksize);
 DLL_IMPORT map_index_t mapmn(unsigned int x, unsigned int y);
+
+// --- Minimap override (client >= 1.11.0) ---
+// A mod can draw the minimap itself: set minimap_override to non-zero and the
+// client stops drawing its round/big map, reserves no panel footprint for it
+// and takes no clicks, hovers or wheel events on it - while it keeps exploring
+// the cell map, handling the area info and POIs, saving/loading the per-area
+// maps and running its keybinds (toggle, zoom in/out/reset). The mod reads
+// the state below and draws whatever it likes; clear the flag and the client
+// map comes back untouched.
+DLL_IMPORT int minimap_override;
+// explored cells of the current area: edge*edge bytes, row-major, cell (x, y)
+// at [x + y * edge]; MINIMAP_CELL_* values
+#define MINIMAP_CELL_UNKNOWN 0 /* never seen */
+#define MINIMAP_CELL_BLOCK   1 /* sight-blocking tile (wall, tree) */
+#define MINIMAP_CELL_FSPRITE 2 /* foreground sprite, passable (fence, bush) */
+#define MINIMAP_CELL_CHAR    3 /* a character stood here when last seen */
+#define MINIMAP_CELL_EMPTY   4 /* open ground */
+#define MINIMAP_CELL_USE     5 /* usable sight-blocker (door, chest) */
+DLL_IMPORT const unsigned char *minimap_cells(void);
+DLL_IMPORT int minimap_cells_edge(void);
+// bumped on every change of the cell map (a fresh look, an area load, a clear)
+DLL_IMPORT unsigned int minimap_generation(void);
+// keybind-driven display state: 0 hidden, 1 small round map, 2 big map; zoom 1..4
+DLL_IMPORT int minimap_mode(void);
+DLL_IMPORT void minimap_set_mode(int mode);
+DLL_IMPORT int minimap_zoom_level(void);
+DLL_IMPORT void minimap_set_zoom(int zoom);
+// server key sent with the area id (SV_AREAINFO), 0 while unmanaged; the
+// area id itself is client_area_id()
+DLL_IMPORT int minimap_area_server(void);
+// points of interest of the current area (res/config/map_poi<server>_<area>.json);
+// type 2 = shown only once its own cell was explored
+DLL_IMPORT int minimap_poi_count(void);
+DLL_IMPORT int minimap_poi_get(int idx, int *x, int *y, int *type, const char **desc);
 
 // --- Teleporter ---
 // The built-in teleporter window can be replaced by a mod: set teleport_override

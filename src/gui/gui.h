@@ -53,6 +53,8 @@ extern int update_skltab;
 
 DLL_EXPORT extern int teleporter;
 DLL_EXPORT extern int teleport_override;
+/* set by a mod that draws the minimap itself - see minimap.c */
+DLL_EXPORT extern int minimap_override;
 extern int show_tutor;
 extern char tutor_text[1024];
 extern int show_look;
@@ -112,6 +114,17 @@ void actions_loaded(void);
 void minimap_clear(void);
 void minimap_compact(void);
 void minimap_areainfo(int cmd, int areaID, int server_key);
+/* mod access to the minimap state (client >= 1.11.0) */
+DLL_EXPORT const unsigned char *minimap_cells(void);
+DLL_EXPORT int minimap_cells_edge(void);
+DLL_EXPORT unsigned int minimap_generation(void);
+DLL_EXPORT int minimap_mode(void);
+DLL_EXPORT void minimap_set_mode(int mode);
+DLL_EXPORT int minimap_zoom_level(void);
+DLL_EXPORT void minimap_set_zoom(int zoom);
+DLL_EXPORT int minimap_area_server(void);
+DLL_EXPORT int minimap_poi_count(void);
+DLL_EXPORT int minimap_poi_get(int idx, int *x, int *y, int *type, const char **desc);
 DLL_EXPORT int client_area_id(void);
 
 struct questlog {

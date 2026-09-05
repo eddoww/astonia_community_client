@@ -33,6 +33,17 @@
 
 static int sx, sy, visible, mx, my, update1, update2, update3, orx, ory, rewrite_cnt;
 
+/* Mod override: a mod that draws its own minimap sets this. The client keeps
+ * everything else going - exploring the cell map, the area info and POIs,
+ * the per-area save/load, the keybind state (mode, zoom) - but draws no map,
+ * reserves no panel footprint and takes no clicks, hovers or wheel events
+ * for it. The mod reads the state through minimap_cells() & friends. */
+DLL_EXPORT int minimap_override = 0;
+
+/* bumped on every change of the explored cell map, so a mod can rebuild
+ * its own picture only when something actually changed */
+static unsigned int map_generation = 1;
+
 static unsigned char _mmap[MAXMAP * MAXMAP];
 static unsigned short map_poi_idx[MAXMAP * MAXMAP];
 
@@ -98,7 +109,7 @@ void minimap_reanchor(void)
  * box, the big square, or nothing while the map is switched off */
 int minimap_footprint(void)
 {
-	if (game_options & GO_NOMAP) {
+	if ((game_options & GO_NOMAP) || minimap_override) {
 		return 0;
 	}
 	switch (visible) {
@@ -158,6 +169,7 @@ static void set_pix(int x, int y, unsigned char val)
 
 		_mmap[x + y * MAXMAP] = val;
 		update1 = update2 = update3 = 1;
+		map_generation++;
 	}
 }
 
@@ -294,7 +306,7 @@ static void recenter_glyph_rect(int *x1, int *y1, int *x2, int *y2)
 
 int minimap_is_panned(void)
 {
-	return visible == 2 && minimap_zoom > 1 && (pan_x || pan_y);
+	return !minimap_override && visible == 2 && minimap_zoom > 1 && (pan_x || pan_y);
 }
 
 int minimap_recenter_hit(int x, int y)
@@ -316,7 +328,7 @@ void minimap_recenter(void)
 /* a press on the big map starts a pan; returns 1 when it took the press */
 int minimap_pan_begin(int x, int y)
 {
-	if (game_options & GO_NOMAP) {
+	if ((game_options & GO_NOMAP) || minimap_override) {
 		return 0;
 	}
 	if (visible != 2 || minimap_zoom <= 1) {
@@ -392,7 +404,7 @@ void display_minimap(void)
 	float dist;
 	SDL_FRect dr, sr;
 
-	if (game_options & GO_NOMAP) {
+	if ((game_options & GO_NOMAP) || minimap_override) {
 		return;
 	}
 
@@ -561,6 +573,7 @@ static void minimap_clearonly(void)
 {
 	memset(_mmap, 0, sizeof(_mmap));
 	update1 = update2 = update3 = 1;
+	map_generation++;
 }
 
 void minimap_clear(void)
@@ -574,6 +587,7 @@ void minimap_clear(void)
 	map_area = 0;
 	memset(_mmap, 0, sizeof(_mmap));
 	update1 = update2 = update3 = 1;
+	map_generation++;
 }
 
 static void minimap_reveal(int x, int y)
@@ -584,6 +598,7 @@ static void minimap_reveal(int x, int y)
 
 	_mmap[x + y * MAXMAP] = MAPPIX_EMPTY;
 	update1 = update2 = update3 = 1;
+	map_generation++;
 }
 
 void minimap_toggle(void)
@@ -622,7 +637,7 @@ void minimap_zoom_reset(void)
  * event was consumed (big map visible and the cursor is over it) */
 int minimap_wheel_zoom(int x, int y, int delta)
 {
-	if (game_options & GO_NOMAP) {
+	if ((game_options & GO_NOMAP) || minimap_override) {
 		return 0;
 	}
 	if (visible != 2) {
@@ -820,6 +835,7 @@ static int map_load_unmanaged(void)
 		fclose(fp);
 
 		map_merge(_mmap, tmap);
+		map_generation++;
 
 		return besti;
 	}
@@ -845,6 +861,8 @@ static int map_load_managed(void)
 	}
 	fread(_mmap, sizeof(_mmap), 1, fp);
 	fclose(fp);
+	map_generation++;
+	update1 = update2 = 1;
 
 	return 1;
 }
@@ -1104,6 +1122,9 @@ void minimap_display_hover(int hx, int hy)
 {
 	int x, y, i;
 
+	if (minimap_override) {
+		return;
+	}
 	if (visible == 1) { // small, round map
 		double sq = 0.70710678118654752440, dist;
 		int tmp;
@@ -1190,4 +1211,92 @@ void minimap_display_hover(int hx, int hy)
 			break;
 		}
 	}
+}
+
+/* ------------------------------------------------------------------------
+ * Mod access to the minimap state (see minimap_override above and amod.h)
+ * ------------------------------------------------------------------------ */
+
+/* the explored cell map: MAXMAP x MAXMAP bytes, row-major, MINIMAP_CELL_*
+ * values (the MAPPIX_* codes above); cell (x, y) of the current area */
+DLL_EXPORT const unsigned char *minimap_cells(void)
+{
+	return _mmap;
+}
+
+DLL_EXPORT int minimap_cells_edge(void)
+{
+	return MAXMAP;
+}
+
+DLL_EXPORT unsigned int minimap_generation(void)
+{
+	return map_generation;
+}
+
+/* keybind-driven display state: 0 hidden, 1 small round map, 2 big map */
+DLL_EXPORT int minimap_mode(void)
+{
+	if (game_options & GO_NOMAP) {
+		return 0;
+	}
+	return visible;
+}
+
+DLL_EXPORT void minimap_set_mode(int mode)
+{
+	if (mode < 0 || mode > 2) {
+		return;
+	}
+	visible = mode;
+}
+
+DLL_EXPORT int minimap_zoom_level(void)
+{
+	return minimap_zoom;
+}
+
+DLL_EXPORT void minimap_set_zoom(int zoom)
+{
+	if (zoom < MINIMAP_ZOOM_MIN) {
+		zoom = MINIMAP_ZOOM_MIN;
+	}
+	if (zoom > MINIMAP_ZOOM_MAX) {
+		zoom = MINIMAP_ZOOM_MAX;
+	}
+	minimap_zoom = zoom;
+}
+
+/* server key sent with the area id (SV_AREAINFO); 0 while unmanaged */
+DLL_EXPORT int minimap_area_server(void)
+{
+	return map_server;
+}
+
+/* points of interest of the current area (res/config/map_poi<server>_<area>.json) */
+DLL_EXPORT int minimap_poi_count(void)
+{
+	return map_poi_cnt > 1 ? map_poi_cnt - 1 : 0;
+}
+
+DLL_EXPORT int minimap_poi_get(int idx, int *x, int *y, int *type, const char **desc)
+{
+	int i = idx + 1; /* slot 0 is the "no POI" placeholder of map_poi_idx */
+
+	if (idx < 0 || i >= map_poi_cnt || !map_poi) {
+		return 0;
+	}
+	if (x) {
+		*x = map_poi[i].x;
+	}
+	if (y) {
+		*y = map_poi[i].y;
+	}
+	if (type) {
+		*type = map_poi[i].type;
+	}
+	if (desc) {
+		*desc = map_poi[i].desc;
+	}
+	return 1;
 }

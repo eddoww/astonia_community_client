@@ -1989,6 +1989,182 @@ int sdl_get_mod_texture_height(int tex_id)
 	return mod_textures[tex_id].height;
 }
 
+/* ---- Mod-filled textures ------------------------------------------------
+ * A mod that composes its own picture on the CPU (a textured minimap, a
+ * chart) gets a texture it can refill from an ARGB8888 buffer. Same slot
+ * table as the PNG-loaded ones, so every render_texture*() call and the
+ * unload apply. The GPU path recreates the texture on each update, exactly
+ * like the client's own dynamic textures (sdl_create_texture): the callers
+ * update rarely (exploration, a step) and the sizes are small. */
+#define MAX_MOD_TEXTURE_EDGE 8192
+
+int sdl_create_mod_texture(int width, int height)
+{
+	SDL_Texture *tex = NULL;
+	int i;
+
+	init_mod_textures();
+
+	if (width < 1 || height < 1 || width > MAX_MOD_TEXTURE_EDGE || height > MAX_MOD_TEXTURE_EDGE) {
+		warn("mod texture: bad size %dx%d", width, height);
+		return -1;
+	}
+
+	for (i = 0; i < MAX_MOD_TEXTURES; i++) {
+		if (!mod_textures[i].used) {
+			break;
+		}
+	}
+	if (i >= MAX_MOD_TEXTURES) {
+		warn("mod texture slots exhausted");
+		return -1;
+	}
+
+	if (!use_gpu_rendering) {
+		tex = SDL_CreateTexture(sdlren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, width, height);
+		if (!tex) {
+			warn("failed to create SDL mod texture: %s", SDL_GetError());
+			return -1;
+		}
+		SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+		SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
+	}
+	/* GPU path: the texture is created on the first update (gpu_texture_create
+	 * needs the pixels up front); drawing an un-updated one is a no-op */
+
+	mod_textures[i].tex = tex;
+	mod_textures[i].gpu_tex = NULL;
+	mod_textures[i].width = width;
+	mod_textures[i].height = height;
+	mod_textures[i].used = 1;
+
+	return i;
+}
+
+int sdl_update_mod_texture(int tex_id, const uint32_t *pixels)
+{
+	if (tex_id < 0 || tex_id >= MAX_MOD_TEXTURES || !mod_textures[tex_id].used || !pixels) {
+		return 0;
+	}
+
+	if (use_gpu_rendering) {
+		SDL_GPUTexture *ntex = gpu_texture_create(pixels, mod_textures[tex_id].width, mod_textures[tex_id].height);
+		if (!ntex) {
+			return 0;
+		}
+		/* SDL_ReleaseGPUTexture defers destruction until in-flight command
+		 * buffers referencing the old texture complete */
+		gpu_texture_destroy(mod_textures[tex_id].gpu_tex);
+		mod_textures[tex_id].gpu_tex = ntex;
+		return 1;
+	}
+
+	if (!mod_textures[tex_id].tex) {
+		return 0;
+	}
+	return SDL_UpdateTexture(mod_textures[tex_id].tex, NULL, pixels, mod_textures[tex_id].width * (int)sizeof(uint32_t))
+	           ? 1
+	           : 0;
+}
+
+/* Source rectangle (texture pixels) scaled into a destination rectangle
+ * (UI pixels), clipped against the clip rect with the source following
+ * proportionally, so a partially clipped draw shows the right part. */
+void sdl_render_mod_texture_region(int tex_id, int src_x, int src_y, int src_w, int src_h, int x, int y, int w, int h,
+    unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	SDL_FRect dr, sr;
+	double fx, fy, sx = src_x, sy = src_y, sw = src_w, sh = src_h, dx = x, dy = y, dw = w, dh = h, d;
+	int tw, th;
+
+	if (tex_id < 0 || tex_id >= MAX_MOD_TEXTURES || !mod_textures[tex_id].used) {
+		return;
+	}
+	if (use_gpu_rendering ? !mod_textures[tex_id].gpu_tex : !mod_textures[tex_id].tex) {
+		return;
+	}
+	if (src_w <= 0 || src_h <= 0 || w <= 0 || h <= 0) {
+		return;
+	}
+	tw = mod_textures[tex_id].width;
+	th = mod_textures[tex_id].height;
+
+	fx = dw / sw; /* destination pixels per source pixel */
+	fy = dh / sh;
+
+	/* keep the source inside the texture, moving the destination along */
+	if (sx < 0) {
+		dx -= sx * fx;
+		dw += sx * fx;
+		sw += sx;
+		sx = 0;
+	}
+	if (sy < 0) {
+		dy -= sy * fy;
+		dh += sy * fy;
+		sh += sy;
+		sy = 0;
+	}
+	if (sx + sw > tw) {
+		d = sx + sw - tw;
+		sw -= d;
+		dw -= d * fx;
+	}
+	if (sy + sh > th) {
+		d = sy + sh - th;
+		sh -= d;
+		dh -= d * fy;
+	}
+
+	/* clip the destination, moving the source along */
+	if (dx < clipsx) {
+		d = clipsx - dx;
+		sx += d / fx;
+		sw -= d / fx;
+		dw -= d;
+		dx = clipsx;
+	}
+	if (dy < clipsy) {
+		d = clipsy - dy;
+		sy += d / fy;
+		sh -= d / fy;
+		dh -= d;
+		dy = clipsy;
+	}
+	if (dx + dw > clipex) {
+		d = dx + dw - clipex;
+		sw -= d / fx;
+		dw -= d;
+	}
+	if (dy + dh > clipey) {
+		d = dy + dh - clipey;
+		sh -= d / fy;
+		dh -= d;
+	}
+	if (sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) {
+		return;
+	}
+
+	sr.x = (float)sx;
+	sr.y = (float)sy;
+	sr.w = (float)sw;
+	sr.h = (float)sh;
+	dr.x = (float)((dx + x_offset) * sdl_scale);
+	dr.y = (float)((dy + y_offset) * sdl_scale);
+	dr.w = (float)(dw * sdl_scale);
+	dr.h = (float)(dh * sdl_scale);
+
+	if (use_gpu_rendering) {
+		if (gpu_draw_is_available()) {
+			gpu_draw_texture(mod_textures[tex_id].gpu_tex, &dr, &sr, tw, th, NULL, alpha);
+		}
+		return;
+	}
+
+	SDL_SetTextureAlphaMod(mod_textures[tex_id].tex, alpha);
+	SDL_RenderTexture(sdlren, mod_textures[tex_id].tex, &sr, &dr);
+}
+
 // ============================================================================
 // Render Targets for Modders
 // ============================================================================

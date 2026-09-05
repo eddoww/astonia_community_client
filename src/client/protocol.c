@@ -1885,6 +1885,9 @@ void cmd_junk_item(void)
 	client_send(buf, 1);
 }
 
+/* longest text a CL_TEXT / CL_LOG frame may carry (see cmd_text) */
+#define CL_TEXT_MAX 253
+
 void cmd_text(char *text)
 {
 	unsigned char buf[512];
@@ -1896,7 +1899,11 @@ void cmd_text(char *text)
 
 	buf[0] = CL_TEXT;
 
-	for (len = 0; text[len] && text[len] != RENDER_TEXT_TERMINATOR && len < 254; len++) {
+	/* the frame is [op][len][text NUL]: the server's input buffer holds a
+	 * 256-byte command at most (v3.6.0 and older - 264 since the September
+	 * 2026 audit), so the text stops at 253 characters; a 254-character
+	 * line needed 257 bytes and wedged the connection until the idle kick */
+	for (len = 0; text[len] && text[len] != RENDER_TEXT_TERMINATOR && len < CL_TEXT_MAX; len++) {
 		buf[len + 2] = (unsigned char)text[len];
 	}
 
@@ -1917,7 +1924,7 @@ void cmd_log(char *text)
 
 	buf[0] = CL_LOG;
 
-	for (len = 0; len < 254 && text[len]; len++) {
+	for (len = 0; len < CL_TEXT_MAX && text[len]; len++) { /* same frame as CL_TEXT */
 		buf[len + 2] = (unsigned char)text[len];
 	}
 

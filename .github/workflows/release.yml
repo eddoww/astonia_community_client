@@ -230,7 +230,17 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
 
+    env:
+      # Identifier the signatures are issued against. Overridable so a fork can sign
+      # under its own namespace without patching every step below.
+      MACOS_BUNDLE_ID: com.ugaris.client
+      ENTITLEMENTS: build/macos/entitlements.plist
+      RCODESIGN_VERSION: "0.29.0"
+
     steps:
+      # Signing is optional: without APPLE_CERT_P12 every signing step below is
+      # skipped and the job still produces (unsigned) binaries, exactly as before
+      # the Apple credentials existed.
       - name: Check signing availability
         id: signing
         run: |
@@ -264,6 +274,47 @@ jobs:
           strip bin/moac
           strip -x bin/libastonia_net.dylib
 
+      # ---- signing toolchain + credentials (skipped when secrets are absent) ----
+      - name: Install rcodesign
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL -o rcodesign.tar.gz \
+            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${RCODESIGN_VERSION}/apple-codesign-${RCODESIGN_VERSION}-macos-universal.tar.gz"
+          mkdir -p rcodesign-dist && tar xzf rcodesign.tar.gz -C rcodesign-dist
+          BIN="$(find rcodesign-dist -name rcodesign -type f | head -1)"
+          [ -n "$BIN" ] || { echo "ERROR: rcodesign missing from the release archive"; exit 1; }
+          mkdir -p "$HOME/.local/bin"
+          mv "$BIN" "$HOME/.local/bin/rcodesign"
+          chmod +x "$HOME/.local/bin/rcodesign"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          rm -rf rcodesign.tar.gz rcodesign-dist
+
+      - name: Install signing credentials
+        if: steps.signing.outputs.available == 'true'
+        env:
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p certs private_keys
+          echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certs/dist.p12
+          printf '%s' '${{ secrets.APP_STORE_CONNECT_KEY }}' > private_keys/AuthKey.p8
+          rcodesign encode-app-store-connect-api-key \
+            -o private_keys/appstore_key.json \
+            '${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}' \
+            '${{ secrets.APP_STORE_CONNECT_KEY_ID }}' \
+            private_keys/AuthKey.p8
+
+          # Catch the likely setup mistake - an "Apple Development" or "Apple
+          # Distribution" certificate exported instead of a "Developer ID
+          # Application" one - before Apple rejects it minutes later during
+          # notarization. The matched line names the signing identity, which is
+          # worth having in the log.
+          rcodesign analyze-certificate --p12-file certs/dist.p12 \
+            --p12-password "$P12_PASSWORD" \
+            | grep -i "developer id" \
+            || { echo "ERROR: APPLE_CERT_P12 is not a Developer ID Application certificate - see macos/README.md in Ugaris_Distribution"; exit 1; }
+
       - name: Collect Binaries (macOS)
         run: |
           mkdir -p binaries
@@ -275,6 +326,43 @@ jobs:
           echo "=== macOS Binaries ==="
           ls -la binaries/
 
+      # These loose binaries - not the .app or the DMG - are what the Steam macOS
+      # depot ships, so they are the ones that have to carry a signature. Apple
+      # Silicon refuses to execute an unsigned Mach-O outright.
+      - name: Sign loose binaries
+        if: steps.signing.outputs.available == 'true'
+        env:
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Dependencies first, executable last: a Mach-O's signature covers the
+          # libraries it links against by hash.
+          for lib in binaries/*.dylib; do
+            [ -e "$lib" ] || continue
+            echo "--- signing $lib"
+            rcodesign sign \
+              --p12-file certs/dist.p12 --p12-password "$P12_PASSWORD" \
+              --binary-identifier "${MACOS_BUNDLE_ID}.$(basename "$lib" | sed 's/\.dylib$//' | tr '_' '-')" \
+              --for-notarization \
+              "$lib"
+          done
+          echo "--- signing binaries/moac"
+          rcodesign sign \
+            --p12-file certs/dist.p12 --p12-password "$P12_PASSWORD" \
+            --binary-identifier "${MACOS_BUNDLE_ID}" \
+            --entitlements-xml-file "${ENTITLEMENTS}" \
+            --for-notarization \
+            binaries/moac
+          # Informational only - rcodesign's own `verify` warns that it is
+          # unreliable. The authoritative check happens when Ugaris_Distribution
+          # submits the assembled depot for notarization.
+          echo "=== signing identifiers ==="
+          for f in binaries/moac binaries/*.dylib; do
+            [ -e "$f" ] || continue
+            ID="$(rcodesign print-signature-info "$f" 2>/dev/null | grep -m1 -E '^ +identifier:' | sed 's/.*identifier: *//')"
+            printf '  %-40s %s\n' "$(basename "$f")" "${ID:-NO SIGNATURE}"
+          done
+
       - name: Upload Binaries (macOS)
         uses: actions/upload-artifact@v7
         with:
@@ -282,55 +370,30 @@ jobs:
           path: binaries/
           retention-days: 7
 
-      # ---- macOS signing + DMG (skipped when Apple secrets are not configured) ----
+      # ---- .app bundle + DMG for distribution outside Steam ----
       - name: Build .app bundle
         if: steps.signing.outputs.available == 'true'
-        run: make macos-appbundle
-
-      - name: Install signing certificate
-        if: steps.signing.outputs.available == 'true'
-        run: |
-          mkdir -p certs
-          echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certs/dist.p12
-
-      - name: Install App Store Connect API key
-        if: steps.signing.outputs.available == 'true'
-        run: |
-          mkdir -p private_keys
-          echo '${{ secrets.APP_STORE_CONNECT_KEY }}' > "private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8"
-
-      - name: Install App Store Connect API key JSON
-        if: steps.signing.outputs.available == 'true'
-        run: |
-          echo '${{ secrets.APP_STORE_CONNECT_KEY_JSON }}' > private_keys/appstore_key.json
-
-      - name: Rename app to tmp name
-        if: steps.signing.outputs.available == 'true'
-        run: mv distrib/Astonia.app distrib/Astonia-unsigned.app
+        run: BUNDLE_ID="${MACOS_BUNDLE_ID}" make macos-appbundle
 
       - name: Sign Astonia.app
         if: steps.signing.outputs.available == 'true'
-        uses: indygreg/apple-code-sign-action@v1
-        with:
-          input_path: distrib/Astonia-unsigned.app
-          output_path: distrib/Astonia.app
-          p12_file: certs/dist.p12
-          p12_password: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
-          notarize: false
-          staple: false
-          rcodesign_version: 0.29.0
-          sign_args: |
-            --binary-identifier
-            com.prismaphonic.astonia
-            --for-notarization
+        env:
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mv distrib/Astonia.app distrib/Astonia-unsigned.app
+          rcodesign sign \
+            --p12-file certs/dist.p12 --p12-password "$P12_PASSWORD" \
+            --binary-identifier "${MACOS_BUNDLE_ID}" \
+            --entitlements-xml-file "${ENTITLEMENTS}" \
+            --for-notarization \
+            distrib/Astonia-unsigned.app distrib/Astonia.app
+          rm -rf distrib/Astonia-unsigned.app
 
-      - name: Remove unsigned app bundle
-        if: steps.signing.outputs.available == 'true'
-        run: rm -rf distrib/Astonia-unsigned.app
-
-      - name: Create unsigned DMG from signed app
+      - name: Create DMG from signed app
         if: steps.signing.outputs.available == 'true'
         run: |
+          set -euo pipefail
           cd distrib
           hdiutil create \
             -volname "Astonia" \
@@ -343,24 +406,24 @@ jobs:
 
       - name: Sign, notarize, and staple DMG
         if: steps.signing.outputs.available == 'true'
-        uses: indygreg/apple-code-sign-action@v1
-        with:
-          input_path: distrib/Astonia-macOS-unsigned.dmg
-          output_path: distrib/Astonia-macOS.dmg
-          p12_file: certs/dist.p12
-          p12_password: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
-          rcodesign_version: 0.29.0
-          sign_args: |
-            --for-notarization
-          notarize: true
-          staple: true
-          app_store_connect_api_key_json_file: private_keys/appstore_key.json
-          app_store_connect_api_issuer: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          app_store_connect_api_key: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        env:
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          rcodesign sign \
+            --p12-file certs/dist.p12 --p12-password "$P12_PASSWORD" \
+            --for-notarization \
+            distrib/Astonia-macOS-unsigned.dmg distrib/Astonia-macOS.dmg
+          rcodesign notary-submit \
+            --api-key-file private_keys/appstore_key.json \
+            --wait --max-wait-seconds 1800 --staple \
+            distrib/Astonia-macOS.dmg
+          rm -f distrib/Astonia-macOS-unsigned.dmg
+          ls -lh distrib/Astonia-macOS.dmg
 
-      - name: Remove unsigned DMG
-        if: steps.signing.outputs.available == 'true'
-        run: rm -f distrib/Astonia-macOS-unsigned.dmg
+      - name: Discard signing credentials
+        if: always()
+        run: rm -rf certs private_keys
 
       - name: Upload signed DMG
         if: steps.signing.outputs.available == 'true'

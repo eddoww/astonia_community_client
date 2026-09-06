@@ -371,6 +371,11 @@ anicopy:	bin/anicopy
 
 MACOS_APP_BUNDLE       := distrib/Astonia.app
 MACOS_UNSIGNED_APP_TMP := distrib/Astonia-unsigned.app
+MACOS_ENTITLEMENTS     := build/macos/entitlements.plist
+
+# Signing identity namespace. Keep in step with package_macos.sh's default and with
+# MACOS_BUNDLE_ID in .github/workflows/release.yml.
+BUNDLE_ID              ?= com.prismaphonic.astonia
 
 # Build the unsigned .app bundle.
 # Relies on:
@@ -393,7 +398,8 @@ sign: $(MACOS_APP_BUNDLE)
 	rcodesign sign \
 	  --p12-file "$$APPLE_CERT_P12" \
 	  --p12-password "$$APPLE_CERT_P12_PASSWORD" \
-	  --binary-identifier "com.prismaphonic.astonia" \
+	  --binary-identifier "$(BUNDLE_ID)" \
+	  --entitlements-xml-file "$(MACOS_ENTITLEMENTS)" \
       --for-notarization \
 	  "$(MACOS_UNSIGNED_APP_TMP)" \
 	  "$(MACOS_APP_BUNDLE)" \

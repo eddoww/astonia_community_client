@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  Entitlements for the hardened runtime (which rcodesign turns on whenever it signs
+  for notarization). Without these the signed client still launches, but silently
+  loses features it needs:
+
+  disable-library-validation
+      The client dlopen()s mods from bin/{a..f}mod.dylib. Under the hardened runtime
+      a process may only load libraries signed by its own Team ID, so without this
+      every third-party mod fails to load, with no error the player can see.
+
+  allow-dyld-environment-variables
+      Steam injects its overlay with DYLD_INSERT_LIBRARIES. The hardened runtime
+      scrubs DYLD_* out of the environment unless this is set.
+
+  allow-jit / allow-unsigned-executable-memory
+      LuaJIT generates machine code at runtime and needs writable-executable pages.
+-->
+<dict>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+</dict>
+</plist>

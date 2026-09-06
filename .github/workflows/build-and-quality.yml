@@ -64,7 +64,12 @@ jobs:
       - name: Verify every shader built for every backend
         run: |
           missing=0
-          for n in line postfx primitive sprite_fx sprite_simple tri; do
+          # Derived from the sources, never hardcoded: a hand-maintained list
+          # silently skipped two pairs (glow, prim_batch) for several releases.
+          names=$(ls res/shaders/*.vert | xargs -n1 basename | sed 's/\.vert$//')
+          [ -n "$names" ] || { echo "ERROR: no shader sources in res/shaders/"; exit 1; }
+          echo "Verifying shader pairs: $names"
+          for n in $names; do
             for s in vs ps; do
               for e in spv dxil msl; do
                 f="res/shaders/compiled/${n}_${s}.${e}"

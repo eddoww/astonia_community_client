@@ -107,6 +107,7 @@ static struct {
 	SDL_Mutex *mutex;
 	bool ready;
 	bool map_failed_logged;
+	Uint32 pitch_align; /* row padding the active backend actually wants */
 	int stat_uploads, stat_flushes, stat_fallbacks;
 	long long stat_bytes;
 } up = {0};
@@ -141,6 +142,15 @@ static bool upload_init(void)
 		return false;
 	}
 	up.capacity = UPLOAD_STAGING_BYTES;
+	/* Padding rows out to 256 bytes is a D3D12 placement rule
+	 * (D3D12_TEXTURE_DATA_PITCH_ALIGNMENT); it lets that backend copy straight
+	 * out of the staging buffer instead of re-packing every upload. Metal's
+	 * blit encoder takes the source stride verbatim, so a padded pitch there
+	 * makes it read each row at the wrong offset - every sprite and every glyph
+	 * comes out sheared into horizontal bands. Pad only where it buys something;
+	 * Metal gets tightly packed rows. */
+	const char *driver = SDL_GetGPUDeviceDriver(sdlgpu);
+	up.pitch_align = (driver && SDL_strcasecmp(driver, "metal") == 0) ? 4u : UPLOAD_PITCH_ALIGN;
 	up.ready = true;
 	return true;
 }
@@ -211,7 +221,7 @@ bool gpu_upload_texture(SDL_GPUTexture *texture, const uint32_t *pixels, int x, 
 	}
 
 	Uint32 row_bytes = (Uint32)w * 4u;
-	Uint32 pitch = upload_align(row_bytes, UPLOAD_PITCH_ALIGN);
+	Uint32 pitch = upload_align(row_bytes, up.pitch_align);
 	Uint32 bytes = pitch * (Uint32)h;
 	if (bytes > up.capacity) {
 		up.stat_fallbacks++; /* larger than the ring: the caller uploads it on its own */

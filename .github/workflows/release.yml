@@ -235,7 +235,11 @@ jobs:
       # under its own namespace without patching every step below.
       MACOS_BUNDLE_ID: com.ugaris.client
       ENTITLEMENTS: build/macos/entitlements.plist
-      RCODESIGN_VERSION: "0.29.0"
+      # Must NOT be named RCODESIGN_*: rcodesign registers every RCODESIGN_
+      # environment variable as a configuration source, so RCODESIGN_VERSION
+      # is read as a config key "version" and every invocation fails with
+      # UnknownField("version"). This only pins the download URL.
+      CODESIGN_TOOL_VERSION: "0.29.0"
 
     steps:
       # Signing is optional: without APPLE_CERT_P12 every signing step below is
@@ -280,7 +284,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsSL -o rcodesign.tar.gz \
-            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${RCODESIGN_VERSION}/apple-codesign-${RCODESIGN_VERSION}-macos-universal.tar.gz"
+            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${CODESIGN_TOOL_VERSION}/apple-codesign-${CODESIGN_TOOL_VERSION}-macos-universal.tar.gz"
           mkdir -p rcodesign-dist && tar xzf rcodesign.tar.gz -C rcodesign-dist
           BIN="$(find rcodesign-dist -name rcodesign -type f | head -1)"
           [ -n "$BIN" ] || { echo "ERROR: rcodesign missing from the release archive"; exit 1; }

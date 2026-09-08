@@ -1,4 +1,4 @@
-.PHONY: all debug release windows linux macos build-sdl3 build-sdl3-mixer macos-appbundle macos-signed-bundle clean distrib distrib-stage amod convert anicopy zig-build docker-linux docker-linux-debug docker-linux-dev docker-distrib-linux appimage zen4-appimage sanitizer coverage test
+.PHONY: all debug release windows linux macos build-sdl3 build-sdl3-mixer macos-appbundle macos-bundle-libs macos-signed-bundle clean distrib distrib-stage amod convert anicopy zig-build docker-linux docker-linux-debug docker-linux-dev docker-distrib-linux appimage zen4-appimage sanitizer coverage test
 
 # Root Makefile - Platform dispatcher
 #
@@ -107,6 +107,10 @@ linux:
 macos:
 	@echo "Building for macOS..."
 	@$(MAKE) -j$(JOBS) -f build/make/Makefile.macos
+
+macos-bundle-libs:
+	@echo "Bundling macOS dependencies into bin/..."
+	@$(MAKE) -f build/make/Makefile.macos bundle-libs
 
 macos-appbundle:
 	@echo "Building for macOS..."

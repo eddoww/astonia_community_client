@@ -381,7 +381,14 @@ BUNDLE_ID              ?= com.prismaphonic.astonia
 # Relies on:
 #   - bin/moac
 #   - bin/astonia_launcher
-appbundle: bin/moac $(LAUNCHER_BIN)
+# Make bin/ self-contained: copy every non-system dependency in beside the
+# binaries and rewrite the absolute Homebrew paths the linker baked in to
+# @rpath. Without this the client only runs on a machine that has the same
+# Homebrew packages in the same place - which is no player's machine.
+bundle-libs: bin/moac
+	@build/tools/bundle_macos_libs.py bin
+
+appbundle: bin/moac $(LAUNCHER_BIN) bundle-libs
 	@echo "Building unsigned macOS .app bundle..."
 	@APP_VERSION=$(VERSION) build/tools/package_macos.sh
 

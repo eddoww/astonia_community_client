@@ -273,6 +273,15 @@ jobs:
           strip bin/moac
           strip -x bin/libastonia_net.dylib
 
+      # The linker bakes absolute Homebrew paths into moac, and cargo bakes the
+      # runner's own build directory into libastonia_net.dylib. Neither exists on
+      # a player's Mac, so the client would fail in dyld before main(). This
+      # copies every non-system dependency into bin/ and rewrites the references
+      # to @rpath. Must run before the binaries are collected and signed:
+      # install_name_tool invalidates any signature it touches.
+      - name: Bundle macOS dependencies
+        run: make macos-bundle-libs
+
       # ---- signing toolchain + credentials (skipped when secrets are absent) ----
       - name: Install rcodesign
         if: steps.signing.outputs.available == 'true'
@@ -319,14 +328,16 @@ jobs:
             exit 1
           fi
 
+      # Everything the client needs now lives in bin/, with @rpath references, so
+      # copy the lot rather than naming libraries individually - the old list
+      # hardcoded three SDL dylibs and silently omitted libpng, libzip, mimalloc,
+      # freetype and harfbuzz.
       - name: Collect Binaries (macOS)
         run: |
+          set -euo pipefail
           mkdir -p binaries
           cp bin/moac binaries/
-          cp bin/libastonia_net.dylib binaries/
-          cp -L /opt/homebrew/lib/libSDL3.0.dylib binaries/ 2>/dev/null || true
-          cp -L /opt/homebrew/lib/libSDL3_mixer.0.dylib binaries/ 2>/dev/null || true
-          cp -L /opt/homebrew/lib/libSDL3_ttf.0.dylib binaries/ 2>/dev/null || true
+          cp bin/*.dylib binaries/
           echo "=== macOS Binaries ==="
           ls -la binaries/
 

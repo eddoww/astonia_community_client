@@ -281,7 +281,7 @@ jobs:
           curl -fsSL -o rcodesign.tar.gz \
             "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${CODESIGN_TOOL_VERSION}/apple-codesign-${CODESIGN_TOOL_VERSION}-macos-universal.tar.gz"
           mkdir -p rcodesign-dist && tar xzf rcodesign.tar.gz -C rcodesign-dist
-          BIN="$(find rcodesign-dist -name rcodesign -type f | head -1)"
+          BIN="$(find rcodesign-dist -name rcodesign -type f -print -quit)"
           [ -n "$BIN" ] || { echo "ERROR: rcodesign missing from the release archive"; exit 1; }
           mkdir -p "$HOME/.local/bin"
           mv "$BIN" "$HOME/.local/bin/rcodesign"
@@ -309,10 +309,15 @@ jobs:
           # Application" one - before Apple rejects it minutes later during
           # notarization. The matched line names the signing identity, which is
           # worth having in the log.
-          rcodesign analyze-certificate --p12-file certs/dist.p12 \
-            --p12-password "$P12_PASSWORD" \
-            | grep -i "developer id" \
-            || { echo "ERROR: APPLE_CERT_P12 is not a Developer ID Application certificate - see macos/README.md in Ugaris_Distribution"; exit 1; }
+          # Capture first, then match: piping rcodesign into grep lets grep close
+          # the pipe on a match, which kills rcodesign and - under pipefail - makes
+          # the guard reject exactly the certificates it should accept.
+          CERT_INFO="$(rcodesign analyze-certificate --p12-file certs/dist.p12 \
+            --p12-password "$P12_PASSWORD")"
+          if ! printf '%s\n' "$CERT_INFO" | grep -i "developer id"; then
+            echo "ERROR: APPLE_CERT_P12 is not a Developer ID Application certificate - see macos/README.md in Ugaris_Distribution"
+            exit 1
+          fi
 
       - name: Collect Binaries (macOS)
         run: |
@@ -358,7 +363,8 @@ jobs:
           echo "=== signing identifiers ==="
           for f in binaries/moac binaries/*.dylib; do
             [ -e "$f" ] || continue
-            ID="$(rcodesign print-signature-info "$f" 2>/dev/null | grep -m1 -E '^ +identifier:' | sed 's/.*identifier: *//')"
+            INFO="$(rcodesign print-signature-info "$f" 2>/dev/null || true)"
+            ID="$(printf '%s\n' "$INFO" | grep -m1 -E '^ +identifier:' | sed 's/.*identifier: *//')" || true
             printf '  %-40s %s\n' "$(basename "$f")" "${ID:-NO SIGNATURE}"
           done
 

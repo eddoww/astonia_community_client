@@ -93,5 +93,6 @@ void exit_network(void);
 void bzero_client(int part);
 DLL_EXPORT void client_send(void *buf, size_t len);
 DLL_EXPORT const char *client_config_dir(void);
+DLL_EXPORT const char *client_mods_dir(void);
 void load_unique(void);
 void save_unique(void);

@@ -375,6 +375,10 @@ static void detect_environment(void)
 }
 
 static int dev_mode = 0; // -dev flag: developer conveniences (Lua auto-reload)
+/* --userdir: explicit user-data directory, overriding SDL_GetPrefPath. The
+ * launcher passes its own so both agree on where configs and mods live -
+ * without it the client uses ORG_NAME/APP_NAME and the launcher guesses. */
+static char userdir_arg[MAX_PATH] = "";
 DLL_EXPORT int want_width = 0;
 DLL_EXPORT int want_height = 0;
 DLL_EXPORT int want_monitor = 0; // Monitor number for multi-monitor support (0=default)
@@ -395,6 +399,14 @@ int parse_args(int argc, char *argv[])
 		// parser below ("-dev" would otherwise be read as -d "ev").
 		if (!strcmp(arg, "-dev") || !strcmp(arg, "--dev")) {
 			dev_mode = 1;
+			continue;
+		}
+		if (!strcmp(arg, "-userdir") || !strcmp(arg, "--userdir")) {
+			if (i + 1 >= argc) {
+				fprintf(stderr, "--userdir needs a path\n");
+				return -1;
+			}
+			snprintf(userdir_arg, sizeof(userdir_arg), "%s", argv[++i]);
 			continue;
 		}
 
@@ -968,15 +980,25 @@ void init_logging(void)
 {
 	char filename[MAX_PATH];
 
-	if ((game_options & GO_APPDATA) || (game_options & GO_NOTSET)) {
-		localdata = SDL_GetPrefPath(ORG_NAME, APP_NAME);
-		if (localdata) {
-			snprintf(filename, sizeof(filename), "%s%s", localdata, "moac.log");
-		} else {
-			// Fallback if SDL_GetPrefPath fails
-			snprintf(filename, sizeof(filename), "moac.log");
+	if (userdir_arg[0]) {
+		// An explicit --userdir wins over the GO_APPDATA/GO_NOTSET test: it is
+		// a launch-time instruction, not a saved preference. SDL_strdup so the
+		// free() at shutdown matches SDL_GetPrefPath's allocator.
+		size_t len = strlen(userdir_arg);
+		if (len && userdir_arg[len - 1] != '/' && userdir_arg[len - 1] != '\\' && len + 1 < sizeof(userdir_arg)) {
+			userdir_arg[len] = '/';
+			userdir_arg[len + 1] = 0;
 		}
+		SDL_CreateDirectory(userdir_arg);
+		localdata = SDL_strdup(userdir_arg);
+	} else if ((game_options & GO_APPDATA) || (game_options & GO_NOTSET)) {
+		localdata = SDL_GetPrefPath(ORG_NAME, APP_NAME);
+	}
+
+	if (localdata) {
+		snprintf(filename, sizeof(filename), "%s%s", localdata, "moac.log");
 	} else {
+		// Portable mode (or SDL_GetPrefPath failed): everything beside the binary
 		snprintf(filename, sizeof(filename), "moac.log");
 	}
 

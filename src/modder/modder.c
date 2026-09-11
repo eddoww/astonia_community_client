@@ -14,6 +14,7 @@
 
 #include "astonia.h"
 #include "modder/modder.h"
+#include "modder/mod_registry.h"
 #include "amod/amod_options.h"
 #include "modder/modder_private.h"
 #include "game/game.h"
@@ -50,35 +51,24 @@ struct mod {
 	int (*_amod_text_line)(const char *line);
 	void (*_amod_register_keybinds)(void);
 	char *(*_amod_version)(void);
+	void (*_amod_set_mod_dir)(const char *dir);
+	/* Retained so a future reload has something to unload. We deliberately do
+	 * NOT SDL_UnloadObject at shutdown: mods spawn threads and register SDL
+	 * callbacks, and pulling the library out from under them at exit buys
+	 * nothing but crash reports. */
+	SDL_SharedObject *handle;
+	/* Copied, not aliased: a registry re-scan (#lua_reload) rebuilds the
+	 * mod_desc array under us, and a borrowed pointer would then name a
+	 * different mod. */
+	char id[MOD_ID_LEN];
 	int loaded;
 };
 
-struct mod mod[MAXMOD] = {{
-    NULL, // _amod_init
-    NULL, // _amod_exit
-    NULL, // _amod_gamestart
-    NULL, // _amod_sprite_config
-    NULL, // _amod_frame
-    NULL, // _amod_tick
-    NULL, // _amod_mouse_move
-    NULL, // _amod_mouse_click
-    NULL, // _amod_mouse_over
-    NULL, // _amod_frame_background
-    NULL, // _amod_mouse_click_background
-    NULL, // _amod_mouse_over_background
-    NULL, // _amod_mouse_capture
-    NULL, // _amod_areachange
-    NULL, // _amod_keydown
-    NULL, // _amod_keyup
-    NULL, // _amod_textinput
-    NULL, // _amod_update_hover_texts
-    NULL, // _amod_client_cmd
-    NULL, // _amod_hotbar_activate
-    NULL, // _amod_text_line
-    NULL, // _amod_register_keybinds
-    NULL, // _amod_version
-    0 // loaded
-}};
+/* Index 0 is the system mod (bin/amod.*) when present; scanned mods follow in
+ * registry order. Sized once at load time - see amod_init(). */
+static struct mod *mod;
+static int mod_count;
+static int mod_capacity;
 
 int (*_amod_is_playersprite)(int sprite) = NULL;
 int (*_amod_display_skill_line)(int v, int base, int curr, int cn, char *buf) = NULL;
@@ -96,239 +86,308 @@ char *game_email_main = "<no one>";
 char *game_email_cash = "<no one>";
 char *game_url = "<nowhere>";
 
-int amod_init(void)
+/* Bind the entry points every mod may implement. Optional throughout: a NULL
+ * pointer just means the dispatcher skips this mod for that event. */
+static void bind_mod(struct mod *m, SDL_SharedObject *h)
 {
-	void *dll_instance = NULL;
 	void *tmp;
-	char fname[80];
 
-	for (int i = 0; i < MAXMOD; i++) {
-#ifdef _WIN32
-		sprintf(fname, "bin\\%cmod.dll", i + 'a');
-#elif defined(SDL_PLATFORM_APPLE)
-		sprintf(fname, "bin/%cmod.dylib", i + 'a');
-#else
-		sprintf(fname, "bin/%cmod.so", i + 'a');
-#endif
-		dll_instance = SDL_LoadObject(fname);
-		if (!dll_instance) {
-			// Only the first slot (amod) is expected to exist; report why it failed to load
-			// so a broken Steam install / wrong arch / missing dependency is diagnosable.
-			if (i == 0) {
-				note("mod loader: could not load %s: %s", fname, SDL_GetError());
-			}
-			continue;
-		};
-		note("mod loader: loaded %s", fname);
+	m->handle = h;
+	m->loaded = 1;
 
-		mod[i].loaded = 1;
+	// amod
+	if ((tmp = SDL_LoadFunction(h, "amod_init"))) {
+		m->_amod_init = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_exit"))) {
+		m->_amod_exit = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_gamestart"))) {
+		m->_amod_gamestart = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_sprite_config"))) {
+		m->_amod_sprite_config = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_frame"))) {
+		m->_amod_frame = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_tick"))) {
+		m->_amod_tick = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_mouse_move"))) {
+		m->_amod_mouse_move = (void (*)(int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_mouse_click"))) {
+		m->_amod_mouse_click = (int (*)(int, int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_mouse_over"))) {
+		m->_amod_mouse_over = (int (*)(int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_frame_background"))) {
+		m->_amod_frame_background = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_mouse_click_background"))) {
+		m->_amod_mouse_click_background = (int (*)(int, int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_mouse_over_background"))) {
+		m->_amod_mouse_over_background = (int (*)(int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_mouse_capture"))) {
+		m->_amod_mouse_capture = (void (*)(int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_areachange"))) {
+		m->_amod_areachange = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_keydown"))) {
+		m->_amod_keydown = (int (*)(SDL_Keycode))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_keyup"))) {
+		m->_amod_keyup = (int (*)(SDL_Keycode))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_textinput"))) {
+		m->_amod_textinput = (int (*)(SDL_Keycode))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_update_hover_texts"))) {
+		m->_amod_update_hover_texts = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_client_cmd"))) {
+		m->_amod_client_cmd = (int (*)(const char *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_hotbar_activate"))) {
+		m->_amod_hotbar_activate = (int (*)(int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_text_line"))) {
+		m->_amod_text_line = (int (*)(const char *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_register_keybinds"))) {
+		m->_amod_register_keybinds = (void (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_version"))) {
+		m->_amod_version = (char *(*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_set_mod_dir"))) {
+		m->_amod_set_mod_dir = (void (*)(const char *))tmp;
+	}
+}
 
-		// amod
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_init"))) {
-			mod[i]._amod_init = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_exit"))) {
-			mod[i]._amod_exit = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_gamestart"))) {
-			mod[i]._amod_gamestart = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_sprite_config"))) {
-			mod[i]._amod_sprite_config = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_frame"))) {
-			mod[i]._amod_frame = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_tick"))) {
-			mod[i]._amod_tick = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_move"))) {
-			mod[i]._amod_mouse_move = (void (*)(int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_click"))) {
-			mod[i]._amod_mouse_click = (int (*)(int, int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_over"))) {
-			mod[i]._amod_mouse_over = (int (*)(int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_frame_background"))) {
-			mod[i]._amod_frame_background = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_click_background"))) {
-			mod[i]._amod_mouse_click_background = (int (*)(int, int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_over_background"))) {
-			mod[i]._amod_mouse_over_background = (int (*)(int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_capture"))) {
-			mod[i]._amod_mouse_capture = (void (*)(int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_areachange"))) {
-			mod[i]._amod_areachange = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_keydown"))) {
-			mod[i]._amod_keydown = (int (*)(SDL_Keycode))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_keyup"))) {
-			mod[i]._amod_keyup = (int (*)(SDL_Keycode))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_textinput"))) {
-			mod[i]._amod_textinput = (int (*)(SDL_Keycode))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_update_hover_texts"))) {
-			mod[i]._amod_update_hover_texts = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_client_cmd"))) {
-			mod[i]._amod_client_cmd = (int (*)(const char *))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_hotbar_activate"))) {
-			mod[i]._amod_hotbar_activate = (int (*)(int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_text_line"))) {
-			mod[i]._amod_text_line = (int (*)(const char *))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_register_keybinds"))) {
-			mod[i]._amod_register_keybinds = (void (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_version"))) {
-			mod[i]._amod_version = (char *(*)(void))tmp;
-		}
-		if (i != 0) {
-			continue; // only amod is allowed to override client stuff, the others can only add stuff
-		}
+/* Bind what only the system mod may do: replace client behaviour, claim the
+ * SV_MOD packet stream, own the options rows and the game data tables. This
+ * used to be "slot 0" - it is now "the mod at bin/amod.*", which is the only
+ * place the Steam depot puts one. Nothing under mods/ can reach this.
+ */
+static void bind_system_mod(SDL_SharedObject *h)
+{
+	void *tmp;
 
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_process"))) {
-			_amod_process = (int (*)(const unsigned char *))tmp;
-		}
-		if (!_amod_options_count && (tmp = SDL_LoadFunction(dll_instance, "amod_options_count"))) {
-			_amod_options_count = (int (*)(void))tmp;
-		}
-		if (!_amod_option_get && (tmp = SDL_LoadFunction(dll_instance, "amod_option_get"))) {
-			_amod_option_get = (int (*)(int, struct amod_option *))tmp;
-		}
-		if (!_amod_option_set && (tmp = SDL_LoadFunction(dll_instance, "amod_option_set"))) {
-			_amod_option_set = (void (*)(int, int))tmp;
-		}
-		if (!_amod_option_tab && (tmp = SDL_LoadFunction(dll_instance, "amod_option_tab"))) {
-			_amod_option_tab = (int (*)(int))tmp;
-		}
-		if (!_amod_escape && (tmp = SDL_LoadFunction(dll_instance, "amod_escape"))) {
-			_amod_escape = (int (*)(void))tmp;
-		}
-		if (!_amod_has_open_window && (tmp = SDL_LoadFunction(dll_instance, "amod_has_open_window"))) {
-			_amod_has_open_window = (int (*)(void))tmp;
-		}
-		if (!_amod_item_group_match && (tmp = SDL_LoadFunction(dll_instance, "amod_item_group_match"))) {
-			_amod_item_group_match = (int (*)(int, uint32_t))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_prefetch"))) {
-			_amod_prefetch = (int (*)(const unsigned char *))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_display_skill_line"))) {
-			_amod_display_skill_line = (int (*)(int, int, int, int, char *))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "amod_is_playersprite"))) {
-			_amod_is_playersprite = (int (*)(int))tmp;
-		}
-
-		// client functions
-		if ((tmp = SDL_LoadFunction(dll_instance, "is_cut_sprite"))) {
-			is_cut_sprite = (int (*)(unsigned int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "is_mov_sprite"))) {
-			is_mov_sprite = (int (*)(unsigned int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "is_door_sprite"))) {
-			is_door_sprite = (int (*)(unsigned int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "is_yadd_sprite"))) {
-			is_yadd_sprite = (int (*)(unsigned int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "get_chr_height"))) {
-			get_chr_height = (int (*)(unsigned int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "trans_asprite"))) {
-			trans_asprite = (unsigned int (*)(map_index_t, unsigned int, tick_t, unsigned char *, unsigned char *,
-			    unsigned char *, unsigned char *, unsigned char *, unsigned char *, unsigned short *, unsigned short *,
-			    unsigned short *, unsigned short *))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "trans_charno"))) {
-			trans_charno = (int (*)(int, int *, int *, int *, int *, int *, int *, int *, int *, int *, int *, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "get_player_sprite"))) {
-			get_player_sprite = (int (*)(int, int, int, int, int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "trans_csprite"))) {
-			trans_csprite = (void (*)(map_index_t, struct map *, tick_t))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "get_lay_sprite"))) {
-			get_lay_sprite = (int (*)(int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "get_offset_sprite"))) {
-			get_offset_sprite = (int (*)(int, int *, int *))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "additional_sprite"))) {
-			additional_sprite = (int (*)(unsigned int, int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "opt_sprite"))) {
-			opt_sprite = (unsigned int (*)(unsigned int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "get_skltab_index"))) {
-			get_skltab_index = (int (*)(int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "get_skltab_sep"))) {
-			get_skltab_sep = (int (*)(int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "get_skltab_show"))) {
-			get_skltab_show = (int (*)(int))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "do_display_random"))) {
-			do_display_random = (int (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "do_toggle_questlog"))) {
-			do_toggle_questlog = (int (*)(void))tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "do_display_help"))) {
-			do_display_help = (int (*)(int))tmp;
-		}
-
-		// client variables
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_email_main"))) {
-			game_email_main = (char *)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_email_cash"))) {
-			game_email_cash = (char *)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_url"))) {
-			game_url = (char *)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_rankname"))) {
-			game_rankname = (char **)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_rankcount"))) {
-			game_rankcount = (int *)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_v_max"))) {
-			game_v_max = (int *)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_skill"))) {
-			game_skill = (struct skill *)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_skilldesc"))) {
-			game_skilldesc = (char **)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_v_profbase"))) {
-			game_v_profbase = (int *)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_questlog"))) {
-			game_questlog = (struct questlog *)tmp;
-		}
-		if ((tmp = SDL_LoadFunction(dll_instance, "game_questcount"))) {
-			game_questcount = (int *)tmp;
-		}
+	if ((tmp = SDL_LoadFunction(h, "amod_process"))) {
+		_amod_process = (int (*)(const unsigned char *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_options_count"))) {
+		_amod_options_count = (int (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_option_get"))) {
+		_amod_option_get = (int (*)(int, struct amod_option *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_option_set"))) {
+		_amod_option_set = (void (*)(int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_option_tab"))) {
+		_amod_option_tab = (int (*)(int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_escape"))) {
+		_amod_escape = (int (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_has_open_window"))) {
+		_amod_has_open_window = (int (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_item_group_match"))) {
+		_amod_item_group_match = (int (*)(int, uint32_t))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_prefetch"))) {
+		_amod_prefetch = (int (*)(const unsigned char *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_display_skill_line"))) {
+		_amod_display_skill_line = (int (*)(int, int, int, int, char *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_is_playersprite"))) {
+		_amod_is_playersprite = (int (*)(int))tmp;
 	}
 
-	for (int i = 0; i < MAXMOD; i++) {
+	// client functions
+	if ((tmp = SDL_LoadFunction(h, "is_cut_sprite"))) {
+		is_cut_sprite = (int (*)(unsigned int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "is_mov_sprite"))) {
+		is_mov_sprite = (int (*)(unsigned int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "is_door_sprite"))) {
+		is_door_sprite = (int (*)(unsigned int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "is_yadd_sprite"))) {
+		is_yadd_sprite = (int (*)(unsigned int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "no_lighting_sprite"))) {
+		no_lighting_sprite = (int (*)(unsigned int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "get_chr_height"))) {
+		get_chr_height = (int (*)(unsigned int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "trans_asprite"))) {
+		trans_asprite = (unsigned int (*)(map_index_t, unsigned int, tick_t, unsigned char *, unsigned char *,
+		    unsigned char *, unsigned char *, unsigned char *, unsigned char *, unsigned short *, unsigned short *,
+		    unsigned short *, unsigned short *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "trans_charno"))) {
+		trans_charno = (int (*)(int, int *, int *, int *, int *, int *, int *, int *, int *, int *, int *, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "get_player_sprite"))) {
+		get_player_sprite = (int (*)(int, int, int, int, int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "trans_csprite"))) {
+		trans_csprite = (void (*)(map_index_t, struct map *, tick_t))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "get_lay_sprite"))) {
+		get_lay_sprite = (int (*)(int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "get_offset_sprite"))) {
+		get_offset_sprite = (int (*)(int, int *, int *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "additional_sprite"))) {
+		additional_sprite = (int (*)(unsigned int, int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "opt_sprite"))) {
+		opt_sprite = (unsigned int (*)(unsigned int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "get_skltab_index"))) {
+		get_skltab_index = (int (*)(int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "get_skltab_sep"))) {
+		get_skltab_sep = (int (*)(int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "get_skltab_show"))) {
+		get_skltab_show = (int (*)(int))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "do_display_random"))) {
+		do_display_random = (int (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "do_toggle_questlog"))) {
+		do_toggle_questlog = (int (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "do_display_help"))) {
+		do_display_help = (int (*)(int))tmp;
+	}
+
+	// client variables
+	if ((tmp = SDL_LoadFunction(h, "game_email_main"))) {
+		game_email_main = (char *)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_email_cash"))) {
+		game_email_cash = (char *)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_url"))) {
+		game_url = (char *)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_rankname"))) {
+		game_rankname = (char **)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_rankcount"))) {
+		game_rankcount = (int *)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_v_max"))) {
+		game_v_max = (int *)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_skill"))) {
+		game_skill = (struct skill *)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_skilldesc"))) {
+		game_skilldesc = (char **)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_v_profbase"))) {
+		game_v_profbase = (int *)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_questlog"))) {
+		game_questlog = (struct questlog *)tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "game_questcount"))) {
+		game_questcount = (int *)tmp;
+	}
+}
+
+/* bin/amod.<ext>, relative to the game root like every other client path. */
+static void load_system_mod(void)
+{
+	SDL_SharedObject *h;
+	struct mod *m = &mod[mod_count];
+
+#ifdef _WIN32
+	const char *fname = "bin\\amod.dll";
+#elif defined(SDL_PLATFORM_APPLE)
+	const char *fname = "bin/amod.dylib";
+#else
+	const char *fname = "bin/amod.so";
+#endif
+
+	if (!(h = SDL_LoadObject(fname))) {
+		// The system mod is expected to exist; report why it failed so a broken
+		// Steam install / wrong arch / missing dependency is diagnosable.
+		note("mod loader: could not load %s: %s", fname, SDL_GetError());
+		return;
+	}
+	note("mod loader: loaded system mod %s", fname);
+
+	bind_mod(m, h);
+	bind_system_mod(h);
+	snprintf(m->id, sizeof(m->id), "amod");
+	mod_count++;
+}
+
+/* Everything discovered under <userdir>/mods/. These get the shared entry
+ * points only. */
+static void load_scanned_mods(void)
+{
+	int i, n = mod_registry_scan();
+
+	for (i = 0; i < n && mod_count < mod_capacity; i++) {
+		const struct mod_desc *desc = mod_registry_get(i);
+		SDL_SharedObject *h;
+		struct mod *m;
+
+		if (!desc->enabled) {
+			note("mod loader: '%s' is disabled", desc->id);
+			continue;
+		}
+		if (!desc->libpath[0]) {
+			continue; /* Lua-only mod, loaded by the scripting subsystem */
+		}
+		if (!(h = SDL_LoadObject(desc->libpath))) {
+			warn("mod loader: could not load %s: %s", desc->libpath, SDL_GetError());
+			continue;
+		}
+		note("mod loader: loaded %s %s (%s)", desc->id, desc->version, desc->libpath);
+
+		m = &mod[mod_count];
+		bind_mod(m, h);
+		snprintf(m->id, sizeof(m->id), "%s", desc->id);
+		/* before amod_init, so a mod can find its own assets from its first
+		 * line of code instead of guessing at the working directory */
+		if (m->_amod_set_mod_dir) {
+			m->_amod_set_mod_dir(desc->dir);
+		}
+		mod_count++;
+	}
+}
+
+int amod_init(void)
+{
+	/* system mod + everything the scan can return */
+	mod_capacity = MOD_MAX + 1;
+	mod = xmalloc((size_t)mod_capacity * sizeof(*mod), MEM_GLOB);
+	memset(mod, 0, (size_t)mod_capacity * sizeof(*mod));
+
+	load_system_mod();
+	load_scanned_mods();
+
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_init) {
 			mod[i]._amod_init();
 		}
@@ -344,7 +403,7 @@ int amod_init(void)
 
 void amod_exit(void)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_exit) {
 			mod[i]._amod_exit();
 		}
@@ -353,7 +412,7 @@ void amod_exit(void)
 
 void amod_gamestart(void)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_gamestart) {
 			mod[i]._amod_gamestart();
 		}
@@ -365,7 +424,7 @@ void amod_gamestart(void)
 
 void amod_sprite_config(void)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_sprite_config) {
 			mod[i]._amod_sprite_config();
 		}
@@ -374,7 +433,7 @@ void amod_sprite_config(void)
 
 void amod_frame(void)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_frame) {
 			mod[i]._amod_frame();
 		}
@@ -386,7 +445,7 @@ void amod_frame(void)
 
 void amod_tick(void)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_tick) {
 			mod[i]._amod_tick();
 		}
@@ -399,7 +458,7 @@ void amod_tick(void)
 
 void amod_mouse_move(int x, int y)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_mouse_move) {
 			mod[i]._amod_mouse_move(x, y);
 		}
@@ -412,7 +471,7 @@ void amod_mouse_move(int x, int y)
 int amod_mouse_click(int x, int y, int what)
 {
 	int ret = 0, tmp;
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_mouse_click && (tmp = mod[i]._amod_mouse_click(x, y, what))) {
 			if (tmp > 0) {
 				return 1;
@@ -436,7 +495,7 @@ int amod_mouse_click(int x, int y, int what)
  * nothing of the client's GUI is under the pointer (see amod.h) */
 void amod_frame_background(void)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_frame_background) {
 			mod[i]._amod_frame_background();
 		}
@@ -447,7 +506,7 @@ int amod_mouse_click_background(int x, int y, int what)
 {
 	int ret = 0, tmp;
 
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_mouse_click_background && (tmp = mod[i]._amod_mouse_click_background(x, y, what))) {
 			if (tmp > 0) {
 				return 1;
@@ -460,7 +519,7 @@ int amod_mouse_click_background(int x, int y, int what)
 
 int amod_mouse_over_background(int x, int y)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_mouse_over_background && mod[i]._amod_mouse_over_background(x, y)) {
 			return 1;
 		}
@@ -470,7 +529,7 @@ int amod_mouse_over_background(int x, int y)
 
 int amod_mouse_over(int x, int y)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_mouse_over && mod[i]._amod_mouse_over(x, y)) {
 			return 1;
 		}
@@ -485,7 +544,7 @@ int amod_mouse_over(int x, int y)
 
 void amod_mouse_capture(int onoff)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_mouse_capture) {
 			mod[i]._amod_mouse_capture(onoff);
 		}
@@ -494,7 +553,7 @@ void amod_mouse_capture(int onoff)
 
 void amod_areachange(void)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_areachange) {
 			mod[i]._amod_areachange();
 		}
@@ -507,7 +566,7 @@ void amod_areachange(void)
 int amod_keydown(SDL_Keycode key)
 {
 	int ret = 0, tmp;
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_keydown && (tmp = mod[i]._amod_keydown(key))) {
 			/* A mod that implements amod_textinput gets the real (layout- and
 			 * shift-aware) character through that hook instead - leave the
@@ -542,7 +601,7 @@ int amod_keydown(SDL_Keycode key)
 int amod_textinput(SDL_Keycode key)
 {
 	int ret = 0, tmp;
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_textinput && (tmp = mod[i]._amod_textinput(key))) {
 			if (tmp > 0) {
 				return 1;
@@ -557,7 +616,7 @@ int amod_textinput(SDL_Keycode key)
 int amod_keyup(SDL_Keycode key)
 {
 	int ret = 0, tmp;
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_keyup && (tmp = mod[i]._amod_keyup(key))) {
 			if (tmp > 0) {
 				return 1;
@@ -579,7 +638,7 @@ int amod_keyup(SDL_Keycode key)
 
 void amod_update_hover_texts(void)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_update_hover_texts) {
 			mod[i]._amod_update_hover_texts();
 		}
@@ -598,7 +657,7 @@ int amod_client_cmd(const char *buf)
 		ret = 1;
 	}
 #endif
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_client_cmd && (tmp = mod[i]._amod_client_cmd(buf))) {
 			if (tmp > 0) {
 				return 1;
@@ -618,7 +677,7 @@ int amod_client_cmd(const char *buf)
 int amod_text_line(const char *line)
 {
 	int ret = 0, tmp;
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_text_line && (tmp = mod[i]._amod_text_line(line))) {
 			if (tmp > 0) {
 				return 1;
@@ -635,7 +694,7 @@ int amod_text_line(const char *line)
  * player rebinds of mod keys persist like any native binding */
 void amod_register_keybinds(void)
 {
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_register_keybinds) {
 			mod[i]._amod_register_keybinds();
 		}
@@ -645,7 +704,7 @@ void amod_register_keybinds(void)
 int amod_hotbar_activate(int slot, int mode)
 {
 	int ret = 0, tmp;
-	for (int i = 0; i < MAXMOD; i++) {
+	for (int i = 0; i < mod_count; i++) {
 		if (mod[i]._amod_hotbar_activate && (tmp = mod[i]._amod_hotbar_activate(slot, mode))) {
 			if (tmp > 0) {
 				return 1;
@@ -689,9 +748,25 @@ int amod_is_playersprite(int sprite)
 	return 0;
 }
 
+int amod_count(void)
+{
+	return mod_count;
+}
+
+// Mod id: the system mod is "amod", scanned mods use their manifest id.
+const char *amod_id(int idx)
+{
+	if (idx < 0 || idx >= mod_count) {
+		return NULL;
+	}
+	return mod[idx].id;
+}
+
+// The mod's own amod_version() string, else "unknown". The manifest version is
+// only a claim by whoever packaged it; this one comes from the binary itself.
 char *amod_version(int idx)
 {
-	if (idx < 0 || idx >= MAXMOD) {
+	if (idx < 0 || idx >= mod_count) {
 		return NULL;
 	}
 
@@ -699,11 +774,7 @@ char *amod_version(int idx)
 		return mod[idx]._amod_version();
 	}
 
-	if (mod[idx].loaded) {
-		return "unknown";
-	}
-
-	return NULL;
+	return "unknown";
 }
 
 // True if a loaded mod handles server mod packets (i.e. the Ugaris mod is present).

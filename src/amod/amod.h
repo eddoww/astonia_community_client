@@ -21,6 +21,11 @@ typedef size_t map_index_t; // Map tile index, selection indices
 // Mod Entry Points
 // =====================================================================
 DLL_EXPORT void amod_init(void);
+/* Optional. Called once, before amod_init(), with the mod's own folder
+ * (trailing slash) so it can find the assets shipped next to it instead of
+ * guessing at the working directory. Not called for the system mod, which
+ * lives at a fixed path. client >= 1.9.0 */
+DLL_EXPORT void amod_set_mod_dir(const char *dir);
 DLL_EXPORT void amod_exit(void);
 DLL_EXPORT char *amod_version(void);
 DLL_EXPORT void amod_gamestart(void);
@@ -311,6 +316,9 @@ DLL_IMPORT void client_send(void *buf, size_t len);
 /* Directory the client stores user settings in (trailing slash, user-writable). Mods should
  * keep their settings here instead of next to the game files. */
 DLL_IMPORT const char *client_config_dir(void);
+/* Root of the mod folders (trailing slash). A mod's own folder is handed to it
+ * through amod_set_mod_dir() - prefer that over building a path from here. */
+DLL_IMPORT const char *client_mods_dir(void);
 /* Current area id as announced by the server (0 = unknown yet). client >= 1.2.40 */
 DLL_IMPORT int client_area_id(void);
 /* "" on the production server, else "DEV" / "PREPROD" / "LOCAL" / "CUSTOM" -

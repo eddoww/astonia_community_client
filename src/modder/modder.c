@@ -862,6 +862,8 @@ static struct mod *find_mod(const char *id)
 	return NULL; /* not installed, or installed but disabled at launch */
 }
 
+/* Native mods answer for themselves; a Lua mod has no library to dlsym, so the
+ * scripting layer answers from what it declared with register_option(). */
 int amod_mod_options_count(const char *id)
 {
 	struct mod *m = find_mod(id);
@@ -869,7 +871,11 @@ int amod_mod_options_count(const char *id)
 	if (m && m->_amod_options_count && m->_amod_option_get) {
 		return m->_amod_options_count();
 	}
+#ifdef USE_LUAJIT
+	return lua_scripting_options_count(id);
+#else
 	return 0;
+#endif
 }
 
 int amod_mod_option_get(const char *id, int index, struct amod_option *out)
@@ -879,7 +885,11 @@ int amod_mod_option_get(const char *id, int index, struct amod_option *out)
 	if (m && m->_amod_option_get && out) {
 		return m->_amod_option_get(index, out);
 	}
+#ifdef USE_LUAJIT
+	return out ? lua_scripting_option_get(id, index, out) : 0;
+#else
 	return 0;
+#endif
 }
 
 void amod_mod_option_set(const char *id, int index, int value)
@@ -888,7 +898,11 @@ void amod_mod_option_set(const char *id, int index, int value)
 
 	if (m && m->_amod_option_set) {
 		m->_amod_option_set(index, value);
+		return;
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_option_set(id, index, value);
+#endif
 }
 
 int amod_option_tab(int index)

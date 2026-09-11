@@ -72,11 +72,41 @@ See `build/mod-sdk/README.md` and `src/amod/amod.h`. Implement
 
 ## Settings
 
-Export `amod_options_count()` / `amod_option_get()` / `amod_option_set()` and
-your settings appear in a foldable section under your mod's name in
-**Options > Mods** - toggles, sliders and headings, no window of your own. The
-client reads your live values each frame and never saves them; persist them
-yourself under `client_config_dir()`.
+Both kinds of mod can put settings in a foldable section under their own name
+in **Options > Mods** - toggles, sliders and headings, no window of your own to
+build and no `#command` for the player to memorise.
+
+**Native mods** export `amod_options_count()` / `amod_option_get()` /
+`amod_option_set()`. The client reads your live values each frame and never
+saves them; persist them yourself under `client_config_dir()`.
+
+**Lua mods** declare theirs instead, and the client owns the value: it stores
+it, persists it in `mods.json`, and mirrors it into your `options` table. No
+Lua runs while the Options screen draws, and you write no save code.
+
+```lua
+register_option{ key = "banner",  type = "header", label = "Overlay" }
+register_option{ key = "show",    type = "toggle", label = "Show overlay", default = true }
+register_option{ key = "opacity", type = "slider", label = "Opacity",
+                 min = 0, max = 100, default = 45 }
+
+register("on_frame", function()
+    if options.show then
+        -- options.opacity is the live value
+    end
+end)
+
+-- optional: react the moment one changes
+register("on_option_changed", function(key, value)
+    client.note(key .. " is now " .. tostring(options[key]))
+end)
+```
+
+Call `register_option` while your mod is loading (top-level in `init.lua`);
+it attaches to the mod being loaded. A `toggle` reads back as a Lua boolean,
+a `slider` as a number. The `value` passed to `on_option_changed` is the raw
+integer - read `options[key]` for the typed one. What the player last chose
+wins over your `default`. Limit: 32 options per mod.
 
 ## Lua mods
 
@@ -144,6 +174,7 @@ modification time changes - save the file and the mod reloads in-game.
 | `on_areachange` | Called when area changes |
 | `on_before_reload` | Called before hot-reload |
 | `on_after_reload` | Called after hot-reload |
+| `on_option_changed` | One of your `register_option` settings changed (key, value) |
 
 ## Client API
 

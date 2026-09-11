@@ -50,4 +50,9 @@ const struct mod_desc *mod_registry_get(int idx);
  * launch: loaded libraries are never unloaded. Returns 1 on success. */
 int mod_registry_set_enabled(const char *id, int enabled);
 
+/* Per-mod option values in mods.json, for mods whose values the client owns
+ * (Lua mods). get returns 1 and fills *out when the key is stored. */
+int mod_registry_get_option(const char *id, const char *key, int *out);
+int mod_registry_set_option(const char *id, const char *key, int value);
+
 #endif

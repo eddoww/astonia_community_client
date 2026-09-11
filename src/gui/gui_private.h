@@ -375,6 +375,21 @@ DLL_EXPORT extern int game_slowdown;
 // Platform-specific GUI functions
 void gui_sdl_draghack(void);
 
+/* non-zero while a pointer gesture (client button or mod surface) owns the
+ * mouse - gui_input.c */
+int gui_pointer_grabbed(void);
+
+/* 1 when a client overlay that is not tracked through butsel (options,
+ * escape menu, look window, teleporter, help, tutor, spellbook, framed
+ * panels ...) sits under (x,y) - gui_input.c. Used to decide whether an
+ * event that found no client control may fall through to the mod's
+ * background layer (the chat) instead of the world. */
+int gui_client_overlay_at(int x, int y);
+
+/* game/main.c: "" on production, else DEV / PREPROD / LOCAL / CUSTOM,
+ * derived from the login host and port the launcher passed */
+DLL_EXPORT const char *client_environment_label(void);
+
 // ============================================================================
 // Shared variables from gui_map.c (shared for map coordinate functions)
 // ============================================================================
@@ -395,7 +410,6 @@ void gui_sdl_draghack(void);
 // ============================================================================
 
 // From gui_core.c
-void gui_insert(void);
 int gui_keymode(void);
 int vk_special_inc(void);
 int vk_special_dec(void);
@@ -444,6 +458,11 @@ extern int help_page_count;
 extern int help_index_count;
 
 int help_index_page_for_entry(int entry);
+/* navigation bar geometry (which: 0 = prev, 1 = index, 2 = next); 0 when
+ * that control is not on screen */
+int help_nav_rect(int which, int *x1, int *y1, int *x2, int *y2);
+/* page a hyperlink drawn on the current help page points at, 0 = none */
+int help_link_page_at(int x, int y);
 
 // From gui_map.c (already declared in gui.h but repeated here for clarity)
 // void set_mapoff(int cx, int cy, int mdx, int mdy);
@@ -483,6 +502,10 @@ int do_display_questlog(int nr);
 void display_action(void);
 void display_selfbars(void);
 
+const char *get_action_text(int slot);
+const char *get_action_desc(int slot);
+int get_action_cast_id(int slot);
+
 void display_teleport(void);
 int get_teleport(int x, int y);
 
@@ -506,19 +529,28 @@ DLL_EXPORT size_t get_near_item(int x, int y, unsigned int flag, unsigned int lo
 DLL_EXPORT size_t get_near_ground(int x, int y);
 
 int context_open(int mx, int my);
+int context_menu_is_open(void);
 void context_display(int mx, int my);
 void context_stop(void);
 int context_click(int mx, int my);
 int context_key(int key);
 void context_keydown(SDL_Keycode key);
+void context_activate_action(int action_slot);
+int context_execute_action(int action_slot);
+int context_execute_action_normal(int action_slot);
 void context_keyup(SDL_Keycode key);
 int context_key_set(int onoff);
-int context_key_isset(void);
 int context_key_isset(void);
 int context_key_enabled(void);
 int context_key_set_cmd(void);
 void context_key_reset(void);
+int context_targeting_active(void);
 int context_key_click(void);
+
+/* hover.c accessors for hotbar */
+const char *hover_get_item_name(int inv_slot);
+void hover_request_item_info(int inv_slot);
+int hover_render_for_slot(int inv_slot, int anchor_x, int anchor_y);
 
 DLL_EXPORT extern char hover_bless_text[];
 DLL_EXPORT extern char hover_freeze_text[];
@@ -530,14 +562,35 @@ DLL_EXPORT extern char hover_rank_text[];
 DLL_EXPORT extern char hover_time_text[];
 
 int action_key2slot(SDL_Keycode key);
-SDL_Keycode action_slot2key(int slot);
 int16_t has_action_skill(int i);
-void action_set_key(int slot, SDL_Keycode key);
 void context_action_enable(int onoff);
 
 void minimap_init(void);
+void minimap_reanchor(void);
 void minimap_toggle(void);
 void minimap_hide(void);
+/* small round map <-> big square map (a click on the minimap flips it) */
+void minimap_toggle_size(void);
+int minimap_is_expanded(void);
+/* edge length of the minimap's current footprint (circle box or big map) */
+int minimap_footprint(void);
+void minimap_zoom_in(void);
+void minimap_zoom_out(void);
+void minimap_zoom_reset(void);
+int minimap_wheel_zoom(int x, int y, int delta);
+/* per-panel size settings (panels.c): scale in percent for the HUD orbs
+ * and the status bars' height, an explicit width for the status bars */
+int panel_scale(int p);
+int panel_status_width(void);
+int stat_bar_h(void);
+int stat_row_h(void);
+int minimap_pan_begin(int x, int y);
+void minimap_pan_update(int x, int y);
+void minimap_pan_end(void);
+int minimap_pan_active(void);
+int minimap_is_panned(void);
+int minimap_recenter_hit(int x, int y);
+void minimap_recenter(void);
 void display_minimap(void);
 void minimap_update(void);
 void minimap_display_hover(int x, int y);

@@ -1,0 +1,41 @@
+/*
+ * Part of Astonia Client (c) Daniel Brockhaus. Please read license.txt.
+ *
+ * Spellbook UI — toggleable panel that shows available spells as
+ * draggable icons. Left-click a spell to "pick it up", then click
+ * a hotbar slot to assign it.
+ */
+
+#ifndef SPELLBOOK_UI_H
+#define SPELLBOOK_UI_H
+
+/* rendering — call from gui_display after hotbar_display */
+void spellbook_display(void);
+
+/* the spell being carried, drawn on the cursor - call late in display(),
+ * outside every panel clip, so it follows the pointer over the whole screen */
+void spellbook_display_carry(void);
+
+/* left button pressed at (mx,my): picks up the spell under the pointer so a
+ * press-drag-release onto the hotbar works as well as click, move, click.
+ * Returns 1 when the press landed on a spell cell. */
+int spellbook_mousedown(int mx, int my);
+
+/* toggle the spellbook panel open/closed */
+void spellbook_toggle(void);
+int spellbook_is_open(void);
+
+/* click handlers — return 1 if consumed */
+int spellbook_click(int mx, int my);
+int spellbook_rclick(int mx, int my);
+
+/* is the player currently dragging a spell from the spellbook? */
+int spellbook_is_dragging(void);
+
+/* the action slot index being dragged, or -1 */
+int spellbook_dragging_slot(void);
+
+/* cancel any in-progress drag */
+void spellbook_cancel_drag(void);
+
+#endif /* SPELLBOOK_UI_H */

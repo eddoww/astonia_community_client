@@ -103,45 +103,61 @@ extern DLL_EXPORT unsigned int _client_dist;
 #define ARRAYSIZE(a) (sizeof(a) / sizeof((a)[0]))
 #endif
 
-#define DOT_TL  0 // top left?
-#define DOT_BR  1 // bottom right?
-#define DOT_WEA 2 // worn equipment
-#define DOT_INV 3 // inventory
-#define DOT_CON 4 // container
-#define DOT_SCL 5 // scroll bar left, uses only X
-#define DOT_SCR 6 // scroll bar right, uses only X
-#define DOT_SCU 7 // scroll bars up arrows at this Y
-#define DOT_SCD 8 // scroll bars down arrors at thy Y
-#define DOT_TXT 9 // chat window
-#define DOT_MTL 10 // map top left
-#define DOT_MBR 11 // map bottom right
-#define DOT_SKL 12 // skill list
-#define DOT_GLD 13 // gold
-#define DOT_JNK 14 // trashcan
-#define DOT_MOD 15 // speed mode
-#define DOT_MCT 16 // map center
-#define DOT_TOP 17 // top left corner of equipment bar
-#define DOT_BOT 18 // top left corner of bottom window holding skills, chat, etc.
-#define DOT_TX2 19 // chat window bottom right
-#define DOT_SK2 20 // skill list window bottom right
-#define DOT_IN1 21 // inventory top left
-#define DOT_IN2 22 // inventory bottom right
-#define DOT_HLP 23 // help top left
-#define DOT_HL2 24 // help bottom right
-#define DOT_TEL 25 // teleporter top left
-#define DOT_COL 26 // color picker top left
-#define DOT_LOK 27 // look at character window (show_look), top left
-#define DOT_BO2 28 // bottom right of bottom window
-#define DOT_ACT 29 // action bar top left
-#define DOT_SSP 30 // self-spell-bars top left
-#define DOT_TUT 31 // tutor window top left
-#define MAX_DOT 32
+#define DOT_TL     0 // top left?
+#define DOT_BR     1 // bottom right?
+#define DOT_WEA    2 // worn equipment
+#define DOT_INV    3 // inventory
+#define DOT_CON    4 // container
+#define DOT_SCL    5 // scroll bar left, uses only X
+#define DOT_SCR    6 // scroll bar right, uses only X
+#define DOT_SCU    7 // scroll bars up arrows at this Y
+#define DOT_SCD    8 // scroll bars down arrors at thy Y
+#define DOT_TXT    9 // chat window
+#define DOT_MTL    10 // map top left
+#define DOT_MBR    11 // map bottom right
+#define DOT_SKL    12 // skill list
+#define DOT_GLD    13 // gold
+#define DOT_JNK    14 // trashcan
+#define DOT_MOD    15 // speed mode
+#define DOT_MCT    16 // map center
+#define DOT_TOP    17 // top left corner of equipment bar
+#define DOT_BOT    18 // top left corner of bottom window holding skills, chat, etc.
+#define DOT_TX2    19 // chat window bottom right
+#define DOT_SK2    20 // skill list window bottom right
+#define DOT_IN1    21 // inventory top left
+#define DOT_IN2    22 // inventory bottom right
+#define DOT_HLP    23 // help top left
+#define DOT_HL2    24 // help bottom right
+#define DOT_TEL    25 // teleporter top left
+#define DOT_COL    26 // color picker top left
+#define DOT_LOK    27 // look at character window (show_look), top left
+#define DOT_BO2    28 // bottom right of bottom window
+#define DOT_ACT    29 // action bar top left
+#define DOT_SSP    30 // self-spell-bars top left
+#define DOT_TUT    31 // tutor window top left
+#define DOT_HOTBAR 32 // hotbar (item/spell slots)
+#define DOT_SPB    33 // spellbook window
+#define DOT_STAT   34 // status panel (level/military bars)
+#define DOT_MENU   35 // system menu strip (menu/help/quests)
+#define DOT_CLK    36 // classic clock
+#define DOT_MMAP   37 // minimap circle, top left
+#define DOT_CN1    38 // container window content top left
+#define DOT_CN2    39 // container window content bottom right
+#define DOT_CSC    40 // container scrollbar rail
+#define MAX_DOT    41
 
 #ifndef MAX_PATH
 #define MAX_PATH 260
 #endif
 
+DLL_EXPORT extern int __xres;
 DLL_EXPORT extern int __yres;
+/* logical dimensions of the UI layer. The GUI is laid out and drawn on a
+ * canvas of this size and composited to the screen scaled by the UI Scale
+ * option; the world always renders at the full canvas (XRES x YRES). At
+ * 100% both pairs are identical. */
+DLL_EXPORT extern int __uixres;
+DLL_EXPORT extern int __uiyres;
 extern int quit;
 DLL_EXPORT extern int frames_per_second;
 extern char *localdata;

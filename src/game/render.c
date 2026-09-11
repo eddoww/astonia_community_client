@@ -495,7 +495,13 @@ int render_text_len(int flags, const char *text, int n)
  *
  * @return Final X coordinate after rendering
  */
-DLL_EXPORT int render_text(int sx, int sy, unsigned short int color, int flags, const char *text)
+/**
+ * Render text like render_text(), with a draw-time opacity (0 transparent,
+ * 255 opaque). Shadow/frame underlays fade along. Return value advances as
+ * if drawn, so layout code works at any alpha.
+ */
+DLL_EXPORT int render_text_alpha(
+    int sx, int sy, unsigned short int color, int flags, unsigned char alpha, const char *text)
 {
 	RenderFont *font;
 
@@ -529,33 +535,39 @@ DLL_EXPORT int render_text(int sx, int sy, unsigned short int color, int flags, 
 	}
 
 	if (flags & RENDER_TEXT_SHADED) {
-		render_text(sx - 1, sy - 1, IRGB(0, 0, 0),
+		render_text_alpha(sx - 1, sy - 1, IRGB(0, 0, 0),
 		    RENDER_TEXT_LEFT |
 		        (flags & (RENDER_TEXT_SMALL | RENDER_TEXT_BIG | RENDER_ALIGN_CENTER | RENDER_TEXT_RIGHT |
 		                     RENDER_TEXT_NOCACHE)) |
 		        RENDER__SHADED_FONT,
-		    text);
+		    alpha, text);
 	} else if (flags & RENDER_TEXT_FRAMED) {
 		if (flags & 512) {
-			render_text(sx - 1, sy - 1, IRGB(31, 31, 31),
+			render_text_alpha(sx - 1, sy - 1, IRGB(31, 31, 31),
 			    RENDER_TEXT_LEFT |
 			        (flags & (RENDER_TEXT_SMALL | RENDER_TEXT_BIG | RENDER_ALIGN_CENTER | RENDER_TEXT_RIGHT |
 			                     RENDER_TEXT_NOCACHE)) |
 			        RENDER__FRAMED_FONT,
-			    text);
+			    alpha, text);
 		} else {
-			render_text(sx - 1, sy - 1, IRGB(0, 0, 0),
+			render_text_alpha(sx - 1, sy - 1, IRGB(0, 0, 0),
 			    RENDER_TEXT_LEFT |
 			        (flags & (RENDER_TEXT_SMALL | RENDER_TEXT_BIG | RENDER_ALIGN_CENTER | RENDER_TEXT_RIGHT |
 			                     RENDER_TEXT_NOCACHE)) |
 			        RENDER__FRAMED_FONT,
-			    text);
+			    alpha, text);
 		}
 	}
 
-	sx = sdl_drawtext(sx, sy, color, flags, text, font, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+	sx =
+	    sdl_drawtext_alpha(sx, sy, color, flags, text, font, clipsx, clipsy, clipex, clipey, x_offset, y_offset, alpha);
 
 	return sx;
+}
+
+DLL_EXPORT int render_text(int sx, int sy, unsigned short int color, int flags, const char *text)
+{
+	return render_text_alpha(sx, sy, color, flags, 255, text);
 }
 
 /**

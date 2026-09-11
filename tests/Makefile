@@ -99,7 +99,7 @@ $(TEST_RENDER_PRIMS): test_render_primitives.c $(ALL_SRCS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Sprite config test (no SDL dependencies, self-contained stubs)
-SPRITE_CONFIG_SRCS = ../src/lib/cjson/cJSON.c
+SPRITE_CONFIG_SRCS = ../src/game/sprite_config.c ../src/lib/cjson/cJSON.c
 
 $(TEST_SPRITE_CONFIG): test_sprite_config.c $(SPRITE_CONFIG_SRCS)
 	@mkdir -p $(BIN_DIR)
@@ -196,7 +196,7 @@ test_shaderfx: $(TEST_SHADERFX)
 
 # Text batching comparison harness (part A always runs; part B SKIPs
 # without a GPU device; part C SKIPs when built without sdl3-ttf)
-$(TEST_TEXT): test_text_compare.c $(ALL_SRCS)
+$(TEST_TEXT): test_text_compare.c ../src/game/font.c $(ALL_SRCS)
 	@mkdir -p $(BIN_DIR)
 	$(CC) $(CFLAGS) $(TTF_TEST_CFLAGS) $^ -o $@ $(LDFLAGS) $(TTF_TEST_LIBS)
 

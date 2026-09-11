@@ -12,14 +12,18 @@
 #include <ctype.h>
 #include <SDL3/SDL.h>
 
+#include "gui/loading_ui.h"
 #include "astonia.h"
 #include "client/client.h"
 #include "client/client_private.h"
 #include "gui/gui.h"
+#include "gui/input_bind.h"
 #include "modder/modder.h"
 #include "protocol.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+
+void load_character_options(void);
 
 struct otext otext[MAXOTEXT];
 
@@ -44,8 +48,9 @@ static size_t sv_map01(unsigned char *buf, int *last, struct map *cmap)
 	}
 
 	if (c < 0 || (unsigned int)c > MAPDX * MAPDY) {
-		fail("sv_map01 illegal call with c=%d\n", c);
-		exit(-1);
+		warn("sv_map01 illegal call with c=%d, disconnecting\n", c);
+		sockstate = 0;
+		return 0;
 	}
 
 	if (buf[0] & 1) {
@@ -90,8 +95,9 @@ static size_t sv_map10(unsigned char *buf, int *last, struct map *cmap)
 	}
 
 	if (c < 0 || (unsigned int)c > MAPDX * MAPDY) {
-		fail("sv_map10 illegal call with c=%d\n", c);
-		exit(-1);
+		warn("sv_map10 illegal call with c=%d, disconnecting\n", c);
+		sockstate = 0;
+		return 0;
 	}
 
 	if (buf[0] & 1) {
@@ -154,8 +160,9 @@ static size_t sv_map11(unsigned char *buf, int *last, struct map *cmap)
 	}
 
 	if (c < 0 || (unsigned int)c > MAPDX * MAPDY) {
-		fail("sv_map11 illegal call with c=%d\n", c);
-		exit(-1);
+		warn("sv_map11 illegal call with c=%d, disconnecting\n", c);
+		sockstate = 0;
+		return 0;
 	}
 
 	if (buf[0] & 1) {
@@ -324,6 +331,7 @@ static void sv_setitem(unsigned char *buf)
 	item_flags[n] = load_u32(buf + 6);
 
 	hover_invalidate_inv(n);
+	hotbar_on_item_changed(n);
 }
 
 static void sv_setorigin(unsigned char *buf)
@@ -356,6 +364,9 @@ static void sv_setcitem(unsigned char *buf)
 {
 	csprite = load_u32(buf + 1);
 	cflags = load_u32(buf + 5);
+	if (!csprite) {
+		csprite_origin = -1;
+	}
 }
 
 static void sv_act(unsigned char *buf)
@@ -380,27 +391,27 @@ static size_t sv_text(unsigned char *buf)
 		line[len] = 0;
 		if (line[0] == '#') {
 			if (!isdigit(line[1])) {
-				strcpy(tutor_text, line + 1);
+				snprintf(tutor_text, sizeof(tutor_text), "%s", line + 1);
 				show_tutor = 1;
 			} else if (line[1] == '1') {
-				strcpy(look_name, line + 2);
+				snprintf(look_name, sizeof(look_name), "%s", line + 2);
 			} else if (line[1] == '2') {
-				strcpy(look_desc, line + 2);
+				snprintf(look_desc, sizeof(look_desc), "%s", line + 2);
 			} else if (line[1] == '3') {
-				strcpy(pent_str[0], line + 2);
+				snprintf(pent_str[0], sizeof(pent_str[0]), "%s", line + 2);
 				pent_str[1][0] = pent_str[2][0] = pent_str[3][0] = pent_str[4][0] = pent_str[5][0] = pent_str[6][0] = 0;
 			} else if (line[1] == '4') {
-				strcpy(pent_str[1], line + 2);
+				snprintf(pent_str[1], sizeof(pent_str[1]), "%s", line + 2);
 			} else if (line[1] == '5') {
-				strcpy(pent_str[2], line + 2);
+				snprintf(pent_str[2], sizeof(pent_str[2]), "%s", line + 2);
 			} else if (line[1] == '6') {
-				strcpy(pent_str[3], line + 2);
+				snprintf(pent_str[3], sizeof(pent_str[3]), "%s", line + 2);
 			} else if (line[1] == '7') {
-				strcpy(pent_str[4], line + 2);
+				snprintf(pent_str[4], sizeof(pent_str[4]), "%s", line + 2);
 			} else if (line[1] == '8') {
-				strcpy(pent_str[5], line + 2);
+				snprintf(pent_str[5], sizeof(pent_str[5]), "%s", line + 2);
 			} else if (line[1] == '9') {
-				strcpy(pent_str[6], line + 2);
+				snprintf(pent_str[6], sizeof(pent_str[6]), "%s", line + 2);
 			} else if (line[1] == '0') {
 				if (otext[MAXOTEXT - 1].text) {
 					xfree(otext[MAXOTEXT - 1].text);
@@ -412,7 +423,7 @@ static size_t sv_text(unsigned char *buf)
 			}
 		} else {
 			if (!hover_capture_text(line)) {
-				addline("%s", line);
+				addline("%s", line); /* the tabbed-chat hook lives inside addline() */
 			}
 		}
 	}
@@ -460,6 +471,7 @@ static size_t sv_exit(unsigned char *buf)
 		memcpy(line, buf + 2, (size_t)len);
 		line[len] = 0;
 		addline("Server demands exit: %s", line);
+		loading_server_exit(line); /* shown on the loading screen if we are still there */
 	}
 	kicked_out = 1;
 
@@ -672,8 +684,9 @@ static size_t sv_ceffect(unsigned char *buf)
 	}
 
 	if (nr >= MAXEF) {
-		fail("sv_ceffect: invalid nr %d\n", nr);
-		exit(-1);
+		warn("sv_ceffect: invalid nr %d, disconnecting\n", nr);
+		sockstate = 0;
+		return 0;
 	}
 
 	memcpy(ceffect + nr, buf + 2, len);
@@ -787,8 +800,9 @@ static size_t svl_ceffect(unsigned char *buf)
 	}
 
 	if (nr >= MAXEF) {
-		fail("svl_ceffect: invalid nr %d\n", nr);
-		exit(-1);
+		warn("svl_ceffect: invalid nr %d, disconnecting\n", nr);
+		sockstate = 0;
+		return 0;
 	}
 
 	return len + 2;
@@ -800,8 +814,9 @@ static void sv_container(unsigned char *buf)
 
 	nr = buf[1];
 	if (nr >= _containersize) {
-		fail("illegal nr %d in sv_container!", nr);
-		exit(-1);
+		warn("illegal nr %d in sv_container, disconnecting!", nr);
+		sockstate = 0;
+		return;
 	}
 
 	container[nr] = load_u32(buf + 2);
@@ -814,8 +829,9 @@ static void sv_price(unsigned char *buf)
 
 	nr = buf[1];
 	if (nr >= _containersize) {
-		fail("illegal nr %d in sv_price!", nr);
-		exit(-1);
+		warn("illegal nr %d in sv_price, disconnecting!", nr);
+		sockstate = 0;
+		return;
 	}
 
 	price[nr] = load_u32(buf + 2);
@@ -827,8 +843,9 @@ static void sv_itemprice(unsigned char *buf)
 
 	nr = buf[1];
 	if (nr >= _containersize) {
-		fail("illegal nr %d in sv_itemprice!", nr);
-		exit(-1);
+		warn("illegal nr %d in sv_itemprice, disconnecting!", nr);
+		sockstate = 0;
+		return;
 	}
 
 	itemprice[nr] = load_u32(buf + 2);
@@ -850,8 +867,9 @@ static void sv_concnt(unsigned char *buf)
 
 	nr = buf[1];
 	if (nr > _containersize) {
-		fail("illegal nr %d in sv_contcnt!", nr);
-		exit(-1);
+		warn("illegal nr %d in sv_contcnt, disconnecting!", nr);
+		sockstate = 0;
+		return;
 	}
 
 	con_cnt = nr;
@@ -919,6 +937,7 @@ static void sv_server(unsigned char *buf)
 static void sv_logindone(void)
 {
 	login_done = 1;
+	load_character_options();
 	bzero_client(1);
 }
 
@@ -1030,7 +1049,7 @@ void sv_protocol(unsigned char *buf)
 	}
 	if (reset) {
 		exit_game();
-		init_game(dotx(DOT_MCT), doty(DOT_MCT));
+		init_game(XRES / 2, YRES / 2); /* the world engine centre is native */
 		note("Astonia Protocol Version %d established, engine reset.", protocol_version);
 	}
 }
@@ -1268,9 +1287,16 @@ void process(unsigned char *buf, int size)
 
 			default:
 				len = (size_t)amod_process(buf);
+				if (!len && buf[0] >= SV_MOD1 && buf[0] <= SV_MOD5) {
+					// Mod packet ([type][len][subtype][data], len excludes type+len) that no
+					// loaded mod claimed. Skip it instead of dropping the connection.
+					len = (size_t)buf[1] + 2;
+					amod_note_unhandled(buf[0], buf[1] >= 1 ? buf[2] : -1);
+				}
 				if (!len) {
-					fail("got illegal command %d", buf[0]);
-					exit(101);
+					warn("process: unknown command %d (0x%02X), disconnecting", buf[0], buf[0]);
+					sockstate = 0;
+					return;
 				}
 				break;
 			}
@@ -1281,8 +1307,9 @@ void process(unsigned char *buf, int size)
 	}
 
 	if (size) {
-		fail("PANIC! size=%d", size);
-		exit(102);
+		warn("process: %d leftover bytes after parsing, disconnecting", size);
+		sockstate = 0;
+		return;
 	}
 }
 
@@ -1494,9 +1521,14 @@ uint32_t prefetch(unsigned char *buf, int size)
 
 			default:
 				len = (size_t)amod_prefetch(buf);
+				if (!len && buf[0] >= SV_MOD1 && buf[0] <= SV_MOD5) {
+					// Unclaimed mod packet: size from the protocol len byte (see process()).
+					len = (size_t)buf[1] + 2;
+				}
 				if (!len) {
-					fail("got illegal command %d", buf[0]);
-					exit(103);
+					warn("prefetch: unknown command %d (0x%02X), disconnecting", buf[0], buf[0]);
+					sockstate = 0;
+					return 0;
 				}
 				break;
 			}
@@ -1507,8 +1539,9 @@ uint32_t prefetch(unsigned char *buf, int size)
 	}
 
 	if (size) {
-		fail("2 PANIC! size=%d", size);
-		exit(104);
+		warn("process: %d leftover bytes after parsing, disconnecting", size);
+		sockstate = 0;
+		return 0;
 	}
 
 	prefetch_tick++;
@@ -1701,6 +1734,22 @@ void cmd_stop(void)
 	client_send(buf, 1);
 }
 
+void cmd_walk_dir(int dir)
+{
+	unsigned char buf[16];
+
+	/* 0 = stop, 1-8 = DX_ directions. The old `> 7` guard silently
+	 * dropped DX_RIGHTUP (8) - the D key - so walking east sent nothing
+	 * and direction changes onto east left the server walking the
+	 * previous direction. */
+	if (dir < 0 || dir > 8) {
+		return;
+	}
+	buf[0] = CL_WALK_DIR;
+	buf[1] = (unsigned char)dir;
+	client_send(buf, 2);
+}
+
 void cmd_kill(unsigned int cn)
 {
 	unsigned char buf[16];
@@ -1771,6 +1820,32 @@ void cmd_some_spell(int spell, int x, int y, unsigned int chr)
 	}
 
 	client_send(buf, (size_t)len);
+}
+
+/* Generic cast (protocol v4+). One packet shape for every new castable
+ * skill; the nine legacy spells keep their per-spell opcodes above for
+ * compatibility with v3 servers. */
+DLL_EXPORT void cmd_cast(int cast_id, int target_kind, int a, int b)
+{
+	unsigned char buf[8];
+
+	if (protocol_version < 4) {
+		/* an old server trashes its whole input buffer on an unknown
+		 * opcode - never emit CL_CAST below the negotiated version */
+		addline("WARNING: server too old for cast %d\n", cast_id);
+		return;
+	}
+	if (cast_id < 1 || cast_id > 255 || target_kind < 0 || target_kind > 2) {
+		addline("WARNING: bad cast %d/%d\n", cast_id, target_kind);
+		return;
+	}
+
+	buf[0] = CL_CAST;
+	buf[1] = (unsigned char)cast_id;
+	buf[2] = (unsigned char)target_kind;
+	store_u16(buf + 3, (a < 0) ? 0 : ((a > UINT16_MAX) ? UINT16_MAX : (uint16_t)a));
+	store_u16(buf + 5, (b < 0) ? 0 : ((b > UINT16_MAX) ? UINT16_MAX : (uint16_t)b));
+	client_send(buf, 7);
 }
 
 void cmd_raise(int vn)

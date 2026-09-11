@@ -423,7 +423,9 @@ static int texcache_lookup(const struct tex_request *r, int hash, int *out_panic
 			    sdlt[stx].dl, (void *)sdlt[stx].text);
 			sdl_dump_spritecache();
 #endif
-			exit(42);
+			warn("texture cache hash chain corruption (panic=%d), skipping", panic);
+			*out_panic = panic;
+			return STX_NONE;
 		}
 
 		if (tex_entry_matches_request(stx, r)) {
@@ -640,8 +642,8 @@ static int texcache_acquire_slot(void)
 
 		if (ptx == STX_NONE) {
 			if (sdlt_cache[hash2] != cache_index) {
-				fail("sdli[sprite].cache_index!=cache_index\n");
-				exit(42);
+				warn("texture cache hash chain mismatch during eviction, skipping\n");
+				return STX_NONE;
 			}
 			sdlt_cache[hash2] = ntx;
 		} else {
@@ -719,6 +721,106 @@ static int texcache_acquire_slot(void)
 	texc_used++;
 
 	return cache_index;
+}
+
+/* Drop every idle sprite entry from the texture cache. Needed when a bake-time
+ * option changes (Brightness / Simplified Lighting are applied in sdl_make via
+ * light_calc) - the cache key doesn't include game_options, so without a flush
+ * the change only shows on sprites that happen to get evicted. Text entries
+ * are kept. Entries with queued/in-flight worker jobs are skipped: they bake
+ * with the live game_options anyway, and freeing under a worker would break
+ * the ownership contract. Render-thread only.
+ */
+void sdl_texture_flush_sprites(void)
+{
+	int flushed = 0;
+
+	for (int i = 0; i < MAX_TEXCACHE; i++) {
+		uint16_t flags = flags_load(&sdlt[i]);
+
+		if (!(flags & SF_SPRITE)) {
+			continue;
+		}
+
+		if (sdl_multi) {
+			SDL_LockMutex(g_tex_jobs.mutex);
+			if (sdlt[i].work_state != TX_WORK_IDLE) {
+				SDL_UnlockMutex(g_tex_jobs.mutex);
+				continue;
+			}
+			SDL_UnlockMutex(g_tex_jobs.mutex);
+		}
+
+		/* unlink from the hash chain */
+		int hash2 = (int)hashfunc(sdlt[i].sprite, sdlt[i].ml, sdlt[i].ll, sdlt[i].rl, sdlt[i].ul, sdlt[i].dl);
+		int ntx = sdlt[i].hnext;
+		int ptx = sdlt[i].hprev;
+
+		if (ptx == STX_NONE) {
+			if (sdlt_cache[hash2] != i) {
+				warn("texture cache hash chain mismatch during flush, skipping");
+				continue;
+			}
+			sdlt_cache[hash2] = ntx;
+		} else {
+			sdlt[ptx].hnext = ntx;
+		}
+		if (ntx != STX_NONE) {
+			sdlt[ntx].hprev = ptx;
+		}
+		sdlt[i].hnext = STX_NONE;
+		sdlt[i].hprev = STX_NONE;
+
+		flags = flags_load(&sdlt[i]);
+		if (flags & SF_DIDGPUTEX) {
+			/* GPU-mode entries: destroy the GPU texture and keep mem_tex in
+			 * sync (previously skipped here - leak + stale accounting) */
+			__atomic_sub_fetch(&mem_tex, sdlt[i].xres * sdlt[i].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+			if (sdlt[i].gpu_tex) {
+				/* shared atlas page - never destroyed per entry, return
+				 * the region instead */
+				if (sdlt[i].atlas_used) {
+					gpu_atlas_release(sdlt[i].gpu_tex, sdlt[i].atlas_x, sdlt[i].atlas_y);
+				} else {
+					gpu_texture_destroy(sdlt[i].gpu_tex);
+				}
+				sdlt[i].gpu_tex = NULL;
+			}
+			sdlt[i].atlas_used = 0;
+		} else if (flags & SF_DIDTEX) {
+			__atomic_sub_fetch(&mem_tex, sdlt[i].xres * sdlt[i].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+			if (sdlt[i].tex) {
+				SDL_DestroyTexture(sdlt[i].tex);
+				sdlt[i].tex = NULL;
+			}
+		} else if (flags & SF_DIDALLOC) {
+			if (sdlt[i].pixel) {
+#ifdef SDL_FAST_MALLOC
+				FREE(sdlt[i].pixel);
+#else
+				xfree(sdlt[i].pixel);
+#endif
+				sdlt[i].pixel = NULL;
+			}
+		}
+
+		uint16_t *flags_ptr = (uint16_t *)&sdlt[i].flags;
+		__atomic_store_n(flags_ptr, 0, __ATOMIC_RELEASE);
+
+		uint32_t new_gen = sdlt[i].generation + 1;
+		if (new_gen == 0) {
+			new_gen = 1;
+		}
+		sdlt[i].generation = new_gen;
+		sdlt[i].work_state = TX_WORK_IDLE;
+
+		texc_used--;
+		flushed++;
+	}
+
+	if (flushed) {
+		note("texture cache: flushed %d sprite entries", flushed);
+	}
 }
 
 // Ensure an existing cache entry is ready for rendering

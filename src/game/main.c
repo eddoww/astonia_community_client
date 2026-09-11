@@ -674,15 +674,30 @@ int main(int argc, char *argv[])
 	help_init();
 	update_user_keys();
 
+	/* settings sdl_init cannot honor itself: it forces vsync on and creates
+	 * the window from the launcher geometry */
+	if (saved_vsync >= 0 && saved_vsync != sdl_vsync) {
+		sdl_set_vsync(saved_vsync);
+	}
+	if (saved_window_mode >= 0) {
+		options_apply_window_mode(saved_window_mode);
+	}
+
+	loading_step(LS_MODS);
+	loading_present();
 	main_loop();
 
 #ifdef ENABLE_SHAREDMEM
 	sharedmem_exit();
 #endif
+#ifdef USE_LUAJIT
+	lua_scripting_exit();
+#endif
 	amod_exit();
 	main_exit();
 	sound_exit();
 	render_exit();
+	fm_cleanup();
 	sdl_exit();
 
 	list_mem();

@@ -116,6 +116,33 @@ typedef enum {
 #define CL_PING           39
 #define CL_GETQUESTLOG    40
 #define CL_REOPENQUEST    41
+#define CL_WALK_DIR       42
+
+/* Generic cast (protocol v4+): fixed 7 bytes
+ * [op][cast_id:u8][target_kind:u8][a:u16][b:u16], unused fields zero.
+ * Only sent when the negotiated protocol_version is >= 4 - older servers
+ * trash their input buffer on unknown opcodes. Mirrors the server's
+ * src/common/client.h by hand (core protocol has no shared header);
+ * CAST_ID_* values are append-only and are NOT V_* skill indices. */
+#define CL_CAST 43
+
+#define CAST_TGT_SELF 0
+#define CAST_TGT_CHAR 1
+#define CAST_TGT_MAP  2
+
+#define CAST_ID_NONE        0
+#define CAST_ID_BLESS       1
+#define CAST_ID_HEAL        2
+#define CAST_ID_FREEZE      3
+#define CAST_ID_MAGICSHIELD 4
+#define CAST_ID_FLASH       5
+#define CAST_ID_FIREBALL    6
+#define CAST_ID_BALL        7
+#define CAST_ID_WARCRY      8
+#define CAST_ID_PULSE       9
+/* next free: 10 (new class casts append here) */
+
+DLL_EXPORT void cmd_cast(int cast_id, int target_kind, int a, int b);
 
 #define PAC_IDLE        0
 #define PAC_MOVE        1
@@ -489,6 +516,7 @@ extern uint64_t tick_receive_interval; // Time between server tick batch arrival
 
 DLL_EXPORT extern unsigned int cflags; // current item (item under mouse cursor) flags
 DLL_EXPORT extern unsigned int csprite; // and sprite
+DLL_EXPORT extern int csprite_origin; // inventory slot the cursor item was picked up from (-1 = unknown)
 
 DLL_EXPORT extern int con_cnt;
 DLL_EXPORT extern int con_type;
@@ -501,8 +529,8 @@ DLL_EXPORT extern int protocol_version;
 
 extern int looklevel;
 DLL_EXPORT extern uint32_t mirror, newmirror;
-extern int may_teleport[64 + 32];
-DLL_EXPORT extern int pspeed; // 0=ill 1=stealth 2=normal 3=fast
+DLL_EXPORT extern int may_teleport[64 + 32];
+DLL_EXPORT extern int pspeed; // 0=normal 1=fast 2=stealth
 
 DLL_EXPORT extern char username[40];
 DLL_EXPORT extern char password[16];
@@ -562,6 +590,7 @@ void cmd_drop(int x, int y);
 void cmd_speed(int mode);
 void cmd_log(char *text);
 void cmd_stop(void);
+void cmd_walk_dir(int dir);
 void cmd_kill(unsigned int cn);
 void cmd_give(unsigned int cn);
 void cmd_some_spell(int spell, int x, int y, unsigned int chr);
@@ -578,6 +607,7 @@ void cmd_con_fast(int pos);
 void cmd_teleport(int nr);
 
 int poll_network(void);
+int client_flush_output(void);
 tick_t next_tick(void);
 int do_tick(void);
 void cl_client_info(struct client_info *ci);

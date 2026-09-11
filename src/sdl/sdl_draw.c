@@ -230,17 +230,24 @@ int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char
 	return sx + dx;
 }
 
+int sdl_drawtext(int sx, int sy, unsigned short int color, int flags, const char *text, struct renderfont *font,
+    int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset)
+{
+	return sdl_drawtext_alpha(
+	    sx, sy, color, flags, text, font, clipsx, clipsy, clipex, clipey, x_offset, y_offset, 255);
+}
+
 void sdl_rect(int sx, int sy, int ex, int ey, unsigned short int color, int clipsx, int clipsy, int clipex, int clipey,
     int x_offset, int y_offset)
 {
 	int r, g, b, a;
-	SDL_FRect rc;
 
 	r = R16TO32(color);
 	g = G16TO32(color);
 	b = B16TO32(color);
 	a = 255;
 
+	// Apply clipping
 	if (sx < clipsx) {
 		sx = clipsx;
 	}

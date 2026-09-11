@@ -43,6 +43,8 @@ pub fn build(b: *std.Build) void {
         "src/gui/color.c",
 
         // CLIENT
+        "src/client/client.c",
+        "src/client/protocol.c",
 
         // GAME
         "src/game/game_core.c",
@@ -50,8 +52,11 @@ pub fn build(b: *std.Build) void {
         "src/game/game_lighting.c",
         "src/game/game_display.c",
         "src/game/render.c",
+        "src/game/font.c",
         "src/game/main.c",
         "src/game/memory.c",
+        "src/game/sprite.c",
+        "src/game/sprite_config.c",
 
         // MODDER core
 
@@ -62,6 +67,7 @@ pub fn build(b: *std.Build) void {
         "src/sdl/sdl_effects.c",
         "src/sdl/sdl_draw.c",
         // builds as inert stubs unless -DHAVE_SDL3_TTF and SDL3_ttf are added
+        "src/sdl/sound.c",
 
         // HELPERS
         "src/helper/helper.c",

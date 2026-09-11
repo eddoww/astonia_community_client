@@ -35,7 +35,8 @@ SDL_SRCS = ../src/sdl/sdl_test.c \
            ../src/sdl/sdl_image.c \
            ../src/sdl/sdl_effects.c \
            ../src/sdl/sdl_draw.c \
-             \
+           ../src/sdl/sdl_text_glyph.c \
+           ../src/sdl/font_manager.c
 
 # Optional sdl3-ttf for the text-compare harness's TTF part (part C).
 # The rest of the suite intentionally builds without SDL3_ttf.

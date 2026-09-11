@@ -129,7 +129,7 @@ OBJS	= \
 			src/game/render.o src/game/font.o src/game/main.o src/game/sprite.o src/game/sprite_config.o\
 			src/game/memory.o src/game/version.o\
 			src/modder/modder.o\
-			src/sdl/sdl_core.o src/sdl/sdl_texture.o src/sdl/sdl_image.o src/sdl/sdl_effects.o src/sdl/sdl_draw.o src/sdl/sound.o \
+			src/sdl/sdl_core.o src/sdl/sdl_texture.o src/sdl/sdl_image.o src/sdl/sdl_effects.o src/sdl/sdl_draw.o src/sdl/sdl_text_glyph.o src/sdl/font_manager.o src/sdl/sound.o \
 			src/helper/helper.o\
 			 src/gui/display.o src/gui/color.o \
 			         src/gui/escape_menu_ui.o src/gui/options_ui.o src/gui/ui_draw.o \
@@ -196,11 +196,13 @@ src/sdl/sdl_core.o:	src/sdl/sdl_core.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_p
 src/sdl/sdl_texture.o:	src/sdl/sdl_texture.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h
 src/sdl/sdl_image.o:	src/sdl/sdl_image.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h src/game/game.h
 src/sdl/sdl_effects.o:	src/sdl/sdl_effects.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h
-src/sdl/sdl_draw.o:	src/sdl/sdl_draw.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h src/game/game.h
+src/sdl/sdl_draw.o:	src/sdl/sdl_draw.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h src/sdl/font_manager.h src/game/game.h
+src/sdl/sdl_text_glyph.o:	src/sdl/sdl_text_glyph.c src/sdl/sdl_text_glyph.h
 # font_manager.c builds as inert stubs here. To enable the experimental TTF
 # text path on macOS: install sdl3_ttf (brew), then add
 # "-DHAVE_SDL3_TTF $(shell pkg-config sdl3-ttf --cflags)" to CFLAGS and
 # "$(shell pkg-config sdl3-ttf --libs)" to LIBS (mirror Makefile.linux).
+src/sdl/font_manager.o:	src/sdl/font_manager.c src/sdl/font_manager.h src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h
 
 src/helper/helper.o:	src/helper/helper.c src/astonia.h
 src/helper/convert.o:	src/helper/convert.c src/astonia.h src/sdl/sdl.h src/sdl/sdl_private.h

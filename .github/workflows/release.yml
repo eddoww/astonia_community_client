@@ -40,7 +40,7 @@ jobs:
       # the toolchain entirely.
       - name: Restore compiled shaders
         id: cache-shaders
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: res/shaders/compiled
           key: shaders-${{ hashFiles('res/shaders/*.vert', 'res/shaders/*.frag', 'build/make/Makefile.shaders', '.github/actions/setup-shader-toolchain/action.yml') }}

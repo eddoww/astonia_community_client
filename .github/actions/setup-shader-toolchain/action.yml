@@ -35,7 +35,7 @@ runs:
 
     - name: Cache SDL_shadercross CLI
       id: cache-shadercross
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: /tmp/shadercross-install
         key: shadercross-${{ inputs.shadercross-commit }}-dxc-${{ inputs.dxc-release }}

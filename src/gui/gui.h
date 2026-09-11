@@ -7,7 +7,18 @@
 #include <SDL3/SDL_stdinc.h>
 #include "dll.h"
 
-#define MAXACTIONSLOT 14
+/* Total castable action ids. ACTION_* ids are append-only (saved configs
+ * store them numerically) and MUST stay below 100: the context system
+ * encodes "self/map variant" as 100+id. Ids 14+ are reserved capacity for
+ * new class spells; a new action needs rows in the four v3/v35 action
+ * tables and spell_caps (display.c/input_bind.c) plus its context.c
+ * dispatch cases. */
+#define MAXACTIONSLOT 24
+/* The legacy invisible action bar (BUT_ACT_BEG..BUT_ACT_END is a packed,
+ * 14-wide button-id range) only ever covers the original actions; new
+ * actions are hotbar/spellbook-only. Also the fread size of the old
+ * moac.dat binary-config layout. */
+#define LEGACY_ACTIONBAR_SLOTS 14
 
 struct quicks {
 	map_index_t mn[9]; // 0 for invalid neighbours
@@ -40,7 +51,10 @@ DLL_EXPORT extern unsigned short int lightorangecolor, orangecolor, darkorangeco
 DLL_EXPORT extern unsigned short int textcolor;
 extern int update_skltab;
 
-extern int teleporter;
+DLL_EXPORT extern int teleporter;
+DLL_EXPORT extern int teleport_override;
+/* set by a mod that draws the minimap itself - see minimap.c */
+DLL_EXPORT extern int minimap_override;
 extern int show_tutor;
 extern char tutor_text[1024];
 extern int show_look;
@@ -57,8 +71,11 @@ int main_init(void);
 int main_loop(void);
 void main_exit(void);
 void gui_dump(FILE *fp);
-void gui_sdl_keyproc(SDL_Keycode wparam);
+void gui_sdl_keyproc(SDL_Keycode key, SDL_Keymod mod);
 void gui_sdl_mouseproc(float x, float y, int what);
+/* left-button state as the OS reports it (motion events, focus loss): ends a
+ * gesture whose release never arrived */
+void gui_sdl_mouse_sync(int lbutton_down);
 
 extern int (*get_skltab_sep)(int i);
 DLL_EXPORT int _get_skltab_sep(int i);
@@ -78,6 +95,11 @@ void hover_invalidate_con(int slot);
 extern int (*do_display_random)(void);
 DLL_EXPORT int _do_display_random(void);
 
+/* Mod override for the quest log toggle (F9 / quest button). When a mod
+ * exports do_toggle_questlog and it returns non-zero, the legacy in-client
+ * quest log stays closed and the mod shows its own quest UI instead. */
+extern int (*do_toggle_questlog)(void);
+
 void help_init(void);
 void teleport_init(void);
 extern int (*do_display_help)(int);
@@ -92,6 +114,18 @@ void actions_loaded(void);
 void minimap_clear(void);
 void minimap_compact(void);
 void minimap_areainfo(int cmd, int areaID, int server_key);
+/* mod access to the minimap state (client >= 1.11.0) */
+DLL_EXPORT const unsigned char *minimap_cells(void);
+DLL_EXPORT int minimap_cells_edge(void);
+DLL_EXPORT unsigned int minimap_generation(void);
+DLL_EXPORT int minimap_mode(void);
+DLL_EXPORT void minimap_set_mode(int mode);
+DLL_EXPORT int minimap_zoom_level(void);
+DLL_EXPORT void minimap_set_zoom(int zoom);
+DLL_EXPORT int minimap_area_server(void);
+DLL_EXPORT int minimap_poi_count(void);
+DLL_EXPORT int minimap_poi_get(int idx, int *x, int *y, int *type, const char **desc);
+DLL_EXPORT int client_area_id(void);
 
 struct questlog {
 	char *name;
@@ -109,3 +143,7 @@ extern int last_right_click_invsel;
 
 // Platform-specific GUI functions
 void gui_sdl_draghack(void);
+void world_loading_begin(void);
+int gui_is_loading(void);
+void exp_bar_toggle(void);
+void mil_bar_toggle(void);

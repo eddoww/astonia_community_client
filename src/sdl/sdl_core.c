@@ -679,6 +679,7 @@ void sdl_exit(void)
 
 void cmd_proc(int key);
 void context_keyup(SDL_Keycode key);
+int amod_textinput(SDL_Keycode key); /* modder.h */
 
 void sdl_loop(void)
 {

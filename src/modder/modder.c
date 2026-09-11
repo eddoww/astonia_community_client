@@ -14,12 +14,17 @@
 
 #include "astonia.h"
 #include "modder/modder.h"
+#include "amod/amod_options.h"
 #include "modder/modder_private.h"
 #include "game/game.h"
 #include "game/game_private.h"
 #include "client/client.h"
+#include "client/client_private.h"
 #include "gui/gui.h"
 #include "sdl/sdl.h"
+#ifdef USE_LUAJIT
+#include "scripting/lua_interface.h"
+#endif
 
 struct mod {
 	void (*_amod_init)(void);
@@ -30,12 +35,20 @@ struct mod {
 	void (*_amod_tick)(void);
 	void (*_amod_mouse_move)(int x, int y);
 	int (*_amod_mouse_click)(int x, int y, int what);
+	int (*_amod_mouse_over)(int x, int y);
+	void (*_amod_frame_background)(void);
+	int (*_amod_mouse_click_background)(int x, int y, int what);
+	int (*_amod_mouse_over_background)(int x, int y);
 	void (*_amod_mouse_capture)(int onoff);
 	void (*_amod_areachange)(void);
 	int (*_amod_keydown)(SDL_Keycode);
 	int (*_amod_keyup)(SDL_Keycode);
+	int (*_amod_textinput)(SDL_Keycode);
 	void (*_amod_update_hover_texts)(void);
 	int (*_amod_client_cmd)(const char *buf);
+	int (*_amod_hotbar_activate)(int slot, int mode);
+	int (*_amod_text_line)(const char *line);
+	void (*_amod_register_keybinds)(void);
 	char *(*_amod_version)(void);
 	int loaded;
 };
@@ -49,12 +62,20 @@ struct mod mod[MAXMOD] = {{
     NULL, // _amod_tick
     NULL, // _amod_mouse_move
     NULL, // _amod_mouse_click
+    NULL, // _amod_mouse_over
+    NULL, // _amod_frame_background
+    NULL, // _amod_mouse_click_background
+    NULL, // _amod_mouse_over_background
     NULL, // _amod_mouse_capture
     NULL, // _amod_areachange
     NULL, // _amod_keydown
     NULL, // _amod_keyup
+    NULL, // _amod_textinput
     NULL, // _amod_update_hover_texts
     NULL, // _amod_client_cmd
+    NULL, // _amod_hotbar_activate
+    NULL, // _amod_text_line
+    NULL, // _amod_register_keybinds
     NULL, // _amod_version
     0 // loaded
 }};
@@ -63,6 +84,13 @@ int (*_amod_is_playersprite)(int sprite) = NULL;
 int (*_amod_display_skill_line)(int v, int base, int curr, int cn, char *buf) = NULL;
 int (*_amod_process)(const unsigned char *buf) = NULL;
 int (*_amod_prefetch)(const unsigned char *buf) = NULL;
+int (*_amod_options_count)(void) = NULL;
+int (*_amod_option_get)(int index, struct amod_option *out) = NULL;
+void (*_amod_option_set)(int index, int value) = NULL;
+int (*_amod_option_tab)(int index) = NULL;
+int (*_amod_escape)(void) = NULL;
+int (*_amod_has_open_window)(void) = NULL;
+int (*_amod_item_group_match)(int group, uint32_t sprite) = NULL;
 
 char *game_email_main = "<no one>";
 char *game_email_cash = "<no one>";
@@ -84,8 +112,14 @@ int amod_init(void)
 #endif
 		dll_instance = SDL_LoadObject(fname);
 		if (!dll_instance) {
+			// Only the first slot (amod) is expected to exist; report why it failed to load
+			// so a broken Steam install / wrong arch / missing dependency is diagnosable.
+			if (i == 0) {
+				note("mod loader: could not load %s: %s", fname, SDL_GetError());
+			}
 			continue;
 		};
+		note("mod loader: loaded %s", fname);
 
 		mod[i].loaded = 1;
 
@@ -114,6 +148,18 @@ int amod_init(void)
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_click"))) {
 			mod[i]._amod_mouse_click = (int (*)(int, int, int))tmp;
 		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_over"))) {
+			mod[i]._amod_mouse_over = (int (*)(int, int))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_frame_background"))) {
+			mod[i]._amod_frame_background = (void (*)(void))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_click_background"))) {
+			mod[i]._amod_mouse_click_background = (int (*)(int, int, int))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_over_background"))) {
+			mod[i]._amod_mouse_over_background = (int (*)(int, int))tmp;
+		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_mouse_capture"))) {
 			mod[i]._amod_mouse_capture = (void (*)(int))tmp;
 		}
@@ -126,11 +172,23 @@ int amod_init(void)
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_keyup"))) {
 			mod[i]._amod_keyup = (int (*)(SDL_Keycode))tmp;
 		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_textinput"))) {
+			mod[i]._amod_textinput = (int (*)(SDL_Keycode))tmp;
+		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_update_hover_texts"))) {
 			mod[i]._amod_update_hover_texts = (void (*)(void))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_client_cmd"))) {
 			mod[i]._amod_client_cmd = (int (*)(const char *))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_hotbar_activate"))) {
+			mod[i]._amod_hotbar_activate = (int (*)(int, int))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_text_line"))) {
+			mod[i]._amod_text_line = (int (*)(const char *))tmp;
+		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "amod_register_keybinds"))) {
+			mod[i]._amod_register_keybinds = (void (*)(void))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_version"))) {
 			mod[i]._amod_version = (char *(*)(void))tmp;
@@ -141,6 +199,27 @@ int amod_init(void)
 
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_process"))) {
 			_amod_process = (int (*)(const unsigned char *))tmp;
+		}
+		if (!_amod_options_count && (tmp = SDL_LoadFunction(dll_instance, "amod_options_count"))) {
+			_amod_options_count = (int (*)(void))tmp;
+		}
+		if (!_amod_option_get && (tmp = SDL_LoadFunction(dll_instance, "amod_option_get"))) {
+			_amod_option_get = (int (*)(int, struct amod_option *))tmp;
+		}
+		if (!_amod_option_set && (tmp = SDL_LoadFunction(dll_instance, "amod_option_set"))) {
+			_amod_option_set = (void (*)(int, int))tmp;
+		}
+		if (!_amod_option_tab && (tmp = SDL_LoadFunction(dll_instance, "amod_option_tab"))) {
+			_amod_option_tab = (int (*)(int))tmp;
+		}
+		if (!_amod_escape && (tmp = SDL_LoadFunction(dll_instance, "amod_escape"))) {
+			_amod_escape = (int (*)(void))tmp;
+		}
+		if (!_amod_has_open_window && (tmp = SDL_LoadFunction(dll_instance, "amod_has_open_window"))) {
+			_amod_has_open_window = (int (*)(void))tmp;
+		}
+		if (!_amod_item_group_match && (tmp = SDL_LoadFunction(dll_instance, "amod_item_group_match"))) {
+			_amod_item_group_match = (int (*)(int, uint32_t))tmp;
 		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "amod_prefetch"))) {
 			_amod_prefetch = (int (*)(const unsigned char *))tmp;
@@ -206,6 +285,9 @@ int amod_init(void)
 		if ((tmp = SDL_LoadFunction(dll_instance, "do_display_random"))) {
 			do_display_random = (int (*)(void))tmp;
 		}
+		if ((tmp = SDL_LoadFunction(dll_instance, "do_toggle_questlog"))) {
+			do_toggle_questlog = (int (*)(void))tmp;
+		}
 		if ((tmp = SDL_LoadFunction(dll_instance, "do_display_help"))) {
 			do_display_help = (int (*)(int))tmp;
 		}
@@ -252,6 +334,11 @@ int amod_init(void)
 		}
 	}
 
+	// capability probe: tells mods implementing amod_textinput that this
+	// client dispatches real text input, so they can stop translating raw
+	// keycodes in their own input fields (key 0 never types anything)
+	amod_textinput(0);
+
 	return 1;
 }
 
@@ -271,6 +358,9 @@ void amod_gamestart(void)
 			mod[i]._amod_gamestart();
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_gamestart();
+#endif
 }
 
 void amod_sprite_config(void)
@@ -289,6 +379,9 @@ void amod_frame(void)
 			mod[i]._amod_frame();
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_frame();
+#endif
 }
 
 void amod_tick(void)
@@ -298,6 +391,10 @@ void amod_tick(void)
 			mod[i]._amod_tick();
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_tick();
+	lua_scripting_check_reload(); // no-op unless -dev; self-throttled to ~1/sec
+#endif
 }
 
 void amod_mouse_move(int x, int y)
@@ -307,6 +404,9 @@ void amod_mouse_move(int x, int y)
 			mod[i]._amod_mouse_move(x, y);
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_mouse_move(x, y);
+#endif
 }
 
 int amod_mouse_click(int x, int y, int what)
@@ -321,7 +421,66 @@ int amod_mouse_click(int x, int y, int what)
 			}
 		}
 	}
+#ifdef USE_LUAJIT
+	tmp = lua_scripting_mouse_click(x, y, what);
+	if (tmp > 0) {
+		return 1;
+	} else if (tmp < 0) {
+		ret = 1;
+	}
+#endif
 	return ret;
+}
+
+/* background layer: drawn under every client panel, offered events only when
+ * nothing of the client's GUI is under the pointer (see amod.h) */
+void amod_frame_background(void)
+{
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_frame_background) {
+			mod[i]._amod_frame_background();
+		}
+	}
+}
+
+int amod_mouse_click_background(int x, int y, int what)
+{
+	int ret = 0, tmp;
+
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_mouse_click_background && (tmp = mod[i]._amod_mouse_click_background(x, y, what))) {
+			if (tmp > 0) {
+				return 1;
+			}
+			ret = 1;
+		}
+	}
+	return ret;
+}
+
+int amod_mouse_over_background(int x, int y)
+{
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_mouse_over_background && mod[i]._amod_mouse_over_background(x, y)) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int amod_mouse_over(int x, int y)
+{
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_mouse_over && mod[i]._amod_mouse_over(x, y)) {
+			return 1;
+		}
+	}
+#ifdef USE_LUAJIT
+	if (lua_scripting_mouse_over(x, y)) {
+		return 1;
+	}
+#endif
+	return 0;
 }
 
 void amod_mouse_capture(int onoff)
@@ -340,6 +499,9 @@ void amod_areachange(void)
 			mod[i]._amod_areachange();
 		}
 	}
+#ifdef USE_LUAJIT
+	lua_scripting_areachange();
+#endif
 }
 
 int amod_keydown(SDL_Keycode key)
@@ -347,7 +509,41 @@ int amod_keydown(SDL_Keycode key)
 	int ret = 0, tmp;
 	for (int i = 0; i < MAXMOD; i++) {
 		if (mod[i]._amod_keydown && (tmp = mod[i]._amod_keydown(key))) {
-			sdl_flush_textinput();
+			/* A mod that implements amod_textinput gets the real (layout- and
+			 * shift-aware) character through that hook instead - leave the
+			 * pending SDL text event queued for it. For older mods the flush
+			 * keeps the consumed key's char out of the classic command line. */
+			if (!mod[i]._amod_textinput) {
+				sdl_flush_textinput();
+			}
+			if (tmp > 0) {
+				return 1;
+			} else {
+				ret = 1;
+			}
+		}
+	}
+#ifdef USE_LUAJIT
+	tmp = lua_scripting_keydown(key);
+	if (tmp > 0) {
+		sdl_flush_textinput();
+		return 1;
+	} else if (tmp < 0) {
+		ret = 1;
+	}
+#endif
+	return ret;
+}
+
+// Text input (SDL_EVENT_TEXT_INPUT) - the shifted/layout-correct character,
+// dispatched before the classic command line sees it. key==0 is the one-time
+// capability probe sent after mod loading so mods can stop translating raw
+// keycodes themselves. Same return convention as amod_keydown.
+int amod_textinput(SDL_Keycode key)
+{
+	int ret = 0, tmp;
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_textinput && (tmp = mod[i]._amod_textinput(key))) {
 			if (tmp > 0) {
 				return 1;
 			} else {
@@ -370,6 +566,14 @@ int amod_keyup(SDL_Keycode key)
 			}
 		}
 	}
+#ifdef USE_LUAJIT
+	tmp = lua_scripting_keyup(key);
+	if (tmp > 0) {
+		return 1;
+	} else if (tmp < 0) {
+		ret = 1;
+	}
+#endif
 	return ret;
 }
 
@@ -385,8 +589,64 @@ void amod_update_hover_texts(void)
 int amod_client_cmd(const char *buf)
 {
 	int ret = 0, tmp;
+#ifdef USE_LUAJIT
+	// Check Lua commands first (allows #lua_reload etc. to work)
+	tmp = lua_scripting_client_cmd(buf);
+	if (tmp > 0) {
+		return 1;
+	} else if (tmp < 0) {
+		ret = 1;
+	}
+#endif
 	for (int i = 0; i < MAXMOD; i++) {
 		if (mod[i]._amod_client_cmd && (tmp = mod[i]._amod_client_cmd(buf))) {
+			if (tmp > 0) {
+				return 1;
+			} else {
+				ret = 1;
+			}
+		}
+	}
+	return ret;
+}
+
+// Called for every chat/system text line just before the classic chat window
+// renders it. Any mod may consume the line (e.g. to show it in its own chat
+// UI); consumed lines are not added to the classic scrollback. Same return
+// convention as the other event handlers: 1 = consumed, stop; -1 = consumed
+// but let later mods observe it too; 0 = not handled.
+int amod_text_line(const char *line)
+{
+	int ret = 0, tmp;
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_text_line && (tmp = mod[i]._amod_text_line(line))) {
+			if (tmp > 0) {
+				return 1;
+			} else {
+				ret = 1;
+			}
+		}
+	}
+	return ret;
+}
+
+/* called at the end of register_all(): mods add their own entries to the
+ * keybinding table here, BEFORE the per-character config is applied, so
+ * player rebinds of mod keys persist like any native binding */
+void amod_register_keybinds(void)
+{
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_register_keybinds) {
+			mod[i]._amod_register_keybinds();
+		}
+	}
+}
+
+int amod_hotbar_activate(int slot, int mode)
+{
+	int ret = 0, tmp;
+	for (int i = 0; i < MAXMOD; i++) {
+		if (mod[i]._amod_hotbar_activate && (tmp = mod[i]._amod_hotbar_activate(slot, mode))) {
 			if (tmp > 0) {
 				return 1;
 			} else {
@@ -444,4 +704,93 @@ char *amod_version(int idx)
 	}
 
 	return NULL;
+}
+
+// True if a loaded mod handles server mod packets (i.e. the Ugaris mod is present).
+int amod_main_loaded(void)
+{
+	return _amod_process != NULL;
+}
+
+// Called by the protocol layer when a SV_MOD packet was skipped because no mod
+// claimed it. Logged once per (type,subtype) pair to avoid spamming.
+void amod_note_unhandled(int type, int subtype)
+{
+	static unsigned char seen[5][256];
+
+	if (type < SV_MOD1 || type > SV_MOD5 || subtype < 0 || subtype > 255) {
+		return;
+	}
+	if (seen[type - SV_MOD1][subtype]) {
+		return;
+	}
+	seen[type - SV_MOD1][subtype] = 1;
+	note("mod: skipped unhandled server mod packet type %d subtype 0x%02X%s", type, subtype,
+	    _amod_process ? "" : " (no mod loaded)");
+}
+
+int amod_options_count(void)
+{
+	if (_amod_options_count && _amod_option_get) {
+		return _amod_options_count();
+	}
+	return 0;
+}
+
+int amod_option_get(int index, struct amod_option *out)
+{
+	if (_amod_option_get && out) {
+		return _amod_option_get(index, out);
+	}
+	return 0;
+}
+
+void amod_option_set(int index, int value)
+{
+	if (_amod_option_set) {
+		_amod_option_set(index, value);
+	}
+}
+
+int amod_option_tab(int index)
+{
+	if (_amod_option_tab) {
+		int tab = _amod_option_tab(index);
+		if (tab >= AMOD_TAB_GAMEPLAY && tab <= AMOD_TAB_UI) {
+			return tab;
+		}
+	}
+	return AMOD_TAB_GAMEPLAY;
+}
+
+// ESC pressed: give the mod a chance to close its topmost window. Returns 1
+// if the mod consumed the key. Optional export - older mods simply never see
+// ESC, as before.
+int amod_escape(void)
+{
+	if (_amod_escape) {
+		return _amod_escape();
+	}
+	return 0;
+}
+
+// True if the mod currently shows a window ESC should close (journal, auction
+// house, ...). Feeds the client's anything_to_cancel().
+int amod_has_open_window(void)
+{
+	if (_amod_has_open_window) {
+		return _amod_has_open_window();
+	}
+	return 0;
+}
+
+// Does this item sprite belong to the given hotbar item group (potions,
+// recall scrolls, ...)? 1 = yes, 0 = no, -1 = no mod table (use the client's
+// builtin fallback). The mod owns the id sets since they ship with content.
+int amod_item_group_match(int group, uint32_t sprite)
+{
+	if (_amod_item_group_match) {
+		return _amod_item_group_match(group, sprite);
+	}
+	return -1;
 }

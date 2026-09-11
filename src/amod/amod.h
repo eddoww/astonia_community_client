@@ -4,6 +4,7 @@
  * Mod SDK Header - API for creating client modifications
  */
 
+#include "amod/amod_options.h"
 #include "../dll.h"
 #include "../astonia.h"
 #include "amod_structs.h"
@@ -35,16 +36,68 @@ DLL_EXPORT void amod_update_hover_texts(void);
 //   1  = processed, client and later mods should ignore
 //  -1  = client should ignore, but allow other mods to process
 //   0  = not processed, continue normal handling
+// Pointer capture: a mod that consumes SDL_MOUM_LDOWN owns the gesture - the client
+// delivers every amod_mouse_move() and the matching SDL_MOUM_LUP to it even when the
+// pointer leaves the mod's surface or the window, and never acts on that release
+// itself. While the client runs one of its own drags (panel title bars, resize grips,
+// scroll thumbs), mods are not offered the release. The pointer is never warped or
+// hidden: implement drags with absolute positions, never by accumulating deltas.
 DLL_EXPORT int amod_mouse_click(int x, int y, int what);
+// Optional: return non-zero if the mod draws an interactive surface (window, bar, ...) at
+// (x,y). While it does, the client suppresses its own hover detection there (no "take"/"use"
+// cursor or tooltips for the inventory/map underneath a mod window). Clicks are still routed
+// through amod_mouse_click().
+DLL_EXPORT int amod_mouse_over(int x, int y);
+// --- Background layer (optional, client >= 1.8.0) ---
+// A mod surface that must sit UNDER every client panel and every other mod
+// window (the chat). amod_frame_background() is called each frame right after
+// the world is drawn and before any client GUI; amod_mouse_click_background()
+// is offered an event (same `what` codes as amod_mouse_click, wheel with x=0
+// and y=delta) only when the foreground amod_mouse_click() did not consume it
+// AND no client control or overlay is under the pointer - i.e. the event would
+// otherwise reach the world. Return 1 to consume; a consumed LDOWN owns the
+// pointer exactly like a consumed foreground press. amod_mouse_over_background()
+// is asked after the client's own hover tests found nothing: return non-zero
+// to keep the world beneath from being targeted. Older clients never call
+// these - keep such surfaces in the foreground pass until the first call.
+DLL_EXPORT void amod_frame_background(void);
+DLL_EXPORT int amod_mouse_click_background(int x, int y, int what);
+DLL_EXPORT int amod_mouse_over_background(int x, int y);
 DLL_EXPORT int amod_keydown(SDL_Keycode key);
 DLL_EXPORT int amod_keyup(SDL_Keycode key);
 DLL_EXPORT int amod_client_cmd(const char *buf);
+DLL_EXPORT int amod_hotbar_activate(int slot, int mode);
+/* Called for every chat/system text line (SV_TEXT, color codes included) just
+ * before the classic chat window renders it. Return 1 to consume the line (it
+ * will not appear in the classic chat), -1 to consume it while letting later
+ * mods observe it too, 0 to leave it alone. */
+DLL_EXPORT int amod_text_line(const char *line);
+
+/* Called at the end of the client's keybind registration, before the saved
+ * config applies: register mod key bindings here (input_register) so player
+ * rebinds of them persist. Runs on every input_init (login / relog). */
+DLL_EXPORT void amod_register_keybinds(void);
+/* Real text input (shift/layout-correct character), dispatched before the
+ * classic command line sees it. amod_keydown only carries raw unshifted SDL
+ * keycodes, so input fields needing '#', '!', uppercase etc. must implement
+ * this. key 0 is a one-time capability probe sent after mod loading: ignore
+ * it (return 0), but remember that this client delivers text through this
+ * hook - and stop inserting printable keycodes from amod_keydown (still
+ * CONSUME them there while an input field is focused so client keybindings
+ * do not fire; the same keystroke's character arrives here right after).
+ * Return 1 to consume, -1 to consume but let later mods see it, 0 to pass
+ * it to the classic command line. */
+DLL_EXPORT int amod_textinput(SDL_Keycode key);
 
 // Main mod only:
 DLL_EXPORT int amod_process(const unsigned char *buf);
 DLL_EXPORT int amod_prefetch(const unsigned char *buf);
 DLL_EXPORT int amod_display_skill_line(int v, int base, int curr, int cn, char *buf);
 DLL_EXPORT int amod_is_playersprite(int sprite);
+/* Options shown in the client's Options > Gameplay tab (see struct amod_option) */
+DLL_EXPORT int amod_options_count(void);
+DLL_EXPORT int amod_option_get(int index, struct amod_option *out);
+DLL_EXPORT void amod_option_set(int index, int value);
 
 // =====================================================================
 // Client Exported Functions - Call these from your mod
@@ -118,6 +171,29 @@ DLL_IMPORT void render_gradient_rect_v(
 DLL_IMPORT void render_gradient_circle(
     int cx, int cy, int radius, unsigned short inner_color, unsigned short outer_color, unsigned char alpha);
 
+// --- Render: Glows (SDL_GPU only) ---
+//
+// Additive capsule glows with a real radial falloff, batched across the
+// whole frame. These replace the usual ways of faking a glow by hand -
+// stacking translucent circles, drawing a line several times at
+// decreasing width and alpha, or plotting a bright pixel with dimmer
+// neighbours - with one call and one batched instance.
+//
+// render_glow_available() is 0 on the SDL_Renderer path and whenever the
+// player turns Glowing Spell Effects off, so ALWAYS branch on it and keep
+// a fallback; the calls are simply no-ops otherwise.
+//
+// radius is in logical pixels, core weights the tight centre lobe
+// (0 = soft halo only, ~1.5-2.5 = hot middle), intensity is 0..1.
+//
+// Prefer render_glow_line() over render_line_aa() for beams and bolts:
+// the AA line costs one draw call per plotted pixel in GPU mode, the glow
+// costs one batched instance for the whole segment.
+DLL_IMPORT int render_glow_available(void);
+DLL_IMPORT void render_glow(int x, int y, unsigned short color, float radius, float core, float intensity);
+DLL_IMPORT void render_glow_line(
+    int fx, int fy, int tx, int ty, unsigned short color, float radius, float core, float intensity);
+
 // --- Render: Screen Effects ---
 DLL_IMPORT void render_vignette(unsigned char intensity);
 DLL_IMPORT void render_screen_flash(unsigned short color, unsigned char intensity);
@@ -135,6 +211,18 @@ DLL_IMPORT void render_texture_scaled(int tex_id, int x, int y, float scale, uns
 DLL_IMPORT int render_texture_width(int tex_id);
 DLL_IMPORT int render_texture_height(int tex_id);
 
+// --- Render: Mod-filled textures (client >= 1.11.0) ---
+// A texture the mod fills from its own pixel buffer (0xAARRGGBB, row-major,
+// width*height entries). Same slot space as render_load_texture, so the
+// render_texture*() calls and render_unload_texture apply. Resolve these via
+// dlsym/GetProcAddress when supporting older clients.
+DLL_IMPORT int render_create_texture(int width, int height);
+DLL_IMPORT int render_update_texture(int tex_id, const uint32_t *pixels);
+// source rectangle (texture pixels) scaled into a destination rectangle (UI
+// pixels), honouring the current clip
+DLL_IMPORT void render_texture_region(
+    int tex_id, int src_x, int src_y, int src_w, int src_h, int x, int y, int w, int h, unsigned char alpha);
+
 // --- Render: Render Targets ---
 DLL_IMPORT int render_create_target(int width, int height);
 DLL_IMPORT void render_destroy_target(int target_id);
@@ -145,6 +233,10 @@ DLL_IMPORT void render_target_to_screen(int target_id, int x, int y, unsigned ch
 // --- Render: Text ---
 DLL_IMPORT int render_text_length(int flags, const char *text);
 DLL_IMPORT int render_text(int sx, int sy, unsigned short int color, int flags, const char *text);
+/* render_text with a draw-time opacity (0..255); shadow/frame underlays fade
+ * along. Resolve via dlsym/GetProcAddress when supporting clients < v1.2.35. */
+DLL_IMPORT int render_text_alpha(
+    int sx, int sy, unsigned short int color, int flags, unsigned char alpha, const char *text);
 DLL_IMPORT int render_text_fmt(int64_t sx, int64_t sy, unsigned short int color, int flags, const char *format, ...)
     __attribute__((format(printf, 5, 6)));
 DLL_IMPORT int render_text_break(int x, int y, int breakx, unsigned short color, int flags, const char *ptr);
@@ -165,7 +257,50 @@ DLL_IMPORT map_index_t get_near_item(int x, int y, unsigned int flag, unsigned i
 DLL_IMPORT map_index_t get_near_char(int x, int y, unsigned int looksize);
 DLL_IMPORT map_index_t mapmn(unsigned int x, unsigned int y);
 
-// --- Misc ---
+// --- Minimap override (client >= 1.11.0) ---
+// A mod can draw the minimap itself: set minimap_override to non-zero and the
+// client stops drawing its round/big map, reserves no panel footprint for it
+// and takes no clicks, hovers or wheel events on it - while it keeps exploring
+// the cell map, handling the area info and POIs, saving/loading the per-area
+// maps and running its keybinds (toggle, zoom in/out/reset). The mod reads
+// the state below and draws whatever it likes; clear the flag and the client
+// map comes back untouched.
+DLL_IMPORT int minimap_override;
+// explored cells of the current area: edge*edge bytes, row-major, cell (x, y)
+// at [x + y * edge]; MINIMAP_CELL_* values
+#define MINIMAP_CELL_UNKNOWN 0 /* never seen */
+#define MINIMAP_CELL_BLOCK   1 /* sight-blocking tile (wall, tree) */
+#define MINIMAP_CELL_FSPRITE 2 /* foreground sprite, passable (fence, bush) */
+#define MINIMAP_CELL_CHAR    3 /* a character stood here when last seen */
+#define MINIMAP_CELL_EMPTY   4 /* open ground */
+#define MINIMAP_CELL_USE     5 /* usable sight-blocker (door, chest) */
+DLL_IMPORT const unsigned char *minimap_cells(void);
+DLL_IMPORT int minimap_cells_edge(void);
+// bumped on every change of the cell map (a fresh look, an area load, a clear)
+DLL_IMPORT unsigned int minimap_generation(void);
+// keybind-driven display state: 0 hidden, 1 small round map, 2 big map; zoom 1..4
+DLL_IMPORT int minimap_mode(void);
+DLL_IMPORT void minimap_set_mode(int mode);
+DLL_IMPORT int minimap_zoom_level(void);
+DLL_IMPORT void minimap_set_zoom(int zoom);
+// server key sent with the area id (SV_AREAINFO), 0 while unmanaged; the
+// area id itself is client_area_id()
+DLL_IMPORT int minimap_area_server(void);
+// points of interest of the current area (res/config/map_poi<server>_<area>.json);
+// type 2 = shown only once its own cell was explored
+DLL_IMPORT int minimap_poi_count(void);
+DLL_IMPORT int minimap_poi_get(int idx, int *x, int *y, int *type, const char **desc);
+
+// --- Teleporter ---
+// The built-in teleporter window can be replaced by a mod: set teleport_override
+// to non-zero and the client stops drawing and hit-testing its own window while
+// keeping all protocol state intact. The mod then watches `teleporter` (set by
+// SV_TELEPORT, cleared by SV_ACT / Escape, writable), reads availability from
+// may_teleport[] (0..63 map destinations; 64..95 clan halls when sv_ver == 30)
+// and answers with a raw CL_TELEPORT packet via client_send().
+DLL_IMPORT int teleporter;
+DLL_IMPORT int teleport_override;
+DLL_IMPORT int may_teleport[64 + 32];
 DLL_IMPORT void set_teleport(int idx, int x, int y);
 DLL_IMPORT int exp2level(int val);
 DLL_IMPORT int level2exp(int level);
@@ -173,6 +308,17 @@ DLL_IMPORT int mil_rank(int exp);
 
 // --- Client/Server Communication ---
 DLL_IMPORT void client_send(void *buf, size_t len);
+/* Directory the client stores user settings in (trailing slash, user-writable). Mods should
+ * keep their settings here instead of next to the game files. */
+DLL_IMPORT const char *client_config_dir(void);
+/* Current area id as announced by the server (0 = unknown yet). client >= 1.2.40 */
+DLL_IMPORT int client_area_id(void);
+/* "" on the production server, else "DEV" / "PREPROD" / "LOCAL" / "CUSTOM" -
+ * derived from the login host and port. client >= 1.8.0 */
+DLL_IMPORT const char *client_environment_label(void);
+/* Options > UI "Minimize Upward" (see panels.h): mod windows must collapse
+ * the same way the client's do. client >= 1.8.0 */
+DLL_IMPORT int panel_collapse_upward(void);
 
 // --- Sound ---
 // Sounds loaded from: sx_mod.zip > sx_patch.zip > sx.zip
@@ -188,12 +334,64 @@ DLL_IMPORT void sound_fade(int channel, float target, int duration);
 DLL_IMPORT float sound_get_master_volume(void);
 DLL_IMPORT int sound_is_playing(int channel);
 DLL_IMPORT int sound_is_enabled(void);
+/* Tag a playing channel with a volume category so the client's Options >
+ * Audio sliders (Sound Effects / Ambient / Interface) scale it alongside
+ * Master. Untagged channels scale with Master only. Resolve via dlsym/
+ * GetProcAddress when supporting clients older than v1.2.35. */
+#define SOUND_CAT_SFX     0
+#define SOUND_CAT_AMBIENT 1
+#define SOUND_CAT_UI      2
+DLL_IMPORT void sound_set_channel_category(int channel, int category);
 
 // --- Sprite Config ---
-// Load custom sprite configurations in amod_sprite_config()
 DLL_IMPORT int sprite_config_load_characters(const char *path);
 DLL_IMPORT int sprite_config_load_animated(const char *path);
 DLL_IMPORT int sprite_config_load_metadata(const char *path);
+
+// --- Input Binding System ---
+DLL_IMPORT InputBinding *input_find(uint32_t key, uint8_t modifiers);
+DLL_IMPORT InputBinding *input_find_by_id(const char *id);
+DLL_IMPORT void input_execute(InputBinding *b);
+DLL_IMPORT uint32_t input_get_key(const char *id);
+DLL_IMPORT InputBinding *input_register(const char *id, const char *display_name, InputCategory cat, uint32_t key,
+    uint8_t modifiers, void (*on_press)(InputBinding *self));
+DLL_IMPORT int input_rebind(const char *id, uint32_t key, uint8_t modifiers);
+DLL_IMPORT int input_unbind(const char *id);
+DLL_IMPORT void input_reset_one(const char *id);
+DLL_IMPORT void input_reset_all(void);
+DLL_IMPORT int input_undo_rebind(void);
+DLL_IMPORT int input_binding_count(void);
+DLL_IMPORT InputBinding *input_binding_at(int index);
+DLL_IMPORT const char *input_category_name(InputCategory cat);
+DLL_IMPORT uint8_t input_current_modifiers(void);
+DLL_IMPORT const char *input_key_to_string(uint32_t key, uint8_t modifiers);
+DLL_IMPORT int input_string_to_key(const char *str, uint32_t *out_key, uint8_t *out_modifiers);
+DLL_IMPORT int keyboard_move_active(void);
+
+// --- Hotbar ---
+DLL_IMPORT const HotbarSlot *hotbar_get(int slot);
+DLL_IMPORT void hotbar_assign_spell(int slot, int action_slot);
+DLL_IMPORT void hotbar_assign_item(int slot, int inventory_index);
+DLL_IMPORT void hotbar_assign_item_by_type(int slot, uint32_t item_type);
+DLL_IMPORT void hotbar_clear(int slot);
+DLL_IMPORT void hotbar_clear_all(void);
+DLL_IMPORT void hotbar_swap(int a, int b);
+DLL_IMPORT void hotbar_activate(int slot);
+DLL_IMPORT void hotbar_activate_with_mode(int slot, int mode);
+DLL_IMPORT int hotbar_visible_slots(void);
+DLL_IMPORT int hotbar_rows(void);
+DLL_IMPORT void hotbar_set_rows(int count);
+DLL_IMPORT void hotbar_set_visible_slots(int count);
+DLL_IMPORT uint32_t hotbar_slot_sprite(int slot);
+DLL_IMPORT const char *hotbar_slot_name(int slot);
+DLL_IMPORT int hotbar_spell_valid_targets(int action_slot);
+DLL_IMPORT int hotbar_spell_has_cast_modes(int action_slot);
+DLL_IMPORT int hotbar_cast_mode(void);
+DLL_IMPORT void hotbar_set_cast_mode(int mode);
+DLL_IMPORT int hotbar_show_hotkeys(void);
+DLL_IMPORT void hotbar_set_show_hotkeys(int on);
+DLL_IMPORT int hotbar_show_names(void);
+DLL_IMPORT void hotbar_set_show_names(int on);
 
 // =====================================================================
 // Client Exported Variables
@@ -298,10 +496,13 @@ DLL_IMPORT int server_port;
 // --- Timing ---
 DLL_IMPORT tick_t tick;
 DLL_IMPORT uint32_t mirror;
+DLL_IMPORT uint32_t newmirror;
+DLL_IMPORT int sv_ver;
 DLL_IMPORT uint32_t realtime;
 DLL_IMPORT int frames_per_second;
 
 // --- Display Settings ---
+DLL_IMPORT extern int __xres;
 DLL_IMPORT extern int __yres;
 DLL_IMPORT int want_width;
 DLL_IMPORT int want_height;

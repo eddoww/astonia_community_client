@@ -3,6 +3,8 @@
  */
 
 #include <SDL3/SDL_keycode.h>
+
+struct amod_option;
 #define MAXMOD 6
 
 int amod_init(void);
@@ -15,6 +17,12 @@ void amod_tick(void);
 int amod_display_skill_line(int v, int base, int curr, int cn, char *buf);
 void amod_mouse_move(int x, int y);
 int amod_mouse_click(int x, int y, int what);
+int amod_mouse_over(int x, int y);
+/* background layer (client >= 1.8.0): drawn under every client panel, and
+ * offered events only when nothing of the client's GUI is under the pointer */
+void amod_frame_background(void);
+int amod_mouse_click_background(int x, int y, int what);
+int amod_mouse_over_background(int x, int y);
 void amod_mouse_capture(int onoff);
 void amod_areachange(void);
 int amod_keydown(SDL_Keycode key);
@@ -22,9 +30,21 @@ int amod_keyup(SDL_Keycode key);
 int amod_textinput(SDL_Keycode key);
 void amod_update_hover_texts(void);
 int amod_client_cmd(const char *buf);
+int amod_text_line(const char *line);
+void amod_register_keybinds(void);
 int amod_process(const unsigned char *buf);
 int amod_prefetch(const unsigned char *buf);
+int amod_options_count(void);
+int amod_option_get(int index, struct amod_option *out);
+void amod_option_set(int index, int value);
+int amod_option_tab(int index);
+int amod_escape(void);
+int amod_has_open_window(void);
+int amod_item_group_match(int group, uint32_t sprite);
+int amod_main_loaded(void);
+void amod_note_unhandled(int type, int subtype);
 int amod_is_playersprite(int sprite);
+int amod_hotbar_activate(int slot, int mode);
 
 int sharedmem_init(void);
 void sharedmem_update(void);

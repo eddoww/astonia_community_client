@@ -62,6 +62,7 @@ pub fn build(b: *std.Build) void {
         "src/game/sprite_config.c",
 
         // MODDER core
+        "src/modder/modder.c",
 
         // SDL layer
         "src/sdl/sdl_core.c",
@@ -271,9 +272,9 @@ pub fn build(b: *std.Build) void {
 
     // Link amod against the main executable to resolve symbols
     if (tgt.os.tag == .windows) {
-        amod.root_module.addCSourceFile(.{ .file = "), .flags = win_cflags });
+        amod.root_module.addCSourceFile(.{ .file = b.path("src/amod/amod.c"), .flags = win_cflags });
     } else {
-        amod.root_module.addCSourceFile(.{ .file = "), .flags = base_cflags });
+        amod.root_module.addCSourceFile(.{ .file = b.path("src/amod/amod.c"), .flags = base_cflags });
     }
     amod.root_module.addIncludePath(b.path(include_root));
     amod.root_module.addIncludePath(b.path(src_root));

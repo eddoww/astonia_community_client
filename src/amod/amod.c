@@ -66,9 +66,14 @@ DLL_EXPORT int amod_client_cmd(const char *buf)
 		sprintf(opt[7], "-m%d", sdl_multi);
 		sprintf(opt[8], "-t%d", server_port);
 
+		/* opt[1] is "-p<credential>" and MUST NOT be printed. The launcher
+		 * redirects this process's stdout into its own game log file, so
+		 * echoing it here wrote the player's account password to disk on every
+		 * #reset. execl() below still needs the real value; only the trace is
+		 * redacted. */
 		printf(MOAC_EXE);
 		for (int i = 0; i < 9; i++) {
-			printf(" %s", opt[i]);
+			printf(" %s", i == 1 ? "-p<redacted>" : opt[i]);
 		}
 		printf("\n");
 		execl(MOAC_EXE, MOAC_EXE, opt[0], opt[1], opt[2], opt[3], opt[4], opt[5], opt[6], opt[7], opt[8], NULL);

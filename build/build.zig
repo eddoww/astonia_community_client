@@ -39,10 +39,17 @@ pub fn build(b: *std.Build) void {
 
     const common_sources = &.{
         // GUI
+        "src/gui/gui_core.c",
+        "src/gui/gui_input.c",
+        "src/gui/gui_display.c",
+        "src/gui/gui_inventory.c",
+        "src/gui/gui_buttons.c",
+        "src/gui/gui_map.c",
         "src/gui/display.c",
         "src/gui/color.c",
         "src/gui/cmd.c",
         "src/gui/context.c",
+        "src/gui/hover.c",
         "src/gui/input_bind.c",
         "src/gui/hotbar_ui.c",
         "src/gui/spellbook_ui.c",
@@ -52,6 +59,7 @@ pub fn build(b: *std.Build) void {
         "src/gui/loading_ui.c",
         "src/gui/options_ui.c",
         "src/gui/ui_draw.c",
+        "src/gui/panels.c",
 
         // CLIENT
         "src/client/client.c",

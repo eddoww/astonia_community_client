@@ -37,7 +37,7 @@ void mtos(unsigned int mapx, unsigned int mapy, int *scrx, int *scry)
 
 int stom(int scrx, int scry, int *mapx, int *mapy)
 {
-	if (scrx < dotx(DOT_MTL) || scrx >= dotx(DOT_MBR) || scry < doty(DOT_MTL) || scry >= doty(DOT_MBR)) {
+	if (scrx < 0 || scrx >= XRES || scry < 0 || scry >= YRES) { /* world coords are native */
 		return 0;
 	}
 
@@ -77,7 +77,9 @@ map_index_t get_near_ex(int x, int y, unsigned int flags, unsigned int looksize)
 	map_index_t mn, nearest = MAXMN;
 	double dist, nearestdist = 100000000;
 
-	if (!stom(mousex, mousey, &mapx, &mapy)) {
+	/* anchor on the caller's coordinates (canvas space) - reading the
+	 * global mouse here broke callers that pass converted coordinates */
+	if (!stom(x, y, &mapx, &mapy)) {
 		return MAXMN;
 	}
 

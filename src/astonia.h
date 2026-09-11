@@ -53,12 +53,16 @@ extern DLL_EXPORT unsigned int _client_dist;
 #define FDX     40 // width of a map tile
 #define FDY     20 // height of a map tile
 
-#define XRES  800
-#define YRES  (__yres)
-#define YRES0 600 // 4:3 aspect ratio
-#define YRES1 650 // Tall
-#define YRES2 500 // 16:10 aspect ratio
-#define YRES3 450 // 16:9 widescreen aspect ratio
+#define XRES   (__xres)
+#define YRES   (__yres)
+#define UIXRES (__uixres)
+#define UIYRES (__uiyres)
+#define XRES0  800 // minimum / classic width, the width the UI chrome art is drawn for
+#define XRES1  1280 // maximum logical width (fairness cap - see also server view distance)
+#define YRES0  600 // 4:3 aspect ratio
+#define YRES1  650 // Tall
+#define YRES2  500 // 16:10 aspect ratio
+#define YRES3  450 // 16:9 widescreen aspect ratio
 
 #ifndef bzero
 #define bzero(ptr, size) memset(ptr, 0, size)

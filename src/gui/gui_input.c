@@ -6,8 +6,6 @@
  */
 
 #include <inttypes.h>
-#include <time.h>
-#include <ctype.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_stdinc.h>
@@ -15,276 +13,257 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
+#include "gui/panels.h"
+#include "gui/gesture.h"
+#include "gui/ui_tokens.h"
+
+extern int ui_scale_pct; /* sdl_core.c */
+#include "gui/spellbook_ui.h"
+#include "gui/keybind_ui.h"
+#include "gui/keybind_settings_ui.h"
+#include "gui/escape_menu_ui.h"
+#include "gui/options_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
 #include "modder/modder.h"
 
-void gui_sdl_keyproc(SDL_Keycode wparam)
-{
-	int i;
+/* set on right-button-down when the click cancelled target selection, so the
+ * matching button-up doesn't execute the look command on top of the cancel */
+static int rclick_cancelled_targeting;
+static int mm_pan; /* a big-minimap pan gesture is live (either button) */
 
-	if (wparam != SDLK_ESCAPE && wparam != SDLK_F12 && amod_keydown(wparam)) {
+/* set on right-button-down when the click abandoned a live pointer gesture,
+ * so the matching button-up does not execute the look command on top */
+static int rclick_cancelled_gesture;
+
+/* set when a gesture is abandoned (Escape, right-click) while the left
+ * button is still held: the release that eventually comes belongs to the
+ * dead gesture and must not turn into a click on whatever is under it */
+static int lclick_release_pending;
+
+/* The one pointer gesture. Whoever takes the left-button press - a client
+ * button flagged BUTF_CAPTURE, or a mod that consumed the press - owns every
+ * motion event and the matching release, whatever sits under the pointer
+ * then. Positions are absolute: the pointer is never warped or hidden, so a
+ * drag follows the hand 1:1 and can neither drift nor run away, and nothing
+ * under the pointer can eat the release and leave the gesture stuck. */
+static Gesture grab;
+
+int gui_pointer_grabbed(void)
+{
+	return gesture_active(&grab);
+}
+
+/* Is a client overlay that butsel does not track sitting under (x,y)? The
+ * modal windows (options, escape menu, keybinding editors) block the whole
+ * screen while open, the rest are tested by their rectangles. Used before
+ * an event that found no client control is offered to the mod's background
+ * layer (the chat) - those surfaces draw UNDER all of this. */
+int gui_client_overlay_at(int x, int y)
+{
+	if (options_is_open() || escape_menu_is_open() || keybind_settings_is_open() || keybind_panel_is_open()) {
+		return 1;
+	}
+	if ((teleporter && !teleport_override) || show_color) {
+		return 1;
+	}
+	if ((display_help || display_quest) && x >= dotx(DOT_HLP) - UI_WIN_PAD && x <= dotx(DOT_HL2) + UI_WIN_PAD &&
+	    y >= doty(DOT_HLP) - UI_WIN_TITLE_H && y <= doty(DOT_HL2) + UI_WIN_PAD) {
+		return 1;
+	}
+	if (show_tutor && x >= dotx(DOT_TUT) && x <= dotx(DOT_TUT) + 410 && y >= doty(DOT_TUT) &&
+	    y <= doty(DOT_TUT) + 122) {
+		return 1;
+	}
+	if (spellbook_over(x, y) || context_menu_is_open()) {
+		return 1;
+	}
+	if (gui_overlay_visible && panels_frame_over(x, y)) {
+		return 1;
+	}
+	return 0;
+}
+
+/* an event nothing of the client's claimed: may the mod's background layer
+ * have it before it reaches the world? */
+static int background_may_take(void)
+{
+	if (gui_client_overlay_at(mousex, mousey)) {
+		return 0;
+	}
+	if (butsel == -1) {
+		return 1;
+	}
+	/* the hit test tags a mod background surface as BUT_PANEL_BODY so the
+	 * world under it is never targeted - that tag must not also keep the
+	 * event from the surface itself (v1.8.0 shipped exactly that: the chat
+	 * could neither be dragged, minimized nor scrolled) */
+	return butsel == BUT_PANEL_BODY && !panels_frame_over(mousex, mousey) && amod_mouse_over_background(mousex, mousey);
+}
+
+/* a client-button gesture starts: the button keeps the pointer */
+static void gesture_take_button(int b)
+{
+	gesture_begin(&grab, GESTURE_BUTTON, b, mousex, mousey);
+	capbut = b;
+	mousedx = mousedy = 0;
+	/* motion and the release keep flowing while the pointer is outside the
+	 * window: SDL auto-captures the mouse for as long as a button is held -
+	 * nothing is warped, nothing is hidden, nothing is grabbed by hand */
+	amod_mouse_capture(1);
+	if (b >= BUT_DRAG_BEG && b <= BUT_DRAG_END) {
+		panels_drag_begin(b - BUT_DRAG_BEG, mousex, mousey);
+	} else if (b >= BUT_PSIZE_BEG && b <= BUT_PSIZE_END) {
+		panels_resize_begin(b - BUT_PSIZE_BEG, mousex, mousey);
+	}
+}
+
+/* the gesture is over: released (cancel=0) or abandoned (cancel=1 - the
+ * panel goes back to where it was at the press) */
+static void gesture_drop_button(int cancel)
+{
+	int b = grab.but;
+
+	gesture_end(&grab);
+	capbut = -1;
+	mousedx = mousedy = 0;
+	amod_mouse_capture(0);
+	if (cancel && vk_lbut) {
+		lclick_release_pending = 1;
+	}
+	if (b >= BUT_DRAG_BEG && b <= BUT_DRAG_END) {
+		if (cancel) {
+			panels_drag_cancel();
+		}
+		panels_drag_end(); /* persists the moved layout */
+	} else if (b >= BUT_PSIZE_BEG && b <= BUT_PSIZE_END) {
+		if (cancel) {
+			panels_resize_cancel();
+		}
+		panels_resize_end();
+	}
+}
+
+void gui_sdl_keyproc(SDL_Keycode key, SDL_Keymod mod)
+{
+	/* modifier state at the time the key event was generated — the live
+	 * SDL_GetModState() may already reflect a later release when a quick
+	 * modifier+key tap was fully pumped before this dispatch runs */
+	Uint8 mods = input_mods_from_sdl(mod);
+
+	/* Escape abandons a live panel drag/resize: the window returns to where
+	 * it was at the press and nothing else happens on this keystroke */
+	if (key == SDLK_ESCAPE && grab.kind == GESTURE_BUTTON) {
+		gesture_drop_button(1);
 		return;
 	}
 
-	switch (wparam) {
-	case SDLK_ESCAPE:
-		cmd_stop();
-		context_stop();
-		show_look = 0;
-		display_gfx = 0;
-		teleporter = 0;
-		show_tutor = 0;
-		display_help = 0;
-		display_quest = 0;
-		show_color = 0;
-		context_key_reset();
-		action_ovr = ACTION_NONE;
-		minimap_hide();
-		if (context_key_enabled()) {
-			cmd_reset();
+	if (keybind_settings_capturing()) {
+		if (key == SDLK_ESCAPE) {
+			keybind_settings_cancel_capture();
+			return;
 		}
-		context_key_set(0);
-		return;
-	case SDLK_F1:
-		if (fkeyitem[0]) {
-			exec_cmd(CMD_USE_FKEYITEM, 0);
+		if (key == SDLK_LSHIFT || key == SDLK_RSHIFT || key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LALT ||
+		    key == SDLK_RALT) {
+			return;
 		}
+		keybind_settings_accept_key(key, mods);
+		sdl_flush_textinput();
 		return;
-	case SDLK_F2:
-		if (fkeyitem[1]) {
-			exec_cmd(CMD_USE_FKEYITEM, 1);
-		}
-		return;
-	case SDLK_F3:
-		if (fkeyitem[2]) {
-			exec_cmd(CMD_USE_FKEYITEM, 2);
-		}
-		return;
-	case SDLK_F4:
-		if (fkeyitem[3]) {
-			exec_cmd(CMD_USE_FKEYITEM, 3);
-		}
-		return;
+	}
 
-	case SDLK_F5:
-		cmd_speed(1);
+	/* keybind panel key capture — intercept before anything else.
+	 * ignore modifier-only keys so Shift+E doesn't bind to "Shift". */
+	if (keybind_panel_capturing()) {
+		if (key == SDLK_ESCAPE) {
+			keybind_panel_cancel_capture();
+			return;
+		}
+		if (key == SDLK_LSHIFT || key == SDLK_RSHIFT || key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LALT ||
+		    key == SDLK_RALT) {
+			return; /* wait for a real key */
+		}
+		keybind_panel_accept_key(key, mods);
+		sdl_flush_textinput();
 		return;
-	case SDLK_F6:
-		cmd_speed(0);
-		return;
-	case SDLK_F7:
-		cmd_speed(2);
-		return;
+	}
 
-	case SDLK_F8:
-		nocut ^= 1;
-		return;
-
-	case SDLK_F9:
-		if (display_quest) {
-			display_quest = 0;
-		} else {
-			display_help = 0;
-			display_quest = 1;
+	/* While a loading screen is up the game GUI is not there yet: no mod
+	 * keys, no bindings, no chat. Escape still works so the player can
+	 * reach the menu (options, exit game). */
+	if (gui_is_loading()) {
+		if (key == SDLK_ESCAPE) {
+			if (keybind_settings_is_open()) {
+				keybind_settings_close();
+			} else if (options_is_open()) {
+				options_close();
+			} else {
+				escape_menu_toggle();
+			}
 		}
 		return;
+	}
 
-	case SDLK_F10:
-		display_vc ^= 1;
-		list_mem();
-		render_list_text();
+	/* let mods intercept first (except ESC and F12 which are non-rebindable) */
+	if (key != SDLK_ESCAPE && key != SDLK_F12 && amod_keydown(key)) {
 		return;
+	}
 
-	case SDLK_F11:
-		if (display_help) {
-			display_help = 0;
-		} else {
-			display_quest = 0;
-			display_help = 1;
-		}
-		return;
-	case SDLK_F12:
-		quit = 1;
-		return;
-
-	case SDLK_RETURN:
-	case SDLK_KP_ENTER:
-		cmd_proc(CMD_RETURN);
-		return;
-	case SDLK_DELETE:
-		cmd_proc(CMD_DELETE);
-		return;
-	case SDLK_BACKSPACE:
-		cmd_proc(CMD_BACK);
-		return;
+	/* movement keys. The classic command line is gone (the tabbed chat
+	 * window owns chat), so no key routes to it anymore - Return, Tab and
+	 * the editing keys fall through to the binding system instead. */
+	switch (key) {
 	case SDLK_LEFT:
-		cmd_proc(CMD_LEFT);
+		keyboard_move_press(KMOVE_LEFT);
 		return;
 	case SDLK_RIGHT:
-		cmd_proc(CMD_RIGHT);
-		return;
-	case SDLK_HOME:
-		cmd_proc(CMD_HOME);
-		return;
-	case SDLK_END:
-		cmd_proc(CMD_END);
+		keyboard_move_press(KMOVE_RIGHT);
 		return;
 	case SDLK_UP:
-		cmd_proc(CMD_UP);
+		keyboard_move_press(KMOVE_UP);
 		return;
 	case SDLK_DOWN:
-		cmd_proc(CMD_DOWN);
+		keyboard_move_press(KMOVE_DOWN);
 		return;
-	case SDLK_TAB:
-		cmd_proc(9);
-		return;
+	default:
+		break;
+	}
 
-	case SDLK_KP_0:
-		wparam = '0';
-		goto spellbindkey;
-	case SDLK_KP_1:
-		wparam = '1';
-		goto spellbindkey;
-	case SDLK_KP_2:
-		wparam = '2';
-		goto spellbindkey;
-	case SDLK_KP_3:
-		wparam = '3';
-		goto spellbindkey;
-	case SDLK_KP_4:
-		wparam = '4';
-		goto spellbindkey;
-	case SDLK_KP_5:
-		wparam = '5';
-		goto spellbindkey;
-	case SDLK_KP_6:
-		wparam = '6';
-		goto spellbindkey;
-	case SDLK_KP_7:
-		wparam = '7';
-		goto spellbindkey;
-	case SDLK_KP_8:
-		wparam = '8';
-		goto spellbindkey;
-	case SDLK_KP_9:
-		wparam = '9';
-		goto spellbindkey;
-
-	case 'm':
-		if (vk_shift && vk_control && !context_key_enabled()) {
-			minimap_toggle();
-		} else {
-			goto spellbindkey;
-		}
-		return;
-
-	case '0':
-	case '1':
-	case '2':
-	case '3':
-	case '4':
-	case '5':
-	case '6':
-	case '7':
-	case '8':
-	case '9':
-	case 'a':
-	case 'b':
-	case 'c':
-	case 'd':
-	case 'e':
-	case 'f':
-	case 'g':
-	case 'h':
-	case 'i':
-	case 'j':
-	case 'k':
-	case 'l':
-	case 'n':
-	case 'o':
-	case 'p':
-	case 'q':
-	case 'r':
-	case 's':
-	case 't':
-	case 'u':
-	case 'v':
-	case 'w':
-	case 'x':
-	case 'y':
-	case 'z':
-	spellbindkey:
-		if (!vk_item && !vk_char && !vk_spell) {
-			context_keydown(wparam);
+	/* check hotbar extra binds first (modifier combos take priority) */
+	{
+		int hb_slot = hotbar_find_extra_bind(key, mods);
+		if (hb_slot >= 0) {
+			hotbar_activate_extra(hb_slot, key, mods);
+			sdl_flush_textinput();
 			return;
 		}
+	}
 
-		// This rules out numbers, we already got here so a-z garaunteed.
-		// toupper for unsigned (aka SDL_Keycode)
-		if (wparam >= 97) {
-			wparam -= 32;
-		}
+	/* try the unified binding system */
+	InputBinding *b = input_find(key, mods);
+	if (b) {
+		input_execute(b);
+		sdl_flush_textinput();
+		return;
+	}
 
-		for (i = 0; i < max_keytab; i++) {
-			if (keytab[i].keycode != wparam && keytab[i].userdef != wparam) {
-				continue;
-			}
-
-			if ((keytab[i].vk_item && !vk_item) || (!keytab[i].vk_item && vk_item)) {
-				continue;
-			}
-			if ((keytab[i].vk_char && !vk_char) || (!keytab[i].vk_char && vk_char)) {
-				continue;
-			}
-			if ((keytab[i].vk_spell && !vk_spell) || (!keytab[i].vk_spell && vk_spell)) {
-				continue;
-			}
-
-			if (keytab[i].cl_spell) {
-				if (keytab[i].tgt == TGT_MAP) {
-					exec_cmd(CMD_MAP_CAST_K, keytab[i].cl_spell);
-				} else if (keytab[i].tgt == TGT_CHR) {
-					exec_cmd(CMD_CHR_CAST_K, keytab[i].cl_spell);
-				} else if (keytab[i].tgt == TGT_SLF) {
-					exec_cmd(CMD_SLF_CAST_K, keytab[i].cl_spell);
-				} else {
-					return; // hu ?
-				}
-				keytab[i].usetime = now;
-				return;
-			}
+	/* Shift+hotbar key → quick-cast: strip Shift and retry.
+	 * Only triggers when Shift is the sole modifier and the underlying
+	 * binding is a hotbar slot — other bindings are not affected. */
+	if ((mods & INPUT_MOD_SHIFT) && !(mods & ~INPUT_MOD_SHIFT)) {
+		b = input_find(key, INPUT_MOD_NONE);
+		if (b && b->category == INPUT_CAT_HOTBAR) {
+			hotbar_activate_with_mode(b->param, CAST_QUICK);
+			sdl_flush_textinput();
 			return;
 		}
-		return;
+	}
 
-	case SDLK_PAGEUP:
-		render_text_pageup();
-		break;
-	case SDLK_PAGEDOWN:
-		render_text_pagedown();
-		break;
-
-	case '+':
-	case '=':
-		if (!context_key_isset()) {
-			context_action_enable(1);
-		}
-		break;
-	case '-':
-		if (!context_key_isset()) {
-			context_action_enable(0);
-		}
-		break;
-
-		// case '<':               render_sceweup(); break;
-
-	case SDLK_INSERT:
-		if (vk_shift && !vk_control && !vk_alt) {
-			gui_insert();
-		}
-		break;
+	/* no modifiers held: letter/number keys go to the action bar context system */
+	if (!vk_item && !vk_char && !vk_spell) {
+		context_keydown(key);
 	}
 }
 
@@ -301,44 +280,91 @@ void gui_sdl_mouseproc(float x, float y, int what)
 
 	switch (what) {
 	case SDL_MOUM_NONE:
-		mousex = local_x;
-		mousey = local_y;
+		mousex = local_x / sdl_scale - render_offset_x();
+		mousey = local_y / sdl_scale - render_offset_y();
+		/* GUI coordinates live on the UI layer. Derive from the actual
+		 * canvas/layer ratio - the exact inverse of the composite - so the
+		 * pointer can never disagree with where the layer really draws. */
+		mousex = mousex * UIXRES / XRES;
+		mousey = mousey * UIYRES / YRES;
 
-		if (capbut != -1) {
-			if (mousex != XRES / 2 || mousey != YRES / 2) {
-				mousedx += (mousex - (XRES / 2)) / sdl_scale;
-				mousedy += (mousey - (YRES / 2)) / sdl_scale;
-				sdl_set_cursor_pos(XRES / 2, YRES / 2);
+		if (gui_is_loading()) {
+			break; /* hover only feeds the menu overlays while loading */
+		}
+
+		if (grab.kind == GESTURE_BUTTON) {
+			int dx, dy;
+
+			/* the captured button follows the pointer: absolute positions
+			 * for the panel gestures, plain deltas for the legacy thumbs */
+			gesture_motion(&grab, mousex, mousey, &dx, &dy);
+			mousedx += dx;
+			mousedy += dy;
+			if (but[capbut].flags & BUTF_MOVEEXEC) {
+				exec_cmd(lcmd, 0);
 			}
+			amod_mouse_move(mousex, mousey); /* hover only - the release is ours */
+			break;
 		}
 
-		mousex /= sdl_scale;
-		mousey /= sdl_scale;
-		mousex -= render_offset_x();
-		mousey -= render_offset_y();
-
-		if (butsel != -1 && vk_lbut && (but[butsel].flags & BUTF_MOVEEXEC)) {
-			exec_cmd(lcmd, 0);
+		if (mm_pan) {
+			minimap_pan_update(mousex, mousey);
 		}
-
 		amod_mouse_move(mousex, mousey);
 		break;
 
 	case SDL_MOUM_LDOWN:
 		vk_lbut = 1;
 
+		if (gui_is_loading()) {
+			break; /* clicks are handled on release while loading */
+		}
+
+		if (grab.kind != GESTURE_NONE) {
+			break; /* a press while a gesture is live: nothing new starts */
+		}
+		lclick_release_pending = 0; /* a fresh press: its release counts again */
+
 		if (amod_mouse_click(mousex, mousey, what)) {
+			/* the mod owns this press: it gets every motion and the
+			 * release, and the client never acts on that release itself */
+			gesture_begin(&grab, GESTURE_MOD, -1, mousex, mousey);
 			break;
 		}
 
-		if (butsel != -1 && capbut == -1 && (but[butsel].flags & BUTF_CAPTURE)) {
-			amod_mouse_capture(1);
-			SDL_HideCursor();
-			sdl_capture_mouse(1);
-			mousedx = 0;
-			mousedy = 0;
-			sdl_set_cursor_pos(XRES / 2, YRES / 2);
-			capbut = butsel;
+		/* a press on a spellbook cell picks the spell up right away, so a
+		 * press-drag-release onto the hotbar works like any other drag */
+		if (spellbook_mousedown(mousex, mousey)) {
+			break;
+		}
+
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			hotbar_mousedown(butsel - BUT_HOTBAR_BEG);
+		}
+
+		if (butsel != -1 && (but[butsel].flags & BUTF_CAPTURE)) {
+			gesture_take_button(butsel);
+			break;
+		}
+
+		/* a locked minimap cannot be moved, so a drag on its big map pans
+		 * the view instead; the recenter glyph takes a plain click */
+		if (butsel == BUT_PANEL_BODY && panel_locked(PANEL_MINIMAP)) {
+			if (minimap_recenter_hit(mousex, mousey)) {
+				minimap_recenter();
+				break;
+			}
+			if (minimap_pan_begin(mousex, mousey)) {
+				mm_pan = 1;
+				break;
+			}
+		}
+
+		/* nothing of the client's under the pointer: the mod's background
+		 * layer (the chat) gets the press before it would reach the world */
+		if (background_may_take() && amod_mouse_click_background(mousex, mousey, what)) {
+			gesture_begin(&grab, GESTURE_MOD, -1, mousex, mousey);
+			break;
 		}
 		break;
 
@@ -361,6 +387,75 @@ void gui_sdl_mouseproc(float x, float y, int what)
 	case SDL_MOUM_LUP:
 		vk_lbut = 0;
 
+		if (mm_pan) {
+			mm_pan = 0;
+			minimap_pan_end();
+			break;
+		}
+
+		if (grab.kind == GESTURE_BUTTON) {
+			/* a press on the minimap that never moved is a click: flip it
+			 * between the small circle and the big map - or, on the
+			 * recenter glyph, bring the panned view back to the player */
+			int minimap_click = (grab.but == BUT_DRAG_BEG + PANEL_MINIMAP) && !panels_drag_moved();
+
+			/* the client owns this gesture: finish it before anyone else
+			 * sees the release - a mod window under the pointer used to
+			 * eat it and leave the drag (and a hidden cursor) stuck */
+			if (!(but[capbut].flags & BUTF_MOVEEXEC)) {
+				exec_cmd(lcmd, 0); /* the purse: the split is taken on release */
+			}
+			gesture_drop_button(0);
+			if (minimap_click) {
+				if (minimap_recenter_hit(mousex, mousey)) {
+					minimap_recenter();
+				} else {
+					minimap_toggle_size();
+				}
+			}
+			break;
+		}
+		if (grab.kind == GESTURE_MOD) {
+			/* the mod that took the press gets its release, always */
+			amod_mouse_click(mousex, mousey, what);
+			gesture_end(&grab);
+			break;
+		}
+		if (lclick_release_pending) {
+			/* the tail of an abandoned gesture: not a click on anything */
+			lclick_release_pending = 0;
+			break;
+		}
+
+		/* a slot picked up from the hotbar is the client's gesture too: it
+		 * ends on this release wherever the pointer is - moved onto another
+		 * slot, or put back - before a window under the pointer can eat the
+		 * release and leave the icon stuck on the cursor */
+		if (hotbar_is_dragging()) {
+			if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+				hotbar_click(butsel - BUT_HOTBAR_BEG);
+			} else {
+				hotbar_cancel_drag();
+			}
+			break;
+		}
+		hotbar_cancel_drag(); /* a press that never became a drag: forget it */
+
+		/* loading screen: only the escape menu and its windows are live */
+		if (gui_is_loading()) {
+			if (options_is_open()) {
+				/* clicks outside are swallowed, not a close - see below */
+				options_click(mousex, mousey);
+			} else if (escape_menu_is_open()) {
+				if (!escape_menu_click(mousex, mousey)) {
+					escape_menu_close();
+				}
+			} else if (keybind_settings_is_open()) {
+				keybind_settings_click(mousex, mousey);
+			}
+			break;
+		}
+
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
@@ -368,36 +463,147 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
-		if (capbut != -1) {
-			sdl_set_cursor_pos(
-			    (but[capbut].x + render_offset_x()) * sdl_scale, (but[capbut].y + render_offset_y()) * sdl_scale);
-			sdl_capture_mouse(0);
-			SDL_ShowCursor();
-			amod_mouse_capture(0);
-			if (!(but[capbut].flags & BUTF_MOVEEXEC)) {
-				exec_cmd(lcmd, 0);
+		/* Options and Keybindings swallow outside clicks instead of closing:
+		 * clicking the chat to answer someone used to dismiss the window and
+		 * lose the player's place. ESC and the X button close them; the
+		 * escape MENU below stays click-away-dismissable like any popup. */
+		if (options_is_open()) {
+			options_click(mousex, mousey);
+			break;
+		}
+
+		if (escape_menu_is_open()) {
+			if (escape_menu_click(mousex, mousey)) {
+				break;
 			}
-			capbut = -1;
+			escape_menu_close();
+			break;
+		}
+
+		if (keybind_settings_is_open()) {
+			keybind_settings_click(mousex, mousey);
+			break;
+		}
+
+		/* keybind panel — consume clicks inside, close on click outside */
+		if (keybind_panel_is_open()) {
+			if (keybind_panel_click(mousex, mousey)) {
+				break;
+			}
+			keybind_panel_close();
+		}
+
+		/* tutorial popup close button */
+		if (tutor_click(mousex, mousey)) {
+			break;
+		}
+
+		/* spellbook toggle button */
+
+		/* hotbar: assign (drop from the spell book / inventory) or activate
+		 * (click) - slot-to-slot drags were settled above */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			if (hotbar_click(butsel - BUT_HOTBAR_BEG)) {
+				break;
+			}
+		}
+
+		/* spellbook panel clicks (pick up spell, or cancel drag) */
+		if (spellbook_click(mousex, mousey)) {
+			break;
+		}
+
+		/* nothing of the client's took the click: the mod's background
+		 * layer (the chat) sees it before it becomes a walk or a look */
+		if (background_may_take() && amod_mouse_click_background(mousex, mousey, what)) {
+			break;
+		}
+
+		if ((tmp = context_key_click()) != CMD_NONE) {
+			exec_cmd(tmp, 0);
 		} else {
-			if ((tmp = context_key_click()) != CMD_NONE) {
-				exec_cmd(tmp, 0);
-			} else {
-				exec_cmd(lcmd, 0);
-			}
+			exec_cmd(lcmd, 0);
 		}
 		break;
 
 	case SDL_MOUM_RDOWN:
 		vk_rbut = 1;
+		if (gui_is_loading()) {
+			break;
+		}
+		if (grab.kind == GESTURE_BUTTON) {
+			/* right-click abandons a panel drag/resize; the release that
+			 * follows must not turn into a look command */
+			gesture_drop_button(1);
+			rclick_cancelled_gesture = 1;
+			break;
+		}
 		if (amod_mouse_click(mousex, mousey, what)) {
 			break;
 		}
+		/* right-drag on the big minimap pans it (any lock state) */
+		if (minimap_pan_begin(mousex, mousey)) {
+			mm_pan = 1;
+			break;
+		}
+		/* right-click during target selection only cancels the cast - it
+		 * must not fall through to the look command, which popped the
+		 * character description window over the cancel */
+		if (context_targeting_active()) {
+			context_key_reset();
+			action_ovr = ACTION_NONE;
+			rclick_cancelled_targeting = 1;
+			hotbar_cancel_held();
+			hotbar_cancel_drag();
+			context_stop();
+			break;
+		}
+		if (background_may_take() && amod_mouse_click_background(mousex, mousey, what)) {
+			break;
+		}
+		hotbar_cancel_held();
+		hotbar_cancel_drag();
 		context_stop();
 		break;
 
 	case SDL_MOUM_RUP:
 		vk_rbut = 0;
+		if (gui_is_loading()) {
+			break;
+		}
+		if (mm_pan) {
+			mm_pan = 0;
+			minimap_pan_end();
+			break;
+		}
+		/* swallow the release of a right-click that cancelled targeting or
+		 * abandoned a gesture */
+		if (rclick_cancelled_targeting || rclick_cancelled_gesture) {
+			rclick_cancelled_targeting = 0;
+			rclick_cancelled_gesture = 0;
+			break;
+		}
 		if (amod_mouse_click(mousex, mousey, what)) {
+			break;
+		}
+		/* right-click cancels spellbook drag */
+		if (spellbook_rclick(mousex, mousey)) {
+			break;
+		}
+		/* keybind panel right-click (cycle backward on cast/target) */
+		if (keybind_panel_is_open()) {
+			if (keybind_panel_rclick(mousex, mousey)) {
+				break;
+			}
+			keybind_panel_close();
+			break;
+		}
+		/* right-click hotbar slot opens keybind config panel */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			keybind_panel_open(butsel - BUT_HOTBAR_BEG);
+			break;
+		}
+		if (background_may_take() && amod_mouse_click_background(mousex, mousey, what)) {
 			break;
 		}
 		if (rcmd == CMD_MAP_LOOK && context_open(mousex, mousey)) {
@@ -410,33 +616,70 @@ void gui_sdl_mouseproc(float x, float y, int what)
 	case SDL_MOUM_WHEEL:
 		delta = local_y;
 
+		if (keybind_settings_is_open()) {
+			keybind_settings_scroll(delta > 0 ? -1 : 1);
+			break;
+		}
+
+		if (options_is_open()) {
+			options_scroll(delta > 0 ? -1 : 1);
+			break;
+		}
+
+		if (gui_is_loading()) {
+			break;
+		}
+
 		if (amod_mouse_click(0, delta, what)) {
 			break;
 		}
 
-		if (mousex >= dotx(DOT_SKL) && mousex < dotx(DOT_SK2) && mousey >= doty(DOT_SKL) &&
-		    mousey < doty(DOT_SK2)) { // skill / depot / merchant
+		/* big-map zoom - the big map draws on top of the side panels
+		 * (display_minimap runs after them), so it gets the wheel first */
+		if (minimap_wheel_zoom(mousex, mousey, delta)) {
+			break;
+		}
+
+		/* the help / quest-log window pages with the wheel */
+		if ((display_help || display_quest) && mousex >= dotx(DOT_HLP) && mousex <= dotx(DOT_HL2) &&
+		    mousey >= doty(DOT_HLP) && mousey <= doty(DOT_HL2)) {
+			exec_cmd(delta > 0 ? CMD_HELP_PREV : CMD_HELP_NEXT, 0);
+			break;
+		}
+
+		/* scroll wherever the pointer is inside the window, not just over
+		 * the text column - the rails and the first item column used to be
+		 * dead zones */
+		int wx1, wy1, wx2, wy2;
+
+		if (panel_content_shown(PANEL_SKILLS) && panel_content_rect(PANEL_SKILLS, &wx1, &wy1, &wx2, &wy2) &&
+		    mousex >= wx1 && mousex <= wx2 && mousey >= wy1 && mousey <= wy2) { // skill list
 			while (delta > 0) {
-				if (!con_cnt) {
-					set_skloff(0, skloff - 1);
-				} else {
-					set_conoff(0, conoff - 1);
-				}
+				set_skloff(0, skloff - 1);
 				delta--;
 			}
 			while (delta < 0) {
-				if (!con_cnt) {
-					set_skloff(0, skloff + 1);
-				} else {
-					set_conoff(0, conoff + 1);
-				}
+				set_skloff(0, skloff + 1);
 				delta++;
 			}
 			break;
 		}
 
-		if (mousex >= dotx(DOT_TXT) && mousex < dotx(DOT_TX2) && mousey >= doty(DOT_TXT) &&
-		    mousey < doty(DOT_TX2)) { // chat
+		if (panel_content_shown(PANEL_CONTAINER) && panel_content_rect(PANEL_CONTAINER, &wx1, &wy1, &wx2, &wy2) &&
+		    mousex >= wx1 && mousex <= wx2 && mousey >= wy1 && mousey <= wy2) { // depot / merchant / grave
+			while (delta > 0) {
+				set_conoff(0, conoff - 1);
+				delta--;
+			}
+			while (delta < 0) {
+				set_conoff(0, conoff + 1);
+				delta++;
+			}
+			break;
+		}
+
+		if (panel_content_shown(PANEL_CHAT) && mousex >= dotx(DOT_TXT) && mousex < dotx(DOT_TX2) &&
+		    mousey >= doty(DOT_TXT) && mousey < doty(DOT_TX2)) { // chat
 			while (delta > 0) {
 				render_text_lineup();
 				render_text_lineup();
@@ -452,8 +695,8 @@ void gui_sdl_mouseproc(float x, float y, int what)
 			break;
 		}
 
-		if (mousex >= dotx(DOT_IN1) && mousex < dotx(DOT_IN2) && mousey >= doty(DOT_IN1) &&
-		    mousey < doty(DOT_IN2)) { // inventory
+		if (panel_content_shown(PANEL_INVENTORY) && panel_content_rect(PANEL_INVENTORY, &wx1, &wy1, &wx2, &wy2) &&
+		    mousex >= wx1 && mousex <= wx2 && mousey >= wy1 && mousey <= wy2) { // inventory
 			while (delta > 0) {
 				set_invoff(0, invoff - 1);
 				delta--;
@@ -462,6 +705,11 @@ void gui_sdl_mouseproc(float x, float y, int what)
 				set_invoff(0, invoff + 1);
 				delta++;
 			}
+			break;
+		}
+
+		/* the mod's background layer (the chat scrolls with the wheel) */
+		if (background_may_take() && amod_mouse_click_background(0, delta, what)) {
 			break;
 		}
 
@@ -521,5 +769,57 @@ void gui_sdl_mouseproc(float x, float y, int what)
 		}
 		mdown = 1;
 		break;
+
+	case SDL_MOUM_X1DOWN:
+	case SDL_MOUM_X2DOWN: {
+		SDL_Keycode vk = (what == SDL_MOUM_X1DOWN) ? INPUT_MOUSE_X1 : INPUT_MOUSE_X2;
+
+		if (gui_is_loading()) {
+			break;
+		}
+
+		if (keybind_panel_capturing()) {
+			keybind_panel_accept_key(vk, input_current_modifiers());
+			break;
+		}
+
+		Uint8 mods = input_current_modifiers();
+
+		int hb_slot = hotbar_find_extra_bind(vk, mods);
+		if (hb_slot >= 0) {
+			hotbar_activate_extra(hb_slot, vk, mods);
+			break;
+		}
+
+		InputBinding *b = input_find(vk, mods);
+		if (b) {
+			input_execute(b);
+		}
+		break;
+	}
+
+	case SDL_MOUM_X1UP:
+	case SDL_MOUM_X2UP: {
+		SDL_Keycode vk = (what == SDL_MOUM_X1UP) ? INPUT_MOUSE_X1 : INPUT_MOUSE_X2;
+		input_keyup(vk);
+		break;
+	}
+	}
+}
+
+/* Called with the left-button state every motion event carries, and with 0
+ * when the window loses focus. If the OS says the button is up but no
+ * release ever reached us (focus change, dropped event, a compositor that
+ * swallowed it), the gesture is finished where the pointer is rather than
+ * left running until the next click. */
+void gui_sdl_mouse_sync(int lbutton_down)
+{
+	if (lbutton_down) {
+		return;
+	}
+	if (grab.kind != GESTURE_NONE) {
+		gui_sdl_mouseproc(0, 0, SDL_MOUM_LUP);
+	} else {
+		vk_lbut = 0;
 	}
 }

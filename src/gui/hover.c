@@ -17,6 +17,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/panels.h"
 #include "game/game.h"
 #include "game/game_private.h"
 #include "client/client.h"
@@ -28,8 +29,8 @@ DLL_EXPORT char hover_freeze_text[120];
 DLL_EXPORT char hover_heal_text[120];
 DLL_EXPORT char hover_potion_text[120];
 DLL_EXPORT char hover_rage_text[120];
-DLL_EXPORT char hover_level_text[120];
-DLL_EXPORT char hover_rank_text[120];
+DLL_EXPORT char hover_level_text[200];
+DLL_EXPORT char hover_rank_text[200];
 DLL_EXPORT char hover_time_text[120];
 
 static int display_hover(void);
@@ -42,62 +43,74 @@ void display_mouseover(void)
 
 	amod_update_hover_texts();
 
-	if (mousex < 0 || mousex >= XRES || mousey < 0 || mousey >= YRES || !sdl_has_focus()) {
+	if (mousex < 0 || mousex >= UIXRES || mousey < 0 || mousey >= UIYRES || !sdl_has_focus()) {
 		return;
 	}
 
-	if (mousey >= doty(DOT_SSP) && mousey <= doty(DOT_SSP) + 53) {
-		if (mousex >= dotx(DOT_SSP) + 28 && mousex <= dotx(DOT_SSP) + 35) {
-			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-			    hover_rage_text);
+	/* a mod window/bar covers the pointer: none of the coordinate-based hover texts
+	 * (spell status, level/rank, time, minimap, item descriptions) may pop through */
+	if (amod_mouse_over(mousex, mousey)) {
+		SDL_ShowCursor();
+		return;
+	}
+
+	/* buff chips: potion, heal/freeze, bless, rage - left to right */
+	if (panel_content_shown(PANEL_BUFFS) && mousey >= doty(DOT_SSP) && mousey <= doty(DOT_SSP) + BUFF_CHIP) {
+		const char *chip[BUFF_COUNT] = {
+		    hover_potion_text, (sv_ver == 35) ? hover_heal_text : hover_freeze_text, hover_bless_text, hover_rage_text};
+		int i = (mousex - dotx(DOT_SSP)) / (BUFF_CHIP + BUFF_GAP);
+		int within = (mousex - dotx(DOT_SSP)) % (BUFF_CHIP + BUFF_GAP);
+
+		if (mousex >= dotx(DOT_SSP) && i >= 0 && i < BUFF_COUNT && within < BUFF_CHIP) {
+			render_text_nl(
+			    mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, chip[i]);
 		}
-		if (mousex >= dotx(DOT_SSP) + 18 && mousex <= dotx(DOT_SSP) + 25) {
-			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-			    hover_bless_text);
-		}
-		if (mousex >= dotx(DOT_SSP) + 8 && mousex <= dotx(DOT_SSP) + 15) {
-			if (sv_ver == 35) {
-				render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-				    hover_heal_text);
-			} else {
-				render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-				    hover_freeze_text);
+	}
+
+	/* equipment window: the "Bonuses" column rows */
+	if (panel_content_shown(PANEL_EQUIPMENT)) {
+		display_wear_bonus_hover(mousex, mousey);
+	}
+
+	/* status panel rows: level details over the top bar, rank over the
+	 * military bar */
+	{
+		int sx1, sy1, sx2, sy2;
+
+		if (panel_content_shown(PANEL_STATUS) && panel_content_rect(PANEL_STATUS, &sx1, &sy1, &sx2, &sy2) &&
+		    mousex >= sx1 && mousex <= sx2) {
+			/* the bars sit at the screen bottom: tooltips go above them */
+			if (mousey >= sy1 && mousey <= sy1 + stat_bar_h()) {
+				render_text_nl(
+				    mousex - 20, mousey - 44, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_level_text);
+			}
+			if (mousey >= sy1 + stat_row_h() && mousey <= sy1 + stat_row_h() + stat_bar_h()) {
+				render_text_nl(mousex - 20, mousey - 34, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_rank_text);
 			}
 		}
-		if (mousex >= dotx(DOT_SSP) - 2 && mousex <= dotx(DOT_SSP) + 5) {
-			render_text_nl(mousex, mousey - 16, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER,
-			    hover_potion_text);
-		}
 	}
 
-	if (mousex >= dotx(DOT_BOT) + 25 && mousex <= dotx(DOT_BOT) + 135) {
-		if (mousey >= doty(DOT_TOP) + 5 && mousey <= doty(DOT_TOP) + 13) {
-			render_text_nl(mousex + 16, mousey - 4, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_level_text);
-		}
-		if (mousey >= doty(DOT_TOP) + 22 && mousey <= doty(DOT_TOP) + 30) {
-			render_text_nl(mousex + 16, mousey - 4, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED, hover_rank_text);
-		}
-	}
-
-	if (mousex >= dotx(DOT_TOP) + 728 && mousex <= dotx(DOT_TOP) + 772 && mousey >= doty(DOT_TOP) + 7 &&
-	    mousey <= doty(DOT_TOP) + 17) {
-		render_text_nl(
-		    mousex - 16, mousey - 4, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_TEXT_RIGHT, hover_time_text);
+	if (panel_content_shown(PANEL_CLOCK) && mousex >= dotx(DOT_CLK) && mousex <= dotx(DOT_CLK) + CLK_W &&
+	    mousey >= doty(DOT_CLK) && mousey <= doty(DOT_CLK) + CLK_H) {
+		render_text_nl(mousex - 16, mousey + 18, 0xffff, RENDER_TEXT_BIG | RENDER_TEXT_FRAMED | RENDER_TEXT_RIGHT,
+		    hover_time_text);
 	}
 
 	display_hover_update();
 	hide = display_hover();
 	display_hover_skill();
+	/* the pointer stays visible through drags and resizes: a gesture
+	 * follows the real cursor now, nothing warps or hides it */
 	if (hide) {
 		SDL_HideCursor();
-	} else if (capbut == -1) {
+	} else {
 		SDL_ShowCursor();
 	}
 	minimap_display_hover(mousex, mousey);
 }
 
 #define MAXVALID (TICKS * 60 * 2)
-#define MAXDESC  20
+#define MAXDESC  40
 
 struct hover_item {
 	uint32_t valid_till;
@@ -178,6 +191,9 @@ int hover_capture_text(char *line)
 	}
 
 	if (capture) {
+		if (last_line >= MAXDESC) {
+			return capture; /* too many lines, skip */
+		}
 		int len = textlength(line);
 		hi[last_invsel].valid_till = tick + MAXVALID;
 		hi[last_invsel].desc[last_line++] = xstrdup(line, MEM_TEMP11);
@@ -228,6 +244,123 @@ void hover_invalidate_con(int slot)
 	hi[slot + _inventorysize].valid_till = 0;
 }
 
+/* Ask the server for look data on an inventory slot so hover_get_item_name()
+ * can answer on a later frame. Shares the request throttle with the tooltip
+ * path; safe to call every frame. */
+void hover_request_item_info(int inv_slot)
+{
+	if (inv_slot < 0 || inv_slot >= _inventorysize || !item[inv_slot]) {
+		return;
+	}
+	if (hi[inv_slot].valid_till >= tick) {
+		return; /* cache is warm */
+	}
+	if (last_look) {
+		return; /* a request is already in flight */
+	}
+	cmd_look_inv(inv_slot);
+	last_line = 0;
+	last_look = 20;
+	last_invsel = inv_slot;
+	for (int i = 0; i < MAXDESC; i++) {
+		if (hi[inv_slot].desc[i]) {
+			xfree(hi[inv_slot].desc[i]);
+			hi[inv_slot].desc[i] = NULL;
+		}
+	}
+	hi[inv_slot].cnt = 0;
+}
+
+const char *hover_get_item_name(int inv_slot)
+{
+	if (inv_slot < 0 || inv_slot >= _inventorysize) {
+		return NULL;
+	}
+	if (hi[inv_slot].valid_till < tick) {
+		return NULL;
+	}
+	if (hi[inv_slot].cnt < 1 || !hi[inv_slot].desc[0]) {
+		return NULL;
+	}
+	return hi[inv_slot].desc[0];
+}
+
+int hover_render_for_slot(int inv_slot, int anchor_x, int anchor_y)
+{
+	char buf[4];
+
+	if (inv_slot < 0 || inv_slot >= _inventorysize || !item[inv_slot]) {
+		return 0;
+	}
+
+	if (hi[inv_slot].valid_till >= tick) {
+		hi[inv_slot].valid_till = max(hi[inv_slot].valid_till, tick + TICKS);
+
+		int sx = anchor_x - hi[inv_slot].width / 2;
+		if (sx < dotx(DOT_TL)) {
+			sx = dotx(DOT_TL);
+		}
+		if (sx > dotx(DOT_BR) - hi[inv_slot].width - 8) {
+			sx = dotx(DOT_BR) - hi[inv_slot].width - 8;
+		}
+
+		int sy = anchor_y - hi[inv_slot].cnt * 10 - 16;
+		if (sy < doty(DOT_TL)) {
+			sy = doty(DOT_TL);
+		}
+
+		render_shaded_rect(sx, sy, sx + hi[inv_slot].width + 8, sy + hi[inv_slot].cnt * 10 + 8, 0x0000, 150);
+
+		for (int n = 0; n < hi[inv_slot].cnt; n++) {
+			int x = sx + 4;
+			unsigned short col = IRGB(24, 24, 24);
+
+			for (int i = 0; hi[inv_slot].desc[n][i]; i++) {
+				if (hi[inv_slot].desc[n][i] == RENDER_TEXT_TERMINATOR) {
+					if (hi[inv_slot].desc[n][i + 1] == 'c') {
+						if (isdigit(hi[inv_slot].desc[n][i + 2])) {
+							if (hi[inv_slot].desc[n][i + 2] == '5') {
+								col = IRGB(31, 31, 31);
+							} else {
+								col = IRGB(16, 16, 16);
+							}
+							if (isdigit(hi[inv_slot].desc[n][i + 3])) {
+								i += 3;
+								continue;
+							}
+							i += 2;
+							continue;
+						}
+						i += 1;
+						continue;
+					}
+					continue;
+				}
+				buf[0] = hi[inv_slot].desc[n][i];
+				buf[1] = 0;
+				x = render_text(x, sy + n * 10 + 4, col, 0, buf);
+			}
+		}
+		return 1;
+	}
+
+	/* cache expired — request fresh data from server */
+	if (!last_look && hi[inv_slot].valid_till < tick) {
+		cmd_look_inv(inv_slot);
+		last_line = 0;
+		last_look = 20;
+		last_invsel = inv_slot;
+		for (int i = 0; i < MAXDESC; i++) {
+			if (hi[inv_slot].desc[i]) {
+				xfree(hi[inv_slot].desc[i]);
+				hi[inv_slot].desc[i] = NULL;
+			}
+		}
+		hi[inv_slot].cnt = 0;
+	}
+	return 0;
+}
+
 static int display_hover(void)
 {
 	char buf[4];
@@ -265,7 +398,7 @@ static int display_hover(void)
 		}
 
 		int sy;
-		if (mousey < YRES / 2) {
+		if (mousey < UIYRES / 2) {
 			sy = mousey + 16;
 		} else {
 			sy = mousey - hi[slot].cnt * 10 - 16;

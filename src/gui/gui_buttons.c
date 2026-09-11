@@ -12,6 +12,12 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/ui_tokens.h"
+#include "gui/input_bind.h"
+#include "gui/panels.h"
+
+extern int ui_scale_pct; /* sdl_core.c */
+#include "gui/escape_menu_ui.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -22,7 +28,6 @@
 // Forward declarations for functions used by exec_cmd
 void cmd_add_text(const char *buf, int typ);
 void cmd_look_skill(int nr);
-void help_drag(void);
 void cmd_action(void);
 
 int get_near_button(int x, int y)
@@ -30,12 +35,22 @@ int get_near_button(int x, int y)
 	int b;
 	int n = -1, ndist = 1000000, dist;
 
-	if (x < 0 || y < 0 || x >= XRES || y >= YRES) {
+	if (x < 0 || y < 0 || x >= UIXRES || y >= UIYRES) {
+		return -1;
+	}
+
+	/* GUI overlay hidden: no button is visible, clicks go to the map */
+	if (!gui_overlay_visible) {
 		return -1;
 	}
 
 	for (b = 0; b < MAX_BUT; b++) {
 		if (but[b].flags & BUTF_NOHIT) {
+			continue;
+		}
+		/* buttons of hidden panels - and the contents of minimized ones -
+		 * are not there to be hit */
+		if (!panel_button_live(b)) {
 			continue;
 		}
 
@@ -59,24 +74,31 @@ void set_button_flags(void)
 {
 	int b, i;
 
-	if (con_cnt) {
-		for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
+	/* the container grid is live only while its window is up (the cells
+	 * past the visible grid stay dead - init_dots() parked them) */
+	for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
+		if (con_cnt && b - BUT_CON_BEG < CONDX * CONDY) {
 			but[b].flags &= ~BUTF_NOHIT;
-		}
-		for (b = BUT_SKL_BEG; b <= BUT_SKL_END; b++) {
+		} else {
 			but[b].flags |= BUTF_NOHIT;
 		}
-	} else {
-		for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
+	}
+	/* the skills rail exists only while the list is longer than the window */
+	for (b = BUT_SCL_UP; b <= BUT_SCL_DW; b++) {
+		if (max_skloff > 0) {
+			but[b].flags &= ~BUTF_NOHIT;
+		} else {
 			but[b].flags |= BUTF_NOHIT;
 		}
-		for (b = BUT_SKL_BEG; b <= BUT_SKL_END; b++) {
-			i = skloff + b - BUT_SKL_BEG;
-			if (i >= skltab_cnt || !skltab[i].button || skltab[i].barsize <= 0) {
-				but[b].flags |= BUTF_NOHIT;
-			} else {
-				but[b].flags &= ~BUTF_NOHIT;
-			}
+	}
+	/* skill rows are their own window now and no longer make way for a
+	 * container - a row is clickable when it has a raise button */
+	for (b = BUT_SKL_BEG; b <= BUT_SKL_END; b++) {
+		i = skloff + b - BUT_SKL_BEG;
+		if (b - BUT_SKL_BEG >= __skldy || i >= skltab_cnt || !skltab[i].button || skltab[i].barsize <= 0) {
+			but[b].flags |= BUTF_NOHIT;
+		} else {
+			but[b].flags &= ~BUTF_NOHIT;
 		}
 	}
 }
@@ -267,6 +289,10 @@ static void set_cmd_cursor(int cmd)
 	case CMD_EXIT:
 		cursor = SDL_CUR_c_use;
 		break;
+	case CMD_EXPBAR:
+	case CMD_MILBAR:
+		cursor = SDL_CUR_c_use;
+		break;
 	case CMD_NOLOOK:
 		cursor = SDL_CUR_c_use;
 		break;
@@ -319,9 +345,18 @@ static void detect_hover_target(void)
 	    actsel = -1;
 	mapsel = itmsel = chrsel = MAXMN;
 
-	if ((display_help || display_quest) && mousex >= dotx(DOT_HLP) && mousex <= dotx(DOT_HL2) - 40 &&
-	    mousey >= doty(DOT_HLP) && mousey <= doty(DOT_HLP) + 12) {
-		butsel = BUT_HELP_DRAG;
+	/* a mod window/bar covers this spot: nothing underneath is hoverable (no take/use
+	 * cursor or tooltips for the inventory/map behind the auction house etc.) */
+	if (amod_mouse_over(mousex, mousey)) {
+		return;
+	}
+
+	/* the spellbook toggle chevron and the open spellbook panel are not but[]
+	 * entries - without this the red map-tile cursor kept drawing under them */
+	/* the spellbook is its own window - it must block hovers even when the
+	 * hotbar it once hung off is hidden */
+	if (spellbook_over(mousex, mousey)) {
+		return;
 	}
 
 	if ((display_help || display_quest) && butsel == -1) {
@@ -360,6 +395,15 @@ static void detect_hover_target(void)
 				}
 			}
 
+			/* topic pages: a mention of another topic is a link to it */
+			if (display_help > 2) {
+				int pg = help_link_page_at(mousex, mousey);
+
+				if (pg > 0) {
+					helpsel = pg;
+				}
+			}
+
 			if (display_quest && mousex >= dotx(DOT_HLP) + 165 && mousex <= dotx(DOT_HLP) + 199) {
 				int tmp, qy;
 
@@ -374,46 +418,35 @@ static void detect_hover_target(void)
 				}
 			}
 		}
-		if (display_help) {
-			if (mousex >= dotx(DOT_HLP) + 135 && mousex <= dotx(DOT_HLP) + 156 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_PREV;
+		/* the navigation bar along the bottom: Prev | Index | Next - one
+		 * geometry shared with the renderer (help_nav_rect) */
+		{
+			static const int nav_but[3] = {BUT_HELP_PREV, BUT_HELP_INDEX, BUT_HELP_NEXT};
+			int hx1, hy1, hx2, hy2;
+
+			for (int n = 0; n < 3; n++) {
+				if (help_nav_rect(n, &hx1, &hy1, &hx2, &hy2) && mousex >= hx1 && mousex <= hx2 && mousey >= hy1 &&
+				    mousey <= hy2) {
+					butsel = nav_but[n];
+				}
 			}
-			if (mousex >= dotx(DOT_HLP) + 159 && mousex <= dotx(DOT_HLP) + 194 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_INDEX;
-			}
-			if (mousex >= dotx(DOT_HLP) + 197 && mousex <= dotx(DOT_HLP) + 218 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_NEXT;
-			}
-		} else {
-			if (mousex >= dotx(DOT_HLP) + 177 && mousex <= dotx(DOT_HLP) + 196 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_PREV;
-			}
-			if (mousex >= dotx(DOT_HLP) + 200 && mousex <= dotx(DOT_HLP) + 219 && mousey >= doty(DOT_HL2) - 18 &&
-			    mousey <= doty(DOT_HL2) - 7) {
-				butsel = BUT_HELP_NEXT;
-			}
-		}
-		if (mousex >= dotx(DOT_HLP) + 211 && mousex <= dotx(DOT_HLP) + 224 && mousey >= doty(DOT_HLP) + 2 &&
-		    mousey <= doty(DOT_HLP) + 12) {
-			butsel = BUT_HELP_CLOSE;
 		}
 	}
 
-	if (mousex >= dotx(DOT_TOP) + 704 && mousex <= dotx(DOT_TOP) + 739 && mousey >= doty(DOT_TOP) + 22 &&
-	    mousey <= doty(DOT_TOP) + 30) {
-		butsel = BUT_HELP;
-	}
-	if (mousex >= dotx(DOT_TOP) + 741 && mousex <= dotx(DOT_TOP) + 775 && mousey >= doty(DOT_TOP) + 22 &&
-	    mousey <= doty(DOT_TOP) + 30) {
-		butsel = BUT_QUEST;
-	}
-	if (mousex >= dotx(DOT_TOP) + 704 && mousex <= dotx(DOT_TOP) + 723 && mousey >= doty(DOT_TOP) + 7 &&
-	    mousey <= doty(DOT_TOP) + 18) {
-		butsel = BUT_EXIT;
+	/* status panel bars: click cycles the numbers printed on them (the
+	 * bars are wide rectangles, so a circular but[] hit box fits badly) */
+	{
+		int sx1, sy1, sx2, sy2;
+
+		if (butsel == -1 && panel_content_shown(PANEL_STATUS) &&
+		    panel_content_rect(PANEL_STATUS, &sx1, &sy1, &sx2, &sy2) && mousex >= sx1 && mousex <= sx2) {
+			if (mousey >= sy1 && mousey <= sy1 + stat_bar_h()) {
+				butsel = BUT_EXPBAR;
+			}
+			if (mousey >= sy1 + stat_row_h() && mousey <= sy1 + stat_row_h() + stat_bar_h()) {
+				butsel = BUT_MILBAR;
+			}
+		}
 	}
 
 	// hit teleport?
@@ -427,21 +460,27 @@ static void detect_hover_target(void)
 		butsel = BUT_COLOR;
 	}
 
-	if (teleporter && butsel == -1) {
+	if (teleporter && !teleport_override && butsel == -1) {
 		if (mousex >= dotx(DOT_TEL) && mousex <= dotx(DOT_TEL) + 520 && mousey >= doty(DOT_TEL) &&
 		    mousey <= doty(DOT_TEL) + 320) {
 			butsel = BUT_TEL_MISC;
 		}
 	}
 
-	if (show_look && mousex >= dotx(DOT_LOK) + 493 && mousex <= dotx(DOT_LOK) + 500 && mousey >= doty(DOT_LOK) + 3 &&
-	    mousey <= doty(DOT_LOK) + 10) {
-		butsel = BUT_NOLOOK;
+
+	/* framed panel chrome (title bars, close/minimize glyphs, resize grips)
+	 * are rectangles, not the circular hit boxes get_near_button() does */
+	if (butsel == -1 && gui_overlay_visible) {
+		butsel = panels_frame_button(mousex, mousey);
 	}
 
 	if (butsel == -1 && context_key_enabled()) {
 		butsel = get_near_button(mousex, mousey);
-		if (context_action_enabled()) {
+
+		/* hotbar buttons are always valid targets */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			; /* keep butsel */
+		} else if (context_action_enabled()) {
 			if (butsel >= BUT_ACT_BEG && butsel <= BUT_ACT_END && has_action_skill(butsel - BUT_ACT_BEG)) {
 				actsel = butsel - BUT_ACT_BEG;
 			}
@@ -459,11 +498,59 @@ static void detect_hover_target(void)
 		}
 	}
 
-	// hit map
-	if (!hitsel[0] && butsel == -1 && mousex >= dotx(DOT_MTL) && mousey >= doty(DOT_MTL) && doty(DOT_MBR) &&
-	    mousey < doty(DOT_MBR)) {
+	// skill text lines for hover text
+	if (!hitsel[0] && butsel == -1 && panel_content_shown(PANEL_SKILLS)) {
+		for (i = 0; i <= BUT_SKL_END - BUT_SKL_BEG; i++) {
+			x = butx(i + BUT_SKL_BEG);
+			y = buty(i + BUT_SKL_BEG);
+			if (mousex > x + 10 && mousex < x + SKLWIDTH && mousey > y - 5 && mousey < y + 5) {
+				sklsel2 = i;
+				break;
+			}
+		}
+	}
+
+	// buttons - before the map so GUI elements win over the full-screen world
+	if (!hitsel[0] && butsel == -1) {
+		butsel = get_near_button(mousex, mousey);
+
+		// translate button
+		if (butsel >= BUT_INV_BEG && butsel <= BUT_INV_END) {
+			invsel = 30 + invoff * INVDX + butsel - BUT_INV_BEG;
+			if (invsel >= _inventorysize) {
+				invsel = -1; /* partial last row: cell has no slot behind it */
+			}
+		} else if (butsel >= BUT_WEA_BEG && butsel <= BUT_WEA_END) {
+			weasel = butsel - BUT_WEA_BEG;
+		} else if (butsel >= BUT_CON_BEG && butsel <= BUT_CON_END) {
+			consel = conoff * CONDX + butsel - BUT_CON_BEG;
+		} else if (butsel >= BUT_SKL_BEG && butsel <= BUT_SKL_END) {
+			sklsel = skloff + butsel - BUT_SKL_BEG;
+		}
+	}
+
+	/* the body of a framed panel swallows the world underneath it: with the
+	 * fullscreen world view every window sits on map tiles, and clicking
+	 * one's background used to walk the character */
+	if (!hitsel[0] && butsel == -1 && gui_overlay_visible && panels_frame_over(mousex, mousey)) {
+		butsel = BUT_PANEL_BODY;
+	}
+
+	/* nothing of the client's under the pointer: a mod background surface
+	 * (the chat) keeps the world beneath it from being targeted */
+	if (!hitsel[0] && butsel == -1 && !gui_client_overlay_at(mousex, mousey) &&
+	    amod_mouse_over_background(mousex, mousey)) {
+		butsel = BUT_PANEL_BODY;
+	}
+
+	// hit map - the world renders at the full canvas, not on the UI layer,
+	// so its hit tests take canvas coordinates
+	int wmx = mousex * XRES / UIXRES;
+	int wmy = mousey * YRES / UIYRES;
+
+	if (!hitsel[0] && butsel == -1 && wmx >= 0 && wmy >= 0 && wmx < XRES && wmy < YRES) {
 		if (action_ovr == ACTION_LOOK) {
-			map_index_t tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR, 5);
+			map_index_t tmp = get_near_ex(wmx, wmy, CMF_USE | CMF_TAKE | NEAR_ITEM | NEAR_CHAR, 5);
 			if (tmp != MAXMN) {
 				if (map[tmp].csprite) {
 					chrsel = tmp;
@@ -471,18 +558,18 @@ static void detect_hover_target(void)
 					itmsel = tmp;
 				}
 			} else {
-				mapsel = get_near_ground(mousex, mousey);
+				mapsel = get_near_ground(wmx, wmy);
 			}
 		} else {
 			// old style interface (shift/ctrl) first
 			if (vk_char) {
-				chrsel = get_near_char(mousex, mousey, MAPDX);
+				chrsel = get_near_char(wmx, wmy, MAPDX);
 			}
 			if (chrsel == MAXMN && vk_item) {
 				if (csprite) {
-					itmsel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, 0);
+					itmsel = get_near_item(wmx, wmy, CMF_USE | CMF_TAKE, 0);
 				} else {
-					itmsel = get_near_item(mousex, mousey, CMF_USE | CMF_TAKE, MAPDX);
+					itmsel = get_near_item(wmx, wmy, CMF_USE | CMF_TAKE, MAPDX);
 				}
 			}
 
@@ -504,9 +591,9 @@ static void detect_hover_target(void)
 				}
 				map_index_t tmp;
 				if (csprite) {
-					tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | flags | NEAR_NOTSELF, 2);
+					tmp = get_near_ex(wmx, wmy, CMF_USE | CMF_TAKE | flags | NEAR_NOTSELF, 2);
 				} else {
-					tmp = get_near_ex(mousex, mousey, CMF_USE | CMF_TAKE | flags, 5);
+					tmp = get_near_ex(wmx, wmy, CMF_USE | CMF_TAKE | flags, 5);
 				}
 				if (tmp != MAXMN) {
 					if (map[tmp].csprite) {
@@ -517,40 +604,12 @@ static void detect_hover_target(void)
 				}
 			}
 
-			if (chrsel == MAXMN && itmsel == MAXMN && !vk_char && (!vk_item || csprite)) {
-				mapsel = get_near_ground(mousex, mousey);
+			if (chrsel == MAXMN && itmsel == MAXMN) {
+				mapsel = get_near_ground(wmx, wmy);
 			}
 			if (mapsel != MAXMN || itmsel != MAXMN || chrsel != MAXMN) {
 				butsel = BUT_MAP;
 			}
-		}
-	}
-
-	// skill text lines for hover text
-	if (!hitsel[0] && butsel == -1 && !con_cnt) {
-		for (i = 0; i <= BUT_SKL_END - BUT_SKL_BEG; i++) {
-			x = butx(i + BUT_SKL_BEG);
-			y = buty(i + BUT_SKL_BEG);
-			if (mousex > x + 10 && mousex < x + SKLWIDTH && mousey > y - 5 && mousey < y + 5) {
-				sklsel2 = i;
-				break;
-			}
-		}
-	}
-
-	// buttons
-	if (!hitsel[0] && butsel == -1) {
-		butsel = get_near_button(mousex, mousey);
-
-		// translate button
-		if (butsel >= BUT_INV_BEG && butsel <= BUT_INV_END) {
-			invsel = 30 + invoff * INVDX + butsel - BUT_INV_BEG;
-		} else if (butsel >= BUT_WEA_BEG && butsel <= BUT_WEA_END) {
-			weasel = butsel - BUT_WEA_BEG;
-		} else if (butsel >= BUT_CON_BEG && butsel <= BUT_CON_END) {
-			consel = conoff * CONDX + butsel - BUT_CON_BEG;
-		} else if (butsel >= BUT_SKL_BEG && butsel <= BUT_SKL_END) {
-			sklsel = skloff + butsel - BUT_SKL_BEG;
 		}
 	}
 }
@@ -602,6 +661,7 @@ void exec_cmd(int cmd, int a)
 		cmd_use_inv(invsel);
 		return;
 	case CMD_INV_TAKE:
+		csprite_origin = invsel;
 		cmd_swap(invsel);
 		return;
 	case CMD_INV_SWAP:
@@ -739,7 +799,7 @@ void exec_cmd(int cmd, int a)
 		break;
 
 	case CMD_SAY_HITSEL:
-		cmd_add_text(hitsel, hittype);
+		/* the classic command line is gone - text links land nowhere */
 		break;
 
 	case CMD_USE_FKEYITEM:
@@ -844,8 +904,54 @@ void exec_cmd(int cmd, int a)
 			quest_select(questsel);
 		}
 		return;
-	case CMD_HELP_DRAG:
-		help_drag();
+	case CMD_DRAG_PANEL:
+		/* the drag handle owns the pointer; its id maps 1:1 to the panel */
+		if (capbut >= BUT_DRAG_BEG && capbut <= BUT_DRAG_END) {
+			panels_drag_update(capbut - BUT_DRAG_BEG, mousex, mousey);
+		}
+		return;
+	case CMD_PANEL_CLOSE:
+		if (butsel >= BUT_PCLOSE_BEG && butsel <= BUT_PCLOSE_END) {
+			int p = butsel - BUT_PCLOSE_BEG;
+
+			/* the container window: close this shop/grave view, not the
+			 * panel for good - the next merchant opens it again */
+			if (p == PANEL_CONTAINER) {
+				panel_dismiss_container();
+			} else if (p == PANEL_HELP) {
+				/* summoned window: closing it clears what summoned it */
+				display_help = 0;
+				display_quest = 0;
+			} else if (p == PANEL_LOOK) {
+				show_look = 0;
+			} else {
+				panel_set_visible(p, 0);
+			}
+			init_dots();
+			save_options();
+		}
+		return;
+	case CMD_PANEL_MIN:
+		if (butsel >= BUT_PMIN_BEG && butsel <= BUT_PMIN_END) {
+			int p = butsel - BUT_PMIN_BEG;
+
+			panel_set_collapsed(p, !panel_collapsed(p));
+			init_dots(); /* the grip moves with the collapsed frame */
+			save_options();
+		}
+		return;
+	case CMD_PANEL_LOCK:
+		if (butsel >= BUT_PLOCK_BEG && butsel <= BUT_PLOCK_END) {
+			panel_toggle_locked(butsel - BUT_PLOCK_BEG);
+			init_dots(); /* the grip appears/disappears with the lock */
+			save_options();
+		}
+		return;
+	case CMD_PANEL_SIZE:
+		/* the grip owns the pointer, like the drag handles above */
+		if (capbut >= BUT_PSIZE_BEG && capbut <= BUT_PSIZE_END) {
+			panels_resize_update(capbut - BUT_PSIZE_BEG, mousex, mousey);
+		}
 		return;
 	case CMD_HELP:
 		if (display_help) {
@@ -856,6 +962,9 @@ void exec_cmd(int cmd, int a)
 		}
 		return;
 	case CMD_QUEST:
+		if (do_toggle_questlog && do_toggle_questlog()) {
+			return; /* mod journal handled it - keep the legacy quest log closed */
+		}
 		if (display_quest) {
 			display_quest = 0;
 		} else {
@@ -865,10 +974,20 @@ void exec_cmd(int cmd, int a)
 		return;
 
 	case CMD_EXIT:
-		quit = 1;
+		if (sockstate < 4) {
+			quit = 1;
+		} else {
+			escape_menu_toggle();
+		}
 		return;
 	case CMD_NOLOOK:
 		show_look = 0;
+		return;
+	case CMD_EXPBAR:
+		exp_bar_toggle();
+		return;
+	case CMD_MILBAR:
+		mil_bar_toggle();
 		return;
 
 	case CMD_ACTION:
@@ -896,37 +1015,6 @@ void cmd_look_skill(int nr)
 	} else {
 		addline("Unknown.");
 	}
-}
-
-void help_drag(void)
-{
-	int x, y;
-
-	x = dot[DOT_HLP].x + mousedx;
-	y = dot[DOT_HLP].y + mousedy;
-
-	if (x < dotx(DOT_TL)) {
-		mousedx += dotx(DOT_TL) - x;
-	}
-	if (y < doty(DOT_TL)) {
-		mousedy += doty(DOT_TL) - y;
-	}
-
-	if (x > dotx(DOT_BR) + dotx(DOT_HLP) - dotx(DOT_HL2)) {
-		mousedx += dotx(DOT_BR) + dotx(DOT_HLP) - dotx(DOT_HL2) - x;
-	}
-	if (y > doty(DOT_BR) - 20) {
-		mousedy += doty(DOT_BR) - 20 - y;
-	}
-
-	dot[DOT_HLP].x += mousedx;
-	dot[DOT_HLP].y += mousedy;
-	dot[DOT_HL2].x += mousedx;
-	dot[DOT_HL2].y += mousedy;
-	but[BUT_HELP_DRAG].x += mousedx;
-	but[BUT_HELP_DRAG].y += mousedy;
-
-	mousedx = mousedy = 0;
 }
 
 void cmd_action(void)
@@ -986,6 +1074,9 @@ static void set_cmd_key_states(void)
 	vk_control = (km & SDL_KEYM_CTRL) || control_override;
 	vk_alt = (km & SDL_KEYM_ALT) != 0;
 
+	/* Mouse modifier behaviors — these affect what happens on mouse click.
+	 * Note: mapsel is now always computed regardless of modifiers, so
+	 * keybinds using shift+key for map-cast spells work correctly. */
 	vk_char = vk_control;
 	vk_item = vk_shift;
 	vk_spell = vk_alt;
@@ -1007,6 +1098,10 @@ static void update_window_title(void)
 	    (map[plrmn].cn && player[map[plrmn].cn].name[0]) ? player[map[plrmn].cn].name : "Someone",
 	    (VERSION >> 16) & 255, (VERSION >> 8) & 255, (VERSION) & 255);
 #endif
+	if (*client_environment_label()) {
+		/* "... [PREPROD]": the title bar names the world, like the in-game tag */
+		sprintf(buf + strlen(buf), " [%s]", client_environment_label());
+	}
 	if (strcmp(title, buf)) {
 		strcpy(title, buf);
 		sdl_set_title(title);
@@ -1120,23 +1215,23 @@ void handle_special_buttons_logic(void)
 			lcmd = CMD_INV_OFF_TR;
 		}
 
-		if (butsel == BUT_SCL_UP && !con_cnt) {
+		if (butsel == BUT_SCL_UP) {
 			lcmd = CMD_SKL_OFF_UP;
 		}
-		if (butsel == BUT_SCL_DW && !con_cnt) {
+		if (butsel == BUT_SCL_DW) {
 			lcmd = CMD_SKL_OFF_DW;
 		}
-		if (butsel == BUT_SCL_TR && !con_cnt && !vk_lbut) {
+		if (butsel == BUT_SCL_TR && !vk_lbut) {
 			lcmd = CMD_SKL_OFF_TR;
 		}
 
-		if (butsel == BUT_SCL_UP && con_cnt) {
+		if (butsel == BUT_CSC_UP) {
 			lcmd = CMD_CON_OFF_UP;
 		}
-		if (butsel == BUT_SCL_DW && con_cnt) {
+		if (butsel == BUT_CSC_DW) {
 			lcmd = CMD_CON_OFF_DW;
 		}
-		if (butsel == BUT_SCL_TR && con_cnt && !vk_lbut) {
+		if (butsel == BUT_CSC_TR && !vk_lbut) {
 			lcmd = CMD_CON_OFF_TR;
 		}
 
@@ -1182,11 +1277,29 @@ void handle_special_buttons_logic(void)
 		if (butsel == BUT_HELP_CLOSE) {
 			lcmd = CMD_HELP_CLOSE;
 		}
-		if (butsel == BUT_HELP_DRAG) {
-			lcmd = CMD_HELP_DRAG;
+		if (butsel >= BUT_DRAG_BEG && butsel <= BUT_DRAG_END) {
+			lcmd = CMD_DRAG_PANEL;
+		}
+		if (butsel >= BUT_PCLOSE_BEG && butsel <= BUT_PCLOSE_END) {
+			lcmd = CMD_PANEL_CLOSE;
+		}
+		if (butsel >= BUT_PMIN_BEG && butsel <= BUT_PMIN_END) {
+			lcmd = CMD_PANEL_MIN;
+		}
+		if (butsel >= BUT_PSIZE_BEG && butsel <= BUT_PSIZE_END) {
+			lcmd = CMD_PANEL_SIZE;
+		}
+		if (butsel >= BUT_PLOCK_BEG && butsel <= BUT_PLOCK_END) {
+			lcmd = CMD_PANEL_LOCK;
 		}
 		if (butsel == BUT_EXIT) {
 			lcmd = CMD_EXIT;
+		}
+		if (butsel == BUT_EXPBAR) {
+			lcmd = CMD_EXPBAR;
+		}
+		if (butsel == BUT_MILBAR) {
+			lcmd = CMD_MILBAR;
 		}
 		if (butsel == BUT_HELP) {
 			lcmd = CMD_HELP;
@@ -1207,6 +1320,13 @@ void handle_special_buttons_logic(void)
 		if (butsel == BUT_WEA_LCK) {
 			lcmd = CMD_WEAR_LOCK;
 		}
+
+		/* hotbar: just prevent other commands when hovering with item on cursor */
+		if (butsel >= BUT_HOTBAR_BEG && butsel <= BUT_HOTBAR_END) {
+			if (csprite) {
+				lcmd = CMD_NONE;
+			}
+		}
 	}
 }
 
@@ -1215,7 +1335,7 @@ void calculate_rcmd_logic(void)
 	rcmd = CMD_NONE;
 	if (action_ovr == ACTION_NONE) {
 		skl_look_sel = get_skl_look(mousex, mousey);
-		if (con_cnt == 0 && skl_look_sel != -1) {
+		if (skl_look_sel != -1) {
 			rcmd = CMD_SKL_LOOK;
 		} else if (!vk_spell) {
 			if (mapsel != MAXMN) {

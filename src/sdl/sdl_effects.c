@@ -25,25 +25,39 @@
 #define OGET_G(c) ((((unsigned short int)(c)) >> 5) & 0x1F)
 #define OGET_B(c) ((((unsigned short int)(c)) >> 0) & 0x1F)
 
+/* The original client's light curve (old dd.c rgbfx_light tables, in their
+ * default "newlight" mode with neutral gamma): brightness(i) comes from this
+ * table, NOT from a linear ramp. The SDL port's val*light/15 made every
+ * partially lit tile far darker than the original - level 8 rendered at 53%
+ * instead of 80%, level 4 at 27% instead of 56% - which muddied item and
+ * world colors across the board (and is what the old sqrt-blend Brightness
+ * workaround tried, and failed, to compensate). */
+static const int lightmulti[16] = {0, 2, 4, 8, 16, 18, 20, 22, 24, 26, 27, 28, 29, 30, 31, 32};
+
 static inline int light_calc(int val, int light)
 {
-	int v1, v2, m = 3, d = 4;
+	int le;
 
-	if (game_options & (GO_LIGHTER | GO_LIGHTER2)) {
-		v1 = val * light / 15;
-		v2 = (int)(val * sqrt(light) / 3.87);
-		if (game_options & GO_LIGHTER) {
-			m--;
-			d--;
-		}
-		if (game_options & GO_LIGHTER2) {
-			m -= 2;
-			d -= 2;
-		}
-		return (v1 * m + v2) / d;
-	} else {
-		return val * light / 15;
+	if (light < 0) {
+		light = 0;
 	}
+	if (light > 15) {
+		light = 15;
+	}
+
+	/* le mirrors the original dd_lighteffect knob: a larger value lifts the
+	 * dark levels while full light stays exactly full (lightmulti[15]==32).
+	 * The default le==light is the original's "newlight" mode; the
+	 * Brightness options raise it further. */
+	le = light;
+	if (game_options & GO_LIGHTER) {
+		le += 8;
+	}
+	if (game_options & GO_LIGHTER2) {
+		le += 12;
+	}
+
+	return val * (lightmulti[light] + le) / (32 + le);
 }
 
 uint32_t sdl_light(int light, uint32_t irgb)
@@ -320,10 +334,16 @@ uint32_t sdl_colorbalance(uint32_t irgb, char cr, char cg, char cb, char light, 
 		b = ((b * (20 - sat)) + (grey * sat)) / 20;
 	}
 
-	// color balancing
+	// Color balancing, with the original client's exact scaling - INCLUDING
+	// its typo: `cr*=0.75; cg*=0.75; cg*=0.75;` scaled cg twice (0.5625) and
+	// never scaled cb. Two decades of item and character tints were
+	// calibrated against that behavior (gilded items are cr=50,cg=50: the
+	// double-scaled cg is what keeps the gold warm - the SDL port's
+	// "corrected" uniform 0.75 turned it brassy/green), so the typo is the
+	// spec.
 	cr = (char)((double)cr * 0.75);
-	cg = (char)((double)cg * 0.75);
-	cb = (char)((double)cb * 0.75);
+	cg = (char)((double)cg * 0.5625);
+	// cb intentionally unscaled
 
 	r += cr;
 	g -= cr / 2;

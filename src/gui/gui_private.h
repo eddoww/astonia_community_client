@@ -7,10 +7,106 @@
 #include "../dll.h"
 #include "../astonia.h"
 
-#define INVDX      4
+/* inventory grid density is a runtime setting (items per row / visible
+ * rows); the container grid stays fixed at the classic 4-wide layout */
+#define INV_GRID_MIN_COLS  4
+#define INV_GRID_MAX_COLS  8
+#define INV_GRID_MIN_ROWS  3
+#define INV_GRID_MAX_ROWS  6
+#define INV_GRID_MAX_SLOTS (INV_GRID_MAX_COLS * INV_GRID_MAX_ROWS)
+
+DLL_EXPORT int inv_grid_cols(void); /* items per row (4..8) */
+DLL_EXPORT int inv_grid_rows(void); /* visible rows setting; 0 = auto (classic 4/3) */
+DLL_EXPORT void inv_grid_set_cols(int n);
+DLL_EXPORT void inv_grid_set_rows(int n);
+
+/* visible rows of the skill list; the button bank holds MAX rows */
+#define SKL_GRID_MIN_ROWS 6
+#define SKL_GRID_MAX_ROWS 40 /* resize ceiling: room for the whole list */
+#define SKL_GRID_DEF_ROWS 16 /* the auto/default height */
+#define MINIMAP_D         80 /* minimap circle diameter (minimap.c draws MINIMAP*2 = this) */
+
+/* look-at window geometry: title bar + portrait/description body + the
+ * classic 12-slot gear strip along the bottom */
+#define LOOK_W          500
+#define LOOK_H          168
+#define LOOK_STRIP_X    ((LOOK_W - 12 * FDX) / 2)
+#define LOOK_PORTRAIT_W 92
+#define LOOK_PORTRAIT_H 94
+#define LOOK_ANIM_TICKS 2 /* game ticks per animation step of the portrait */
+DLL_EXPORT int skl_grid_rows(void); /* setting; 0 = auto (16, or 12 small bottom) */
+DLL_EXPORT int skl_grid_rows_effective(void); /* the row count actually drawn */
+DLL_EXPORT void skl_grid_set_rows(int n);
+
+/* the shop / grave grid is sized like the inventory one, independently of it */
+#define CON_GRID_MIN_COLS  4
+#define CON_GRID_MAX_COLS  8
+#define CON_GRID_MIN_ROWS  3
+#define CON_GRID_MAX_ROWS  6
+#define CON_GRID_MAX_SLOTS (CON_GRID_MAX_COLS * CON_GRID_MAX_ROWS)
+DLL_EXPORT int con_grid_cols(void);
+DLL_EXPORT int con_grid_rows(void); /* setting; 0 = auto (4, or 3 small bottom) */
+DLL_EXPORT void con_grid_set_cols(int n);
+DLL_EXPORT void con_grid_set_rows(int n);
+
+/* ── Panel content geometry ─────────────────────────────────────────────
+ * Shared by dots.c (which lays the panels out), display.c (which draws
+ * them) and hover.c (which puts tooltips over them). */
+#define INV_RAIL_W         12 /* inventory scrollbar rail column         */
+#define INV_RAIL_GAP       3
+#define INV_FOOT_H         32 /* purse + trashcan row under the grid     */
+#define SKL_RAIL_W         12 /* skill list scrollbar rail column        */
+#define WEA_COLS           3 /* equipment paper doll                    */
+#define WEA_ROWS           5
+#define WEA_FOOT_H         18 /* gear-lock row under the doll            */
+#define WEA_BONUS_W        168 /* "Bonuses" column right of the doll     */
+#define WEA_BONUS_GAP      6 /* rule + padding between doll and column   */
+#define WEA_BONUS_HEAD_H   14 /* column header row                    */
+#define WEA_BONUS_ROW_H    LINEHEIGHT
+#define WEA_BONUS_LEGEND_H (2 * LINEHEIGHT + 2) /* legend / mod-less note  */
+#define WEA_BONUS_MAX_ROWS 24
+#define SPEED_ORB          12 /* the speed selector: three small orbs with their label above */
+#define SPEED_COL_W        34 /* one orb column                                             */
+#define SPEED_LABEL_H      10
+#define SPEED_PANEL_H      (SPEED_LABEL_H + SPEED_ORB + 4)
+#define BUFF_CHIP          20 /* one effect orb                         */
+#define BUFF_GAP           4
+#define BUFF_LABEL_H       10
+#define BUFF_COUNT         4
+/* the mod's weather indicator sits in the top-right corner; the client's
+ * own top-right defaults (system menu, minimap) keep clear of this box */
+#define UI_WEATHER_W 84
+#define UI_WEATHER_H 58
+/* the tabbed chat's default width (mod): the hotbar's default sits right of it */
+#define UI_CHAT_DEF_W 520
+#define SPB_COLS      7 /* spellbook window columns              */
+/* status panel (level + military progress) */
+/* status panel: two WoW-style full-width bars at the screen bottom */
+#define STAT_BAR_H 11
+#define STAT_ROW_H (STAT_BAR_H + 2)
+/* the bar strip spans this fraction of the UI width, centered */
+#define STAT_W_NUM 3
+#define STAT_W_DEN 5
+#define STAT_MIN_W 420
+/* system menu strip (Menu / Help / Quests)  */
+#define SYSM_BTN_W 48
+#define SYSM_BTN_H 18
+#define SYSM_GAP   3
+/* classic flip clock                        */
+#define CLK_W 58
+#define CLK_H 16
+
+/* number of castable spells the spellbook has cells for (spellbook_ui.c) */
+int spellbook_slot_count(void);
+
+/* centre of worn-equipment slot `slot` in the paper doll; 0 when the slot
+ * has no cell (dots.c) */
+int wea_slot_pos(int slot, int *x, int *y);
+
+#define INVDX      (inv_grid_cols())
 #define INVDY      (__invdy)
-#define CONDX      4
-#define CONDY      (__invdy)
+#define CONDX      (con_grid_cols())
+#define CONDY      (__condy)
 #define SKLDY      (__skldy)
 #define SKLWIDTH   145
 #define LINEHEIGHT 10
@@ -19,52 +115,106 @@
 #define FX_ITEMBRIGHT RENDERFX_BRIGHT
 #define DOTF_TOPOFF   (1 << 0) // dot moves with top bar
 
-#define BUT_MAP       0
-#define BUT_WEA_BEG   1
-#define BUT_WEA_END   12
-#define BUT_INV_BEG   13
-#define BUT_INV_END   28
-#define BUT_CON_BEG   29
-#define BUT_CON_END   44
-#define BUT_SCL_UP    45
-#define BUT_SCL_TR    46
-#define BUT_SCL_DW    47
-#define BUT_SCR_UP    48
-#define BUT_SCR_TR    49
-#define BUT_SCR_DW    50
-#define BUT_SKL_BEG   51
-#define BUT_SKL_END   66
-#define BUT_GLD       67
-#define BUT_JNK       68
-#define BUT_MOD_WALK0 69
-#define BUT_MOD_WALK1 70
-#define BUT_MOD_WALK2 71
+#define BUT_MAP     0
+#define BUT_WEA_BEG 1
+#define BUT_WEA_END 12
+#define BUT_INV_BEG 13
+#define BUT_INV_END 60 /* INV_GRID_MAX_SLOTS (8×6) button ids: 13..60 */
+/* BUT_CON_* moved to the end of the id space - the container grid is a
+ * runtime size now and needs more than the classic 16 slots */
+#define BUT_SCL_UP 77
+#define BUT_SCL_TR 78
+#define BUT_SCL_DW 79
+#define BUT_SCR_UP 80
+#define BUT_SCR_TR 81
+#define BUT_SCR_DW 82
+/* skill rows moved past the container bank: the classic 83..98 slot gave
+ * only 16 rows, the resize ceiling of the skills window (SKL_GRID_MAX_ROWS)
+ * needs one button per possible row */
+#define BUT_SKL_BEG (BUT_CON_END + 1)
+#define BUT_SKL_END (BUT_SKL_BEG + SKL_GRID_MAX_ROWS - 1)
+/* the container window's own scroll rail (it used to share the skills rail
+ * back when the two views took turns in one window) */
+#define BUT_CSC_UP    (BUT_SKL_END + 1)
+#define BUT_CSC_TR    (BUT_SKL_END + 2)
+#define BUT_CSC_DW    (BUT_SKL_END + 3)
+#define BUT_GLD       99
+#define BUT_JNK       100
+#define BUT_MOD_WALK0 101
+#define BUT_MOD_WALK1 102
+#define BUT_MOD_WALK2 103
 
-#define BUT_TEL        72
-#define BUT_HELP_NEXT  73
-#define BUT_HELP_PREV  74
-#define BUT_HELP_MISC  75
-#define BUT_HELP_CLOSE 76
-#define BUT_HELP_INDEX 102
-#define BUT_EXIT       77
-#define BUT_HELP       78
-#define BUT_NOLOOK     79
-#define BUT_COLOR      80
-#define BUT_SKL_LOOK   81
-#define BUT_QUEST      82
-#define BUT_HELP_DRAG  83
+#define BUT_TEL        104
+#define BUT_HELP_NEXT  105
+#define BUT_HELP_PREV  106
+#define BUT_HELP_MISC  107
+#define BUT_HELP_CLOSE 108
+#define BUT_HELP_INDEX 134
+#define BUT_EXPBAR     182 /* above BUT_HOTBAR_END (179) */
+#define BUT_MILBAR     183
+#define BUT_EXIT       109
+#define BUT_HELP       110
+#define BUT_NOLOOK     111
+#define BUT_COLOR      112
+#define BUT_SKL_LOOK   113
+#define BUT_QUEST      114
+#define BUT_HELP_DRAG  115
 
-#define BUT_TEL_MISC 84
+#define BUT_TEL_MISC 116
 
-#define BUT_ACT_LCK 85
-#define BUT_ACT_OPN 86
-#define BUT_ACT_BEG 87
-#define BUT_ACT_END 100
+#define BUT_ACT_LCK 117
+#define BUT_ACT_OPN 118
+#define BUT_ACT_BEG 119
+#define BUT_ACT_END 132
 
-#define BUT_WEA_LCK 101
-// BUT_HELP_INDEX is 102
+#define BUT_WEA_LCK 133
+// BUT_HELP_INDEX is 134
 
-#define MAX_BUT 103
+#define BUT_HOTBAR_BEG 135
+#define BUT_HOTBAR_END 179 /* 45 slots (3×15): 135..179 */
+
+/* Per-panel button banks. Each bank has PANEL_BUT_SLOTS consecutive ids in
+ * PANEL_* enum order (panels.h): BANK_BEG + PANEL_x is that panel's button.
+ * Slots past MAX_PANEL are unused and set BUTF_NOHIT by init_dots(). */
+#define PANEL_BUT_SLOTS 16
+
+/* window drag handle / titlebar */
+#define BUT_DRAG_BEG    184
+#define BUT_DRAG_HOTBAR (BUT_DRAG_BEG + PANEL_HOTBAR)
+#define BUT_DRAG_END    (BUT_DRAG_BEG + PANEL_BUT_SLOTS - 1)
+
+/* titlebar close / minimize buttons and the bottom-right resize grip */
+#define BUT_PCLOSE_BEG (BUT_DRAG_END + 1)
+#define BUT_PCLOSE_END (BUT_PCLOSE_BEG + PANEL_BUT_SLOTS - 1)
+#define BUT_PMIN_BEG   (BUT_PCLOSE_END + 1)
+#define BUT_PMIN_END   (BUT_PMIN_BEG + PANEL_BUT_SLOTS - 1)
+#define BUT_PSIZE_BEG  (BUT_PMIN_END + 1)
+#define BUT_PSIZE_END  (BUT_PSIZE_BEG + PANEL_BUT_SLOTS - 1)
+#define BUT_PLOCK_BEG  (BUT_PSIZE_END + 1)
+#define BUT_PLOCK_END  (BUT_PLOCK_BEG + PANEL_BUT_SLOTS - 1)
+
+/* not a real button: parks butsel while the pointer is over a framed
+ * panel's body so the full-screen world underneath is not targeted */
+#define BUT_PANEL_BODY (BUT_PLOCK_END + 1)
+
+/* container (shop / grave) grid - sized at runtime like the inventory */
+#define BUT_CON_BEG (BUT_PANEL_BODY + 1)
+#define BUT_CON_END (BUT_CON_BEG + CON_GRID_MAX_SLOTS - 1)
+
+#define MAX_BUT (BUT_CSC_DW + 1) /* keep > the highest BUT_* id */
+
+_Static_assert(
+    BUT_INV_END - BUT_INV_BEG + 1 == INV_GRID_MAX_SLOTS, "inventory button range must hold the densest possible grid");
+_Static_assert(
+    BUT_CON_END - BUT_CON_BEG + 1 == CON_GRID_MAX_SLOTS, "container button range must hold the densest possible grid");
+_Static_assert(BUT_MILBAR < MAX_BUT && BUT_EXPBAR < MAX_BUT && BUT_HOTBAR_END < MAX_BUT && BUT_DRAG_END < MAX_BUT,
+    "MAX_BUT must exceed every BUT_* id (but[] is indexed by id)");
+_Static_assert(
+    BUT_EXPBAR > BUT_HOTBAR_END && BUT_MILBAR > BUT_HOTBAR_END, "bar button ids must not fall into the hotbar range");
+_Static_assert(BUT_DRAG_BEG > BUT_MILBAR, "drag handle ids must not collide with the bar button ids");
+_Static_assert(BUT_DRAG_END < BUT_PCLOSE_BEG && BUT_PCLOSE_END < BUT_PMIN_BEG && BUT_PMIN_END < BUT_PSIZE_BEG &&
+                   BUT_PSIZE_END < BUT_PLOCK_BEG && BUT_PLOCK_END < BUT_PANEL_BODY && BUT_PANEL_BODY < MAX_BUT,
+    "the per-panel button banks must not overlap");
 
 #define BUTF_NOHIT    (1 << 1) // button is ignored int hit processing
 #define BUTF_CAPTURE  (1 << 2) // button captures mouse on lclick
@@ -184,8 +334,15 @@
 #define CMD_ACTION_LOCK 79
 #define CMD_ACTION_OPEN 80
 
-#define CMD_WEAR_LOCK  81
-#define CMD_HELP_INDEX 82
+#define CMD_WEAR_LOCK   81
+#define CMD_HELP_INDEX  82
+#define CMD_EXPBAR      83 /* cycle the numbers printed on the experience bar */
+#define CMD_MILBAR      84 /* cycle the numbers printed on the military bar */
+#define CMD_DRAG_PANEL  85 /* move the panel whose drag handle captured the mouse */
+#define CMD_PANEL_CLOSE 86 /* hide the framed panel whose X was clicked        */
+#define CMD_PANEL_MIN   87 /* collapse/expand the framed panel to its titlebar */
+#define CMD_PANEL_SIZE  88 /* resize the panel whose grip captured the mouse   */
+#define CMD_PANEL_LOCK  89 /* toggle the panel's position lock                 */
 
 #define STV_EMPTYLINE  -1
 #define STV_JUSTAVALUE -2 // value is in curr
@@ -319,6 +476,7 @@ extern int conoff, max_conoff;
 extern int skloff, max_skloff;
 extern int __skldy;
 extern int __invdy;
+extern int __condy;
 
 extern int fkeyitem[4];
 
@@ -482,8 +640,15 @@ void display_inventory(void);
 void display_keys(void);
 void display_skill(void);
 void display_scrollbars(void);
+void display_scrollbar_left(void);
+void display_scrollbar_right(void);
+void display_scrollbar_container(void);
+/* small environment tag (DEV / PREPROD / LOCAL) - empty on production */
+void display_environment_tag(void);
 void display_tutor(void);
-void display_screen(void);
+int tutor_click(int x, int y);
+void display_sysmenu(void);
+void display_clock(void);
 void display_text(void);
 void display_mode(void);
 void display_mouseover(void);

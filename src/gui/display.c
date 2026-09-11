@@ -7,6 +7,7 @@
  */
 
 #include <stdint.h>
+#include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -14,6 +15,10 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
+#include "gui/panels.h"
+#include "gui/ui_draw.h"
+#include "gui/equip_bonus.h"
 #include "game/game.h"
 #include "client/client.h"
 #include "modder/modder.h"
@@ -48,12 +53,19 @@ void display_wear(void)
 	unsigned short c1, c2, c3, shine;
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
+	int cx1, cy1, cx2, cy2;
 
 	for (b = BUT_WEA_BEG; b <= BUT_WEA_END; b++) {
 		int i = b - BUT_WEA_BEG;
 		int x = butx(b);
 		int y = buty(b);
-		int yt = y + 23;
+		int yt = y + 13;
+		unsigned short namecol = UI_TEXT_MUTED;
+		int named = 0;
+
+		if (but[b].flags & BUTF_NOHIT) {
+			continue; /* slot has no cell in the doll */
+		}
 
 		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
 		if (i == weasel) {
@@ -80,54 +92,35 @@ void display_wear(void)
 			fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = i == weasel ? FX_ITEMBRIGHT : FX_ITEMLIGHT;
 
 			render_sprite_fx(&fx, x, y);
+		} else {
+			/* an empty cell says what belongs in it - the doll is only
+			 * readable as a body once the slots are labelled */
+			named = 1;
 		}
 
-		if (butsel >= BUT_WEA_BEG && butsel <= BUT_WEA_END && !vk_item && capbut == -1) {
-			render_text(x, yt, textcolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
+		/* the carried (or hovered) item fits here: call the slot out */
+		if (cflags & wea_slot_flag[i]) {
+			named = 1;
+			namecol = whitecolor;
+			if (i == 2 && (cflags & IF_WNTWOHANDED)) {
+				namecol = redcolor;
+			}
 		}
-
-		if ((cflags & IF_WNRRING) && i == 0) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
+		if (butsel >= BUT_WEA_BEG && butsel <= BUT_WEA_END && !vk_item && capbut == -1 && i == weasel) {
+			named = 1;
+			namecol = textcolor;
 		}
-		if ((cflags & IF_WNRHAND) && i == 1) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNLHAND) && i == 2 && !(cflags & IF_WNTWOHANDED)) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNTWOHANDED) && i == 2) {
-			render_text(x, yt, redcolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNLRING) && i == 3) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNNECK) && i == 4) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNHEAD) && i == 5) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNCLOAK) && i == 6) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNBODY) && i == 7) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNBELT) && i == 8) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNARMS) && i == 9) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNLEGS) && i == 10) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
-		}
-		if ((cflags & IF_WNFEET) && i == 11) {
-			render_text(x, yt, whitecolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
+		if (named) {
+			render_text(x, yt, namecol, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, weaname[i]);
 		}
 
 		if (i == 2 && item[weatab[1]] && (item_flags[weatab[1]] & IF_WNTWOHANDED)) {
+			/* left hand blocked by a two-handed weapon in the right hand:
+			 * red-tinted pad with a cross so the dead slot reads at a glance */
 			render_sprite(5, x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+			render_shaded_rect(x - 16, y - 16, x + 16, y + 16, IRGB(25, 6, 6), 100);
+			render_line(x - 11, y - 11, x + 11, y + 11, IRGB(31, 0, 0));
+			render_line(x + 11, y - 11, x - 11, y + 11, IRGB(31, 0, 0));
 		}
 
 		if (con_cnt && con_type == 2 && itemprice[weatab[i]]) {
@@ -135,9 +128,14 @@ void display_wear(void)
 		}
 	}
 
+	/* the bonuses column, then the gear lock in the window's footer */
+	if (panel_content_rect(PANEL_EQUIPMENT, &cx1, &cy1, &cx2, &cy2)) {
+		display_wear_bonuses(cx1, cy1, cx2, cy2 - WEA_FOOT_H);
+		render_rect_alpha(cx1, cy2 - WEA_FOOT_H, cx2, cy2 - WEA_FOOT_H + 1, UI_BORDER, UI_A_RULE);
+	}
 	dx_copysprite_emerald(butx(BUT_WEA_LCK), buty(BUT_WEA_LCK), 2 - gear_lock, 2);
-	render_text(butx(BUT_WEA_LCK) + 6, buty(BUT_WEA_LCK) - 4, textcolor, RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED,
-	    gear_lock ? "Gear locked" : "Gear free");
+	render_text(butx(BUT_WEA_LCK) + 8, buty(BUT_WEA_LCK) - 4, gear_lock ? UI_TEXT : UI_TEXT_MUTED,
+	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, gear_lock ? "Gear locked" : "Gear free");
 }
 
 void display_look(void)
@@ -148,14 +146,24 @@ void display_look(void)
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
 
-	render_sprite(opt_sprite(994), dotx(DOT_LOK), doty(DOT_LOK), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	/* the panel system draws the frame (title bar with the name, close,
+	 * minimize, lock); this draws the content into its rect. lx1/ly1 keep
+	 * meaning "frame top-left" so the classic layout math below holds. */
+	int cx1, cy1, cx2, cy2, lx1, ly1, lw = LOOK_W, lh = LOOK_H;
 
+	if (!panel_content_rect(PANEL_LOOK, &cx1, &cy1, &cx2, &cy2) || !panel_content_shown(PANEL_LOOK)) {
+		return;
+	}
+	lx1 = cx1;
+	ly1 = cy1 - UI_WIN_TITLE_H;
+
+	/* the classic 12-wide gear strip, in slot cells along the bottom */
 	for (b = BUT_WEA_BEG; b <= BUT_WEA_END; b++) {
 		int i = b - BUT_WEA_BEG;
-		int x = dotx(DOT_LOK) + but[b].x - dotx(DOT_WEA) + 30;
-		int y = doty(DOT_LOK) + 20;
+		int x = lx1 + LOOK_STRIP_X + FDX / 2 + i * FDX;
+		int y = ly1 + lh - UI_WIN_PAD - FDX / 2;
 
-		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+		ui_slot_cell(x, y, FDX / 2 - 1, 0, 0);
 		if (lookinv[weatab[i]]) {
 			bzero(&fx, sizeof(fx));
 
@@ -191,7 +199,13 @@ void display_look(void)
 		    (int)looksprite, &l_scale, &l_cr, &l_cg, &l_cb, &l_light, &l_sat, &l_c1, &l_c2, &l_c3, &l_shine, (int)tick);
 
 		fx.sprite = (unsigned int)get_player_sprite(l_csprite, look_dir, look_anim, look_step, 16, (int)(uint32_t)tick);
-		look_step++;
+		/* advance on game ticks, not frames: at 60+ fps the frame-stepped
+		 * walk ran several times faster than the character walks in the
+		 * world; LOOK_ANIM_TICKS ticks per step gives the classic pace */
+		if (tick - look_tick >= LOOK_ANIM_TICKS) {
+			look_tick = tick;
+			look_step++;
+		}
 		if (look_step == 16) {
 			look_step = 0;
 			look_anim++;
@@ -238,14 +252,23 @@ void display_inventory(void)
 
 	// fkey[0]=fkey[1]=fkey[2]=fkey[3]=0;
 
+	/* sunken trough behind the scrollbar rail; the window frame itself is
+	 * drawn by panels_display_frames() */
+	render_rounded_rect_filled_alpha(dotx(DOT_IN1), doty(DOT_IN1), dotx(DOT_IN1) + INV_RAIL_W,
+	    doty(DOT_IN1) + __invdy * FDX, UI_R_CHIP, UI_BG_SUNKEN, UI_A_SOCKET);
+
 	for (b = BUT_INV_BEG; b <= BUT_INV_END; b++) {
-		int i = 30 + invoff * INVDX + b - BUT_INV_BEG;
+		int i;
+		if (but[b].flags & BUTF_NOHIT) {
+			continue; /* beyond the active rows*cols grid */
+		}
+		i = 30 + invoff * INVDX + b - BUT_INV_BEG;
+		if (i >= _inventorysize) {
+			continue; /* partial last row: no slot behind this cell */
+		}
 		int c = (i - 2) % 4;
 		int x = butx(b);
 		int y = buty(b);
-		if (y > doty(DOT_IN2) - 20) {
-			break;
-		}
 		int yt = y + 12;
 
 		render_sprite(opt_sprite(SPR_ITPAD), x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
@@ -293,17 +316,14 @@ void display_container(void)
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
 
-	render_sprite(
-	    opt_sprite(SPR_TEXTF), dot[DOT_CON].x - 20, dot[DOT_CON].y - 55, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	if (con_type == 1) {
-		render_text(dot[DOT_CON].x, dot[DOT_CON].y - 50 + 2, textcolor, RENDER_TEXT_LEFT | RENDER_TEXT_LARGE, con_name);
-	} else {
-		render_text_fmt(dot[DOT_CON].x, dot[DOT_CON].y - 50 + 2, textcolor, RENDER_TEXT_LEFT | RENDER_TEXT_LARGE,
-		    "%s's Shop", con_name);
-	}
-
+	/* the container's name lives in its window's title bar (panel_title()),
+	 * so no separate header plate is drawn here */
 	for (b = BUT_CON_BEG; b <= BUT_CON_END; b++) {
 		int i = conoff * CONDX + b - BUT_CON_BEG;
+
+		if (but[b].flags & BUTF_NOHIT) {
+			continue;
+		}
 		int x = butx(b);
 		int y = buty(b);
 		int yt = y + 12;
@@ -353,24 +373,37 @@ void display_container(void)
 	}
 }
 
+/* Purse and trashcan sit on the inventory window's footer row: the purse is
+ * both the gold readout and the handle you grab to take/drop coins, the
+ * trashcan is where a carried item goes to be destroyed. */
 void display_gold(void)
 {
-	int x, y;
+	int x = butx(BUT_GLD), y = buty(BUT_GLD);
+	int cx1, cy1, cx2, cy2;
 
-	x = but[BUT_GLD].x;
-	y = but[BUT_GLD].y;
-
-	if (!(game_options & GO_SMALLBOT)) {
-		render_sprite(SPR_GOLD_BEG + 7, x, y - 10,
-		    lcmd == CMD_TAKE_GOLD || lcmd == CMD_DROP_GOLD ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT,
-		    RENDER_ALIGN_CENTER);
+	if (panel_content_rect(PANEL_INVENTORY, &cx1, &cy1, &cx2, &cy2)) {
+		render_rect_alpha(cx1, cy2 - INV_FOOT_H, cx2, cy2 - INV_FOOT_H + 1, UI_BORDER, UI_A_RULE);
 	}
 
+	render_sprite(SPR_GOLD_BEG + 7, x, y,
+	    lcmd == CMD_TAKE_GOLD || lcmd == CMD_DROP_GOLD ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+
 	if (capbut == BUT_GLD) {
-		dx_drawtext_gold(x, y - 10, textcolor, (int)takegold);
-		dx_drawtext_gold(x, y + 2, textcolor, (int)(gold - takegold));
+		/* splitting a stack: what you are pulling out over what stays */
+		dx_drawtext_gold(x + 34, y - 5, whitecolor, (int)takegold);
+		dx_drawtext_gold(x + 34, y + 5, UI_TEXT_MUTED, (int)(gold - takegold));
 	} else {
-		dx_drawtext_gold(x, y + 2, textcolor, (int)gold);
+		dx_drawtext_gold(x + 34, y, UI_TEXT_GOLD, (int)gold);
+	}
+
+	/* trashcan: dimmed until there is something to throw away */
+	x = butx(BUT_JNK);
+	y = buty(BUT_JNK);
+	if (vk_item || csprite) {
+		render_sprite(25, x, y, lcmd == CMD_JUNK_ITEM ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+	} else {
+		render_sprite(25, x, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
+		render_rect_alpha(x - 13, y - 13, x + 13, y + 13, UI_BG_BASE, 120);
 	}
 }
 
@@ -382,29 +415,18 @@ void display_citem(void)
 	unsigned char scale, cr, cg, cb, light, sat;
 	RenderFX fx;
 
-	// trashcan
-	if (vk_item || csprite) {
-		x = but[BUT_JNK].x;
-		y = but[BUT_JNK].y;
-		render_sprite(25, x, y, lcmd == CMD_JUNK_ITEM ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_CENTER);
-	}
-
-	// citem
+	// citem (the trashcan is part of the inventory window - display_gold())
 	if (!csprite) {
 		return;
 	}
 
-	if (capbut == -1) {
-		x = mousex;
-		y = mousey;
-	} else {
-		return;
-	}
+	x = mousex;
+	y = mousey;
 
-	if (x < 0 || y >= XRES) {
+	if (x < 0 || x >= UIXRES) {
 		return;
 	}
-	if (y < 0 || y >= YRES) {
+	if (y < 0 || y >= UIYRES) {
 		return;
 	}
 
@@ -426,7 +448,7 @@ void display_citem(void)
 	fx.align = RENDER_ALIGN_CENTER;
 	fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = FX_ITEMLIGHT;
 	render_push_clip();
-	render_more_clip(0, 0, XRES, YRES);
+	render_more_clip(0, 0, UIXRES, UIYRES);
 	render_sprite_fx(&fx, x, y);
 	if ((sprite = (unsigned int)additional_sprite((unsigned int)csprite, (int)tick)) != 0U) {
 		fx.sprite = sprite;
@@ -439,21 +461,64 @@ void display_citem(void)
 	render_pop_clip();
 }
 
+/* Slim scrollbar rail matching the window chrome: a sunken trough, two
+ * triangle arrows and a rounded thumb. The classic SPR_SCR* sprites are far
+ * wider than the 12px rail the panels reserve - they used to spill over the
+ * first item column and the skill values. */
+static void draw_scroll_rail(int b_up, int b_tr, int b_dw, int maxoff)
+{
+	int cx = butx(b_up);
+	int x1 = cx - UI_SCROLLBAR_W / 2 + 1, x2 = cx + UI_SCROLLBAR_W / 2 - 1;
+	int top = buty(b_up), bot = buty(b_dw);
+	int ty = buty(b_tr);
+	int hot_up = (butsel == b_up), hot_dw = (butsel == b_dw);
+	int hot_tr = (butsel == b_tr) || (capbut == b_tr);
+	unsigned short thumb = (maxoff > 0) ? (hot_tr ? UI_ACCENT : UI_BORDER_STRONG) : UI_BG_ROW_ACTIVE;
+
+	render_rounded_rect_filled_alpha(x1, top, x2, bot, UI_R_CHIP, UI_BG_SUNKEN, UI_A_CONTROL);
+
+	render_triangle_filled_alpha(cx, top - 4, cx - 4, top + 2, cx + 4, top + 2,
+	    hot_up ? UI_ACCENT : (maxoff > 0 ? UI_TEXT_LABEL : UI_TEXT_DISABLED), 255);
+	render_triangle_filled_alpha(cx, bot + 4, cx - 4, bot - 2, cx + 4, bot - 2,
+	    hot_dw ? UI_ACCENT : (maxoff > 0 ? UI_TEXT_LABEL : UI_TEXT_DISABLED), 255);
+
+	render_rounded_rect_filled_alpha(x1, ty - 5, x2, ty + 5, UI_R_CHIP, thumb, hot_tr ? 255 : UI_A_CONTROL);
+}
+
+void display_scrollbar_left(void)
+{
+	draw_scroll_rail(BUT_SCL_UP, BUT_SCL_TR, BUT_SCL_DW, max_skloff);
+}
+
+void display_scrollbar_container(void)
+{
+	draw_scroll_rail(BUT_CSC_UP, BUT_CSC_TR, BUT_CSC_DW, max_conoff);
+}
+
+void display_scrollbar_right(void)
+{
+	draw_scroll_rail(BUT_SCR_UP, BUT_SCR_TR, BUT_SCR_DW, max_invoff);
+}
+
+/* Which world is this? Everything but production wears a small amber tag
+ * at the top of the screen so a tester never mistakes pre-production or a
+ * local stack for the live game. */
+void display_environment_tag(void)
+{
+	const char *env = client_environment_label();
+	char buf[40];
+
+	if (!env || !*env) {
+		return;
+	}
+	snprintf(buf, sizeof(buf), "%s SERVER", env);
+	render_text(UIXRES / 2, 3, IRGB(31, 24, 6), RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, buf);
+}
+
 void display_scrollbars(void)
 {
-	render_sprite(SPR_SCRUP, but[BUT_SCL_UP].x, but[BUT_SCL_UP].y, butsel == BUT_SCL_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRLT, but[BUT_SCL_TR].x, but[BUT_SCL_TR].y, butsel == BUT_SCL_TR ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRDW, but[BUT_SCL_DW].x, but[BUT_SCL_DW].y, butsel == BUT_SCL_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-
-	render_sprite(SPR_SCRUP, but[BUT_SCR_UP].x, but[BUT_SCR_UP].y, butsel == BUT_SCR_UP ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRRT, but[BUT_SCR_TR].x, but[BUT_SCR_TR].y, butsel == BUT_SCR_TR ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
-	render_sprite(SPR_SCRDW, but[BUT_SCR_DW].x, but[BUT_SCR_DW].y, butsel == BUT_SCR_DW ? FX_ITEMBRIGHT : FX_ITEMLIGHT,
-	    RENDER_ALIGN_OFFSET);
+	display_scrollbar_left();
+	display_scrollbar_right();
 }
 
 void display_skill(void)
@@ -682,7 +747,7 @@ void display_tutor(void)
 				break;
 			}
 		}
-		x = render_text(x, y, IRGB(12, 10, 4), RENDER_TEXT_LEFT | RENDER_TEXT_LARGE, buf) + 3;
+		x = render_text(x, y, UI_TEXT, RENDER_TEXT_LEFT | RENDER_TEXT_LARGE, buf) + 3;
 	}
 }
 
@@ -701,13 +766,41 @@ static void trans_date(int t, int *phour, int *pmin)
 	}
 }
 
-void display_screen(void)
+/* System menu strip: the Menu / Help / Quests buttons that lived in the
+ * top bar's right corner. Plain ui_buttons on a HUD plate; the commands
+ * are the classic BUT_EXIT / BUT_HELP / BUT_QUEST ones. */
+void display_sysmenu(void)
+{
+	static const struct {
+		int but;
+		const char *label;
+	} seg[3] = {
+	    {BUT_EXIT, "Menu"},
+	    {BUT_HELP, "Help"},
+	    {BUT_QUEST, "Quests"},
+	};
+
+	for (int i = 0; i < 3; i++) {
+		int x = dotx(DOT_MENU) + i * (SYSM_BTN_W + SYSM_GAP);
+		int y = doty(DOT_MENU);
+		int active = (seg[i].but == BUT_HELP && display_help) || (seg[i].but == BUT_QUEST && display_quest);
+		int hot = (butsel == seg[i].but);
+		int state = active ? UI_BTN_ACTIVE : (hot ? (vk_lbut ? UI_BTN_PRESSED : UI_BTN_HOVER) : UI_BTN_REST);
+
+		ui_button(x, y, SYSM_BTN_W, SYSM_BTN_H, seg[i].label, state);
+	}
+}
+
+/* Classic flip-digit game clock, on its own little HUD plate (hidden by
+ * default - the mod ships a modern clock widget; this one is for the
+ * players who liked the old one). Sprites 200.. are the flip animation
+ * frames the top bar used to show. */
+void display_clock(void)
 {
 	int h, m;
 	int h1, h2, m1, m2;
 	static int rh1 = 0, rh2 = 0, rm1 = 0, rm2 = 0;
-
-	render_sprite(opt_sprite(999), dotx(DOT_TOP), doty(DOT_TOP), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	int x = dotx(DOT_CLK) + 1, y = doty(DOT_CLK) + 2;
 
 	trans_date((int)realtime, &h, &m);
 
@@ -722,21 +815,18 @@ void display_screen(void)
 	if (rh1 == 30) {
 		rh1 = 0;
 	}
-
 	if (h2 != rh2) {
 		rh2++;
 	}
 	if (rh2 == 30) {
 		rh2 = 0;
 	}
-
 	if (m1 != rm1) {
 		rm1++;
 	}
 	if (rm1 == 18) {
 		rm1 = 0;
 	}
-
 	if (m2 != rm2) {
 		rm2++;
 	}
@@ -744,22 +834,13 @@ void display_screen(void)
 		rm2 = 0;
 	}
 
-	render_sprite((unsigned int)(200 + rh1), dotx(DOT_TOP) + 730 + 0 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rh2), dotx(DOT_TOP) + 730 + 1 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rm1), dotx(DOT_TOP) + 734 + 2 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_sprite((unsigned int)(200 + rm2), dotx(DOT_TOP) + 734 + 3 * 10 - 2, doty(DOT_TOP) + 5 + 3,
-	    RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_sprite((unsigned int)(200 + rh1), x + 0 * 10, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_sprite((unsigned int)(200 + rh2), x + 1 * 10, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_text(x + 2 * 10 + 3, y, UI_TEXT_MUTED, UI_FONT_BODY, ":");
+	render_sprite((unsigned int)(200 + rm1), x + 2 * 10 + 8, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
+	render_sprite((unsigned int)(200 + rm2), x + 3 * 10 + 8, y, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
 
 	sprintf(hover_time_text, "%02d:%02d Astonia Standard Time", h, m);
-
-	if (game_options & GO_SMALLBOT) {
-		render_sprite(opt_sprite(991), dotx(DOT_BOT), doty(DOT_BOT), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	} else {
-		render_sprite(opt_sprite(998), dotx(DOT_BOT), doty(DOT_BOT), RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	}
 }
 
 void display_text(void)
@@ -773,55 +854,138 @@ void display_text(void)
 	} else {
 		hitsel[0] = 0;
 	}
-
-	display_cmd();
 }
 
 void display_mode(void)
 {
-	static char *speedtext[3] = {"NORMAL", "FAST", "STEALTH"};
-	int sel;
-	unsigned short int col;
+	static const struct {
+		int but;
+		int mode;
+		const char *label;
+	} seg[3] = {
+	    {BUT_MOD_WALK1, 1, "Fast"},
+	    {BUT_MOD_WALK0, 0, "Normal"},
+	    {BUT_MOD_WALK2, 2, "Stealth"},
+	};
 
-	// walk
-	if (butsel >= BUT_MOD_WALK0 && butsel <= BUT_MOD_WALK2) {
-		sel = butsel - BUT_MOD_WALK0;
-		col = sel == pspeed ? lightbluecolor : bluecolor;
-	} else {
-		sel = pspeed;
-		col = lightbluecolor;
+	int sc = panel_scale(PANEL_SPEED);
+	int r = max(4, SPEED_ORB * sc / 200);
+	int i;
+
+	/* three small orbs, the mode's name above each: the classic look,
+	 * without the wide segment buttons that took over the corner */
+	for (i = 0; i < 3; i++) {
+		int cx = butx(seg[i].but), cy = buty(seg[i].but);
+		int active = (pspeed == seg[i].mode);
+		int hot = (butsel == seg[i].but);
+
+		render_text(cx, doty(DOT_MOD) + 1, active ? UI_TEXT : (hot ? UI_TEXT : UI_TEXT_LABEL),
+		    UI_FONT_CENTER | (sc < 130 ? RENDER_TEXT_SMALL : 0), seg[i].label);
+
+		render_circle_filled_alpha(cx, cy, r, UI_BG_SUNKEN, UI_A_SOCKET);
+		render_gradient_circle(cx, cy, r, UI_BG_BASE, 0, 160);
+		if (active) {
+			render_gradient_circle(cx, cy, r - 1, UI_ACCENT, 230, 40);
+			render_circle_alpha(cx, cy, r, UI_ACCENT, 255);
+			if (render_glow_available()) {
+				render_glow(cx, cy, UI_ACCENT, (float)r * 2.2f, 0.5f, 0.35f);
+			}
+		} else {
+			render_circle_alpha(cx, cy, r, hot ? UI_ACCENT : UI_BORDER, hot ? UI_A_BORDER_HOV : UI_A_BORDER_REST);
+		}
+	}
+}
+
+/* ── Buff chips ─────────────────────────────────────────────────────────
+ *
+ * One orb per tracked effect (potion, heal/freeze, bless, rage). An idle
+ * effect is a dark socket; an active one is a colored orb lit from within
+ * (an additive GPU glow when the fancy-effects pipeline is on, a gradient
+ * fill either way), with the remaining time as a rim ring that unwinds
+ * clockwise - a small hot spark rides its leading edge - and the seconds
+ * printed underneath. Nearly-expired effects pulse hard. */
+static void buff_chip(int idx, const char *tag, unsigned short color, int active, int pct, const char *sub)
+{
+	int sc = panel_scale(PANEL_BUFFS);
+	int chip = BUFF_CHIP * sc / 100, gap = BUFF_GAP * sc / 100;
+	int x1 = dotx(DOT_SSP) + idx * (chip + gap);
+	int y1 = doty(DOT_SSP);
+	int cx = x1 + chip / 2, cy = y1 + chip / 2;
+	int r = chip / 2 - 1;
+	int glow = render_glow_available();
+	int urgent;
+	float pulse;
+
+	if (pct < 0) {
+		pct = 0;
+	}
+	if (pct > 100) {
+		pct = 100;
+	}
+	urgent = active && pct <= 15;
+	/* ~1Hz breath, doubled while the effect is about to run out */
+	pulse = 0.5f + 0.5f * sinf((float)tick * (urgent ? 0.55f : 0.26f));
+
+	/* socket: a dark well with a faint raised rim - always there, so the
+	 * row reads as four fixed slots whatever is active */
+	render_circle_filled_alpha(cx, cy, r, UI_BG_SUNKEN, UI_A_SOCKET);
+	render_gradient_circle(cx, cy, r, UI_BG_BASE, 0, 160);
+	render_circle_alpha(cx, cy, r, active ? color : UI_BORDER, active ? 200 : UI_A_BORDER_REST);
+
+	if (active) {
+		float f = (float)pct / 100.0f;
+		float ang = -(float)M_PI / 2.0f + 2.0f * (float)M_PI * f;
+		int tipx = cx + (int)lroundf(cosf(ang) * (float)(r - 1));
+		int tipy = cy + (int)lroundf(sinf(ang) * (float)(r - 1));
+
+		/* the orb: colored, brighter at the centre - lit from within */
+		render_gradient_circle(cx, cy, r - 2, color, (unsigned char)(150 + 60 * f), 30);
+
+		if (glow) {
+			/* soft halo bleeding past the rim, breathing with the pulse */
+			render_glow(cx, cy, color, (float)chip * 0.85f, 0.4f,
+			    (0.16f + 0.24f * f) * (0.7f + 0.3f * pulse) * (urgent ? 1.5f : 1.0f));
+			/* hot core so the middle reads as the light source */
+			render_glow(cx, cy, color, (float)r * 0.8f, 2.2f, 0.30f + 0.15f * pulse);
+		}
+
+		/* remaining time as a rim ring, unwinding clockwise from 12
+		 * o'clock, with a spark riding the leading edge */
+		render_ring_alpha(cx, cy, r - 2, r, -90, -90 + (int)(360.0f * f), whitecolor, urgent ? 255 : 210);
+		if (glow) {
+			render_glow(tipx, tipy, color, 5.0f, 2.5f, 0.55f + 0.35f * pulse);
+		} else {
+			render_circle_filled_alpha(tipx, tipy, 1, whitecolor, 255);
+		}
 	}
 
-	dx_copysprite_emerald(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y, 4, sel == 0 ? 2 : pspeed == 0 ? 1 : 0);
-	dx_copysprite_emerald(but[BUT_MOD_WALK1].x, but[BUT_MOD_WALK1].y, 4, sel == 1 ? 2 : pspeed == 1 ? 1 : 0);
-	dx_copysprite_emerald(but[BUT_MOD_WALK2].x, but[BUT_MOD_WALK2].y, 4, sel == 2 ? 2 : pspeed == 2 ? 1 : 0);
-
-	render_text(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y + 7, bluecolor,
-	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "F6");
-	render_text(but[BUT_MOD_WALK1].x, but[BUT_MOD_WALK1].y + 7, bluecolor,
-	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "F5");
-	render_text(but[BUT_MOD_WALK2].x, but[BUT_MOD_WALK2].y + 7, bluecolor,
-	    RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED | RENDER_ALIGN_CENTER, "F7");
-
-	if (*speedtext[sel]) {
-		render_text(but[BUT_MOD_WALK0].x, but[BUT_MOD_WALK0].y - 13, col,
-		    RENDER_TEXT_SMALL | RENDER_ALIGN_CENTER | RENDER_TEXT_FRAMED, speedtext[sel]);
+	/* the tag sits in the orb only when there is room for it; the
+	 * countdown goes on the label row below */
+	if (chip >= 24) {
+		render_text(cx, cy - 4, active ? UI_TEXT : UI_TEXT_DISABLED, UI_FONT_CENTER | RENDER_TEXT_SMALL, tag);
+	}
+	if (active && sub && *sub) {
+		render_text(cx, y1 + chip + 1, urgent && ((tick & 8) != 0U) ? UI_TEXT_ERROR : UI_TEXT_MUTED,
+		    UI_FONT_CENTER | RENDER_TEXT_SMALL, sub);
+	} else if (chip < 24) {
+		render_text(cx, y1 + chip + 1, active ? UI_TEXT : UI_TEXT_DISABLED, UI_FONT_CENTER | RENDER_TEXT_SMALL, tag);
 	}
 }
 
 void display_selfspells(void)
 {
 	int cn = (int)map[mapmn(MAPDX / 2, MAPDY / 2)].cn;
-	if (!cn) {
-		return;
-	}
+	int pot_on = 0, mid_on = 0, bls_on = 0;
+	int pot_pct = 0, mid_pct = 0, bls_pct = 0;
+	char pot_txt[16] = "", mid_txt[16] = "", bls_txt[16] = "";
+	const char *mid_tag = (sv_ver == 35) ? "HEA" : "FRZ";
 
 	sprintf(hover_bless_text, "Bless: Not active");
 	sprintf(hover_freeze_text, "Freeze: Not active");
 	sprintf(hover_heal_text, "Heal: Not active");
 	sprintf(hover_potion_text, "Potion: Not active");
 
-	for (int n = 0; n < 4; n++) {
+	for (int n = 0; cn && n < 4; n++) {
 		int nr = find_cn_ceffect(cn, n);
 		if (nr == -1) {
 			continue;
@@ -829,67 +993,150 @@ void display_selfspells(void)
 
 		switch (ceffect[nr].generic.type) {
 		case 9: {
-			int step = 50 - 50 * (int)(ceffect[nr].bless.stop - tick) /
-			                    (int)(ceffect[nr].bless.stop - ceffect[nr].bless.start);
-			render_push_clip();
-			render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
-			if (ceffect[nr].bless.stop - tick < 24 * 30 && (tick & 4)) {
-				render_sprite(997, dotx(DOT_SSP) + 2 * 10, doty(DOT_SSP) + step, RENDERFX_BRIGHT, RENDER_ALIGN_NORMAL);
-			} else {
-				render_sprite(
-				    997, dotx(DOT_SSP) + 2 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-			}
-			render_pop_clip();
-			sprintf(hover_bless_text, "Bless: %us to go", (ceffect[nr].bless.stop - tick) / 24);
+			unsigned int left = ceffect[nr].bless.stop - tick;
+
+			bls_on = 1;
+			bls_pct = 100 * (int)left / (int)(ceffect[nr].bless.stop - ceffect[nr].bless.start);
+			snprintf(bls_txt, sizeof(bls_txt), "%us", left / 24);
+			sprintf(hover_bless_text, "Bless: %us to go", left / 24);
 			break;
 		}
 		case 10:
 #define HEALDURATION (TICKS * 8)
 			if (sv_ver == 35) {
-				int step = 50 * (tick - ceffect[nr].heal.start) / HEALDURATION;
-				render_push_clip();
-				render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
-				render_sprite(
-				    997, dotx(DOT_SSP) + 1 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-				render_pop_clip();
+				unsigned int done = tick - ceffect[nr].heal.start;
+
+				mid_on = 1;
+				mid_pct = 100 - 100 * (int)done / HEALDURATION;
+				snprintf(mid_txt, sizeof(mid_txt), "%.0fs", (ceffect[nr].heal.start + HEALDURATION - tick) / 24.0);
 				sprintf(hover_heal_text, "Heal: %.1fs to go", (ceffect[nr].heal.start + HEALDURATION - tick) / 24.0);
 			}
 			break;
 
 		case 11:
 			if (sv_ver == 30) {
-				int step = 50 - 50 * (int)(ceffect[nr].freeze.stop - tick) /
-				                    (int)(ceffect[nr].freeze.stop - ceffect[nr].freeze.start);
-				render_push_clip();
-				render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
-				render_sprite(
-				    997, dotx(DOT_SSP) + 1 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-				render_pop_clip();
-				sprintf(hover_freeze_text, "Freeze: %us to go", (ceffect[nr].freeze.stop - tick) / 24);
+				unsigned int left = ceffect[nr].freeze.stop - tick;
+
+				mid_on = 1;
+				mid_pct = 100 * (int)left / (int)(ceffect[nr].freeze.stop - ceffect[nr].freeze.start);
+				snprintf(mid_txt, sizeof(mid_txt), "%us", left / 24);
+				sprintf(hover_freeze_text, "Freeze: %us to go", left / 24);
 			}
 			break;
 		case 14: {
-			int step = 50 - 50 * (int)(ceffect[nr].potion.stop - tick) /
-			                    (int)(ceffect[nr].potion.stop - ceffect[nr].potion.start);
-			render_push_clip();
-			render_more_clip(0, 0, XRES, doty(DOT_SSP) + 119 - 68);
-			if (step >= 40 && (tick & 4)) {
-				render_sprite(997, dotx(DOT_SSP) + 0 * 10, doty(DOT_SSP) + step, RENDERFX_BRIGHT, RENDER_ALIGN_NORMAL);
-			} else {
-				render_sprite(
-				    997, dotx(DOT_SSP) + 0 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-			}
-			render_pop_clip();
-			sprintf(hover_potion_text, "Potion: %us to go", (ceffect[nr].potion.stop - tick) / 24);
+			unsigned int left = ceffect[nr].potion.stop - tick;
+
+			pot_on = 1;
+			pot_pct = 100 * (int)left / (int)(ceffect[nr].potion.stop - ceffect[nr].potion.start);
+			snprintf(pot_txt, sizeof(pot_txt), "%us", left / 24);
+			sprintf(hover_potion_text, "Potion: %us to go", left / 24);
 			break;
 		}
 		}
+	}
+
+	buff_chip(0, "POT", IRGB(8, 26, 10), pot_on, pot_pct, pot_txt);
+	buff_chip(1, mid_tag, IRGB(10, 18, 28), mid_on, mid_pct, mid_txt);
+	buff_chip(2, "BLS", IRGB(28, 22, 8), bls_on, bls_pct, bls_txt);
+}
+
+/* What the experience / military bars print right below themselves.
+ * Cycled by clicking the bar: nothing -> percent -> have/need -> to go. */
+#define BAR_INFO_NONE    0
+#define BAR_INFO_PERCENT 1
+#define BAR_INFO_VALUES  2
+#define BAR_INFO_TOGO    3
+#define BAR_INFO_MODES   4
+
+static int exp_info_mode = BAR_INFO_PERCENT;
+static int mil_info_mode = BAR_INFO_PERCENT;
+
+void exp_bar_toggle(void)
+{
+	exp_info_mode = (exp_info_mode + 1) % BAR_INFO_MODES;
+}
+
+void mil_bar_toggle(void)
+{
+	mil_info_mode = (mil_info_mode + 1) % BAR_INFO_MODES;
+}
+
+/* 1234567 -> "1.23M", 45678 -> "45.7k", 999 -> "999" */
+static const char *fmt_compact(long long v, char *buf, size_t sz)
+{
+	if (v >= 1000000000LL) {
+		snprintf(buf, sz, "%.2fG", (double)v / 1e9);
+	} else if (v >= 1000000LL) {
+		snprintf(buf, sz, "%.2fM", (double)v / 1e6);
+	} else if (v >= 10000LL) {
+		snprintf(buf, sz, "%.1fk", (double)v / 1e3);
+	} else {
+		snprintf(buf, sz, "%lld", v);
+	}
+	return buf;
+}
+
+/* 1234567 -> "1,234,567" */
+static const char *fmt_thousands(long long v, char *buf, size_t sz)
+{
+	char tmp[32];
+	int len, i, o = 0;
+
+	snprintf(tmp, sizeof(tmp), "%lld", v);
+	len = (int)strlen(tmp);
+	for (i = 0; i < len && o < (int)sz - 1; i++) {
+		if (i && (len - i) % 3 == 0 && tmp[i] != '-') {
+			buf[o++] = ',';
+		}
+		buf[o++] = tmp[i];
+	}
+	buf[o] = 0;
+	return buf;
+}
+
+/* One row of the status panel: a long WoW-style bar with its info text
+ * printed ON the bar (click cycles what it says). The width comes from the
+ * panel's content rect so it follows the layout and the UI scale. */
+static void draw_status_row(
+    int y, int pct, unsigned short color, int flash, int mode, long long have, long long need, long long togo)
+{
+	int x1, y1, x2, y2;
+	char a[32], b[32], text[80] = "";
+
+	if (!panel_content_rect(PANEL_STATUS, &x1, &y1, &x2, &y2)) {
+		return;
+	}
+
+	ui_meter_h(x1, y, x2, y + stat_bar_h(), pct, flash ? whitecolor : color);
+	/* WoW-style segment ticks every 10% */
+	for (int i = 1; i < 10; i++) {
+		int tx = x1 + (x2 - x1) * i / 10;
+
+		render_rect_alpha(tx, y + 1, tx + 1, y + stat_bar_h() - 1, UI_BG_BASE, 120);
+	}
+
+	switch (mode) {
+	case BAR_INFO_PERCENT:
+		snprintf(text, sizeof(text), "%d%%", pct);
+		break;
+	case BAR_INFO_VALUES:
+		snprintf(text, sizeof(text), "%s / %s", fmt_compact(have, a, sizeof(a)), fmt_compact(need, b, sizeof(b)));
+		break;
+	case BAR_INFO_TOGO:
+		snprintf(text, sizeof(text), "%s to go", fmt_compact(togo, a, sizeof(a)));
+		break;
+	default:
+		break;
+	}
+	if (text[0] && stat_bar_h() >= 9) {
+		render_text((x1 + x2) / 2, y + (stat_bar_h() - 7) / 2, UI_TEXT, UI_FONT_CENTER, text);
 	}
 }
 
 void display_exp(void)
 {
 	static int last_exp = 0, exp_ticker = 0;
+	char n1[32], n2[32], n3[32], n4[32];
 
 	sprintf(hover_level_text, "Level: unknown");
 
@@ -907,22 +1154,27 @@ void display_exp(void)
 	}
 
 	if (total) {
+		long long have = total - step; /* exp gathered in this level */
 		if (last_exp != expe) {
 			exp_ticker = 3;
 			last_exp = expe;
 		}
-
-		render_push_clip();
-		render_more_clip(0, 0, dotx(DOT_TOP) + 31 + 100 - (int)(100ll * step / total), doty(DOT_TOP) + 8 + 7);
-		render_sprite(996, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 7, exp_ticker ? RENDERFX_BRIGHT : RENDERFX_NORMAL_LIGHT,
-		    RENDER_ALIGN_NORMAL);
-		render_pop_clip();
-
 		if (exp_ticker) {
 			exp_ticker--;
 		}
 
-		sprintf(hover_level_text, "Level: From %d to %d", clevel, nlevel);
+		char lead[96];
+
+		draw_status_row(doty(DOT_STAT), (int)(100ll * have / total), IRGB(14, 8, 28), exp_ticker != 0, exp_info_mode,
+		    have, total, step);
+		/* the level tag sits at the bar's left end, whatever the mode */
+		snprintf(lead, sizeof(lead), "Lv %d", clevel);
+		render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
+
+		snprintf(hover_level_text, 200,
+		    "Level %d to %d: %s / %s (%lld%%)\n%s to go, total %s exp\n(click the bar to change the numbers shown)",
+		    clevel, nlevel, fmt_thousands(have, n1, sizeof(n1)), fmt_thousands(total, n2, sizeof(n2)),
+		    100LL * have / total, fmt_thousands(step, n3, sizeof(n3)), fmt_thousands(expe, n4, sizeof(n4)));
 	}
 }
 
@@ -951,11 +1203,28 @@ char *_game_rankname[] = {
     "Knight of Astonia", // 21
     "Baron of Astonia", // 22
     "Earl of Astonia", // 23
-    "Warlord of Astonia" // 24    lvl 125
+    "Warlord of Astonia", // 24    lvl 125
+    "Duke of Astonia", // 25    lvl 130
+    "Archduke of Astonia", // 26    lvl 135
+    "Prince of Astonia", // 27    lvl 140
+    "High Prince of Astonia", // 28    lvl 145
+    "Royal Guardian", // 29    lvl 150
+    "Slayer of Demons", // 30    lvl 155
+    "Astonian Champion", // 31    lvl 161
+    "Defender of the Realm", // 32    lvl 167
+    "Sword of Astonia", // 33    lvl 173
+    "Shield of the Kingdom", // 34    lvl 179
+    "Legendary Warrior", // 35    lvl 185
+    "Immortal Guardian", // 36    lvl 188
+    "Hero of Ages", // 37    lvl 191
+    "Mythic Protector", // 38    lvl 194
+    "Eternal Champion", // 39    lvl 197
+    "Avatar of Astonia" // 40    lvl 200
 };
 char **game_rankname = _game_rankname;
 
 int _game_rankcount = ARRAYSIZE(_game_rankname);
+_Static_assert(ARRAYSIZE(_game_rankname) == 41, "rank table must cover ranks 0..40 (server mil_rank table)");
 int *game_rankcount = &_game_rankcount;
 
 DLL_EXPORT int mil_rank(int exp);
@@ -974,11 +1243,18 @@ DLL_EXPORT int mil_rank(int exp)
 
 void display_military(void)
 {
-	int step, total, rank, cost1, cost2;
+	int step, total, rank, cost1, cost2, maxrank;
+	char n1[32], n2[32], n3[32], n4[32];
 
 	sprintf(hover_rank_text, "Rank: none or unknown");
 
+	/* Ranks follow the server: rank = cbrt(military points), capped at the last name
+	 * in the table (40 = Avatar of Astonia). */
+	maxrank = *game_rankcount - 1;
 	rank = mil_rank((int)mil_exp);
+	if (rank > maxrank) {
+		rank = maxrank;
+	}
 	cost1 = rank * rank * rank;
 	cost2 = (rank + 1) * (rank + 1) * (rank + 1);
 
@@ -987,46 +1263,87 @@ void display_military(void)
 	if (step > total) {
 		step = total;
 	}
+	if (step < 0) {
+		step = 0;
+	}
 
-	if (mil_exp && total) {
-		if (rank < *game_rankcount - 1) {
-			render_push_clip();
-			render_more_clip(0, 0, dotx(DOT_TOP) + 31 + 100 * step / total, doty(DOT_TOP) + 8 + 24);
-			render_sprite(993, dotx(DOT_TOP) + 31, doty(DOT_TOP) + 24, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-			render_pop_clip();
+	if (!mil_exp || !total) {
+		/* no military points yet: the bar still exists, empty - players
+		 * kept reporting it "missing" when it only appeared with honor */
+		draw_status_row(doty(DOT_STAT) + stat_row_h(), 0, IRGB(28, 12, 4), 0, BAR_INFO_NONE, 0, 0, 0);
+		if (stat_bar_h() >= 9) {
+			render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + stat_row_h() + 2, UI_TEXT_MUTED, UI_FONT_BODY,
+			    "Military Standing - no rank yet");
+		}
+		snprintf(hover_rank_text, 200, "No rank yet - military points come from fighting for your realm");
+		return;
+	}
+	{
+		unsigned short mil_color = IRGB(28, 12, 4);
+		char lead[96];
 
-			sprintf(hover_rank_text, "Rank: '%s' to '%s'", game_rankname[rank], game_rankname[rank + 1]);
+		/* the rank table can have unnamed gaps - say so instead of %s-ing null */
+		const char *rname = game_rankname[rank] && game_rankname[rank][0] ? game_rankname[rank] : NULL;
+
+		if (rank < maxrank) {
+			draw_status_row(doty(DOT_STAT) + stat_row_h(), 100 * step / total, mil_color, 0, mil_info_mode, step, total,
+			    total - step);
+			if (rname) {
+				snprintf(lead, sizeof(lead), "Military Standing - %s", rname);
+			} else {
+				snprintf(lead, sizeof(lead), "Military Standing - unnamed rank %d", rank);
+			}
+			if (stat_bar_h() >= 9) {
+				render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + stat_row_h() + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
+			}
+
+			snprintf(hover_rank_text, 200,
+			    "Rank %d '%s' to %d '%s': %s / %s (%d%%)\n%s to go, total %s military points", rank,
+			    game_rankname[rank], rank + 1, game_rankname[rank + 1], fmt_thousands(step, n1, sizeof(n1)),
+			    fmt_thousands(total, n2, sizeof(n2)), 100 * step / total, fmt_thousands(total - step, n3, sizeof(n3)),
+			    fmt_thousands((long long)mil_exp, n4, sizeof(n4)));
 		} else {
-			sprintf(hover_rank_text, "%s", game_rankname[*game_rankcount - 1]);
+			/* Highest rank: full bar */
+			draw_status_row(doty(DOT_STAT) + stat_row_h(), 100, mil_color, 0, BAR_INFO_NONE, 0, 0, 0);
+			if (rname) {
+				snprintf(lead, sizeof(lead), "Military Standing - %s (max)", rname);
+			} else {
+				snprintf(lead, sizeof(lead), "Military Standing - unnamed rank %d (max)", rank);
+			}
+			if (stat_bar_h() >= 9) {
+				render_text(dotx(DOT_STAT) + 4, doty(DOT_STAT) + stat_row_h() + 2, UI_TEXT_MUTED, UI_FONT_BODY, lead);
+			}
+			snprintf(hover_rank_text, 200, "Rank %d '%s' (highest rank)\ntotal %s military points", rank,
+			    game_rankname[maxrank], fmt_thousands((long long)mil_exp, n4, sizeof(n4)));
 		}
 	}
 }
 
+/* The rage chip is the fourth socket of the buffs panel; unlike the timed
+ * effects it fills up as rage builds rather than draining. */
 void display_rage(void)
 {
-	int step;
+	int pct, cap;
+	char txt[16] = "";
 
 	sprintf(hover_rage_text, "Rage: Not active");
 
 	if (!value[0][sv_val(V_RAGE)] || !rage) {
+		buff_chip(3, "RGE", IRGB(28, 8, 8), 0, 0, "");
 		return;
 	}
 
 	if (sv_ver == 35) {
-		step = 50 - 50 * rage / (value[0][V35_RAGE] + (int)(value[0][V35_TACTICS] * 0.15 + 0.1));
-	} else {
-		step = (int)(50 - 50 * rage / value[0][V3_RAGE]);
-	}
-	render_push_clip();
-	render_more_clip(0, 0, 800, doty(DOT_SSP) + 119 - 68);
-	render_sprite(997, dotx(DOT_SSP) + 3 * 10, doty(DOT_SSP) + step, RENDERFX_NORMAL_LIGHT, RENDER_ALIGN_NORMAL);
-	render_pop_clip();
-
-	if (sv_ver == 35) {
+		cap = value[0][V35_RAGE] + (int)(value[0][V35_TACTICS] * 0.15 + 0.1);
 		sprintf(hover_rage_text, "Rage: +%d", rage / 4);
+		snprintf(txt, sizeof(txt), "+%d", rage / 4);
 	} else {
-		sprintf(hover_rage_text, "Rage: %d%%", 100 * rage / value[0][V3_RAGE]);
+		cap = (int)value[0][V3_RAGE];
+		sprintf(hover_rage_text, "Rage: %d%%", 100 * rage / max(1, cap));
+		snprintf(txt, sizeof(txt), "%d%%", 100 * rage / max(1, cap));
 	}
+	pct = 100 * rage / max(1, cap);
+	buff_chip(3, "RGE", IRGB(28, 8, 8), 1, pct, txt);
 }
 
 void display_game_special(void)
@@ -1067,7 +1384,7 @@ void display_game_special(void)
 		render_sprite(50475, 75, 47, 14, 0);
 		break;
 	case 8:
-		render_sprite(50475, 763, 62, 14, 0);
+		render_sprite(50475, UIXRES - 37, 62, 14, 0);
 		break;
 
 	case 9:
@@ -1099,10 +1416,10 @@ void display_game_special(void)
 		render_sprite(50476, 625, 456, 14, 0);
 		break;
 	case 14:
-		render_sprite(50476, 700, 456, 14, 0);
+		render_sprite(50476, UIXRES - 100, 456, 14, 0);
 		break;
 	case 15:
-		render_sprite(50476, 741, 456, 14, 0);
+		render_sprite(50476, UIXRES - 59, 456, 14, 0);
 		break;
 
 	case 16:
@@ -1110,7 +1427,7 @@ void display_game_special(void)
 		break;
 
 	case 17:
-		render_sprite(50473, 722, 382, 14, 0);
+		render_sprite(50473, UIXRES - 78, 382, 14, 0);
 		render_sprite(50475, 257, 60, 14, 0);
 		break;
 
@@ -1308,8 +1625,8 @@ void display_selfbars(void)
 		return;
 	}
 
-	x = dotx(DOT_MTL) + 7;
-	y = doty(DOT_MTL) + 7;
+	x = 7;
+	y = 47;
 
 	lifep = map[plrmn].health;
 	shieldp = map[plrmn].shield;

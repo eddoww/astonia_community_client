@@ -12,7 +12,10 @@
 
 #include "astonia.h"
 #include "gui/gui.h"
+#include "gui/loading_ui.h"
 #include "gui/gui_private.h"
+#include "gui/input_bind.h"
+#include "gui/panels.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -211,6 +214,7 @@ int conoff, max_conoff;
 int skloff, max_skloff;
 int __skldy;
 int __invdy;
+int __condy;
 
 int lcmd;
 int rcmd;
@@ -282,7 +286,7 @@ int main_init(void)
 	set_skloff(0, 0);
 	set_conoff(0, 0);
 
-	init_game(dotx(DOT_MCT), doty(DOT_MCT));
+	init_game(XRES / 2, YRES / 2); /* the world engine centre is native */
 
 	minimap_init();
 
@@ -336,6 +340,7 @@ int main_loop(void)
 	uint64_t gui_last_frame = 0, gui_last_tick = 0;
 
 	amod_gamestart();
+	loading_step(LS_CONNECT);
 
 	nexttick = (int)(SDL_GetTicks() + (Uint32)MPT);
 	nextframe = (int)(SDL_GetTicks() + (Uint32)MPF);
@@ -375,6 +380,11 @@ int main_loop(void)
 					cl_ticker();
 				}
 				amod_tick();
+				keyboard_move_tick();
+				/* walk commands were just appended; poll_network() already ran
+				 * this iteration, so without a flush they'd wait a full frame */
+				client_flush_output();
+				finish_character_options();
 #ifdef ENABLE_SHAREDMEM
 				sharedmem_update();
 #endif
@@ -398,8 +408,17 @@ int main_loop(void)
 			if (sdl_is_shown() && (!(tick & 3) || !game_slowdown || sockstate != 4)) {
 				sdl_clear();
 				display();
-				amod_frame();
-				display_mouseover();
+				/* mod widgets (weather, menu button ...) and hover texts
+				 * have no place on top of a loading screen */
+				if (!gui_is_loading()) {
+					amod_frame();
+					if (gui_overlay_visible) {
+						display_mouseover();
+					}
+				}
+				/* the GUI drew on the UI layer since the world pass -
+				 * composite it, scaled, over the frame */
+				render_ui_layer_end();
 				minimap_update();
 			}
 
@@ -568,18 +587,6 @@ int vk_special_inc(void)
 		}
 	}
 	return 0;
-}
-
-void gui_insert(void)
-{
-	char *text;
-
-	text = SDL_GetClipboardText();
-
-	if (text != NULL) {
-		cmd_add_text(text, 0);
-		SDL_free(text);
-	}
 }
 
 int gui_keymode(void)

@@ -58,9 +58,47 @@ MIX_Track *sdl_tracks[MAX_SOUND_CHANNELS] = {NULL};
 
 // Scale and resolution settings
 DLL_EXPORT int sdl_scale = 1;
+/* Options > Interface > UI Scale, percent (50..200, default 100). The GUI
+ * is laid out on a UIXRES x UIYRES canvas and composited scaled; the world
+ * always renders at the full canvas. Applies live via ui_scale_apply(). */
+DLL_EXPORT int ui_scale_pct = 100;
+DLL_EXPORT int __uixres, __uiyres;
+
+/* derive the UI-layer dims from the canvas + scale, clamped so the classic
+ * 800x450 layout always fits the layer */
+void sdl_derive_ui_canvas(void)
+{
+	int pct = ui_scale_pct;
+	int maxpct;
+
+	if (pct < 50) {
+		pct = 50;
+	}
+	if (pct > 200) {
+		pct = 200;
+	}
+	maxpct = XRES * 100 / XRES0;
+	if (YRES * 100 / YRES3 < maxpct) {
+		maxpct = YRES * 100 / YRES3;
+	}
+	if (pct > maxpct) {
+		pct = maxpct;
+	}
+	/* write the clamp back: the mouse transform, the Options slider and the
+	 * saved value must all agree with the dims derived here - a silently
+	 * clamped layout with an unclamped mouse divisor put every hover a
+	 * scale-factor away from the cursor */
+	ui_scale_pct = pct;
+	__uixres = XRES * 100 / pct;
+	__uiyres = YRES * 100 / pct;
+}
+
 DLL_EXPORT int sdl_frames = 0;
 DLL_EXPORT int sdl_multi = 4;
+extern SDL_AtomicInt sdl_tex_jobs_enqueued, sdl_tex_jobs_finished;
 DLL_EXPORT int sdl_cache_size = 8000;
+int sdl_vsync = 1;
+DLL_EXPORT int __xres = XRES0;
 DLL_EXPORT int __yres = YRES0;
 
 // Worker thread management

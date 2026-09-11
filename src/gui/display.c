@@ -942,7 +942,8 @@ void display_skill(void)
 				break;
 			default:
 				if (!amod_display_skill_line(skltab[i].v, skltab[i].base, skltab[i].curr, cn, buf)) {
-					if (skltab[i].v >= V_PROFBASE) {
+					if (skltab[i].v >= V_PROFBASE &&
+					    skltab[i].v < V_PROFBASE + 20) { // base-only render is a profession thing
 						sprintf(buf, "%d", skltab[i].base);
 					} else {
 						sprintf(buf, "%2d/%2d", skltab[i].base, skltab[i].curr);
@@ -1771,15 +1772,21 @@ static char *v3_action_desc[MAXACTIONSLOT] = {"Attacks another character using y
     "Increases the basic attributes (WIS/INT/AGI/STR) of the target.", "Restores some of the target's hitpoints.",
     "Gives you a temporary Life Shield, blocking some damage. Slows enemies and might interrupt spellcasting in a "
     "fairly wide radius around you.",
-    "Deals some damage to adjacent enemies. If an enemy is killed you will receive a small amount of their life force "
-    "as mana.",
+    "A finishing move: instantly kills adjacent enemies that are weakened enough, converting their remaining life "
+    "force into mana for you. Has no effect on healthy enemies.",
     "Deals high damage to adjacent enemies.",
     "Interact with items. Can be used to take or use an item on the ground, or to drop or give an item on your mouse "
     "cursor.",
     "Cycles between the minimap, the big map and no map.", "Look at characters or items in the world."};
 
+/* Skill gate per action: -1 = always available (look/map), -2 = never
+ * (reserved/disabled). The tails MUST be explicit -2: an implicit 0 would
+ * read as "requires skill index 0" (Hitpoints), making every reserved slot
+ * look like an owned spell with a NULL name. */
 static int v3_action_skill[MAXACTIONSLOT] = {V3_PERCEPT, V3_FIREBALL, V3_FLASH, V3_FLASH, V3_FREEZE, V3_MAGICSHIELD,
-    V3_BLESS, V3_HEAL, V3_WARCRY, V3_PULSE, V3_FIREBALL, V3_PERCEPT, -1, -1};
+    V3_BLESS, V3_HEAL, V3_WARCRY, V3_PULSE, V3_FIREBALL, V3_PERCEPT, -1, -1,
+    /* 14-23: reserved for new class actions */
+    -2, -2, -2, -2, -2, -2, -2, -2, -2, -2};
 
 char v35_action_row[2][MAXACTIONSLOT] = {{'a', 's', 'd', ' ', ' ', ' ', ' ', 'b', ' ', ' ', ' ', 'g', ' ', 'l'},
     {' ', 'q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p', ' ', 'm', ' '}};
@@ -1802,12 +1809,27 @@ static char *v35_action_desc[MAXACTIONSLOT] = {"Attacks another character using 
     "Cycles between the minimap, the big map and no map.", "Look at characters or items in the world."};
 
 static int v35_action_skill[MAXACTIONSLOT] = {V35_PERCEPT, V35_FIRE, V35_FLASH, V35_FLASH, V35_FREEZE, V35_MAGICSHIELD,
-    V35_BLESS, V35_HEAL, V35_WARCRY, -2, V35_FIRE, V35_PERCEPT, -1, -1};
+    V35_BLESS, V35_HEAL, V35_WARCRY, -2, V35_FIRE, V35_PERCEPT, -1, -1,
+    /* 14-23: reserved for new class actions */
+    -2, -2, -2, -2, -2, -2, -2, -2, -2, -2};
+
+/* CAST_ID_* wire id per action for the generic CL_CAST path (protocol v4+),
+ * -1 = none: the original actions keep their dedicated legacy opcodes via
+ * the context.c dispatch, so a new castable action only needs its cast_id
+ * here (plus text/desc/skill/spell_caps rows) to become fully usable. */
+static int v3_action_cast_id[MAXACTIONSLOT] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    /* 14-23: reserved for new class actions */
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+
+static int v35_action_cast_id[MAXACTIONSLOT] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    /* 14-23: reserved for new class actions */
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
 char (*action_row)[MAXACTIONSLOT] = v3_action_row;
 static char **action_text = v3_action_text;
 static char **action_desc = v3_action_desc;
-static int *action_skill = v3_action_skill;
+int *action_skill = v3_action_skill;
+static int *action_cast_id = v3_action_cast_id;
 
 void set_v35_actions(void)
 {
@@ -1815,6 +1837,15 @@ void set_v35_actions(void)
 	action_text = v35_action_text;
 	action_desc = v35_action_desc;
 	action_skill = v35_action_skill;
+	action_cast_id = v35_action_cast_id;
+}
+
+int get_action_cast_id(int slot)
+{
+	if (slot < 0 || slot >= MAXACTIONSLOT) {
+		return -1;
+	}
+	return action_cast_id[slot];
 }
 
 void actions_loaded(void)

@@ -49,8 +49,10 @@ pub fn build(b: *std.Build) void {
         "src/gui/gui_map.c",
         "src/gui/dots.c",
         "src/gui/display.c",
+        "src/gui/teleport.c",
         "src/gui/color.c",
         "src/gui/cmd.c",
+        "src/gui/questlog.c",
         "src/gui/context.c",
         "src/gui/hover.c",
         "src/gui/minimap.c",
@@ -67,6 +69,7 @@ pub fn build(b: *std.Build) void {
 
         // CLIENT
         "src/client/client.c",
+        "src/client/skill.c",
         "src/client/protocol.c",
 
         // GAME

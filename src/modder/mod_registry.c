@@ -312,6 +312,104 @@ static int state_save(const char *root)
 	return 1;
 }
 
+/* Per-mod option values, stored alongside enabled/order in mods.json. Only
+ * mods whose values the client owns use these - a native mod keeps its own and
+ * persists them itself. Read on demand rather than cached: this runs a handful
+ * of times at mod load, never in a frame. */
+int mod_registry_get_option(const char *id, const char *key, int *out)
+{
+	char path[MAX_PATH];
+	char *text;
+	cJSON *json, *list, *entry, *opts, *item;
+	int found = 0;
+
+	state_path(path, sizeof(path), mod_root);
+	if (!(text = read_file(path))) {
+		return 0;
+	}
+	json = cJSON_Parse(text);
+	free(text);
+	if (!json) {
+		return 0;
+	}
+
+	list = cJSON_GetObjectItemCaseSensitive(json, "mods");
+	entry = cJSON_IsObject(list) ? cJSON_GetObjectItemCaseSensitive(list, id) : NULL;
+	opts = cJSON_IsObject(entry) ? cJSON_GetObjectItemCaseSensitive(entry, "options") : NULL;
+	item = cJSON_IsObject(opts) ? cJSON_GetObjectItemCaseSensitive(opts, key) : NULL;
+
+	if (cJSON_IsNumber(item)) {
+		*out = item->valueint;
+		found = 1;
+	} else if (cJSON_IsBool(item)) {
+		*out = cJSON_IsTrue(item) ? 1 : 0;
+		found = 1;
+	}
+	cJSON_Delete(json);
+	return found;
+}
+
+int mod_registry_set_option(const char *id, const char *key, int value)
+{
+	char path[MAX_PATH], tmp[MAX_PATH];
+	char *text, *existing;
+	cJSON *json = NULL, *list, *entry, *opts;
+	FILE *fp;
+	int ok = 0;
+
+	state_path(path, sizeof(path), mod_root);
+	if ((existing = read_file(path))) {
+		json = cJSON_Parse(existing);
+		free(existing);
+	}
+	if (!json && !(json = cJSON_CreateObject())) {
+		return 0;
+	}
+
+	list = cJSON_GetObjectItemCaseSensitive(json, "mods");
+	if (!cJSON_IsObject(list)) {
+		cJSON_DeleteItemFromObjectCaseSensitive(json, "mods");
+		list = cJSON_AddObjectToObject(json, "mods");
+	}
+	entry = cJSON_IsObject(list) ? cJSON_GetObjectItemCaseSensitive(list, id) : NULL;
+	if (!cJSON_IsObject(entry)) {
+		entry = list ? cJSON_AddObjectToObject(list, id) : NULL;
+	}
+	opts = cJSON_IsObject(entry) ? cJSON_GetObjectItemCaseSensitive(entry, "options") : NULL;
+	if (!cJSON_IsObject(opts)) {
+		if (entry) {
+			cJSON_DeleteItemFromObjectCaseSensitive(entry, "options");
+		}
+		opts = entry ? cJSON_AddObjectToObject(entry, "options") : NULL;
+	}
+	if (!opts) {
+		cJSON_Delete(json);
+		return 0;
+	}
+	cJSON_DeleteItemFromObjectCaseSensitive(opts, key);
+	cJSON_AddNumberToObject(opts, key, value);
+
+	text = cJSON_Print(json);
+	cJSON_Delete(json);
+	if (!text) {
+		return 0;
+	}
+
+	snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+	if ((fp = fopen(tmp, "w"))) {
+		ok = (fputs(text, fp) >= 0);
+		if (fclose(fp) != 0) {
+			ok = 0;
+		}
+	}
+	free(text);
+	if (!ok || !SDL_RenamePath(tmp, path)) {
+		remove(tmp);
+		return 0;
+	}
+	return 1;
+}
+
 int mod_registry_set_enabled(const char *id, int enabled)
 {
 	int i;

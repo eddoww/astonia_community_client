@@ -22,6 +22,7 @@
 #include "astonia.h"
 #include "scripting/lua_interface.h"
 #include "modder/mod_registry.h"
+#include "amod/amod_options.h"
 
 // Forward declarations for API registration
 void lua_api_register(lua_State *L);
@@ -50,6 +51,80 @@ static int loaded_script_count = 0;
 // Track loaded mod names
 #define MAX_MODS 32
 static char loaded_mod_names[MAX_MODS][64];
+
+/* --- Settings a Lua mod registers (Options > Mods) ------------------------
+ * Unlike a native mod, which owns its values and is asked for them every
+ * frame, a Lua mod only *declares* its options: the client holds the value,
+ * persists it in mods.json, and mirrors it into the mod's `options` table. No
+ * Lua call happens per frame, and mods get persistence for free. */
+#define MAX_MOD_OPTIONS 32
+
+struct lua_option {
+	char key[32];
+	char label[48];
+	int type; /* AMOD_OPT_* */
+	int value;
+	int min_val;
+	int max_val;
+};
+
+struct lua_mod_options {
+	char mod_id[64];
+	struct lua_option opt[MAX_MOD_OPTIONS];
+	int count;
+};
+
+static struct lua_mod_options mod_options[MAX_MODS];
+static int mod_options_count;
+
+/* The mod whose scripts are being loaded; register_option() attaches to it. */
+static char current_mod_id[64] = "";
+
+static struct lua_mod_options *find_mod_options(const char *mod_id, int create)
+{
+	int i;
+
+	if (!mod_id || !mod_id[0]) {
+		return NULL;
+	}
+	for (i = 0; i < mod_options_count; i++) {
+		if (!strcmp(mod_options[i].mod_id, mod_id)) {
+			return &mod_options[i];
+		}
+	}
+	if (!create || mod_options_count >= MAX_MODS) {
+		return NULL;
+	}
+	memset(&mod_options[mod_options_count], 0, sizeof(mod_options[0]));
+	snprintf(mod_options[mod_options_count].mod_id, sizeof(mod_options[0].mod_id), "%s", mod_id);
+	return &mod_options[mod_options_count++];
+}
+
+/* Mirror a value into _mod_options[<id>][<key>], which is what the mod's
+ * `options` table actually is. */
+static void push_option_value(const char *mod_id, const struct lua_option *o)
+{
+	lua_getglobal(L, "_mod_options");
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 1);
+		return;
+	}
+	lua_getfield(L, -1, mod_id);
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 1);
+		lua_newtable(L);
+		lua_pushvalue(L, -1);
+		lua_setfield(L, -3, mod_id);
+	}
+	if (o->type == AMOD_OPT_TOGGLE) {
+		lua_pushboolean(L, o->value != 0);
+	} else {
+		lua_pushinteger(L, o->value);
+	}
+	lua_setfield(L, -2, o->key);
+	lua_pop(L, 2);
+}
+
 static int loaded_mod_count = 0;
 
 // Current mod path for safe require (set during mod loading)
@@ -376,6 +451,25 @@ static int load_mod_scripts(const char *mod_path, const char *mod_name)
 	strncpy(current_mod_path, mod_path, sizeof(current_mod_path) - 1);
 	current_mod_path[sizeof(current_mod_path) - 1] = '\0';
 
+	/* Which mod register_option() and register() attach to, and the `options`
+	 * table this mod's top-level code sees. Every mod shares one Lua state, so
+	 * both are swapped per mod here and restored per callback by register(). */
+	snprintf(current_mod_id, sizeof(current_mod_id), "%s", mod_name);
+	lua_pushstring(L, current_mod_id);
+	lua_setglobal(L, "_current_mod");
+	lua_getglobal(L, "_mod_options");
+	if (lua_istable(L, -1)) {
+		lua_getfield(L, -1, current_mod_id);
+		if (!lua_istable(L, -1)) {
+			lua_pop(L, 1);
+			lua_newtable(L);
+			lua_pushvalue(L, -1);
+			lua_setfield(L, -3, current_mod_id);
+		}
+		lua_setglobal(L, "options");
+	}
+	lua_pop(L, 1);
+
 	// First, look for and load init.lua if it exists
 	char init_path[512];
 	int written = snprintf(init_path, sizeof(init_path), "%s/init.lua", mod_path);
@@ -424,6 +518,9 @@ static int load_mod_scripts(const char *mod_path, const char *mod_name)
 
 	// Clear current mod path (require only works during mod loading)
 	current_mod_path[0] = '\0';
+	current_mod_id[0] = '\0';
+	lua_pushnil(L);
+	lua_setglobal(L, "_current_mod");
 
 	// Track the mod name (truncation of very long directory names is fine)
 	if (count > 0 && loaded_mod_count < MAX_MODS) {
@@ -447,6 +544,7 @@ static int load_all_mods(void)
 	// Reset tracking
 	loaded_script_count = 0;
 	loaded_mod_count = 0;
+	mod_options_count = 0;
 
 	n = mod_registry_count();
 	if (n == 0) {
@@ -616,6 +714,48 @@ static int call_lua_handler_int(const char *name, int nargs, ...)
 }
 
 // Call all registered callbacks with string argument, returning combined result
+/* (string, int) dispatch - on_option_changed(key, value). Values are pushed as
+ * a boolean for toggles by the caller's own mirroring, so this keeps the int
+ * form and lets the mod read `options` for the typed value. */
+static void call_lua_handler_str_int(const char *name, const char *str_arg, int int_arg)
+{
+	int len, i;
+
+	if (!L) {
+		return;
+	}
+	lua_getglobal(L, "_callbacks");
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 1);
+		return;
+	}
+	lua_getfield(L, -1, name);
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 2);
+		return;
+	}
+
+	len = (int)lua_objlen(L, -1);
+	for (i = 1; i <= len; i++) {
+		lua_rawgeti(L, -1, i);
+		if (!lua_isfunction(L, -1)) {
+			lua_pop(L, 1);
+			continue;
+		}
+		lua_pushstring(L, str_arg);
+		lua_pushinteger(L, int_arg);
+
+		enable_instruction_limit(L);
+		if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+			const char *error = lua_tostring(L, -1);
+			warn("Lua error in %s callback %d: %s", name, i, error ? error : "unknown");
+			lua_pop(L, 1);
+		}
+		disable_instruction_limit(L);
+	}
+	lua_pop(L, 2);
+}
+
 static int call_lua_handler_str(const char *name, const char *str_arg)
 {
 	if (!L) {
@@ -673,9 +813,143 @@ static int call_lua_handler_str(const char *name, const char *str_arg)
 // List of callback event names
 static const char *callback_names[] = {"on_init", "on_exit", "on_gamestart", "on_tick", "on_frame", "on_mouse_move",
     "on_mouse_over", "on_mouse_click", "on_keydown", "on_keyup", "on_client_cmd", "on_areachange", "on_before_reload",
-    "on_after_reload", NULL};
+    "on_after_reload", "on_option_changed", NULL};
 
 // Set up the callback registration system in Lua
+/* register_option{ key=..., type="toggle"|"slider"|"header", label=...,
+ *                  min=..., max=..., default=... }
+ * Declared at load time; the value comes from mods.json when the player has
+ * changed it before, else from `default`. */
+static int l_register_option(lua_State *Ls)
+{
+	struct lua_mod_options *set;
+	struct lua_option *o;
+	const char *str;
+	int stored;
+
+	if (!lua_istable(Ls, 1)) {
+		warn("register_option: expects a table");
+		lua_pushboolean(Ls, 0);
+		return 1;
+	}
+	if (!(set = find_mod_options(current_mod_id, 1))) {
+		warn("register_option: only valid while a mod is loading");
+		lua_pushboolean(Ls, 0);
+		return 1;
+	}
+	if (set->count >= MAX_MOD_OPTIONS) {
+		warn("register_option: '%s' already has %d options", current_mod_id, MAX_MOD_OPTIONS);
+		lua_pushboolean(Ls, 0);
+		return 1;
+	}
+
+	o = &set->opt[set->count];
+	memset(o, 0, sizeof(*o));
+
+	lua_getfield(Ls, 1, "key");
+	str = lua_tostring(Ls, -1);
+	if (!str || !str[0]) {
+		lua_pop(Ls, 1);
+		warn("register_option: missing key");
+		lua_pushboolean(Ls, 0);
+		return 1;
+	}
+	snprintf(o->key, sizeof(o->key), "%s", str);
+	lua_pop(Ls, 1);
+
+	lua_getfield(Ls, 1, "type");
+	str = lua_tostring(Ls, -1);
+	o->type = AMOD_OPT_TOGGLE;
+	if (str && !strcmp(str, "slider")) {
+		o->type = AMOD_OPT_SLIDER;
+	} else if (str && !strcmp(str, "header")) {
+		o->type = AMOD_OPT_HEADER;
+	}
+	lua_pop(Ls, 1);
+
+	lua_getfield(Ls, 1, "label");
+	str = lua_tostring(Ls, -1);
+	snprintf(o->label, sizeof(o->label), "%s", (str && str[0]) ? str : o->key);
+	lua_pop(Ls, 1);
+
+	lua_getfield(Ls, 1, "min");
+	o->min_val = (int)lua_tointeger(Ls, -1);
+	lua_pop(Ls, 1);
+	lua_getfield(Ls, 1, "max");
+	o->max_val = lua_isnil(Ls, -1) ? 100 : (int)lua_tointeger(Ls, -1);
+	lua_pop(Ls, 1);
+
+	lua_getfield(Ls, 1, "default");
+	o->value = lua_isboolean(Ls, -1) ? lua_toboolean(Ls, -1) : (int)lua_tointeger(Ls, -1);
+	lua_pop(Ls, 1);
+
+	/* what the player last chose wins over the mod's default */
+	if (mod_registry_get_option(current_mod_id, o->key, &stored)) {
+		o->value = stored;
+	}
+	if (o->type == AMOD_OPT_SLIDER && o->max_val > o->min_val) {
+		if (o->value < o->min_val) {
+			o->value = o->min_val;
+		}
+		if (o->value > o->max_val) {
+			o->value = o->max_val;
+		}
+	}
+
+	set->count++;
+	push_option_value(current_mod_id, o);
+	lua_pushboolean(Ls, 1);
+	return 1;
+}
+
+/* ---- what the Options screen calls (via amod_mod_option_* in modder.c) ---- */
+
+int lua_scripting_options_count(const char *mod_id)
+{
+	struct lua_mod_options *set = L ? find_mod_options(mod_id, 0) : NULL;
+
+	return set ? set->count : 0;
+}
+
+int lua_scripting_option_get(const char *mod_id, int index, struct amod_option *out)
+{
+	struct lua_mod_options *set = L ? find_mod_options(mod_id, 0) : NULL;
+	const struct lua_option *o;
+
+	if (!set || !out || index < 0 || index >= set->count) {
+		return 0;
+	}
+	o = &set->opt[index];
+	memset(out, 0, sizeof(*out));
+	out->type = o->type;
+	out->value = o->value;
+	out->min_val = o->min_val;
+	out->max_val = o->max_val;
+	snprintf(out->label, sizeof(out->label), "%s", o->label);
+	return 1;
+}
+
+void lua_scripting_option_set(const char *mod_id, int index, int value)
+{
+	struct lua_mod_options *set = L ? find_mod_options(mod_id, 0) : NULL;
+	struct lua_option *o;
+
+	if (!set || index < 0 || index >= set->count) {
+		return;
+	}
+	o = &set->opt[index];
+	if (o->type == AMOD_OPT_HEADER || o->value == value) {
+		return;
+	}
+	o->value = value;
+
+	push_option_value(mod_id, o);
+	mod_registry_set_option(mod_id, o->key, value);
+
+	/* let the mod react; `options` is already current for its callbacks */
+	call_lua_handler_str_int("on_option_changed", o->key, value);
+}
+
 static void setup_callback_system(void)
 {
 	// Create _callbacks table with empty arrays for each event type
@@ -685,6 +959,13 @@ static void setup_callback_system(void)
 		lua_setfield(L, -2, callback_names[i]);
 	}
 	lua_setglobal(L, "_callbacks");
+
+	// Per-mod option values: _mod_options[<mod id>] is that mod's `options`
+	lua_newtable(L);
+	lua_setglobal(L, "_mod_options");
+
+	lua_pushcfunction(L, l_register_option);
+	lua_setglobal(L, "register_option");
 
 	// Create the register() function in Lua
 	const char *register_func = "function register(event_name, callback)\n"
@@ -696,7 +977,11 @@ static void setup_callback_system(void)
 	                            "        client.warn('register: unknown event: ' .. tostring(event_name))\n"
 	                            "        return false\n"
 	                            "    end\n"
-	                            "    table.insert(_callbacks[event_name], callback)\n"
+	                            "    local mod = _current_mod\n"
+	                            "    table.insert(_callbacks[event_name], function(...)\n"
+	                            "        options = _mod_options[mod]\n"
+	                            "        return callback(...)\n"
+	                            "    end)\n"
 	                            "    return true\n"
 	                            "end\n";
 

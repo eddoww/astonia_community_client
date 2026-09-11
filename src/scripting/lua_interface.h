@@ -75,4 +75,13 @@ void lua_scripting_set_dev_mode(bool enabled);
 // to roughly one filesystem check per second.
 void lua_scripting_check_reload(void);
 
+
+struct amod_option;
+/* Settings a Lua mod declared with register_option(); the client owns the
+ * values and persists them, so these are plain reads of C state - no Lua call
+ * happens when the Options screen draws them. */
+int lua_scripting_options_count(const char *mod_id);
+int lua_scripting_option_get(const char *mod_id, int index, struct amod_option *out);
+void lua_scripting_option_set(const char *mod_id, int index, int value);
+
 #endif // LUA_INTERFACE_H

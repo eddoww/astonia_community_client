@@ -107,7 +107,7 @@ $(TEST_SPRITE_CONFIG): test_sprite_config.c $(SPRITE_CONFIG_SRCS)
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
 
 # Loading screen logic test (loading_ui.c + stubs, only SDL for SDL_GetTicks/SDL_Delay)
-$(TEST_LOADING_UI): test_loading_ui.c
+$(TEST_LOADING_UI): test_loading_ui.c ../src/gui/loading_ui.c
 	@mkdir -p $(BIN_DIR)
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src -I../include $(shell pkg-config --cflags sdl3) $^ -o $@ $(shell pkg-config --libs sdl3)
 

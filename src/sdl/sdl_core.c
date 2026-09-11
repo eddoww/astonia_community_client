@@ -1231,6 +1231,7 @@ void sdl_pre_add(unsigned int sprite, signed char sink, unsigned char freeze, un
 
 	g_tex_jobs.tail = (g_tex_jobs.tail + 1) % TEX_JOB_CAPACITY;
 	g_tex_jobs.count++;
+	SDL_AddAtomicInt(&sdl_tex_jobs_enqueued, 1);
 
 	// Mark as queued
 	slot->work_state = TX_WORK_QUEUED;
@@ -1252,6 +1253,37 @@ void sdl_lock(void *a)
 }
 
 #define SDL_LockMutex(a) sdl_lock(a)
+
+// Texture preload progress (used for the "loading world" screen after login)
+SDL_AtomicInt sdl_tex_jobs_enqueued, sdl_tex_jobs_finished;
+static int tex_jobs_mark_enqueued, tex_jobs_mark_finished;
+
+void sdl_tex_jobs_mark(void)
+{
+	tex_jobs_mark_enqueued = SDL_GetAtomicInt(&sdl_tex_jobs_enqueued);
+	tex_jobs_mark_finished = SDL_GetAtomicInt(&sdl_tex_jobs_finished);
+}
+
+void sdl_tex_jobs_progress(int *done, int *total)
+{
+	int e = SDL_GetAtomicInt(&sdl_tex_jobs_enqueued) - tex_jobs_mark_enqueued;
+	int f = SDL_GetAtomicInt(&sdl_tex_jobs_finished) - tex_jobs_mark_finished;
+	if (e < 0) {
+		e = 0;
+	}
+	if (f < 0) {
+		f = 0;
+	}
+	if (f > e) {
+		f = e;
+	}
+	if (done) {
+		*done = f;
+	}
+	if (total) {
+		*total = e;
+	}
+}
 
 int sdl_pre_do(void)
 {
@@ -1352,6 +1384,7 @@ int sdl_pre_backgnd(void *ptr)
 				tex->work_state = TX_WORK_IDLE;
 			}
 			SDL_UnlockMutex(g_tex_jobs.mutex);
+			SDL_AddAtomicInt(&sdl_tex_jobs_finished, 1);
 			continue;
 		}
 
@@ -1365,6 +1398,7 @@ int sdl_pre_backgnd(void *ptr)
 			tex->work_state = TX_WORK_IDLE;
 		}
 		SDL_UnlockMutex(g_tex_jobs.mutex);
+		SDL_AddAtomicInt(&sdl_tex_jobs_finished, 1);
 
 		sdl_backgnd_work += SDL_GetTicks() - work_start;
 		sdl_backgnd_jobs++;

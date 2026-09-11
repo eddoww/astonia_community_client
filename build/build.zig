@@ -41,6 +41,9 @@ pub fn build(b: *std.Build) void {
         // GUI
         "src/gui/display.c",
         "src/gui/color.c",
+        "src/gui/escape_menu_ui.c",
+        "src/gui/options_ui.c",
+        "src/gui/ui_draw.c",
 
         // CLIENT
         "src/client/client.c",

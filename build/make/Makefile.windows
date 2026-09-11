@@ -294,7 +294,7 @@ OBJS	= \
 			src/sdl/sdl_core.o src/sdl/sdl_texture.o src/sdl/sdl_image.o src/sdl/sdl_effects.o src/sdl/sdl_draw.o src/sdl/sound.o \
 			src/game/resource.o src/helper/helper.o\
 			 src/gui/display.o src/gui/color.o \
-			                \
+			         src/gui/escape_menu_ui.o src/gui/options_ui.o src/gui/ui_draw.o \
 			src/modder/sharedmem_windows.o src/game/crash_handler_windows.o\
 			src/game/memory_windows.o src/gui/draghack_windows.o src/client/unique_windows.o\
 			src/game/version.o\
@@ -354,7 +354,10 @@ src/lib/cjson/cJSON.o:	src/lib/cjson/cJSON.c src/lib/cjson/cJSON.h
 		$(CC) $(OPT) $(DEBUG) -fno-omit-frame-pointer -fvisibility=hidden -Isrc -c -o $@ $<
 
 src/gui/color.o:	src/gui/color.c src/astonia.h src/gui/gui_private.h src/client/client.h src/game/game.h
-src/gui/display.o:	src/gui/display.c src/astonia.h src/gui/gui_private.h src/client/client.h src/game/game.h
+src/gui/display.o:	src/gui/display.c src/astonia.h src/gui/gui_private.h src/client/client.h src/game/game.h src/gui/ui_draw.h src/gui/ui_tokens.h
+src/gui/escape_menu_ui.o:	src/gui/escape_menu_ui.c src/gui/escape_menu_ui.h src/astonia.h src/gui/gui_private.h src/game/game.h src/gui/ui_draw.h src/gui/ui_tokens.h
+src/gui/ui_draw.o:	src/gui/ui_draw.c src/gui/ui_draw.h src/gui/ui_tokens.h src/astonia.h src/gui/gui_private.h src/game/game.h
+src/gui/options_ui.o:	src/gui/options_ui.c src/gui/options_ui.h src/astonia.h src/gui/gui_private.h src/client/client.h src/game/game.h src/sdl/sdl.h src/gui/ui_draw.h src/gui/ui_tokens.h
 
 # Refactored GUI modules
 

@@ -211,17 +211,14 @@ jobs:
           retention-days: 7
           overwrite: true
 
+      - name: Stage Mod SDK
+        run: make mod-sdk-stage
+
       - name: Upload Mod SDK (Windows)
         uses: actions/upload-artifact@v7
         with:
           name: mod-sdk-windows
-          path: |
-            lib/moac.a
-            lib/moac.lib
-            src/amod/amod.h
-            src/amod/amod_structs.h
-            src/dll.h
-            src/astonia.h
+          path: mod-sdk/
           retention-days: 7
           if-no-files-found: error
 

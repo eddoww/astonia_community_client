@@ -582,62 +582,75 @@ void display_skill(void)
 
 void display_keys(void)
 {
-	int i, x, u;
-	char buf[256];
-	unsigned short int col;
+	/* Legacy keytab display disabled - hotbar system replaces this */
+	(void)0;
+}
 
-	for (u = i = 0; i < max_keytab; i++) {
-		if ((keytab[i].vk_item && !vk_item) || (!keytab[i].vk_item && vk_item)) {
-			continue;
-		}
-		if ((keytab[i].vk_char && !vk_char) || (!keytab[i].vk_char && vk_char)) {
-			continue;
-		}
-		if ((keytab[i].vk_spell && !vk_spell) || (!keytab[i].vk_spell && vk_spell)) {
-			continue;
-		}
+/* Close button in the top-right corner of the tutorial popup. */
+static void tutor_close_rect(int *x1, int *y1, int *x2, int *y2)
+{
+	*x1 = dotx(DOT_TUT) + 410 - 13;
+	*y1 = doty(DOT_TUT) + 3;
+	*x2 = dotx(DOT_TUT) + 410 - 3;
+	*y2 = doty(DOT_TUT) + 13;
+}
 
-		if (keytab[i].usetime > now - 300) {
-			col = bluecolor;
-		} else {
-			col = textcolor;
-		}
+int tutor_click(int x, int y)
+{
+	int x1, y1, x2, y2;
 
-		x = 10 + u++ * ((XRES - 20) / 10);
-
-		if (keytab[i].skill == -1) {
-			continue;
-		}
-		if (!value[0][keytab[i].skill]) {
-			continue;
-		}
-
-		if (keytab[i].userdef) {
-			sprintf(buf, "%c/%c %s", keytab[i].keycode, keytab[i].userdef, keytab[i].name);
-		} else {
-			sprintf(buf, "%c %s", keytab[i].keycode, keytab[i].name);
-		}
-
-		render_text(
-		    dotx(DOT_BOT) + x, doty(DOT_BOT) - 6, col, RENDER_TEXT_LEFT | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, buf);
+	if (!show_tutor) {
+		return 0;
 	}
+	tutor_close_rect(&x1, &y1, &x2, &y2);
+	if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+		show_tutor = 0;
+		return 1;
+	}
+	return 0;
 }
 
 void display_tutor(void)
 {
 	int mx = dotx(DOT_TUT) + 406, my = doty(DOT_TUT) + 80;
 	char buf[80];
+	char hint1[128];
+	int bh;
 
 	if (!show_tutor) {
 		return;
 	}
 
-	render_rect(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + 90, IRGB(24, 22, 16));
+	/* Escape dismisses open windows before it opens the menu, so it always
+	 * works here; name the dedicated Cancel All key instead when one is
+	 * bound. */
+	InputBinding *cancel = input_find_by_id("ui.cancel");
+	if (cancel && cancel->key != SDLK_UNKNOWN) {
+		snprintf(hint1, sizeof(hint1), "Press %s or click the X to dismiss this window.",
+		    input_key_to_string(cancel->key, cancel->modifiers));
+	} else {
+		snprintf(hint1, sizeof(hint1), "Press ESCAPE or click the X to dismiss this window.");
+	}
+	bh = 102;
 
-	render_line(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT), IRGB(12, 10, 4));
-	render_line(dotx(DOT_TUT) + 410, doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + 90, IRGB(12, 10, 4));
-	render_line(dotx(DOT_TUT), doty(DOT_TUT) + 90, dotx(DOT_TUT) + 410, doty(DOT_TUT) + 90, IRGB(12, 10, 4));
-	render_line(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT), doty(DOT_TUT) + 90, IRGB(12, 10, 4));
+	ui_panel(dotx(DOT_TUT), doty(DOT_TUT), dotx(DOT_TUT) + 410, doty(DOT_TUT) + bh);
+
+	/* close button */
+	{
+		int x1, y1, x2, y2;
+		tutor_close_rect(&x1, &y1, &x2, &y2);
+		int hov = (mousex >= x1 && mousex <= x2 && mousey >= y1 && mousey <= y2);
+		int state = UI_BTN_REST;
+		if (hov) {
+			state = vk_lbut ? UI_BTN_PRESSED : UI_BTN_HOVER;
+		}
+		ui_button(x1, y1, x2 - x1, y2 - y1, "X", state);
+	}
+
+	/* dismissal hint below the server text */
+	render_rect_alpha(
+	    dotx(DOT_TUT) + 4, doty(DOT_TUT) + 84, dotx(DOT_TUT) + 406, doty(DOT_TUT) + 85, UI_BORDER, UI_A_RULE);
+	render_text(dotx(DOT_TUT) + 6, doty(DOT_TUT) + 88, UI_TEXT_MUTED, RENDER_TEXT_SMALL | RENDER_TEXT_LEFT, hint1);
 
 	int x = dotx(DOT_TUT) + 6;
 	int y = doty(DOT_TUT) + 4;

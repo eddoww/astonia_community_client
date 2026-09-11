@@ -15,6 +15,7 @@
 #include "game/game.h"
 #include "game/game_private.h"
 #include "gui/gui.h"
+#include "gui/input_bind.h"
 #include "client/client.h"
 
 static int trans_x(int frx, int fry, int tox, int toy, int step, uint32_t start)
@@ -824,7 +825,9 @@ static void display_game_act(void)
 		int scrx, scry;
 		mtos(mapx, mapy, &scrx, &scry);
 		if (acttyp == 0) {
-			dl_next_set(GNDSEL_LAY, 5, scrx, scry, RENDERFX_NORMAL_LIGHT);
+			if (!keyboard_move_active()) {
+				dl_next_set(GNDSEL_LAY, 5, scrx, scry, RENDERFX_NORMAL_LIGHT);
+			}
 		} else {
 			render_text(scrx, scry, textcolor, RENDER_ALIGN_CENTER | RENDER_TEXT_SMALL | RENDER_TEXT_FRAMED, actstr);
 		}

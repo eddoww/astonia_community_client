@@ -89,19 +89,50 @@ void gui_sdl_mouseproc(float x __attribute__((unused)), float y __attribute__((u
 	// No-op in tests
 }
 
-void gui_sdl_keyproc(SDL_Keycode key __attribute__((unused)))
+void gui_sdl_mouse_sync(int lbutton_down __attribute__((unused)))
 {
 	// No-op in tests
 }
 
-void context_keyup(SDL_Keycode key __attribute__((unused)))
+void gui_sdl_keyproc(SDL_Keycode key __attribute__((unused)), SDL_Keymod mod __attribute__((unused)))
 {
 	// No-op in tests
 }
+
+void context_keyup(SDL_Keycode key __attribute__((unused))) {}
+
+void input_keyup(SDL_Keycode key __attribute__((unused))) {}
+
+int cmd_is_active(void)
+{
+	return 0;
+}
+
+void gamepad_init(void) {}
+
+void gamepad_shutdown(void) {}
+
+void gamepad_tick(void) {}
+
+void gamepad_on_added(uint32_t id __attribute__((unused))) {}
+
+void gamepad_on_removed(uint32_t id __attribute__((unused))) {}
+
+void gamepad_button_down(int button __attribute__((unused))) {}
+
+void gamepad_button_up(int button __attribute__((unused))) {}
+
+void gamepad_axis_motion(int axis __attribute__((unused)), int16_t value __attribute__((unused))) {}
 
 void cmd_proc(int key __attribute__((unused)))
 {
 	// No-op in tests
+}
+
+int amod_textinput(int key __attribute__((unused)))
+{
+	// No mods in tests - never consume
+	return 0;
 }
 
 void display_messagebox(const char *title __attribute__((unused)), const char *msg __attribute__((unused)))

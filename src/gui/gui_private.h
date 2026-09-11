@@ -491,6 +491,10 @@ int get_color(int x, int y);
 void cmd_color(int nr);
 void cmd_reset(void);
 void cmd_proc(int key);
+int cmd_is_active(void);
+
+/* hotbar_ui.c */
+int spellbook_over(int mx, int my);
 
 #define NEAR_ITEM    1024
 #define NEAR_CHAR    2048

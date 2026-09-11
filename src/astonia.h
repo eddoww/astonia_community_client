@@ -38,7 +38,9 @@ typedef int32_t svval_t; // skill index, server side (V3_HP, V3_BLESS *or* V35_H
 
 #define SDL_FAST_MALLOC // will use the C library instead of the error-checking client version
 
-#define MAXSPRITE 250000
+#define MAXSPRITE                                                                                                      \
+	2000000 // raised from 250000: file-backed character sprites live at 100000+charno*1000, so this caps charno at
+	        // 1899; costs ~28 bytes/id in static arrays (~55MB)
 
 #define TICKS  24 // ticks (game data updates) per second
 #define FRAMES (frames_per_second) // frames (display updates) per second

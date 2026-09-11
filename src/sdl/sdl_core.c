@@ -161,7 +161,7 @@ int sdl_init(int width, int height, char *title, int monitor)
 	SDL_DisplayID *displays;
 	SDL_DisplayID display_id;
 
-	if (!SDL_Init(SDL_INIT_VIDEO | ((game_options & GO_SOUND) ? SDL_INIT_AUDIO : 0))) {
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | ((game_options & GO_SOUND) ? SDL_INIT_AUDIO : 0))) {
 		fail("SDL_Init Error: %s", SDL_GetError());
 		return 0;
 	}
@@ -853,6 +853,12 @@ void sdl_loop(void)
 			if (event.button.button == SDL_BUTTON_RIGHT) {
 				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_RDOWN);
 			}
+			if (event.button.button == SDL_BUTTON_X1) {
+				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_X1DOWN);
+			}
+			if (event.button.button == SDL_BUTTON_X2) {
+				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_X2DOWN);
+			}
 			break;
 		case SDL_EVENT_MOUSE_BUTTON_UP:
 			if (event.button.button == SDL_BUTTON_LEFT) {
@@ -864,9 +870,19 @@ void sdl_loop(void)
 			if (event.button.button == SDL_BUTTON_RIGHT) {
 				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_RUP);
 			}
+			if (event.button.button == SDL_BUTTON_X1) {
+				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_X1UP);
+			}
+			if (event.button.button == SDL_BUTTON_X2) {
+				gui_sdl_mouseproc(event.button.x, event.button.y, SDL_MOUM_X2UP);
+			}
 			break;
 		case SDL_EVENT_MOUSE_WHEEL:
 			gui_sdl_mouseproc(event.wheel.x, event.wheel.y, SDL_MOUM_WHEEL);
+			break;
+		case SDL_EVENT_WINDOW_FOCUS_LOST:
+			/* alt-tab mid-drag: the release goes to another window */
+			gui_sdl_mouse_sync(0);
 			break;
 		case SDL_EVENT_WINDOW_FOCUS_GAINED:
 #ifdef ENABLE_DRAGHACK
@@ -877,20 +893,31 @@ void sdl_loop(void)
 			}
 #endif
 			break;
+		case SDL_EVENT_GAMEPAD_ADDED:
+			gamepad_on_added(event.gdevice.which);
+			break;
+		case SDL_EVENT_GAMEPAD_REMOVED:
+			gamepad_on_removed(event.gdevice.which);
+			break;
+		case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+			gamepad_button_down((SDL_GamepadButton)event.gbutton.button);
+			break;
+		case SDL_EVENT_GAMEPAD_BUTTON_UP:
+			gamepad_button_up((SDL_GamepadButton)event.gbutton.button);
+			break;
+		case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+			gamepad_axis_motion((SDL_GamepadAxis)event.gaxis.axis, event.gaxis.value);
+			break;
 		default:
 			break;
 		}
 	}
+	gamepad_tick();
 }
 
 void sdl_set_cursor_pos(int x, int y)
 {
 	SDL_WarpMouseInWindow(sdlwnd, (float)x, (float)y);
-}
-
-void sdl_capture_mouse(int flag)
-{
-	SDL_CaptureMouse(flag ? true : false);
 }
 
 /* This function is a hack. It can only load one specific type of
@@ -1359,7 +1386,9 @@ bool sdl_is_shown(void)
 		return false;
 	}
 
-	return true;
+	gamepad_init();
+
+	return 1;
 }
 
 bool sdl_has_focus(void)

@@ -470,83 +470,425 @@ int parse_args(int argc, char *argv[])
 	return 0;
 }
 
-void save_options(void)
+static char active_charname[80];
+
+static const char *get_character_name(void)
 {
-	FILE *fp;
-	char filename[MAX_PATH];
-
-	if (localdata) {
-		if (sv_ver == 35) {
-			sprintf(filename, "%s%s", localdata, "moac35.dat");
-		} else {
-			sprintf(filename, "%s%s", localdata, "moac.dat");
-		}
-	} else {
-		if (sv_ver == 35) {
-			sprintf(filename, "%s", "bin/data/moac35.dat");
-		} else {
-			sprintf(filename, "%s", "bin/data/moac.dat");
-		}
+	if (active_charname[0]) {
+		return active_charname;
 	}
+	return NULL;
+}
 
-	fp = fopen(filename, "wb");
-	if (!fp) {
+static void get_config_path(char *buf, size_t bufsize)
+{
+	const char *charname = get_character_name();
+	if (charname && localdata) {
+		snprintf(buf, bufsize, "%skeybinds_%s.json", localdata, charname);
+	} else if (charname) {
+		snprintf(buf, bufsize, "res/config/keybinds_%s.json", charname);
+	} else if (localdata) {
+		snprintf(buf, bufsize, "%skeybinds.json", localdata);
+	} else {
+		snprintf(buf, bufsize, "res/config/keybinds.json");
+	}
+}
+
+static void get_shared_config_path(char *buf, size_t bufsize)
+{
+	if (localdata) {
+		snprintf(buf, bufsize, "%skeybinds.json", localdata);
+	} else {
+		snprintf(buf, bufsize, "res/config/keybinds.json");
+	}
+}
+
+static void get_legacy_config_path(char *buf, size_t bufsize)
+{
+	if (localdata) {
+		snprintf(buf, bufsize, "%s%s", localdata, sv_ver == 35 ? "moac35.dat" : "moac.dat");
+	} else {
+		snprintf(buf, bufsize, "bin/data/%s", sv_ver == 35 ? "moac35.dat" : "moac.dat");
+	}
+}
+
+/* ── Extra game-option persistence ──────────────────────────────────────
+ *
+ * The keybind config (input_bind.c) only persists the GO_ bits the
+ * launcher passes via -o (see GO_UI_MANAGED there). Newer UI-only toggles
+ * like GO_NOLAG live in a small side file instead, so they survive
+ * restarts without launcher or keybind-config changes. */
+
+static void get_extra_options_path(char *buf, size_t bufsize)
+{
+	if (localdata) {
+		snprintf(buf, bufsize, "%soptions_extra.json", localdata);
+	} else {
+		snprintf(buf, bufsize, "res/config/options_extra.json");
+	}
+}
+
+/* Window mode (0 windowed / 1 borderless / 2 exclusive) the user picked in
+ * Options > Video; -1 until they ever touch it. Re-applied after sdl_init. */
+int saved_window_mode = -1;
+/* VSync from the extra-options file; applied after sdl_init (which forces 1). */
+static int saved_vsync = -1;
+/* TTF text from the extra-options file; re-applied after sdl_init because
+ * sdl_init resets game_options to GO_DEFAULTS when no -o was given. */
+static int saved_ttf_text = -1;
+/* SDL_GPU renderer (experimental, opt-in) from the extra-options file; must
+ * be known BEFORE sdl_init (renderer creation), re-applied to game_options
+ * after it (same GO_DEFAULTS reset as the TTF option). */
+static int saved_gpu_rendering = -1;
+/* GPU backend override ("auto", "vulkan", "direct3d12", "metal"): the
+ * client prefers Vulkan everywhere; this is the escape hatch, applied as the
+ * SDL_GPU_DRIVER hint before the device is created. */
+static char saved_gpu_driver[32] = "auto";
+/* GPU shader effects sub-flag (experimental, opt-in, needs gpu_rendering):
+ * base textures + per-draw effects in the fragment shader. */
+static int saved_gpu_shaderfx = -1;
+/* UI Scale percent (sdl_core.c); applied live via ui_scale_apply() */
+extern int ui_scale_pct;
+/* TTF face name from the extra-options file (Options > Display > Font).
+ * Kept here as well as in the font manager so the choice survives a round
+ * trip through a build without SDL3_ttf or an install missing the file. */
+static char saved_ttf_font[64] = "";
+/* Bump when a *_requested default flips, so configs written under the old
+ * default do not pin the old behaviour forever. Everything the client saves
+ * is written on every options change, so an experimental feature that was
+ * default-off left an explicit "false" in nearly every existing config even
+ * for players who never chose it - without this, flipping the default would
+ * reach nobody. A config older than the current revision has its GPU keys
+ * treated as unset (the new defaults apply); an opt-out made afterwards is
+ * written with the current revision and sticks. */
+#define GPU_DEFAULTS_REV 1
+static int saved_defaults_rev = 0;
+
+/* GPU effect glows (needs gpu_rendering). Default ON: held as the negative
+ * GO_NOFANCYFX bit so nothing has to opt in, checked per draw so the
+ * Options toggle takes effect immediately. */
+static int saved_gpu_fancyfx = -1;
+
+static void save_extra_options(void)
+{
+	char path[MAX_PATH];
+	FILE *fp;
+	cJSON *root;
+	char *json;
+
+	get_extra_options_path(path, sizeof(path));
+	root = cJSON_CreateObject();
+	if (!root) {
 		return;
 	}
-
-	fwrite(&user_keys, sizeof(user_keys), 1, fp);
-	if (sv_ver == 35) {
-		fwrite(&v35_action_row, sizeof(v35_action_row), 1, fp);
-	} else {
-		fwrite(&v3_action_row, sizeof(v3_action_row), 1, fp);
+	cJSON_AddBoolToObject(root, "hide_lag_warning", (game_options & GO_NOLAG) != 0);
+	cJSON_AddBoolToObject(root, "ttf_text", (game_options & GO_TTF) != 0);
+	cJSON_AddBoolToObject(root, "gpu_rendering", (game_options & GO_GPU) != 0);
+	cJSON_AddStringToObject(root, "gpu_driver", saved_gpu_driver);
+	cJSON_AddBoolToObject(root, "gpu_shader_effects", (game_options & GO_SHADERFX) != 0);
+	cJSON_AddBoolToObject(root, "gpu_fancy_effects", (game_options & GO_NOFANCYFX) == 0);
+	cJSON_AddNumberToObject(root, "defaults_rev", GPU_DEFAULTS_REV);
+	cJSON_AddNumberToObject(root, "master_volume", sound_volume);
+	cJSON_AddNumberToObject(root, "sfx_volume", sound_volume_sfx);
+	cJSON_AddNumberToObject(root, "ambient_volume", sound_volume_ambient);
+	cJSON_AddNumberToObject(root, "ui_volume", sound_volume_ui);
+	cJSON_AddNumberToObject(root, "fps_limit", frames_per_second);
+	cJSON_AddNumberToObject(root, "vsync", sdl_vsync);
+	cJSON_AddNumberToObject(root, "texture_cache", sdl_cache_size);
+	cJSON_AddNumberToObject(root, "worker_threads", sdl_multi);
+	cJSON_AddNumberToObject(root, "window_mode", saved_window_mode);
+	cJSON_AddNumberToObject(root, "ui_scale", ui_scale_pct);
+	/* TTF face + text size (Options > Display > Font / Text Size) */
+	if (fm_current_font_name()) {
+		snprintf(saved_ttf_font, sizeof(saved_ttf_font), "%s", fm_current_font_name());
 	}
-	fwrite(&action_enabled, sizeof(action_enabled), 1, fp);
-	fwrite(&gear_lock, sizeof(gear_lock), 1, fp);
-	fclose(fp);
+	if (saved_ttf_font[0]) {
+		cJSON_AddStringToObject(root, "ttf_font", saved_ttf_font);
+	}
+	cJSON_AddNumberToObject(root, "ttf_text_scale", fm_text_scale());
+
+	json = cJSON_Print(root);
+	cJSON_Delete(root);
+	if (!json) {
+		return;
+	}
+	fp = fopen(path, "w");
+	if (fp) {
+		fputs(json, fp);
+		fputc('\n', fp);
+		fclose(fp);
+	}
+	cJSON_free(json);
+}
+
+static int extra_int(cJSON *root, const char *key, int fallback, int min_val, int max_val)
+{
+	cJSON *v = cJSON_GetObjectItem(root, key);
+
+	if (!v || !cJSON_IsNumber(v)) {
+		return fallback;
+	}
+	if (v->valueint < min_val) {
+		return min_val;
+	}
+	if (v->valueint > max_val) {
+		return max_val;
+	}
+	return v->valueint;
+}
+
+static void load_extra_options(void)
+{
+	char path[MAX_PATH];
+	char *json;
+	cJSON *root, *v;
+
+	get_extra_options_path(path, sizeof(path));
+	json = load_ascii_file(path, MEM_TEMP);
+	if (!json && localdata) {
+		/* one-time migration: earlier builds (launcher without GO_APPDATA)
+		 * kept this file inside the install dir */
+		json = load_ascii_file("res/config/options_extra.json", MEM_TEMP);
+	}
+	if (!json) {
+		return;
+	}
+	root = cJSON_Parse(json);
+	xfree(json);
+	if (!root) {
+		return;
+	}
+	v = cJSON_GetObjectItem(root, "hide_lag_warning");
+	if (v && cJSON_IsBool(v)) {
+		if (cJSON_IsTrue(v)) {
+			game_options |= GO_NOLAG;
+		} else {
+			game_options &= ~GO_NOLAG;
+		}
+	}
+	v = cJSON_GetObjectItem(root, "ui_scale");
+	if (v && cJSON_IsNumber(v)) {
+		ui_scale_pct = (int)cJSON_GetNumberValue(v);
+		/* configs from the short-lived whole-canvas scheme stored 0..4 */
+		if (ui_scale_pct < 50 || ui_scale_pct > 200) {
+			ui_scale_pct = 100;
+		}
+	}
+	v = cJSON_GetObjectItem(root, "ttf_text");
+	if (v && cJSON_IsBool(v)) {
+		saved_ttf_text = cJSON_IsTrue(v) ? 1 : 0;
+		if (saved_ttf_text) {
+			game_options |= GO_TTF;
+		} else {
+			game_options &= ~GO_TTF;
+		}
+	}
+	/* face + size go straight to the font manager: before fm_init they are
+	 * the sizes/face it opens with, after it (a reload of the options)
+	 * they re-apply live - either way no second load when nothing changed */
+	v = cJSON_GetObjectItem(root, "ttf_font");
+	if (v && cJSON_IsString(v) && v->valuestring) {
+		snprintf(saved_ttf_font, sizeof(saved_ttf_font), "%s", v->valuestring);
+	}
+	fm_set_preferred_font(saved_ttf_font);
+	fm_set_text_scale(extra_int(root, "ttf_text_scale", 100, FM_SCALE_MIN, FM_SCALE_MAX));
+	v = cJSON_GetObjectItem(root, "gpu_driver");
+	if (v && cJSON_IsString(v) && v->valuestring) {
+		snprintf(saved_gpu_driver, sizeof(saved_gpu_driver), "%s", v->valuestring);
+		if (!saved_gpu_driver[0]) {
+			snprintf(saved_gpu_driver, sizeof(saved_gpu_driver), "auto");
+		}
+	}
+	v = cJSON_GetObjectItem(root, "gpu_rendering");
+	if (v && cJSON_IsBool(v)) {
+		saved_gpu_rendering = cJSON_IsTrue(v) ? 1 : 0;
+		if (saved_gpu_rendering) {
+			game_options |= GO_GPU;
+		} else {
+			game_options &= ~GO_GPU;
+		}
+	}
+	v = cJSON_GetObjectItem(root, "gpu_shader_effects");
+	if (v && cJSON_IsBool(v)) {
+		saved_gpu_shaderfx = cJSON_IsTrue(v) ? 1 : 0;
+		if (saved_gpu_shaderfx) {
+			game_options |= GO_SHADERFX;
+		} else {
+			game_options &= ~GO_SHADERFX;
+		}
+	}
+	/* effect glows: stored as a positive key but held as a negative bit, so
+	 * an absent key (and any -o mask that predates it) means glows ON */
+	v = cJSON_GetObjectItem(root, "gpu_fancy_effects");
+	if (v && cJSON_IsBool(v)) {
+		saved_gpu_fancyfx = cJSON_IsTrue(v) ? 1 : 0;
+		if (saved_gpu_fancyfx) {
+			game_options &= ~GO_NOFANCYFX;
+		} else {
+			game_options |= GO_NOFANCYFX;
+		}
+	}
+	saved_defaults_rev = extra_int(root, "defaults_rev", 0, 0, 1000000);
+	if (saved_defaults_rev < GPU_DEFAULTS_REV) {
+		/* written while these were experimental opt-ins; adopt the new
+		 * defaults rather than inheriting a "false" nobody chose */
+		saved_gpu_rendering = -1;
+		saved_gpu_shaderfx = -1;
+		game_options |= GO_GPU;
+		game_options |= GO_SHADERFX;
+	}
+	sound_volume = extra_int(root, "master_volume", sound_volume, 0, 128);
+	sound_volume_sfx = extra_int(root, "sfx_volume", sound_volume_sfx, 0, 128);
+	sound_volume_ambient = extra_int(root, "ambient_volume", sound_volume_ambient, 0, 128);
+	sound_volume_ui = extra_int(root, "ui_volume", sound_volume_ui, 0, 128);
+	frames_per_second = extra_int(root, "fps_limit", frames_per_second, 24, 244);
+	saved_vsync = extra_int(root, "vsync", -1, 0, 1);
+	sdl_cache_size = extra_int(root, "texture_cache", sdl_cache_size, 1000, 8000);
+	sdl_multi = extra_int(root, "worker_threads", sdl_multi, 1, 8);
+	saved_window_mode = extra_int(root, "window_mode", -1, -1, 2);
+	cJSON_Delete(root);
+}
+
+void save_options(void)
+{
+	char path[MAX_PATH];
+	get_config_path(path, sizeof(path));
+	input_save_config(path);
+	save_extra_options();
 }
 
 void load_options(void)
 {
-	FILE *fp;
-	char filename[MAX_PATH];
+	char path[MAX_PATH];
 
-	if (localdata) {
-		if (sv_ver == 35) {
-			sprintf(filename, "%s%s", localdata, "moac35.dat");
-		} else {
-			sprintf(filename, "%s%s", localdata, "moac.dat");
-		}
-	} else {
-		if (sv_ver == 35) {
-			sprintf(filename, "%s", "bin/data/moac35.dat");
-		} else {
-			sprintf(filename, "%s", "bin/data/moac.dat");
-		}
-	}
+	active_charname[0] = '\0';
+	input_init(sv_ver);
+	load_extra_options();
 
-	fp = fopen(filename, "rb");
-	if (!fp) {
+	get_shared_config_path(path, sizeof(path));
+	if (input_load_config(path) == 0) {
 		return;
 	}
 
-	fread(&user_keys, sizeof(user_keys), 1, fp);
-	if (sv_ver == 35) {
-		fread(&v35_action_row, sizeof(v35_action_row), 1, fp);
-	} else {
-		fread(&v3_action_row, sizeof(v3_action_row), 1, fp);
+	/* One-time migration: earlier builds (launcher without GO_APPDATA) kept
+	 * configs inside the install dir, where Steam updates could wipe them.
+	 * Pull an existing install-dir config into the pref path once. */
+	if (localdata && input_load_config("res/config/keybinds.json") == 0) {
+		input_save_config(path);
+		return;
 	}
-	fread(&action_enabled, sizeof(action_enabled), 1, fp);
-	fread(&gear_lock, sizeof(gear_lock), 1, fp);
-	fclose(fp);
 
-	actions_loaded();
+	get_legacy_config_path(path, sizeof(path));
+	if (input_migrate_binary_config(path) == 0) {
+		char json_path[MAX_PATH];
+		get_shared_config_path(json_path, sizeof(json_path));
+		input_save_config(json_path);
+		return;
+	}
+
+	hotbar_setup_defaults();
+	save_options();
+}
+
+/* The v3 staggered login often delivers SV_LOGINDONE before the skill
+ * values, so the hotbar setup below cannot always run right away. When it
+ * can't, this remembers what is still owed (1 = re-filter a loaded profile,
+ * 2 = full fresh-character setup) and finish_character_options() settles
+ * the debt once the values are in. */
+static int char_options_pending;
+
+void load_character_options(void)
+{
+	/* every SV_LOGINDONE means we just (re)entered the game world - make
+	 * sure the chat window is not left scrolled up from the login flood */
+	render_text_jump_bottom();
+
+	/* The name comes from the login credentials, not from the map: with
+	 * the protocol v3 staggered login the center tile often has no
+	 * character yet when sv_logindone fires, and reading it here made
+	 * the per-character profile load a coin flip. */
+	if (username[0] == '\0') {
+		return;
+	}
+
+	snprintf(active_charname, sizeof(active_charname), "%s", username);
+
+	char path[MAX_PATH];
+	get_config_path(path, sizeof(path));
+
+	char shared[MAX_PATH];
+	get_shared_config_path(shared, sizeof(shared));
+	if (strcmp(path, shared) == 0) {
+		return;
+	}
+
+	/* migrate a per-character profile out of the install dir (see load_options) */
+	if (localdata) {
+		char oldpath[MAX_PATH];
+		snprintf(oldpath, sizeof(oldpath), "res/config/keybinds_%s.json", active_charname);
+		FILE *probe = fopen(path, "r");
+		if (probe) {
+			fclose(probe);
+		} else {
+			FILE *oldfp = fopen(oldpath, "r");
+			if (oldfp) {
+				fclose(oldfp);
+				if (input_load_config(oldpath) == 0) {
+					input_save_config(path);
+				}
+			}
+		}
+	}
+
+	if (input_load_config(path) == 0) {
+		/* Every area transfer (including a death rescue) is a full
+		 * relogin and reloads the profile so per-character binds follow
+		 * the player across zones - but announcing it each time spammed
+		 * the chat. Say it once per character. */
+		static char announced_for[sizeof(active_charname)];
+		if (strcmp(announced_for, active_charname) != 0) {
+			snprintf(announced_for, sizeof(announced_for), "%s", active_charname);
+			addline("Loaded keybinds for %s", active_charname);
+		}
+		/* saved profiles can still carry spells from before the skill
+		 * filter existed (or from another class's shared config) */
+		char_options_pending = (hotbar_filter_uncastable() < 0) ? 1 : 0;
+		return;
+	}
+
+	/* No saved profile for this character: the hotbar currently holds the
+	 * pre-login defaults, which include every spell in the game. Once
+	 * skill values are known, strip what this character cannot cast and
+	 * offer a recall scroll and a healing potion instead. */
+	if (hotbar_filter_uncastable() >= 0) {
+		hotbar_add_default_items();
+		save_options();
+		char_options_pending = 0;
+	} else {
+		char_options_pending = 2;
+	}
+}
+
+void finish_character_options(void)
+{
+	if (!char_options_pending) {
+		return;
+	}
+	if (hotbar_filter_uncastable() < 0) {
+		return; /* skill values still on their way */
+	}
+	if (char_options_pending == 2) {
+		hotbar_add_default_items();
+		save_options();
+	}
+	char_options_pending = 0;
 }
 
 void init_logging(void)
 {
 	char filename[MAX_PATH];
 
-	if (game_options & GO_APPDATA) {
+	if ((game_options & GO_APPDATA) || (game_options & GO_NOTSET)) {
 		localdata = SDL_GetPrefPath(ORG_NAME, APP_NAME);
 		if (localdata) {
 			snprintf(filename, sizeof(filename), "%s%s", localdata, "moac.log");
@@ -566,35 +908,16 @@ void init_logging(void)
 
 void determine_resolution(void)
 {
-	if (!want_height) {
-		if (want_width == 800) {
-			want_height = 600;
-		} else if (want_width == 1600) {
-			want_height = 1200;
-		} else if (want_width == 2400) {
-			want_height = 1800;
-		} else if (want_width == 3200) {
-			want_height = 2400;
-		} else if (want_width) {
-			want_height = want_width * 9 / 16;
-		}
+	/* When only one dimension is given, complete it to a 16:9 window: the
+	 * widescreen canvas is the intended default. The old 4:3 mappings
+	 * (800x600, 1600x1200, ...) are gone - anyone who wants those passes
+	 * both -w and -h explicitly, which is left untouched. With neither
+	 * given the client sizes itself to the monitor (see sdl_init()). */
+	if (!want_height && want_width) {
+		want_height = want_width * 9 / 16;
 	}
-	if (!want_width) {
-		if (want_height == 600) {
-			want_width = 800;
-		} else if (want_height == 1000) {
-			want_width = 1600;
-		} else if (want_height == 1200) {
-			want_width = 1600;
-		} else if (want_height == 1800) {
-			want_width = 2400;
-		} else if (want_height == 2000) {
-			want_width = 3200;
-		} else if (want_height == 2400) {
-			want_width = 3200;
-		} else if (want_height) {
-			want_width = want_height * 16 / 9;
-		}
+	if (!want_width && want_height) {
+		want_width = want_height * 16 / 9;
 	}
 }
 

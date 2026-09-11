@@ -1401,9 +1401,11 @@ static int opt_mods_rows(void)
 		return 2; /* header + "none installed" */
 	}
 	for (i = 0; i < n; i++) {
+		int cnt = opt_mod_open[i] ? opt_mod_settings_count(mod_registry_get(i)) : 0;
+
 		rows++;
-		if (opt_mod_open[i]) {
-			rows += opt_mod_settings_count(mod_registry_get(i));
+		if (cnt) {
+			rows += cnt + 1; /* its options, then the closing spacer */
 		}
 	}
 	return rows + 1; /* the restart note */
@@ -1425,11 +1427,14 @@ static int opt_mods_locate(int row, int *opt)
 		r++;
 		if (opt_mod_open[i]) {
 			int cnt = opt_mod_settings_count(mod_registry_get(i));
+
 			if (row >= r && row < r + cnt) {
 				*opt = row - r;
 				return i;
 			}
-			r += cnt;
+			if (cnt) {
+				r += cnt + 1; /* skip the spacer row, which is not clickable */
+			}
 		}
 	}
 	return -1;
@@ -1481,6 +1486,18 @@ static void opt_display_mods(void)
 				draw_option_row_at(opt_lx + OPT_TWISTY_W, ry, opt_content_w - OPT_TWISTY_W, &o);
 			}
 			row += cnt;
+
+			/* Close the section off in a row of its own: without the gap and
+			 * the rule, an expanded mod's last option sits flush against the
+			 * next mod and the two read as one list. */
+			if (cnt) {
+				ry = opt_row_y(row);
+				if (ry >= 0) {
+					render_rect_alpha(
+					    opt_lx + OPT_TWISTY_W, ry + UI_ROW_H / 2, opt_rx, ry + UI_ROW_H / 2 + 1, UI_BORDER, 110);
+				}
+				row++;
+			}
 		}
 	}
 

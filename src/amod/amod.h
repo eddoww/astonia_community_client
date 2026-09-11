@@ -94,15 +94,28 @@ DLL_EXPORT void amod_register_keybinds(void);
  * it to the classic command line. */
 DLL_EXPORT int amod_textinput(SDL_Keycode key);
 
+/* --- Settings rows in the client's Options screen (any mod) -------------
+ * Export all three and your settings appear under your mod's name in
+ * Options > Mods, as a section the player can fold open: a checkbox per
+ * AMOD_OPT_TOGGLE, a slider per AMOD_OPT_SLIDER, a heading per
+ * AMOD_OPT_HEADER (see struct amod_option). The client calls amod_option_get()
+ * every frame it draws them, so report your live values; it calls
+ * amod_option_set() on a click and never persists anything itself - saving is
+ * yours to do, in client_config_dir(). client >= 1.15.0; before that only the
+ * system mod could register options. */
+DLL_EXPORT int amod_options_count(void);
+DLL_EXPORT int amod_option_get(int index, struct amod_option *out);
+DLL_EXPORT void amod_option_set(int index, int value);
+
 // Main mod only:
 DLL_EXPORT int amod_process(const unsigned char *buf);
 DLL_EXPORT int amod_prefetch(const unsigned char *buf);
 DLL_EXPORT int amod_display_skill_line(int v, int base, int curr, int cn, char *buf);
 DLL_EXPORT int amod_is_playersprite(int sprite);
-/* Options shown in the client's Options > Gameplay tab (see struct amod_option) */
-DLL_EXPORT int amod_options_count(void);
-DLL_EXPORT int amod_option_get(int index, struct amod_option *out);
-DLL_EXPORT void amod_option_set(int index, int value);
+/* Which themed tab each of the system mod's option rows belongs to. Only the
+ * system mod has this: its rows are game settings, so they live in
+ * Gameplay/UI/Audio rather than under a mod in Options > Mods. */
+DLL_EXPORT int amod_option_tab(int index);
 
 // =====================================================================
 // Client Exported Functions - Call these from your mod

@@ -52,6 +52,13 @@ struct mod {
 	void (*_amod_register_keybinds)(void);
 	char *(*_amod_version)(void);
 	void (*_amod_set_mod_dir)(const char *dir);
+	/* A mod's own settings rows, shown under it in Options > Mods. Bound for
+	 * every mod - the system mod is the exception and is cleared again in
+	 * load_system_mod(), because its rows are game settings and belong in the
+	 * themed tabs, not under a mod nobody should have to know about. */
+	int (*_amod_options_count)(void);
+	int (*_amod_option_get)(int index, struct amod_option *out);
+	void (*_amod_option_set)(int index, int value);
 	/* Retained so a future reload has something to unload. We deliberately do
 	 * NOT SDL_UnloadObject at shutdown: mods spawn threads and register SDL
 	 * callbacks, and pulling the library out from under them at exit buys
@@ -167,6 +174,15 @@ static void bind_mod(struct mod *m, SDL_SharedObject *h)
 	}
 	if ((tmp = SDL_LoadFunction(h, "amod_set_mod_dir"))) {
 		m->_amod_set_mod_dir = (void (*)(const char *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_options_count"))) {
+		m->_amod_options_count = (int (*)(void))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_option_get"))) {
+		m->_amod_option_get = (int (*)(int, struct amod_option *))tmp;
+	}
+	if ((tmp = SDL_LoadFunction(h, "amod_option_set"))) {
+		m->_amod_option_set = (void (*)(int, int))tmp;
 	}
 }
 
@@ -337,6 +353,12 @@ static void load_system_mod(void)
 
 	bind_mod(m, h);
 	bind_system_mod(h);
+	/* Its options are already reachable through the globals bind_system_mod()
+	 * set, which feed the Gameplay/UI/Audio tabs. Clearing the per-mod copies
+	 * keeps them from also appearing under Options > Mods. */
+	m->_amod_options_count = NULL;
+	m->_amod_option_get = NULL;
+	m->_amod_option_set = NULL;
 	snprintf(m->id, sizeof(m->id), "amod");
 	mod_count++;
 }
@@ -820,6 +842,52 @@ void amod_option_set(int index, int value)
 {
 	if (_amod_option_set) {
 		_amod_option_set(index, value);
+	}
+}
+
+/* ---- a single mod's own options, addressed by id (Options > Mods) ---- */
+
+static struct mod *find_mod(const char *id)
+{
+	int i;
+
+	if (!id) {
+		return NULL;
+	}
+	for (i = 0; i < mod_count; i++) {
+		if (!strcmp(mod[i].id, id)) {
+			return &mod[i];
+		}
+	}
+	return NULL; /* not installed, or installed but disabled at launch */
+}
+
+int amod_mod_options_count(const char *id)
+{
+	struct mod *m = find_mod(id);
+
+	if (m && m->_amod_options_count && m->_amod_option_get) {
+		return m->_amod_options_count();
+	}
+	return 0;
+}
+
+int amod_mod_option_get(const char *id, int index, struct amod_option *out)
+{
+	struct mod *m = find_mod(id);
+
+	if (m && m->_amod_option_get && out) {
+		return m->_amod_option_get(index, out);
+	}
+	return 0;
+}
+
+void amod_mod_option_set(const char *id, int index, int value)
+{
+	struct mod *m = find_mod(id);
+
+	if (m && m->_amod_option_set) {
+		m->_amod_option_set(index, value);
 	}
 }
 

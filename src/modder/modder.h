@@ -39,6 +39,11 @@ int amod_options_count(void);
 int amod_option_get(int index, struct amod_option *out);
 void amod_option_set(int index, int value);
 int amod_option_tab(int index);
+/* A single mod's own settings rows, addressed by its registry id. Returns 0 /
+ * no-op for a mod that is not loaded or exports no options. */
+int amod_mod_options_count(const char *id);
+int amod_mod_option_get(const char *id, int index, struct amod_option *out);
+void amod_mod_option_set(const char *id, int index, int value);
 int amod_escape(void);
 int amod_has_open_window(void);
 int amod_item_group_match(int group, uint32_t sprite);

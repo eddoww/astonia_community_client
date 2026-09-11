@@ -89,6 +89,45 @@ The player's enable/disable state lives in `<userdir>/mods/mods.json`, written
 by the client (Options ▸ Gameplay ▸ Installed Mods) and by the launcher. Do
 not write it from a mod.
 
+## Settings in the Options screen
+
+Export `amod_options_count()`, `amod_option_get()` and `amod_option_set()` and
+your mod gets a foldable section of its own under **Options > Mods**, with a
+checkbox per `AMOD_OPT_TOGGLE`, a slider per `AMOD_OPT_SLIDER` and a heading per
+`AMOD_OPT_HEADER`. No window of your own to build, and no `#command` for the
+player to memorise.
+
+    DLL_EXPORT int amod_options_count(void) { return 2; }
+
+    DLL_EXPORT int amod_option_get(int index, struct amod_option *out)
+    {
+        memset(out, 0, sizeof(*out));
+        if (index == 0) {
+            out->type = AMOD_OPT_TOGGLE;
+            out->value = show_overlay;
+            snprintf(out->label, sizeof(out->label), "Show overlay");
+            return 1;
+        }
+        if (index == 1) {
+            out->type = AMOD_OPT_SLIDER;
+            out->value = opacity;
+            out->min_val = 0;
+            out->max_val = 100;
+            snprintf(out->label, sizeof(out->label), "Opacity");
+            return 1;
+        }
+        return 0;
+    }
+
+    DLL_EXPORT void amod_option_set(int index, int value) { /* store it */ }
+
+`amod_option_get()` is called every frame the rows are drawn, so report your
+live values rather than a snapshot. The client **never persists them** - save
+them yourself under `client_config_dir()`.
+
+Requires client >= 1.15.0. Before that only the system mod could register
+options; an older client simply never calls these, so exporting them is safe.
+
 ## Privileged mod
 
 One mod — the game's own system mod, loaded from `bin/amod.<dll|so|dylib>`

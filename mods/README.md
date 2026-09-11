@@ -70,6 +70,14 @@ See `build/mod-sdk/README.md` and `src/amod/amod.h`. Implement
 `amod_set_mod_dir(const char *dir)` to be handed your own folder before
 `amod_init()`.
 
+## Settings
+
+Export `amod_options_count()` / `amod_option_get()` / `amod_option_set()` and
+your settings appear in a foldable section under your mod's name in
+**Options > Mods** - toggles, sliders and headings, no window of your own. The
+client reads your live values each frame and never saves them; persist them
+yourself under `client_config_dir()`.
+
 ## Lua mods
 
 Put `init.lua` (loaded first) and any other `.lua` files in the mod folder.

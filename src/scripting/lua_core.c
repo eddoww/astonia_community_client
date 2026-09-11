@@ -21,6 +21,7 @@
 
 #include "astonia.h"
 #include "scripting/lua_interface.h"
+#include "modder/mod_registry.h"
 
 // Forward declarations for API registration
 void lua_api_register(lua_State *L);
@@ -32,7 +33,6 @@ static lua_State *L = NULL;
 static bool dev_mode = false;
 
 // Mods subdirectory name (within SDL user data path)
-static const char *MODS_SUBDIR = "mods";
 
 // Version string for loaded mods
 static char lua_version_str[256] = "LuaJIT Scripting";
@@ -435,65 +435,49 @@ static int load_mod_scripts(const char *mod_path, const char *mod_name)
 	return count;
 }
 
-// Load all mods from the mods directory (mods/MODNAME/*.lua)
+// Load the Lua half of every enabled mod the registry found. Discovery,
+// manifests and the enabled flag are shared with the native loader (see
+// modder/mod_registry.h) - a mod folder may hold scripts, a library, or both.
 static int load_all_mods(void)
 {
-	char mods_path[512];
-	DIR *dir;
-	struct dirent *entry;
 	int total_scripts = 0;
 	int mod_count = 0;
+	int i, n;
 
 	// Reset tracking
 	loaded_script_count = 0;
 	loaded_mod_count = 0;
 
-	// Get SDL user data path (e.g., ~/.local/share/Astonia/mods/ on Linux)
-	char *pref_path = SDL_GetPrefPath(ORG_NAME, APP_NAME);
-	if (pref_path) {
-		snprintf(mods_path, sizeof(mods_path), "%s%s", pref_path, MODS_SUBDIR);
-		SDL_free(pref_path);
-		dir = opendir(mods_path);
-	} else {
-		// Fallback to relative path if SDL_GetPrefPath fails
-		snprintf(mods_path, sizeof(mods_path), "%s", MODS_SUBDIR);
-		dir = opendir(mods_path);
+	n = mod_registry_count();
+	if (n == 0) {
+		// amod_init() scans before us; only a reload can find the list stale
+		n = mod_registry_scan();
 	}
 
-	if (!dir) {
-		note("Mods directory '%s' not found, no Lua mods will be loaded", mods_path);
-		return 0;
-	}
+	for (i = 0; i < n; i++) {
+		const struct mod_desc *desc = mod_registry_get(i);
+		char mod_path[MAX_PATH];
+		size_t len;
+		int scripts_loaded;
 
-	// Iterate through subdirectories (each is a mod)
-	while ((entry = readdir(dir)) != NULL) {
-		// Skip . and ..
-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+		if (!desc->has_lua || !desc->enabled) {
 			continue;
 		}
 
-		char mod_path[512];
-		int written = snprintf(mod_path, sizeof(mod_path), "%s/%s", mods_path, entry->d_name);
-		if (written >= (int)sizeof(mod_path)) {
-			warn("Mod path too long, skipping: %s/%s", mods_path, entry->d_name);
-			continue;
+		// load_mod_scripts joins with "/", so hand it a path without one
+		snprintf(mod_path, sizeof(mod_path), "%s", desc->dir);
+		len = strlen(mod_path);
+		if (len && (mod_path[len - 1] == '/' || mod_path[len - 1] == '\\')) {
+			mod_path[len - 1] = 0;
 		}
 
-		// stat() instead of d_type - see load_mod_scripts for rationale
-		struct stat st;
-		if (stat(mod_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
-			continue;
-		}
-
-		int scripts_loaded = load_mod_scripts(mod_path, entry->d_name);
+		scripts_loaded = load_mod_scripts(mod_path, desc->id);
 		if (scripts_loaded > 0) {
-			note("Loaded mod '%s' (%d scripts)", entry->d_name, scripts_loaded);
+			note("Loaded mod '%s' (%d scripts)", desc->id, scripts_loaded);
 			total_scripts += scripts_loaded;
 			mod_count++;
 		}
 	}
-
-	closedir(dir);
 
 	// Update version string with loaded mod names
 	if (loaded_mod_count > 0) {
@@ -861,6 +845,9 @@ bool lua_scripting_reload(void)
 	lua_api_register(L);
 
 	// Reload all mods
+	/* re-scan first: #lua_reload should pick up a mod folder dropped in
+	 * since startup, not just changed scripts */
+	mod_registry_scan();
 	load_all_mods();
 
 	// Call initialization handler (scripts were freshly loaded)

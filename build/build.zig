@@ -86,6 +86,7 @@ pub fn build(b: *std.Build) void {
 
         // MODDER core
         "src/modder/modder.c",
+        "src/modder/mod_registry.c",
 
         // SDL layer
         "src/sdl/sdl_core.c",

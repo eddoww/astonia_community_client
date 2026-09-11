@@ -79,8 +79,9 @@ TEST_SHADERFX = $(BIN_DIR)/test_shaderfx_compare
 TEST_TEXT = $(BIN_DIR)/test_text_compare
 TEST_GESTURE = $(BIN_DIR)/test_gesture
 TEST_EQUIP = $(BIN_DIR)/test_equip_bonus
+TEST_MOD_REGISTRY = $(BIN_DIR)/test_mod_registry
 
-all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT) $(TEST_GESTURE) $(TEST_EQUIP)
+all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT) $(TEST_GESTURE) $(TEST_EQUIP) $(TEST_MOD_REGISTRY)
 test: run
 
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
@@ -120,6 +121,18 @@ $(TEST_GESTURE): test_gesture.c ../src/gui/gesture.c
 $(TEST_EQUIP): test_equip_bonus.c ../src/gui/equip_bonus.c
 	@mkdir -p $(BIN_DIR)
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
+
+# Mod discovery (cJSON + SDL filesystem; the fixtures are real directories)
+$(TEST_MOD_REGISTRY): test_mod_registry.c ../src/modder/mod_registry.c ../src/lib/cjson/cJSON.c
+	@mkdir -p $(BIN_DIR)
+	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src -I../include $(shell pkg-config --cflags sdl3) $^ -o $@ $(shell pkg-config --libs sdl3)
+
+test_mod_registry: $(TEST_MOD_REGISTRY)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running mod registry tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_mod_registry
 
 test_equip_bonus: $(TEST_EQUIP)
 	@echo ""
@@ -209,13 +222,13 @@ test_text: $(TEST_TEXT)
 	cd .. && ./bin/test_text_compare
 
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_shaderfx test_text
+run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry test_shaderfx test_text
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"
 	@echo "==============================================="
 
 clean:
-	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_GESTURE) $(TEST_EQUIP) *.o
+	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_GESTURE) $(TEST_EQUIP) $(TEST_MOD_REGISTRY) *.o
 
-.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus
+.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry

@@ -5,10 +5,11 @@
 #include <SDL3/SDL_keycode.h>
 
 struct amod_option;
-#define MAXMOD 6
 
 int amod_init(void);
 void amod_exit(void);
+int amod_count(void);
+const char *amod_id(int idx);
 char *amod_version(int idx);
 void amod_gamestart(void);
 void amod_sprite_config(void);

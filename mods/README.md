@@ -1,25 +1,86 @@
-# Astonia Client Lua Mods
+# Astonia Client Mods
 
-Place your mods in subdirectories here. Each mod should have its own folder.
+A mod is one folder under the player's user data directory. What is in the
+folder decides what kind of mod it is: a native library, Lua scripts, or both.
 
-## Directory Structure
+    <userdir>/mods/
+      mods.json            enable/disable + load order (written by the client)
+      my-lua-mod/
+        mod.json           required
+        init.lua           loaded first if present
+        helpers.lua
+      my-native-mod/
+        mod.json           required
+        mymod.so           any filename; one platform library per folder
+      hybrid-mod/
+        mod.json
+        hybrid.so
+        init.lua
 
+`<userdir>` is `~/.local/share/Astonia/` on Linux, `%APPDATA%\Astonia\` on
+Windows and `~/Library/Application Support/Astonia/` on macOS — or whatever
+path was passed to `--userdir`, which is how the launcher keeps the client and
+its own mod installs pointing at the same place.
+
+There is no limit on how many mods can be installed, and no `amod`..`fmod`
+slots: those are gone. The one exception is the game's system mod, which is
+loaded from `bin/amod.<dll|so|dylib>` next to the binary and is the only mod
+allowed to override client behaviour.
+
+## mod.json
+
+Required — a folder without one is not a mod, which is what keeps stray files
+a player unzipped in there from being loaded.
+
+```json
+{
+  "id": "my_mod",
+  "name": "My Mod",
+  "version": "1.0.0",
+  "author": "you",
+  "description": "what it does"
+}
 ```
-mods/
-  your_mod_name/
-    init.lua         (loaded first if present)
-    other_file.lua
-    ...
-  another_mod/
-    init.lua
+
+Everything in it is optional: `id` defaults to the folder name, `name` to
+`id`, `version` to `"unknown"`. Add `"entry": "mymod"` (no extension) when the
+folder holds more than one native library for a platform — the client will not
+guess which one is the mod, and loads neither.
+
+## mods.json
+
+Per-mod user state, owned by the client and also written by the launcher:
+
+```json
+{ "version": 1,
+  "mods": {
+    "my_mod":  { "enabled": false, "order": 100 },
+    "hybrid":  { "enabled": true,  "order": 10 }
+  } }
 ```
+
+Mods not listed default to enabled with order 100. Load order is `order`
+ascending, ties broken by id. Toggle mods in-game under
+Options ▸ Gameplay ▸ Installed Mods; a change takes effect at the next launch,
+because loaded libraries are never unloaded.
+
+## Native mods
+
+See `build/mod-sdk/README.md` and `src/amod/amod.h`. Implement
+`amod_set_mod_dir(const char *dir)` to be handed your own folder before
+`amod_init()`.
+
+## Lua mods
+
+Put `init.lua` (loaded first) and any other `.lua` files in the mod folder.
 
 ## Getting Started
 
-1. Create a folder for your mod: `mods/my_mod/`
-2. Create `init.lua` in your mod folder
-3. Register callbacks using `register("event_name", function() ... end)`
-4. Start the game - your mod will be loaded automatically
+1. Create a folder for your mod: `<userdir>/mods/my_mod/`
+2. Write a `mod.json` — `{}` is enough to start
+3. Create `init.lua` in your mod folder
+4. Register callbacks using `register("event_name", function() ... end)`
+5. Start the game - your mod will be loaded automatically
 
 ## Callback Registration
 
@@ -49,7 +110,9 @@ end)
 
 ## Hot Reload
 
-Type `#lua_reload` in the chat to reload all mods without restarting the client.
+Type `#lua_reload` in the chat to reload all Lua mods without restarting the
+client. It re-scans the mods directory first, so a mod folder dropped in while
+the game is running is picked up. Native libraries are not reloaded.
 
 When the client is started with the `-dev` flag, loaded scripts are also watched
 for changes (about once per second) and reloaded automatically when a file's

@@ -68,10 +68,10 @@ static void cmd_version(void)
 
 	addline("Client version: %s", client_version());
 
-	for (i = 0; i < MAXMOD; i++) {
+	for (i = 0; i < amod_count(); i++) {
 		ptr = amod_version(i);
 		if (ptr) {
-			addline("%c-mod version: %s", 'A' + i, ptr);
+			addline("mod %s: %s", amod_id(i), ptr);
 		}
 	}
 

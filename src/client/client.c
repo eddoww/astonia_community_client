@@ -139,6 +139,19 @@ DLL_EXPORT const char *client_config_dir(void)
 	return localdata ? localdata : "res/config/";
 }
 
+/* Root of the mod folders: <userdir>/mods/, one directory per mod. The
+ * relative fallback is what makes the repo-local mods/ tree usable when the
+ * client runs portable (-o without GO_APPDATA). */
+DLL_EXPORT const char *client_mods_dir(void)
+{
+	static char dir[MAX_PATH];
+
+	if (!dir[0]) {
+		snprintf(dir, sizeof(dir), "%smods/", localdata ? localdata : "");
+	}
+	return dir;
+}
+
 DLL_EXPORT void client_send(void *buf, size_t len)
 {
 	if (len > MAX_OUTBUF - outused) {

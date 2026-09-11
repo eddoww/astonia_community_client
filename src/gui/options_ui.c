@@ -18,6 +18,7 @@
 #include "sdl/font_manager.h"
 #include "sdl/gamepad.h"
 #include "modder/modder.h"
+#include "modder/mod_registry.h"
 #include "amod/amod_options.h"
 
 #define OPT_WIDTH      360
@@ -95,9 +96,9 @@ extern SDL_Window *sdlwnd;
 /* rows 0..9 classic, 10..15 window sizes, 16..19+MAX_PANEL panels
  * (16 header, 17 lock, 18 minimize direction, 19.. per-panel toggles, then
  * the reset row) */
-#define OPT_UI_PANEL_ROW0   19
-#define OPT_UI_NATIVE       (OPT_UI_PANEL_ROW0 + MAX_PANEL + 1)
-#define OPT_GAMEPLAY_NATIVE 2
+#define OPT_UI_PANEL_ROW0 19
+#define OPT_UI_NATIVE     (OPT_UI_PANEL_ROW0 + MAX_PANEL + 1)
+#define OPT_GAMEPLAY_BASE 2 /* Combat header + cast mode */
 
 #define OPT_MAX_MOD_ROWS 64
 
@@ -121,6 +122,23 @@ static int opt_mod_row_count(int amod_tab)
 	return opt_mod_rows(amod_tab, map);
 }
 
+/* Installed-mods block on the Gameplay tab: a header, one row per discovered
+ * mod (disabled ones included - that is how they get switched back on), and a
+ * reminder that toggles need a restart. Nothing at all when no mods are
+ * installed, so a plain client shows no empty section. */
+static int opt_modlist_rows(void)
+{
+	int n = mod_registry_count();
+
+	return n ? n + 2 : 0;
+}
+
+/* Where the Gameplay tab's mod-provided option rows start. */
+static int opt_gameplay_native(void)
+{
+	return OPT_GAMEPLAY_BASE + opt_modlist_rows();
+}
+
 static int opt_tab_total(void)
 {
 	switch (opt_tab) {
@@ -133,7 +151,7 @@ static int opt_tab_total(void)
 	case 3:
 		return OPT_UI_NATIVE + opt_mod_row_count(AMOD_TAB_UI);
 	case 4:
-		return OPT_GAMEPLAY_NATIVE + opt_mod_row_count(AMOD_TAB_GAMEPLAY);
+		return opt_gameplay_native() + opt_mod_row_count(AMOD_TAB_GAMEPLAY);
 	case 5:
 		return 10;
 	case 6:
@@ -1341,8 +1359,63 @@ static int opt_click_gamepad(int mx, int my)
 	return 0;
 }
 
-/* Gameplay tab: native combat rows first, then options provided by the loaded
- * mod (see amod_option in amod_structs.h) */
+/* One row per installed mod: name, version and an enable checkbox. The list
+ * comes from the registry rather than from the loaded mods, so a disabled mod
+ * is still listed and can be switched back on. */
+static void draw_mod_list(int first_row)
+{
+	int n = mod_registry_count();
+	int i, ry;
+
+	if (!n) {
+		return;
+	}
+
+	ry = opt_row_y(first_row);
+	if (ry >= 0) {
+		draw_section_header(opt_lx, ry, opt_content_w, "Installed Mods");
+	}
+
+	for (i = 0; i < n; i++) {
+		const struct mod_desc *m = mod_registry_get(i);
+		char label[MOD_NAME_LEN + MOD_VERSION_LEN + 8];
+
+		ry = opt_row_y(first_row + 1 + i);
+		if (ry < 0) {
+			continue;
+		}
+		snprintf(label, sizeof(label), "%s  %s", m->name, m->version);
+		draw_checkbox(opt_lx, ry, m->enabled, label);
+	}
+
+	ry = opt_row_y(first_row + 1 + n);
+	if (ry >= 0) {
+		/* Libraries are never unloaded once dlopened, so a toggle cannot
+		 * take effect before the next launch - say so rather than let the
+		 * checkbox imply otherwise. */
+		render_text(opt_lx, ry, UI_TEXT_MUTED, UI_FONT_BODY, "Mod changes take effect at the next launch.");
+	}
+}
+
+static int click_mod_list(int first_row, int mx, int my)
+{
+	int n = mod_registry_count();
+	int i, ry;
+
+	for (i = 0; i < n; i++) {
+		const struct mod_desc *m = mod_registry_get(i);
+
+		ry = opt_row_y(first_row + 1 + i);
+		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+			mod_registry_set_enabled(m->id, !m->enabled);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* Gameplay tab: native combat rows first, then the installed-mod list, then
+ * options provided by the loaded mods (see amod_option in amod_structs.h) */
 static void opt_display_gameplay(void)
 {
 	int ry;
@@ -1361,7 +1434,8 @@ static void opt_display_gameplay(void)
 		render_text(opt_lx + 100, ry, UI_TEXT, UI_FONT_BODY, cast_names[cm]);
 	}
 
-	draw_mod_tab_rows(AMOD_TAB_GAMEPLAY, OPT_GAMEPLAY_NATIVE);
+	draw_mod_list(OPT_GAMEPLAY_BASE);
+	draw_mod_tab_rows(AMOD_TAB_GAMEPLAY, opt_gameplay_native());
 }
 
 static int opt_click_gameplay(int mx, int my)
@@ -1375,7 +1449,11 @@ static int opt_click_gameplay(int mx, int my)
 		return 1;
 	}
 
-	return click_mod_tab_rows(AMOD_TAB_GAMEPLAY, OPT_GAMEPLAY_NATIVE, mx, my);
+	if (click_mod_list(OPT_GAMEPLAY_BASE, mx, my)) {
+		return 1;
+	}
+
+	return click_mod_tab_rows(AMOD_TAB_GAMEPLAY, opt_gameplay_native(), mx, my);
 }
 
 void options_display(void)

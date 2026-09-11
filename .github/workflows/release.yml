@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "*"
+      - "v*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,206 +16,76 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
+      - name: Checkout code
+        uses: actions/checkout@v7
 
-      - name: Cache SDL3 libraries
-        id: cache-sdl3
-        uses: actions/cache@v4
+      - name: Build SDL3 + SDL3_mixer (cached)
+        uses: ./.github/actions/setup-sdl3-linux
         with:
-          path: /tmp/sdl3-install
-          key: sdl3-linux-${{ steps.week.outputs.week }}
+          build-on-miss: 'true'
 
-      - name: Install build dependencies
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            libasound2-dev \
-            libpulse-dev \
-            libaudio-dev \
-            libfribidi-dev \
-            libjack-dev \
-            libsndio-dev \
-            libusb-1.0-0-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxcursor-dev \
-            libxfixes-dev \
-            libxi-dev \
-            libxss-dev \
-            libxtst-dev \
-            libwayland-dev \
-            libxkbcommon-dev \
-            libdrm-dev \
-            libgbm-dev \
-            libgl1-mesa-dev \
-            libgles2-mesa-dev \
-            libegl1-mesa-dev \
-            libdbus-1-dev \
-            libibus-1.0-dev \
-            libudev-dev \
-            libthai-dev
-
-      - name: Build SDL3 from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git
-          cmake -S SDL -B SDL-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
-            -DSDL_STATIC=OFF
-          cmake --build SDL-build
-          cmake --install SDL-build
-          rm -rf SDL SDL-build
-
-      - name: Build SDL3_mixer from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        env:
-          SDL3_MIXER_VERSION: prerelease-3.1.2
-        run: |
-          cd /tmp
-          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
-          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
-            -DCMAKE_PREFIX_PATH=/tmp/sdl3-install \
-            -DSDL3MIXER_VENDORED=ON
-          cmake --build SDL_mixer-build
-          cmake --install SDL_mixer-build
-          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
-
-  build-sdl3-windows:
-    name: Build SDL3 for Windows
-    runs-on: windows-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        shell: msys2 {0}
+  build-shaders-release:
+    needs: [build-sdl3-linux]
+    name: Compile Shaders
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-      - name: Setup MSYS2 (clang64)
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: clang64
-          path-type: inherit
-          update: true
-          install: >
-            mingw-w64-clang-x86_64-cmake
-            mingw-w64-clang-x86_64-ninja
-            git
+      - name: Checkout code
+        uses: actions/checkout@v7
 
-      - name: Get week of year
-        shell: bash
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-        id: week
-
-      - name: Cache SDL3 libraries
-        id: cache-sdl3
+      # Compiled shaders only change when the GLSL sources or the toolchain do.
+      # Keying the cache on both means the expensive SDL_shadercross/DXC build
+      # runs once and virtually every later build restores the outputs and skips
+      # the toolchain entirely.
+      - name: Restore compiled shaders
+        id: cache-shaders
         uses: actions/cache@v4
         with:
-          path: D:\a\_temp\msys64\sdl3-tmp
-          key: sdl3-windows-${{ steps.week.outputs.week }}
+          path: res/shaders/compiled
+          key: shaders-${{ hashFiles('res/shaders/*.vert', 'res/shaders/*.frag', 'build/make/Makefile.shaders', '.github/actions/setup-shader-toolchain/action.yml') }}
 
-      - name: Create SDL3 install directory
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: mkdir -p /sdl3-tmp
+      # shadercross links against SDL3
+      - name: Setup SDL3 (cached)
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-sdl3-linux
 
-      - name: Build SDL3 from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
+      - name: Setup shader toolchain
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-shader-toolchain
+
+      - name: Compile all shader formats
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        run: make -f build/make/Makefile.shaders all
+
+      # Runs on cache hits too, so a truncated or partial cache entry is caught
+      # rather than shipped.
+      - name: Verify every shader built for every backend
         run: |
-          cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git
-          cmake -S SDL -B SDL-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/sdl3-tmp \
-            -DSDL_STATIC=OFF
-          cmake --build SDL-build
-          cmake --install SDL-build
-          rm -rf SDL SDL-build
+          missing=0
+          # Derived from the sources, never hardcoded: a hand-maintained list
+          # silently skipped two pairs (glow, prim_batch) for several releases.
+          names=$(ls res/shaders/*.vert | xargs -n1 basename | sed 's/\.vert$//')
+          [ -n "$names" ] || { echo "ERROR: no shader sources in res/shaders/"; exit 1; }
+          echo "Verifying shader pairs: $names"
+          for n in $names; do
+            for s in vs ps; do
+              for e in spv dxil msl; do
+                f="res/shaders/compiled/${n}_${s}.${e}"
+                [ -s "$f" ] || { echo "MISSING: $f"; missing=1; }
+              done
+            done
+          done
+          ls -la res/shaders/compiled/
+          [ "$missing" = "0" ] || { echo "ERROR: shader set incomplete"; exit 1; }
 
-      - name: Build SDL3_mixer from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        env:
-          SDL3_MIXER_VERSION: prerelease-3.1.2
-        run: |
-          cd /tmp
-          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz --exclude='*/Xcode'
-          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/sdl3-tmp \
-            -DCMAKE_PREFIX_PATH=/sdl3-tmp \
-            -DSDL3MIXER_VENDORED=ON
-          cmake --build SDL_mixer-build
-          cmake --install SDL_mixer-build
-          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
-
-  build-sdl3-macos:
-    name: Build SDL3 for macOS
-    runs-on: macos-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Install build dependencies
-        run: brew install cmake ninja
-
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-
-      - name: Cache SDL3 libraries
-        id: cache-sdl3
-        uses: actions/cache@v4
+      - name: Upload compiled shaders
+        uses: actions/upload-artifact@v7
         with:
-          path: |
-            /opt/homebrew/lib/libSDL3*
-            /opt/homebrew/lib/pkgconfig/sdl3.pc
-            /opt/homebrew/lib/pkgconfig/sdl3-mixer.pc
-            /opt/homebrew/include/SDL3
-            /opt/homebrew/include/SDL3_mixer
-            /opt/homebrew/lib/cmake/SDL3
-            /opt/homebrew/lib/cmake/SDL3_mixer
-            /opt/homebrew/share/licenses/SDL3
-            /opt/homebrew/share/licenses/SDL3_mixer
-          key: sdl3-macos-${{ steps.week.outputs.week }}
-
-      - name: Build SDL3 from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git
-          cmake -S SDL -B SDL-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/homebrew \
-            -DCMAKE_INSTALL_NAME_DIR=/opt/homebrew/lib \
-            -DSDL_STATIC=OFF \
-            -DSDL_RPATH=OFF
-          cmake --build SDL-build
-          sudo cmake --install SDL-build
-          rm -rf SDL SDL-build
-
-      - name: Build SDL3_mixer from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        env:
-          SDL3_MIXER_VERSION: prerelease-3.1.2
-        run: |
-          cd /tmp
-          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
-          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/homebrew \
-            -DCMAKE_INSTALL_NAME_DIR=/opt/homebrew/lib \
-            -DCMAKE_PREFIX_PATH=/opt/homebrew \
-            -DSDL3MIXER_VENDORED=ON
-          cmake --build SDL_mixer-build
-          sudo cmake --install SDL_mixer-build
-          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
-
+          name: compiled-shaders
+          path: res/shaders/compiled/
+          retention-days: 7
+          overwrite: true
   build-linux-release:
     needs: [build-sdl3-linux]
     name: Build Linux Release
@@ -224,36 +94,30 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
+      - name: Setup SDL3 (cached)
+        uses: ./.github/actions/setup-sdl3-linux
 
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
+      - name: Install LLVM toolchain
+        uses: ./.github/actions/setup-llvm-toolchain
         with:
-          path: /tmp/sdl3-install
-          key: sdl3-linux-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
-
-      - name: Install SDL3 libraries
-        run: |
-          sudo cp -r /tmp/sdl3-install/* /usr/local/
-          sudo ldconfig
+          llvm-version: "21"
+          packages: clang-21
+          create-alternatives: "true"
 
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
-            clang \
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
-            libmimalloc-dev
+            libmimalloc-dev \
+            libluajit-5.1-dev
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -270,37 +134,18 @@ jobs:
           strip bin/moac
           strip bin/libastonia_net.so
 
-      - name: Collect Binaries (Linux)
-        run: |
-          mkdir -p binaries
-          cp bin/moac binaries/
-          cp bin/libastonia_net.so binaries/
-          cp -L /usr/local/lib/libSDL3.so.0 binaries/ 2>/dev/null || \
-            cp -L /tmp/sdl3-install/lib/libSDL3.so.0 binaries/ || true
-          cp -L /usr/local/lib/libSDL3_mixer.so.0 binaries/ 2>/dev/null || \
-            cp -L /tmp/sdl3-install/lib/libSDL3_mixer.so.0 binaries/ || true
-          echo "=== Linux Binaries ==="
-          ls -la binaries/
-
-      - name: Upload Binaries (Linux)
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-binaries
-          path: binaries/
-          retention-days: 7
-
       - name: Prepare distribution staging
         run: make distrib-stage
 
-      - name: Upload distribution staging
-        uses: actions/upload-artifact@v4
+      - name: Upload Binaries (Linux)
+        uses: actions/upload-artifact@v7
         with:
-          name: linux-staging
-          path: distrib/linux_client/
+          name: linux-binaries
+          path: distrib/linux_client/bin/
           retention-days: 7
+          overwrite: true
 
   build-windows-release:
-    needs: build-sdl3-windows
     name: Build Windows Release
     runs-on: windows-latest
     timeout-minutes: 20
@@ -310,7 +155,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
@@ -333,27 +178,16 @@ jobs:
           update: true
           install: >
             mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-sdl3-mixer
+            mingw-w64-clang-x86_64-sdl3-ttf
             mingw-w64-clang-x86_64-libpng
             mingw-w64-clang-x86_64-libzip
             mingw-w64-clang-x86_64-dwarfstack
             mingw-w64-clang-x86_64-mimalloc
+            mingw-w64-clang-x86_64-luajit
             make
             git
-
-      - name: Get week of year
-        shell: bash
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-        id: week
-
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: D:\a\_temp\msys64\sdl3-tmp
-          key: sdl3-windows-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
-
-      - name: Install SDL3 libraries
-        run: cp -r /sdl3-tmp/* /clang64/
 
       - name: Build release
         run: make windows
@@ -369,22 +203,16 @@ jobs:
       - name: Prepare distribution staging
         run: make distrib-stage
 
-      - name: Upload distribution staging
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-staging
-          path: distrib/windows_client/
-          retention-days: 7
-
       - name: Upload Binaries (Windows)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-binaries
           path: distrib/windows_client/bin/
           retention-days: 7
+          overwrite: true
 
       - name: Upload Mod SDK (Windows)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mod-sdk-windows
           path: |
@@ -398,40 +226,41 @@ jobs:
           if-no-files-found: error
 
   build-macos-release:
-    needs: build-sdl3-macos
     name: Build MacOS Release
     runs-on: macos-latest
     timeout-minutes: 30
 
+    env:
+      # Identifier the signatures are issued against. Overridable so a fork can sign
+      # under its own namespace without patching every step below.
+      MACOS_BUNDLE_ID: com.ugaris.client
+      ENTITLEMENTS: build/macos/entitlements.plist
+      # Must NOT be named RCODESIGN_*: rcodesign registers every RCODESIGN_
+      # environment variable as a configuration source, so RCODESIGN_VERSION
+      # is read as a config key "version" and every invocation fails with
+      # UnknownField("version"). This only pins the download URL.
+      CODESIGN_TOOL_VERSION: "0.29.0"
+
     steps:
+      # Signing is optional: without APPLE_CERT_P12 every signing step below is
+      # skipped and the job still produces (unsigned) binaries, exactly as before
+      # the Apple credentials existed.
+      - name: Check signing availability
+        id: signing
+        run: |
+          if [ -n "$CERT" ]; then echo "available=true"; else echo "available=false"; fi >> $GITHUB_OUTPUT
+        env:
+          CERT: ${{ secrets.APPLE_CERT_P12 }}
+
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
       - name: Install dependencies
         run: |
-          brew install libzip zlib mimalloc imagemagick
-
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            /opt/homebrew/lib/libSDL3*
-            /opt/homebrew/lib/pkgconfig/sdl3.pc
-            /opt/homebrew/lib/pkgconfig/sdl3-mixer.pc
-            /opt/homebrew/include/SDL3
-            /opt/homebrew/include/SDL3_mixer
-            /opt/homebrew/lib/cmake/SDL3
-            /opt/homebrew/lib/cmake/SDL3_mixer
-            /opt/homebrew/share/licenses/SDL3
-            /opt/homebrew/share/licenses/SDL3_mixer
-          key: sdl3-macos-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
+          brew untap aws/tap 2>/dev/null || true
+          brew install sdl3 sdl3_mixer sdl3_ttf libzip zlib mimalloc imagemagick
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -449,76 +278,143 @@ jobs:
           strip bin/moac
           strip -x bin/libastonia_net.dylib
 
+      # The linker bakes absolute Homebrew paths into moac, and cargo bakes the
+      # runner's own build directory into libastonia_net.dylib. Neither exists on
+      # a player's Mac, so the client would fail in dyld before main(). This
+      # copies every non-system dependency into bin/ and rewrites the references
+      # to @rpath. Must run before the binaries are collected and signed:
+      # install_name_tool invalidates any signature it touches.
+      - name: Bundle macOS dependencies
+        run: make macos-bundle-libs
+
+      # ---- signing toolchain + credentials (skipped when secrets are absent) ----
+      - name: Install rcodesign
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL -o rcodesign.tar.gz \
+            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F${CODESIGN_TOOL_VERSION}/apple-codesign-${CODESIGN_TOOL_VERSION}-macos-universal.tar.gz"
+          mkdir -p rcodesign-dist && tar xzf rcodesign.tar.gz -C rcodesign-dist
+          BIN="$(find rcodesign-dist -name rcodesign -type f -print -quit)"
+          [ -n "$BIN" ] || { echo "ERROR: rcodesign missing from the release archive"; exit 1; }
+          mkdir -p "$HOME/.local/bin"
+          mv "$BIN" "$HOME/.local/bin/rcodesign"
+          chmod +x "$HOME/.local/bin/rcodesign"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          rm -rf rcodesign.tar.gz rcodesign-dist
+
+      - name: Install signing credentials
+        if: steps.signing.outputs.available == 'true'
+        env:
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p certs private_keys
+          echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certs/dist.p12
+          printf '%s' '${{ secrets.APP_STORE_CONNECT_KEY }}' > private_keys/AuthKey.p8
+          rcodesign encode-app-store-connect-api-key \
+            -o private_keys/appstore_key.json \
+            '${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}' \
+            '${{ secrets.APP_STORE_CONNECT_KEY_ID }}' \
+            private_keys/AuthKey.p8
+
+          # Catch the likely setup mistake - an "Apple Development" or "Apple
+          # Distribution" certificate exported instead of a "Developer ID
+          # Application" one - before Apple rejects it minutes later during
+          # notarization. The matched line names the signing identity, which is
+          # worth having in the log.
+          # Capture first, then match: piping rcodesign into grep lets grep close
+          # the pipe on a match, which kills rcodesign and - under pipefail - makes
+          # the guard reject exactly the certificates it should accept.
+          CERT_INFO="$(rcodesign analyze-certificate --p12-file certs/dist.p12 \
+            --p12-password "$P12_PASSWORD")"
+          if ! printf '%s\n' "$CERT_INFO" | grep -i "developer id"; then
+            echo "ERROR: APPLE_CERT_P12 is not a Developer ID Application certificate - see macos/README.md in Ugaris_Distribution"
+            exit 1
+          fi
+
+      # Everything the client needs now lives in bin/, with @rpath references, so
+      # copy the lot rather than naming libraries individually - the old list
+      # hardcoded three SDL dylibs and silently omitted libpng, libzip, mimalloc,
+      # freetype and harfbuzz.
       - name: Collect Binaries (macOS)
         run: |
+          set -euo pipefail
           mkdir -p binaries
           cp bin/moac binaries/
-          cp bin/libastonia_net.dylib binaries/
-          cp -L /opt/homebrew/lib/libSDL3.0.dylib binaries/ 2>/dev/null || true
-          cp -L /opt/homebrew/lib/libSDL3_mixer.0.dylib binaries/ 2>/dev/null || true
+          cp bin/*.dylib binaries/
           echo "=== macOS Binaries ==="
           ls -la binaries/
 
+      # These loose binaries - not the .app or the DMG - are what the Steam macOS
+      # depot ships, so they are the ones that have to carry a signature. Apple
+      # Silicon refuses to execute an unsigned Mach-O outright.
+      - name: Sign loose binaries
+        if: steps.signing.outputs.available == 'true'
+        env:
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Dependencies first, executable last: a Mach-O's signature covers the
+          # libraries it links against by hash.
+          for lib in binaries/*.dylib; do
+            [ -e "$lib" ] || continue
+            echo "--- signing $lib"
+            rcodesign sign \
+              --p12-file certs/dist.p12 --p12-password "$P12_PASSWORD" \
+              --binary-identifier "${MACOS_BUNDLE_ID}.$(basename "$lib" | sed 's/\.dylib$//' | tr '_' '-')" \
+              --for-notarization \
+              "$lib"
+          done
+          echo "--- signing binaries/moac"
+          rcodesign sign \
+            --p12-file certs/dist.p12 --p12-password "$P12_PASSWORD" \
+            --binary-identifier "${MACOS_BUNDLE_ID}" \
+            --entitlements-xml-file "${ENTITLEMENTS}" \
+            --for-notarization \
+            binaries/moac
+          # Informational only - rcodesign's own `verify` warns that it is
+          # unreliable. The authoritative check happens when Ugaris_Distribution
+          # submits the assembled depot for notarization.
+          echo "=== signing identifiers ==="
+          for f in binaries/moac binaries/*.dylib; do
+            [ -e "$f" ] || continue
+            INFO="$(rcodesign print-signature-info "$f" 2>/dev/null || true)"
+            ID="$(printf '%s\n' "$INFO" | grep -m1 -E '^ +identifier:' | sed 's/.*identifier: *//')" || true
+            printf '  %-40s %s\n' "$(basename "$f")" "${ID:-NO SIGNATURE}"
+          done
+
       - name: Upload Binaries (macOS)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-binaries
           path: binaries/
           retention-days: 7
 
-      # Build unsigned .app bundle
+      # ---- .app bundle + DMG for distribution outside Steam ----
       - name: Build .app bundle
-        run: make macos-appbundle
+        if: steps.signing.outputs.available == 'true'
+        run: BUNDLE_ID="${MACOS_BUNDLE_ID}" make macos-appbundle
 
-      # Materialize the signing certificate from a base64-encoded secret
-      - name: Install signing certificate
-        run: |
-          mkdir -p certs
-          echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > certs/dist.p12
-
-      # Materialize the App Store Connect API key file in ./private_keys
-      # File name must match the api_key (KEY_ID) used later.
-      - name: Install App Store Connect API key
-        run: |
-          mkdir -p private_keys
-          echo '${{ secrets.APP_STORE_CONNECT_KEY }}' > "private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8"
-
-      - name: Install App Store Connect API key JSON
-        run: |
-          echo '${{ secrets.APP_STORE_CONNECT_KEY_JSON }}' > private_keys/appstore_key.json
-
-      - name: Rename app with to tmp name
-        run: |
-          mv distrib/Astonia.app distrib/Astonia-unsigned.app
-
-      # 1) Sign app bundle
       - name: Sign Astonia.app
-        uses: indygreg/apple-code-sign-action@v1
-        with:
-          input_path: distrib/Astonia-unsigned.app
-          output_path: distrib/Astonia.app
-
-          # Code signing certificate
-          p12_file: certs/dist.p12
-          p12_password: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
-
-          notarize: false
-          staple: false
-
-          rcodesign_version: 0.29.0
-
-          # Extra arguments passed directly to `rcodesign sign`
-          sign_args: |
-            --binary-identifier
-            com.prismaphonic.astonia
-            --for-notarization
-
-      - name: Remove unsigned app bundle
-        run: rm -rf distrib/Astonia-unsigned.app
-
-      # 2) Create an unsigned DMG wrapping the notarized .app
-      - name: Create unsigned DMG from notarized app
+        if: steps.signing.outputs.available == 'true'
+        env:
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
         run: |
+          set -euo pipefail
+          mv distrib/Astonia.app distrib/Astonia-unsigned.app
+          rcodesign sign \
+            --p12-file certs/dist.p12 --p12-password "$P12_PASSWORD" \
+            --binary-identifier "${MACOS_BUNDLE_ID}" \
+            --entitlements-xml-file "${ENTITLEMENTS}" \
+            --for-notarization \
+            distrib/Astonia-unsigned.app distrib/Astonia.app
+          rm -rf distrib/Astonia-unsigned.app
+
+      - name: Create DMG from signed app
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          set -euo pipefail
           cd distrib
           hdiutil create \
             -volname "Astonia" \
@@ -529,34 +425,30 @@ jobs:
           cd ..
           ls -lh distrib/Astonia-macOS-unsigned.dmg
 
-      # 3) Sign + notarize + staple the DMG
       - name: Sign, notarize, and staple DMG
-        uses: indygreg/apple-code-sign-action@v1
-        with:
-          input_path: distrib/Astonia-macOS-unsigned.dmg
-          output_path: distrib/Astonia-macOS.dmg
+        if: steps.signing.outputs.available == 'true'
+        env:
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          rcodesign sign \
+            --p12-file certs/dist.p12 --p12-password "$P12_PASSWORD" \
+            --for-notarization \
+            distrib/Astonia-macOS-unsigned.dmg distrib/Astonia-macOS.dmg
+          rcodesign notary-submit \
+            --api-key-file private_keys/appstore_key.json \
+            --wait --max-wait-seconds 1800 --staple \
+            distrib/Astonia-macOS.dmg
+          rm -f distrib/Astonia-macOS-unsigned.dmg
+          ls -lh distrib/Astonia-macOS.dmg
 
-          # Code signing certificate
-          p12_file: certs/dist.p12
-          p12_password: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
-
-          rcodesign_version: 0.29.0
-
-          sign_args: |
-            --for-notarization
-
-          # Notarization
-          notarize: true
-          staple: true
-          app_store_connect_api_key_json_file: private_keys/appstore_key.json
-          app_store_connect_api_issuer: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          app_store_connect_api_key: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-
-      - name: Remove unsigned DMG
-        run: rm -f distrib/Astonia-macOS-unsigned.dmg
+      - name: Discard signing credentials
+        if: always()
+        run: rm -rf certs private_keys
 
       - name: Upload signed DMG
-        uses: actions/upload-artifact@v4
+        if: steps.signing.outputs.available == 'true'
+        uses: actions/upload-artifact@v7
         with:
           name: macos-dmg
           path: distrib/Astonia-macOS.dmg
@@ -570,7 +462,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
@@ -578,7 +470,7 @@ jobs:
         run: make appimage
 
       - name: Upload AppImage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: appimage-release
           path: astonia-client.AppImage
@@ -592,87 +484,113 @@ jobs:
         build-windows-release,
         build-macos-release,
         build-appimage-release,
+        build-shaders-release,
       ]
+    # macOS is not shipped yet: a failed macOS build must not block the Linux/Windows release
+    if: >-
+      ${{ !cancelled()
+          && needs.build-linux-release.result == 'success'
+          && needs.build-windows-release.result == 'success'
+          && needs.build-appimage-release.result == 'success'
+          && needs.build-shaders-release.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Download Linux staging
-        uses: actions/download-artifact@v4
+      - name: Checkout code
+        uses: actions/checkout@v7
         with:
-          name: linux-staging
-          path: linux_client
+          lfs: true
 
-      - name: Download Windows staging
-        uses: actions/download-artifact@v4
+      - name: Download Linux Binaries
+        uses: actions/download-artifact@v8
         with:
-          name: windows-staging
-          path: windows_client
+          name: linux-binaries
+          path: linux_client/bin
+
+      - name: Download Windows Binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: windows-binaries
+          path: windows_client/bin
 
       - name: Download macOS DMG
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
+        continue-on-error: true
         with:
           name: macos-dmg
           path: .
 
       - name: Download AppImage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: appimage-release
 
       - name: Download Mod SDK (Windows)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mod-sdk-windows
           path: mod-sdk
 
-      - name: Download Linux Binaries
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-binaries
-          path: linux-binaries
-
-      - name: Download Windows Binaries
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-binaries
-          path: windows-binaries
-
       - name: Download macOS Binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
+        continue-on-error: true
         with:
           name: macos-binaries
           path: macos-binaries
 
+      - name: Download compiled shaders
+        uses: actions/download-artifact@v8
+        with:
+          name: compiled-shaders
+          path: res/shaders/compiled
+
       - name: Rename DMG to match convention
+        if: hashFiles('Astonia-macOS.dmg') != ''
         run: mv Astonia-macOS.dmg client-macos.dmg
 
       - name: Rename AppImage to match convention
         run: mv astonia-client.AppImage client-linux.AppImage
+
+      - name: Assemble full distributions
+        run: |
+          cp -r res linux_client/res
+          cp -r res windows_client/res
+          cp eula.txt license.txt linux_client/ 2>/dev/null || true
+          cp eula.txt create_shortcut.bat windows_client/ 2>/dev/null || true
 
       - name: Create distribution archives
         run: |
           tar czf client-linux.tar.gz linux_client
           zip -q -r client-windows.zip windows_client
           zip -q -r mod-sdk.zip mod-sdk
-          tar czf client-linux-binaries.tar.gz -C linux-binaries .
-          cd windows-binaries && zip -q -r ../client-windows-binaries.zip . && cd ..
-          tar czf client-macos-binaries.tar.gz -C macos-binaries .
+          tar czf client-linux-binaries.tar.gz -C linux_client/bin .
+          # Steam consumes the binaries-only archives, which carry no res/.
+          # Ship the compiled shaders separately so the content depot can place
+          # them at res/shaders/compiled/ next to the other resources.
+          tar czf client-shaders.tar.gz -C res/shaders/compiled .
+          cd windows_client/bin && zip -q -r ../../client-windows-binaries.zip . && cd ../..
+          if [ -d macos-binaries ] && [ -n "$(ls -A macos-binaries)" ]; then
+            tar czf client-macos-binaries.tar.gz -C macos-binaries .
+          else
+            echo "No macOS binaries (build skipped/failed) - releasing Linux/Windows only"
+          fi
 
       - name: Generate checksums
         run: |
           sha256sum client-linux.tar.gz > checksums.txt
           sha256sum client-windows.zip >> checksums.txt
           sha256sum client-linux.AppImage >> checksums.txt
-          sha256sum client-macos.dmg >> checksums.txt
+          [ -f client-macos.dmg ] && sha256sum client-macos.dmg >> checksums.txt || true
           sha256sum mod-sdk.zip >> checksums.txt
           sha256sum client-linux-binaries.tar.gz >> checksums.txt
+          sha256sum client-shaders.tar.gz >> checksums.txt
           sha256sum client-windows-binaries.zip >> checksums.txt
-          sha256sum client-macos-binaries.tar.gz >> checksums.txt
+          [ -f client-macos-binaries.tar.gz ] && sha256sum client-macos-binaries.tar.gz >> checksums.txt || true
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             client-linux.tar.gz
@@ -682,6 +600,7 @@ jobs:
             mod-sdk.zip
             client-linux-binaries.tar.gz
             client-windows-binaries.zip
+            client-shaders.tar.gz
             client-macos-binaries.tar.gz
             checksums.txt
           draft: false

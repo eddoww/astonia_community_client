@@ -75,6 +75,57 @@ fi
 echo ""
 
 # ============================================================================
+# Check Build Source Lists (filesystem vs Makefiles vs build.zig)
+# ============================================================================
+echo ">>> Checking Build Source Lists"
+
+# Standalone tools built as separate targets, not linked into the game exe
+BUILD_EXCLUDE=" src/helper/anicopy.c src/helper/convert.c src/sdl/sdl_test.c "
+
+BUILD_SRC_ERRORS=""
+
+# Every game source on disk must be referenced by build.zig and the
+# platform Makefiles (platform-suffixed files only by their own platform).
+while IFS= read -r f; do
+    case "$BUILD_EXCLUDE" in *" $f "*) continue ;; esac
+    obj="${f%.c}.o"
+    targets="zig linux windows macos"
+    case "$f" in
+        *_windows.c) targets="zig windows" ;;
+        *_macos.c)   targets="zig macos" ;;
+        *_linux.c)   targets="zig linux" ;;
+    esac
+    for t in $targets; do
+        case "$t" in
+            zig) grep -q "\"$f\"" build/build.zig || \
+                BUILD_SRC_ERRORS="$BUILD_SRC_ERRORS  $f missing from build/build.zig\n" ;;
+            *)   grep -q -e "$f" -e "$obj" "build/make/Makefile.$t" || \
+                BUILD_SRC_ERRORS="$BUILD_SRC_ERRORS  $f missing from build/make/Makefile.$t\n" ;;
+        esac
+    done
+done < <(git ls-files 'src/gui/*.c' 'src/client/*.c' 'src/game/*.c' 'src/sdl/*.c' 'src/modder/*.c' 'src/helper/*.c')
+
+# Every source referenced by the build files must exist on disk (no dead rules)
+for ref in $(grep -oE '"src/[A-Za-z0-9_/.]+\.c"' build/build.zig | tr -d '"' | sort -u); do
+    [ -f "$ref" ] || BUILD_SRC_ERRORS="$BUILD_SRC_ERRORS  build/build.zig references missing file $ref\n"
+done
+for mk in build/make/Makefile.linux build/make/Makefile.windows build/make/Makefile.macos; do
+    for ref in $(grep -oE 'src/[A-Za-z0-9_/]+\.[co]\b' "$mk" | sed 's/\.o$/.c/' | sort -u); do
+        [ -f "${ref%.c}.rc" ] && continue  # windres objects (resource.rc -> resource.o)
+        [ -f "$ref" ] || BUILD_SRC_ERRORS="$BUILD_SRC_ERRORS  $mk references missing file $ref\n"
+    done
+done
+
+if [ -n "$BUILD_SRC_ERRORS" ]; then
+    echo "ERROR: Build source lists are out of sync:" | tee -a "$LOG_DIR/file-consistency.log"
+    printf "%b" "$BUILD_SRC_ERRORS" | tee -a "$LOG_DIR/file-consistency.log"
+    FAILED=1
+else
+    echo "  ✓ Makefiles and build.zig agree on game sources"
+fi
+echo ""
+
+# ============================================================================
 # Summary
 # ============================================================================
 if [ $FAILED -eq 1 ]; then

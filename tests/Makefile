@@ -27,12 +27,26 @@ endif
 
 # SDL source files needed for testing
 # Note: We use REAL I/O (sdl_image.c included) and only stub GPU operations
+# font_manager.c builds as inert stubs here (no HAVE_SDL3_TTF), so the tests
+# exercise the classic bitmap text path without needing SDL3_ttf installed
 SDL_SRCS = ../src/sdl/sdl_test.c \
            ../src/sdl/sdl_core.c \
            ../src/sdl/sdl_texture.c \
            ../src/sdl/sdl_image.c \
            ../src/sdl/sdl_effects.c \
-           ../src/sdl/sdl_draw.c
+           ../src/sdl/sdl_draw.c \
+             \
+
+# Optional sdl3-ttf for the text-compare harness's TTF part (part C).
+# The rest of the suite intentionally builds without SDL3_ttf.
+HAVE_SDL3_TTF_PC := $(shell pkg-config --exists sdl3-ttf 2>/dev/null && echo 1)
+ifeq ($(HAVE_SDL3_TTF_PC),1)
+    TTF_TEST_CFLAGS = $(shell pkg-config --cflags sdl3-ttf) -DHAVE_TTF_COMPARE
+    TTF_TEST_LIBS = $(shell pkg-config --libs sdl3-ttf)
+else
+    TTF_TEST_CFLAGS =
+    TTF_TEST_LIBS =
+endif
 
 # Helper source files
 HELPER_SRCS = ../src/game/memory.c \
@@ -59,8 +73,13 @@ TEST_CONCURRENT = $(BIN_DIR)/test_concurrent
 TEST_HASH_DIAG = $(BIN_DIR)/test_hash_distribution
 TEST_RENDER_PRIMS = $(BIN_DIR)/test_render_primitives
 TEST_SPRITE_CONFIG = $(BIN_DIR)/test_sprite_config
+TEST_LOADING_UI = $(BIN_DIR)/test_loading_ui
+TEST_SHADERFX = $(BIN_DIR)/test_shaderfx_compare
+TEST_TEXT = $(BIN_DIR)/test_text_compare
+TEST_GESTURE = $(BIN_DIR)/test_gesture
+TEST_EQUIP = $(BIN_DIR)/test_equip_bonus
 
-all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG)
+all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT) $(TEST_GESTURE) $(TEST_EQUIP)
 test: run
 
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
@@ -80,11 +99,48 @@ $(TEST_RENDER_PRIMS): test_render_primitives.c $(ALL_SRCS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Sprite config test (no SDL dependencies, self-contained stubs)
-SPRITE_CONFIG_SRCS = ../src/game/sprite_config.c ../src/lib/cjson/cJSON.c
+SPRITE_CONFIG_SRCS = ../src/lib/cjson/cJSON.c
 
 $(TEST_SPRITE_CONFIG): test_sprite_config.c $(SPRITE_CONFIG_SRCS)
 	@mkdir -p $(BIN_DIR)
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
+
+# Loading screen logic test (loading_ui.c + stubs, only SDL for SDL_GetTicks/SDL_Delay)
+$(TEST_LOADING_UI): test_loading_ui.c
+	@mkdir -p $(BIN_DIR)
+	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src -I../include $(shell pkg-config --cflags sdl3) $^ -o $@ $(shell pkg-config --libs sdl3)
+
+# Pointer gesture core (pure C: no SDL, no client globals)
+$(TEST_GESTURE): test_gesture.c
+	@mkdir -p $(BIN_DIR)
+	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
+
+# Worn-equipment bonus table (pure C: no SDL, no client globals)
+$(TEST_EQUIP): test_equip_bonus.c
+	@mkdir -p $(BIN_DIR)
+	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
+
+test_equip_bonus: $(TEST_EQUIP)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running equipment bonus table tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_equip_bonus
+
+test_gesture: $(TEST_GESTURE)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running pointer gesture tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_gesture
+
+# Run loading screen tests
+test_loading_ui: $(TEST_LOADING_UI)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running loading screen tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_loading_ui
 
 # Run serialized tests (single-threaded cache tests)
 test_serialized: $(TEST_SERIALIZED)
@@ -126,14 +182,39 @@ test_sprite_config: $(TEST_SPRITE_CONFIG)
 	@echo "==============================================="
 	cd .. && ./bin/test_sprite_config
 
+$(TEST_SHADERFX): test_shaderfx_compare.c $(ALL_SRCS)
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# Run shader-effects CPU/GPU comparison (SKIPs without a GPU device)
+test_shaderfx: $(TEST_SHADERFX)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running shader-effects CPU/GPU comparison..."
+	@echo "==============================================="
+	cd .. && ./bin/test_shaderfx_compare
+
+# Text batching comparison harness (part A always runs; part B SKIPs
+# without a GPU device; part C SKIPs when built without sdl3-ttf)
+$(TEST_TEXT): test_text_compare.c $(ALL_SRCS)
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) $(TTF_TEST_CFLAGS) $^ -o $@ $(LDFLAGS) $(TTF_TEST_LIBS)
+
+test_text: $(TEST_TEXT)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running text-rendering comparison..."
+	@echo "==============================================="
+	cd .. && ./bin/test_text_compare
+
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config
+run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_shaderfx test_text
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"
 	@echo "==============================================="
 
 clean:
-	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) *.o
+	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_GESTURE) $(TEST_EQUIP) *.o
 
-.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config
+.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus

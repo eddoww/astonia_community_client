@@ -17,206 +17,76 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
+      - name: Checkout code
+        uses: actions/checkout@v7
 
-      - name: Cache SDL3 libraries
-        id: cache-sdl3
-        uses: actions/cache@v4
+      - name: Build SDL3 + SDL3_mixer (cached)
+        uses: ./.github/actions/setup-sdl3-linux
         with:
-          path: /tmp/sdl3-install
-          key: sdl3-linux-${{ steps.week.outputs.week }}
+          build-on-miss: 'true'
 
-      - name: Install build dependencies
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            libasound2-dev \
-            libpulse-dev \
-            libaudio-dev \
-            libfribidi-dev \
-            libjack-dev \
-            libsndio-dev \
-            libusb-1.0-0-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxcursor-dev \
-            libxfixes-dev \
-            libxi-dev \
-            libxss-dev \
-            libxtst-dev \
-            libwayland-dev \
-            libxkbcommon-dev \
-            libdrm-dev \
-            libgbm-dev \
-            libgl1-mesa-dev \
-            libgles2-mesa-dev \
-            libegl1-mesa-dev \
-            libdbus-1-dev \
-            libibus-1.0-dev \
-            libudev-dev \
-            libthai-dev
-
-      - name: Build SDL3 from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git
-          cmake -S SDL -B SDL-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
-            -DSDL_STATIC=OFF
-          cmake --build SDL-build
-          cmake --install SDL-build
-          rm -rf SDL SDL-build
-
-      - name: Build SDL3_mixer from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        env:
-          SDL3_MIXER_VERSION: prerelease-3.1.2
-        run: |
-          cd /tmp
-          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
-          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-install \
-            -DCMAKE_PREFIX_PATH=/tmp/sdl3-install \
-            -DSDL3MIXER_VENDORED=ON
-          cmake --build SDL_mixer-build
-          cmake --install SDL_mixer-build
-          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
-
-  build-sdl3-windows:
-    name: Build SDL3 for Windows
-    runs-on: windows-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        shell: msys2 {0}
+  build-shaders:
+    needs: build-sdl3-linux
+    name: Compile Shaders
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-      - name: Setup MSYS2 (clang64)
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: clang64
-          path-type: inherit
-          update: true
-          install: >
-            mingw-w64-clang-x86_64-cmake
-            mingw-w64-clang-x86_64-ninja
-            git
+      - name: Checkout code
+        uses: actions/checkout@v7
 
-      - name: Get week of year
-        shell: bash
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-        id: week
-
-      - name: Cache SDL3 libraries
-        id: cache-sdl3
+      # Compiled shaders only change when the GLSL sources or the toolchain do.
+      # Keying the cache on both means the expensive SDL_shadercross/DXC build
+      # runs once and virtually every later build restores the outputs and skips
+      # the toolchain entirely.
+      - name: Restore compiled shaders
+        id: cache-shaders
         uses: actions/cache@v4
         with:
-          path: D:\a\_temp\msys64\sdl3-tmp
-          key: sdl3-windows-${{ steps.week.outputs.week }}
+          path: res/shaders/compiled
+          key: shaders-${{ hashFiles('res/shaders/*.vert', 'res/shaders/*.frag', 'build/make/Makefile.shaders', '.github/actions/setup-shader-toolchain/action.yml') }}
 
-      - name: Create SDL3 install directory
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: mkdir -p /sdl3-tmp
+      # shadercross links against SDL3
+      - name: Setup SDL3 (cached)
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-sdl3-linux
 
-      - name: Build SDL3 from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
+      - name: Setup shader toolchain
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-shader-toolchain
+
+      - name: Compile all shader formats
+        if: steps.cache-shaders.outputs.cache-hit != 'true'
+        run: make -f build/make/Makefile.shaders all
+
+      # Runs on cache hits too, so a truncated or partial cache entry is caught
+      # rather than shipped.
+      - name: Verify every shader built for every backend
         run: |
-          cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git
-          cmake -S SDL -B SDL-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/sdl3-tmp \
-            -DSDL_STATIC=OFF
-          cmake --build SDL-build
-          cmake --install SDL-build
-          rm -rf SDL SDL-build
+          missing=0
+          # Derived from the sources, never hardcoded: a hand-maintained list
+          # silently skipped two pairs (glow, prim_batch) for several releases.
+          names=$(ls res/shaders/*.vert | xargs -n1 basename | sed 's/\.vert$//')
+          [ -n "$names" ] || { echo "ERROR: no shader sources in res/shaders/"; exit 1; }
+          echo "Verifying shader pairs: $names"
+          for n in $names; do
+            for s in vs ps; do
+              for e in spv dxil msl; do
+                f="res/shaders/compiled/${n}_${s}.${e}"
+                [ -s "$f" ] || { echo "MISSING: $f"; missing=1; }
+              done
+            done
+          done
+          ls -la res/shaders/compiled/
+          [ "$missing" = "0" ] || { echo "ERROR: shader set incomplete"; exit 1; }
 
-      - name: Build SDL3_mixer from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        env:
-          SDL3_MIXER_VERSION: prerelease-3.1.2
-        run: |
-          cd /tmp
-          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz --exclude='*/Xcode'
-          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/sdl3-tmp \
-            -DCMAKE_PREFIX_PATH=/sdl3-tmp \
-            -DSDL3MIXER_VENDORED=ON
-          cmake --build SDL_mixer-build
-          cmake --install SDL_mixer-build
-          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
-
-  build-sdl3-macos:
-    name: Build SDL3 for macOS
-    runs-on: macos-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Install build dependencies
-        run: brew install cmake ninja
-
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-
-      - name: Cache SDL3 libraries
-        id: cache-sdl3
-        uses: actions/cache@v4
+      - name: Upload compiled shaders
+        uses: actions/upload-artifact@v7
         with:
-          path: |
-            /opt/homebrew/lib/libSDL3*
-            /opt/homebrew/lib/pkgconfig/sdl3.pc
-            /opt/homebrew/lib/pkgconfig/sdl3-mixer.pc
-            /opt/homebrew/include/SDL3
-            /opt/homebrew/include/SDL3_mixer
-            /opt/homebrew/lib/cmake/SDL3
-            /opt/homebrew/lib/cmake/SDL3_mixer
-            /opt/homebrew/share/licenses/SDL3
-            /opt/homebrew/share/licenses/SDL3_mixer
-          key: sdl3-macos-${{ steps.week.outputs.week }}
-
-      - name: Build SDL3 from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        run: |
-          cd /tmp
-          git clone --depth 1 --branch main https://github.com/libsdl-org/SDL.git
-          cmake -S SDL -B SDL-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/homebrew \
-            -DCMAKE_INSTALL_NAME_DIR=/opt/homebrew/lib \
-            -DSDL_STATIC=OFF \
-            -DSDL_RPATH=OFF
-          cmake --build SDL-build
-          sudo cmake --install SDL-build
-          rm -rf SDL SDL-build
-
-      - name: Build SDL3_mixer from source
-        if: steps.cache-sdl3.outputs.cache-hit != 'true'
-        env:
-          SDL3_MIXER_VERSION: prerelease-3.1.2
-        run: |
-          cd /tmp
-          curl -sL https://github.com/libsdl-org/SDL_mixer/archive/refs/tags/${SDL3_MIXER_VERSION}.tar.gz | tar xz
-          cmake -S SDL_mixer-${SDL3_MIXER_VERSION} -B SDL_mixer-build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/homebrew \
-            -DCMAKE_INSTALL_NAME_DIR=/opt/homebrew/lib \
-            -DCMAKE_PREFIX_PATH=/opt/homebrew \
-            -DSDL3MIXER_VENDORED=ON
-          cmake --build SDL_mixer-build
-          sudo cmake --install SDL_mixer-build
-          rm -rf SDL_mixer-${SDL3_MIXER_VERSION} SDL_mixer-build
-
+          name: compiled-shaders
+          path: res/shaders/compiled/
+          retention-days: 7
+          overwrite: true
   build-linux:
     needs: build-sdl3-linux
     name: Build Linux
@@ -225,31 +95,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
+      - name: Setup SDL3 (cached)
+        uses: ./.github/actions/setup-sdl3-linux
 
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
+      - name: Install LLVM toolchain
+        uses: ./.github/actions/setup-llvm-toolchain
         with:
-          path: /tmp/sdl3-install
-          key: sdl3-linux-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
-
-      - name: Install SDL3 libraries
-        run: |
-          sudo cp -r /tmp/sdl3-install/* /usr/local/
-          sudo ldconfig
-
-      - name: Install LLVM/Clang 21
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 21
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-21 100
-          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-21 100
+          llvm-version: "21"
+          packages: clang-21
+          create-alternatives: "true"
 
       - name: Install dependencies
         run: |
@@ -259,7 +115,8 @@ jobs:
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
-            libmimalloc-dev
+            libmimalloc-dev \
+            libluajit-5.1-dev
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -272,7 +129,7 @@ jobs:
         run: make linux
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-build
           path: |
@@ -282,7 +139,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Mod SDK (Linux headers)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mod-sdk-linux
           path: |
@@ -294,7 +151,6 @@ jobs:
           if-no-files-found: error
 
   build-windows:
-    needs: build-sdl3-windows
     name: Build Windows
     runs-on: windows-latest
     timeout-minutes: 10
@@ -304,7 +160,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain (LLVM variant)
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -321,27 +177,16 @@ jobs:
           update: true
           install: >
             mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-sdl3-mixer
+            mingw-w64-clang-x86_64-sdl3-ttf
             mingw-w64-clang-x86_64-libpng
             mingw-w64-clang-x86_64-libzip
             mingw-w64-clang-x86_64-dwarfstack
             mingw-w64-clang-x86_64-mimalloc
+            mingw-w64-clang-x86_64-luajit
             make
             git
-
-      - name: Get week of year
-        shell: bash
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-        id: week
-
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: D:\a\_temp\msys64\sdl3-tmp
-          key: sdl3-windows-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
-
-      - name: Install SDL3 libraries
-        run: cp -r /sdl3-tmp/* /clang64/
 
       - name: Build
         run: make CC=clang windows
@@ -350,7 +195,7 @@ jobs:
         run: cp astonia_net/target/x86_64-pc-windows-gnullvm/release/astonia_net.dll bin/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-build
           path: |
@@ -360,7 +205,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Mod SDK (Windows)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mod-sdk-windows
           path: |
@@ -374,43 +219,24 @@ jobs:
           if-no-files-found: error
 
   build-macos-arm:
-    needs: build-sdl3-macos
     name: Build macOS (Apple Silicon)
     runs-on: macos-latest
     timeout-minutes: 20
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install LLVM/Clang 21
         run: |
+          brew untap aws/tap 2>/dev/null || true
+          brew uninstall --ignore-dependencies llvm@20 2>/dev/null || true
           brew install llvm@21
           echo "/opt/homebrew/opt/llvm@21/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: |
-          brew install libzip zlib mimalloc imagemagick
-
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            /opt/homebrew/lib/libSDL3*
-            /opt/homebrew/lib/pkgconfig/sdl3.pc
-            /opt/homebrew/lib/pkgconfig/sdl3-mixer.pc
-            /opt/homebrew/include/SDL3
-            /opt/homebrew/include/SDL3_mixer
-            /opt/homebrew/lib/cmake/SDL3
-            /opt/homebrew/lib/cmake/SDL3_mixer
-            /opt/homebrew/share/licenses/SDL3
-            /opt/homebrew/share/licenses/SDL3_mixer
-          key: sdl3-macos-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
+          brew install sdl3 sdl3_mixer sdl3_ttf libzip zlib mimalloc imagemagick
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -424,7 +250,7 @@ jobs:
         run: make macos
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-arm-build
           path: |
@@ -440,7 +266,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Build with Docker (Zig)
         run: make docker-linux
@@ -452,7 +278,7 @@ jobs:
           file bin/moac
 
       - name: Upload Docker build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-linux-build
           path: |
@@ -469,33 +295,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
+      - name: Setup SDL3 (cached)
+        uses: ./.github/actions/setup-sdl3-linux
 
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
+      - name: Install LLVM toolchain
+        uses: ./.github/actions/setup-llvm-toolchain
         with:
-          path: /tmp/sdl3-install
-          key: sdl3-linux-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
-
-      - name: Install SDL3 libraries
-        run: |
-          sudo cp -r /tmp/sdl3-install/* /usr/local/
-          sudo ldconfig
-
-      - name: Install LLVM/Clang 21
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 21
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-21 100
-          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-21 100
+          llvm-version: "21"
+          packages: clang-21
+          create-alternatives: "true"
 
       - name: Install dependencies
         run: |
@@ -505,7 +317,8 @@ jobs:
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
-            libmimalloc-dev
+            libmimalloc-dev \
+            libluajit-5.1-dev
 
       - name: Run tests
         run: make test
@@ -518,7 +331,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install clang-format-21
         uses: ./.github/actions/setup-llvm-toolchain
@@ -538,23 +351,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/sdl3-install
-          key: sdl3-linux-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
-
-      - name: Install SDL3 libraries
-        run: |
-          sudo cp -r /tmp/sdl3-install/* /usr/local/
-          sudo ldconfig
+      - name: Setup SDL3 (cached)
+        uses: ./.github/actions/setup-sdl3-linux
 
       - name: Install LLVM toolchain
         uses: ./.github/actions/setup-llvm-toolchain
@@ -572,7 +372,8 @@ jobs:
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
-            libmimalloc-dev
+            libmimalloc-dev \
+            libluajit-5.1-dev
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -585,7 +386,7 @@ jobs:
         run: scripts/check-static-analysis.sh
 
       - name: Upload analysis reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: static-analysis-reports
@@ -600,7 +401,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -621,7 +422,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -642,7 +443,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Run file consistency script
         run: scripts/check-files.sh
@@ -656,23 +457,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - name: Get week of year
-        id: week
-        run: echo "week=$(date +%Y-W%U)" >> $GITHUB_OUTPUT
-
-      - name: Restore SDL3 libraries from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/sdl3-install
-          key: sdl3-linux-${{ steps.week.outputs.week }}
-          fail-on-cache-miss: true
-
-      - name: Install SDL3 libraries
-        run: |
-          sudo cp -r /tmp/sdl3-install/* /usr/local/
-          sudo ldconfig
+      - name: Setup SDL3 (cached)
+        uses: ./.github/actions/setup-sdl3-linux
 
       - name: Install LLVM toolchain
         uses: ./.github/actions/setup-llvm-toolchain
@@ -688,7 +476,8 @@ jobs:
             libpng-dev \
             libzip-dev \
             zlib1g-dev \
-            libmimalloc-dev
+            libmimalloc-dev \
+            libluajit-5.1-dev
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1

@@ -186,11 +186,12 @@ void display_look(void)
 			render_sprite_fx(&fx, x, y);
 		}
 	}
-	render_text(dotx(DOT_LOK) + 70, doty(DOT_LOK) + 50, 0xffff, RENDER_TEXT_LEFT, look_name);
-	render_text_break(dotx(DOT_LOK) + 70, doty(DOT_LOK) + 60, dotx(DOT_LOK) + 270, 0xffff, RENDER_TEXT_LEFT, look_desc);
+	render_text_break(lx1 + LOOK_PORTRAIT_W, ly1 + UI_WIN_TITLE_H + 8, lx1 + lw - UI_WIN_PAD - 4, UI_TEXT,
+	    RENDER_TEXT_LEFT, look_desc);
 
 	{
 		static int look_anim = 4, look_step = 0, look_dir = 0;
+		static unsigned int look_tick = 0;
 		int l_csprite, l_scale, l_cr, l_cg, l_cb, l_light, l_sat, l_c1, l_c2, l_c3, l_shine;
 
 		bzero(&fx, sizeof(fx));
@@ -237,7 +238,7 @@ void display_look(void)
 		fx.sink = 0;
 		fx.align = RENDER_ALIGN_OFFSET;
 		fx.ml = fx.ll = fx.rl = fx.ul = fx.dl = FX_ITEMLIGHT;
-		render_sprite_fx(&fx, dotx(DOT_LOK) + 40, doty(DOT_LOK) + 110);
+		render_sprite_fx(&fx, lx1 + LOOK_PORTRAIT_W / 2 + 4, ly1 + UI_WIN_TITLE_H + LOOK_PORTRAIT_H);
 	}
 }
 

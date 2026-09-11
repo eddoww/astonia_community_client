@@ -1118,6 +1118,40 @@ DLL_EXPORT void render_texture_scaled(int tex_id, int x, int y, float scale, uns
 }
 
 /**
+ * Create a texture the mod fills itself (ARGB8888 pixels, see
+ * render_update_texture). Same slot space as render_load_texture: the
+ * render_texture*() calls and render_unload_texture apply.
+ *
+ * @return Texture ID (>= 0) on success, -1 on failure
+ */
+DLL_EXPORT int render_create_texture(int width, int height)
+{
+	return sdl_create_mod_texture(width, height);
+}
+
+/**
+ * Replace the pixels of a texture from render_create_texture: width*height
+ * 0xAARRGGBB values, row-major.
+ *
+ * @return 1 on success, 0 on failure
+ */
+DLL_EXPORT int render_update_texture(int tex_id, const uint32_t *pixels)
+{
+	return sdl_update_mod_texture(tex_id, pixels);
+}
+
+/**
+ * Draw the source rectangle (texture pixels) of a texture scaled into the
+ * destination rectangle (UI pixels), honouring the current clip.
+ */
+DLL_EXPORT void render_texture_region(
+    int tex_id, int src_x, int src_y, int src_w, int src_h, int x, int y, int w, int h, unsigned char alpha)
+{
+	sdl_render_mod_texture_region(
+	    tex_id, src_x, src_y, src_w, src_h, x, y, w, h, alpha, clipsx, clipsy, clipex, clipey, x_offset, y_offset);
+}
+
+/**
  * Get the width of a loaded texture.
  *
  * @return Width in pixels, or 0 if invalid texture ID

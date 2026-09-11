@@ -227,6 +227,11 @@ void sdl_render_mod_texture_scaled(int tex_id, int x, int y, float scale, unsign
     int clipex, int clipey, int x_offset, int y_offset);
 int sdl_get_mod_texture_width(int tex_id);
 int sdl_get_mod_texture_height(int tex_id);
+// Mod-filled (dynamic) textures in the same slot space
+int sdl_create_mod_texture(int width, int height);
+int sdl_update_mod_texture(int tex_id, const uint32_t *pixels);
+void sdl_render_mod_texture_region(int tex_id, int src_x, int src_y, int src_w, int src_h, int x, int y, int w, int h,
+    unsigned char alpha, int clipsx, int clipsy, int clipex, int clipey, int x_offset, int y_offset);
 
 // Render targets
 int sdl_create_render_target(int width, int height);

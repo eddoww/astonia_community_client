@@ -14,6 +14,7 @@
 #include "astonia.h"
 #include "gui/gui.h"
 #include "gui/gui_private.h"
+#include "gui/panels.h"
 #include "client/client.h"
 #include "game/game.h"
 #include "sdl/sdl.h"
@@ -32,6 +33,17 @@
 
 static int sx, sy, visible, mx, my, update1, update2, update3, orx, ory, rewrite_cnt;
 
+/* Mod override: a mod that draws its own minimap sets this. The client keeps
+ * everything else going - exploring the cell map, the area info and POIs,
+ * the per-area save/load, the keybind state (mode, zoom) - but draws no map,
+ * reserves no panel footprint and takes no clicks, hovers or wheel events
+ * for it. The mod reads the state through minimap_cells() & friends. */
+DLL_EXPORT int minimap_override = 0;
+
+/* bumped on every change of the explored cell map, so a mod can rebuild
+ * its own picture only when something actually changed */
+static unsigned int map_generation = 1;
+
 static unsigned char _mmap[MAXMAP * MAXMAP];
 static unsigned short map_poi_idx[MAXMAP * MAXMAP];
 
@@ -45,11 +57,85 @@ static int map_managed = 0; // map managed 0 = we're guessing. map managed 1 = t
 static int map_area = 0;
 static int map_server = 0;
 
+/* Big-map magnification. The big map always fills a MAXMAP x MAXMAP
+ * viewport; zoom selects how large a source window of the explored-map
+ * texture is scaled into it (1x = whole map, 4x = MAXMAP/4 window around
+ * the player). 3 matches the fixed 3x big-map view this replaces. */
+#define MINIMAP_ZOOM_MIN 1
+#define MINIMAP_ZOOM_MAX 4
+static int minimap_zoom = 3;
+
+/* Big-map panning: an offset in map cells added to the player-centred
+ * source window (right-drag, or left-drag on a locked minimap). Zero means
+ * "follow the player"; the recenter glyph in the map's corner clears it. */
+static int pan_x, pan_y;
+static int pan_active, pan_grab_x, pan_grab_y, pan_start_x, pan_start_y;
+#define MM_GLYPH 14 /* recenter glyph edge, bottom-right corner of the big map */
+
+/* Current area id as last announced by the server (SV_AREAINFO / AIC_SETID),
+ * 0 until the first area info arrives. Exported for mods, which otherwise
+ * have no way to tell which area the player is in. */
+DLL_EXPORT int client_area_id(void)
+{
+	return map_area;
+}
+
 static int map_poi_load(void);
 static void map_update_poi(void);
 static uint32_t map_poi_col(int x, int y);
 
-SDL_Texture *maptex1 = NULL, *maptex2 = NULL;
+/* Opaque dual-mode textures from sdl_create_texture (work in both the
+ * SDL_Renderer and the SDL_GPU path; see sdl_core.c) */
+static void *maptex1 = NULL, *maptex2 = NULL;
+
+/* (re)compute the screen anchors from the current layout. The minimap panel
+ * publishes a content rect that IS the map's footprint in its current mode
+ * (init_dots() sizes it from minimap_footprint()), so both the small circle
+ * and the big square simply draw at the rect's top-left corner - the panel
+ * system does the clamping, snapping and dragging. */
+void minimap_reanchor(void)
+{
+	int x1, y1, x2, y2;
+
+	if (!panel_content_rect(PANEL_MINIMAP, &x1, &y1, &x2, &y2)) {
+		x1 = UIXRES - minimap_footprint() - 6;
+		y1 = 46;
+	}
+	mx = sx = x1;
+	my = sy = y1;
+}
+
+/* edge length of the footprint the panel system should reserve: the circle's
+ * box, the big square, or nothing while the map is switched off */
+int minimap_footprint(void)
+{
+	if ((game_options & GO_NOMAP) || minimap_override) {
+		return 0;
+	}
+	switch (visible) {
+	case 1:
+		return MINIMAP * 2;
+	case 2:
+		return MAXMAP;
+	default:
+		return 0;
+	}
+}
+
+int minimap_is_expanded(void)
+{
+	return visible == 2;
+}
+
+/* a click on the map flips it between the small circle and the big square
+ * (the big one zooms with the wheel); hiding stays with the toggle key */
+void minimap_toggle_size(void)
+{
+	if (!visible) {
+		return;
+	}
+	visible = (visible == 2) ? 1 : 2;
+}
 
 void minimap_init(void)
 {
@@ -57,24 +143,15 @@ void minimap_init(void)
 		return;
 	}
 
-	sx = dotx(DOT_MBR) - MAXMAP - 6;
-	sy = doty(DOT_MTL) + 6;
-
-	mx = dotx(DOT_MBR) - MINIMAP * 2 - 6;
-	my = doty(DOT_MTL) + 6;
+	minimap_reanchor();
 
 	memset(_mmap, 0, sizeof(_mmap));
 	visible = 1;
 	update1 = update2 = update3 = 1;
 
+	// blend mode BLEND and scale mode NEAREST are set by sdl_create_texture
 	maptex1 = sdl_create_texture(MAXMAP, MAXMAP);
 	maptex2 = sdl_create_texture(MINIMAP * 2, MINIMAP * 2);
-
-	SDL_SetTextureBlendMode(maptex1, SDL_BLENDMODE_BLEND);
-	SDL_SetTextureBlendMode(maptex2, SDL_BLENDMODE_BLEND);
-
-	SDL_SetTextureScaleMode(maptex1, SDL_SCALEMODE_NEAREST);
-	SDL_SetTextureScaleMode(maptex2, SDL_SCALEMODE_NEAREST);
 }
 
 static void set_pix(int x, int y, unsigned char val)
@@ -92,6 +169,7 @@ static void set_pix(int x, int y, unsigned char val)
 
 		_mmap[x + y * MAXMAP] = val;
 		update1 = update2 = update3 = 1;
+		map_generation++;
 	}
 }
 
@@ -193,13 +271,117 @@ static uint32_t pix_col(int x, int y)
 	}
 }
 
+/* player marker: a red plus with a dark halo and a bright core - readable
+ * on the pale corridor colours and on the near-black unknown alike */
 static void draw_center(int x, int y)
 {
-	render_pixel(x, y, IRGB(31, 8, 8));
+	int i;
+
+	for (i = -2; i <= 2; i++) {
+		render_pixel(x + i, y - 2, IRGB(2, 2, 2));
+		render_pixel(x + i, y + 2, IRGB(2, 2, 2));
+		render_pixel(x - 2, y + i, IRGB(2, 2, 2));
+		render_pixel(x + 2, y + i, IRGB(2, 2, 2));
+	}
+	render_pixel(x, y, IRGB(31, 28, 20));
 	render_pixel(x + 1, y, IRGB(31, 8, 8));
 	render_pixel(x, y + 1, IRGB(31, 8, 8));
 	render_pixel(x - 1, y, IRGB(31, 8, 8));
 	render_pixel(x, y - 1, IRGB(31, 8, 8));
+	render_pixel(x + 1, y + 1, IRGB(18, 4, 4));
+	render_pixel(x - 1, y + 1, IRGB(18, 4, 4));
+	render_pixel(x + 1, y - 1, IRGB(18, 4, 4));
+	render_pixel(x - 1, y - 1, IRGB(18, 4, 4));
+}
+
+/* bottom-right of the big map: the "back to the player" glyph, shown only
+ * while the view is panned away */
+static void recenter_glyph_rect(int *x1, int *y1, int *x2, int *y2)
+{
+	*x2 = sx + MAXMAP - 4;
+	*y2 = sy + MAXMAP - 4;
+	*x1 = *x2 - MM_GLYPH;
+	*y1 = *y2 - MM_GLYPH;
+}
+
+int minimap_is_panned(void)
+{
+	return !minimap_override && visible == 2 && minimap_zoom > 1 && (pan_x || pan_y);
+}
+
+int minimap_recenter_hit(int x, int y)
+{
+	int x1, y1, x2, y2;
+
+	if (!minimap_is_panned()) {
+		return 0;
+	}
+	recenter_glyph_rect(&x1, &y1, &x2, &y2);
+	return x >= x1 && x <= x2 && y >= y1 && y <= y2;
+}
+
+void minimap_recenter(void)
+{
+	pan_x = pan_y = 0;
+}
+
+/* a press on the big map starts a pan; returns 1 when it took the press */
+int minimap_pan_begin(int x, int y)
+{
+	if ((game_options & GO_NOMAP) || minimap_override) {
+		return 0;
+	}
+	if (visible != 2 || minimap_zoom <= 1) {
+		return 0;
+	}
+	if (x < sx || x >= sx + MAXMAP || y < sy || y >= sy + MAXMAP) {
+		return 0;
+	}
+	if (minimap_recenter_hit(x, y)) {
+		return 0; /* the glyph is a click, not a drag */
+	}
+	pan_active = 1;
+	pan_grab_x = x;
+	pan_grab_y = y;
+	pan_start_x = pan_x;
+	pan_start_y = pan_y;
+	return 1;
+}
+
+void minimap_pan_update(int x, int y)
+{
+	int limit;
+
+	if (!pan_active) {
+		return;
+	}
+	/* the view shows MAXMAP/zoom cells across MAXMAP pixels: zoom pixels
+	 * per cell; dragging the map right moves the window left */
+	pan_x = pan_start_x - (x - pan_grab_x) / minimap_zoom;
+	pan_y = pan_start_y - (y - pan_grab_y) / minimap_zoom;
+	limit = MAXMAP;
+	if (pan_x < -limit) {
+		pan_x = -limit;
+	}
+	if (pan_x > limit) {
+		pan_x = limit;
+	}
+	if (pan_y < -limit) {
+		pan_y = -limit;
+	}
+	if (pan_y > limit) {
+		pan_y = limit;
+	}
+}
+
+void minimap_pan_end(void)
+{
+	pan_active = 0;
+}
+
+int minimap_pan_active(void)
+{
+	return pan_active;
 }
 
 static void draw_center2(int x, int y)
@@ -222,18 +404,24 @@ void display_minimap(void)
 	float dist;
 	SDL_FRect dr, sr;
 
-	if (game_options & GO_NOMAP) {
+	if ((game_options & GO_NOMAP) || minimap_override) {
 		return;
 	}
 
-	if (visible & 2) { // display big map
+	/* follow the panel live - a drag shifts the content rect every frame,
+	 * long before the next init_dots() */
+	minimap_reanchor();
+
+	if (visible == 2) { // display big map
+		int src_size;
+
 		if (update1) {
 			for (y = 0; y < MAXMAP; y++) {
 				for (x = 0; x < MAXMAP; x++) {
 					mapix1[x + y * MAXMAP] = pix_col(x, y);
 				}
 			}
-			SDL_UpdateTexture(maptex1, NULL, mapix1, MAXMAP * sizeof(uint32_t));
+			sdl_update_texture(maptex1, mapix1);
 			update1 = 0;
 		}
 
@@ -242,44 +430,85 @@ void display_minimap(void)
 		dr.y = (float)((sy + y_offset) * sdl_scale);
 		dr.h = (float)(MAXMAP * sdl_scale);
 
-		if (visible & 1) {
-			sr.x = 0.0f;
-			sr.w = (float)MAXMAP;
-			sr.y = 0.0f;
-			sr.h = (float)MAXMAP;
-			sdl_render_copy(maptex1, &sr, &dr);
-			draw_center(sx + originx, sy + originy);
-		} else {
-			x = originx - MAXMAP / 6;
-			y = originy - MAXMAP / 6;
-			if (x < 0) {
-				x = 0;
-			}
-			if (x > MAXMAP - MAXMAP / 3) {
-				x = MAXMAP - MAXMAP / 3;
-			}
-			if (y < 0) {
-				y = 0;
-			}
-			if (y > MAXMAP - MAXMAP / 3) {
-				y = MAXMAP - MAXMAP / 3;
-			}
+		/* a MAXMAP/zoom source window centered on the player, clamped to
+		 * the map borders (never letting it slide off the texture), scaled
+		 * up to the full viewport. Zoom 1x shows the whole map. */
+		src_size = MAXMAP / minimap_zoom;
 
-			sr.x = (float)x;
-			sr.w = (float)(MAXMAP / 3);
-			sr.y = (float)y;
-			sr.h = (float)(MAXMAP / 3);
-
-			sdl_render_copy(maptex1, &sr, &dr);
-			draw_center2(sx + (originx - x) * 3 + 2, sy + (originy - y) * 3 + 2);
+		x = originx + (minimap_zoom > 1 ? pan_x : 0) - src_size / 2;
+		y = originy + (minimap_zoom > 1 ? pan_y : 0) - src_size / 2;
+		if (x < 0) {
+			x = 0;
+		}
+		if (x > MAXMAP - src_size) {
+			x = MAXMAP - src_size;
+		}
+		if (y < 0) {
+			y = 0;
+		}
+		if (y > MAXMAP - src_size) {
+			y = MAXMAP - src_size;
 		}
 
-		render_line(sx, sy, sx, sy + MAXMAP, 0xffff);
-		render_line(sx, sy + MAXMAP, sx + MAXMAP, sy + MAXMAP, 0xffff);
-		render_line(sx + MAXMAP, sy + MAXMAP, sx + MAXMAP, sy, 0xffff);
-		render_line(sx + MAXMAP, sy, sx, sy, 0xffff);
+		sr.x = (float)x;
+		sr.w = (float)src_size;
+		sr.y = (float)y;
+		sr.h = (float)src_size;
 
-		render_text(sx + 6, sy + 6, 0xffff, 0, "N");
+		sdl_render_copy(maptex1, &sr, &dr);
+
+		/* player marker: transform the map position through the same
+		 * (clamped) source window - marker = anchor + (origin - sr.xy)
+		 * * scale + half a cell, done in exact integer math so it stays
+		 * on the player even when the window is pinned at a map border */
+		if (minimap_zoom == 1) {
+			draw_center(sx + originx, sy + originy);
+		} else {
+			draw_center2(sx + ((originx - x) * MAXMAP + MAXMAP / 2) / src_size,
+			    sy + ((originy - y) * MAXMAP + MAXMAP / 2) / src_size);
+		}
+
+		/* frame: a dark outer line and a warm inner one - the flat white
+		 * box read as a debug overlay against the parchment-toned UI */
+		render_line(sx - 1, sy - 1, sx - 1, sy + MAXMAP + 1, IRGB(2, 2, 2));
+		render_line(sx - 1, sy + MAXMAP + 1, sx + MAXMAP + 1, sy + MAXMAP + 1, IRGB(2, 2, 2));
+		render_line(sx + MAXMAP + 1, sy + MAXMAP + 1, sx + MAXMAP + 1, sy - 1, IRGB(2, 2, 2));
+		render_line(sx + MAXMAP + 1, sy - 1, sx - 1, sy - 1, IRGB(2, 2, 2));
+		render_line(sx, sy, sx, sy + MAXMAP, IRGB(24, 21, 14));
+		render_line(sx, sy + MAXMAP, sx + MAXMAP, sy + MAXMAP, IRGB(24, 21, 14));
+		render_line(sx + MAXMAP, sy + MAXMAP, sx + MAXMAP, sy, IRGB(24, 21, 14));
+		render_line(sx + MAXMAP, sy, sx, sy, IRGB(24, 21, 14));
+
+		/* corner chips: compass north, zoom factor */
+		render_rect_alpha(sx + 2, sy + 2, sx + 16, sy + 16, IRGB(0, 0, 0), 150);
+		render_text(sx + 9, sy + 4, IRGB(30, 27, 18), RENDER_TEXT_CENTER | RENDER_TEXT_SMALL, "N");
+		{
+			char zoombuf[8];
+			int zw;
+
+			sprintf(zoombuf, "%dx", minimap_zoom);
+			zw = render_text_length(RENDER_TEXT_SMALL, zoombuf);
+			render_rect_alpha(sx + MAXMAP - zw - 10, sy + 2, sx + MAXMAP - 2, sy + 16, IRGB(0, 0, 0), 150);
+			render_text(
+			    sx + MAXMAP - 6 - zw / 2, sy + 4, IRGB(30, 27, 18), RENDER_TEXT_CENTER | RENDER_TEXT_SMALL, zoombuf);
+		}
+
+		/* panned away from the player: the recenter glyph (a target ring) */
+		if (minimap_is_panned()) {
+			int gx1, gy1, gx2, gy2, gcx, gcy;
+
+			recenter_glyph_rect(&gx1, &gy1, &gx2, &gy2);
+			gcx = (gx1 + gx2) / 2;
+			gcy = (gy1 + gy2) / 2;
+			render_rect_alpha(gx1, gy1, gx2, gy2, IRGB(0, 0, 0), 190);
+			render_line(gx1, gy1, gx2, gy1, IRGB(24, 21, 14));
+			render_line(gx1, gy2, gx2, gy2, IRGB(24, 21, 14));
+			render_line(gx1, gy1, gx1, gy2, IRGB(24, 21, 14));
+			render_line(gx2, gy1, gx2, gy2, IRGB(24, 21, 14));
+			render_line(gcx - 5, gcy, gcx + 5, gcy, IRGB(31, 26, 14));
+			render_line(gcx, gcy - 5, gcx, gcy + 5, IRGB(31, 26, 14));
+			render_pixel(gcx, gcy, IRGB(31, 8, 8));
+		}
 	}
 
 	if (orx != originx || ory != originy) {
@@ -308,7 +537,7 @@ void display_minimap(void)
 					}
 				}
 			}
-			SDL_UpdateTexture(maptex2, NULL, mapix2, MINIMAP * 2 * sizeof(uint32_t));
+			sdl_update_texture(maptex2, mapix2);
 			update2 = 0;
 		}
 
@@ -325,11 +554,18 @@ void display_minimap(void)
 		sdl_render_copy_ex(maptex2, &sr, &dr, 45.0);
 		draw_center(mx + MINIMAP, my + MINIMAP);
 
+		/* ring: dark outer edge, warm light rim, soft inner shadow */
 		for (i = 0; i < sdl_scale; i++) {
-			sdl_render_circle((mx + MINIMAP + x_offset) * sdl_scale, (my + MINIMAP + y_offset) * sdl_scale,
-			    (MINIMAP)*sdl_scale + i, 0xffffffff);
+			int ccx = (mx + MINIMAP + x_offset) * sdl_scale, ccy = (my + MINIMAP + y_offset) * sdl_scale;
+			int r = MINIMAP * sdl_scale;
+
+			sdl_render_circle(ccx, ccy, r + 2 * sdl_scale + i, IRGBA(8, 8, 8, 230));
+			sdl_render_circle(ccx, ccy, r + sdl_scale + i, IRGBA(196, 176, 120, 235));
+			sdl_render_circle(ccx, ccy, r + i, IRGBA(196, 176, 120, 235));
+			sdl_render_circle(ccx, ccy, r - sdl_scale + i, IRGBA(0, 0, 0, 90));
 		}
-		render_text(mx + MINIMAP, my + 4, 0xffff, 0, "N");
+		render_rect_alpha(mx + MINIMAP - 6, my + 2, mx + MINIMAP + 6, my + 13, IRGB(0, 0, 0), 150);
+		render_text(mx + MINIMAP, my + 3, IRGB(30, 27, 18), RENDER_TEXT_CENTER | RENDER_TEXT_SMALL, "N");
 	}
 }
 
@@ -337,10 +573,13 @@ static void minimap_clearonly(void)
 {
 	memset(_mmap, 0, sizeof(_mmap));
 	update1 = update2 = update3 = 1;
+	map_generation++;
 }
 
 void minimap_clear(void)
 {
+	pan_x = pan_y = 0;
+	pan_active = 0;
 	if (game_options & GO_MAPSAVE) {
 		map_save();
 	}
@@ -348,6 +587,7 @@ void minimap_clear(void)
 	map_area = 0;
 	memset(_mmap, 0, sizeof(_mmap));
 	update1 = update2 = update3 = 1;
+	map_generation++;
 }
 
 static void minimap_reveal(int x, int y)
@@ -358,11 +598,13 @@ static void minimap_reveal(int x, int y)
 
 	_mmap[x + y * MAXMAP] = MAPPIX_EMPTY;
 	update1 = update2 = update3 = 1;
+	map_generation++;
 }
 
 void minimap_toggle(void)
 {
-	visible = (visible + 1) % 4;
+	/* hidden -> small round map -> big map (zoomable) -> hidden */
+	visible = (visible + 1) % 3;
 }
 
 void minimap_hide(void)
@@ -370,6 +612,50 @@ void minimap_hide(void)
 	if (visible) {
 		visible = 1;
 	}
+}
+
+void minimap_zoom_in(void)
+{
+	if (minimap_zoom < MINIMAP_ZOOM_MAX) {
+		minimap_zoom++;
+	}
+}
+
+void minimap_zoom_out(void)
+{
+	if (minimap_zoom > MINIMAP_ZOOM_MIN) {
+		minimap_zoom--;
+	}
+}
+
+void minimap_zoom_reset(void)
+{
+	minimap_zoom = MINIMAP_ZOOM_MIN;
+}
+
+/* mouse-wheel zoom while hovering the big map; returns 1 when the wheel
+ * event was consumed (big map visible and the cursor is over it) */
+int minimap_wheel_zoom(int x, int y, int delta)
+{
+	if ((game_options & GO_NOMAP) || minimap_override) {
+		return 0;
+	}
+	if (visible != 2) {
+		return 0;
+	}
+	if (x < sx || x >= sx + MAXMAP || y < sy || y >= sy + MAXMAP) {
+		return 0;
+	}
+
+	while (delta > 0) {
+		minimap_zoom_in();
+		delta--;
+	}
+	while (delta < 0) {
+		minimap_zoom_out();
+		delta++;
+	}
+	return 1;
 }
 
 static char *mapname(int i)
@@ -549,6 +835,7 @@ static int map_load_unmanaged(void)
 		fclose(fp);
 
 		map_merge(_mmap, tmap);
+		map_generation++;
 
 		return besti;
 	}
@@ -574,6 +861,8 @@ static int map_load_managed(void)
 	}
 	fread(_mmap, sizeof(_mmap), 1, fp);
 	fclose(fp);
+	map_generation++;
+	update1 = update2 = 1;
 
 	return 1;
 }
@@ -833,6 +1122,9 @@ void minimap_display_hover(int hx, int hy)
 {
 	int x, y, i;
 
+	if (minimap_override) {
+		return;
+	}
 	if (visible == 1) { // small, round map
 		double sq = 0.70710678118654752440, dist;
 		int tmp;
@@ -852,33 +1144,34 @@ void minimap_display_hover(int hx, int hy)
 
 		x += originx;
 		y += originy;
-	} else if (visible == 2) { // big scaled up map
-		int ox, oy;
+	} else if (visible == 2) { // big zoomable map
+		int ox, oy, src_size;
 
-		ox = originx - MAXMAP / 6;
-		oy = originy - MAXMAP / 6;
+		if (hx < sx || hx >= sx + MAXMAP || hy < sy || hy >= sy + MAXMAP) {
+			return;
+		}
+
+		/* same clamped source window as display_minimap, inverted:
+		 * screen offset -> source cell */
+		src_size = MAXMAP / minimap_zoom;
+
+		ox = originx - src_size / 2;
+		oy = originy - src_size / 2;
 		if (ox < 0) {
 			ox = 0;
 		}
-		if (ox > MAXMAP - MAXMAP / 3) {
-			ox = MAXMAP - MAXMAP / 3;
+		if (ox > MAXMAP - src_size) {
+			ox = MAXMAP - src_size;
 		}
 		if (oy < 0) {
 			oy = 0;
 		}
-		if (oy > MAXMAP - MAXMAP / 3) {
-			oy = MAXMAP - MAXMAP / 3;
+		if (oy > MAXMAP - src_size) {
+			oy = MAXMAP - src_size;
 		}
 
-		x = hx - sx;
-		y = hy - sy;
-
-		x = x / 3 + ox;
-		y = y / 3 + oy;
-
-	} else if (visible == 3) { // big full map
-		x = hx - sx;
-		y = hy - sy;
+		x = (hx - sx) * src_size / MAXMAP + ox;
+		y = (hy - sy) * src_size / MAXMAP + oy;
 	} else {
 		return;
 	}
@@ -918,4 +1211,92 @@ void minimap_display_hover(int hx, int hy)
 			break;
 		}
 	}
+}
+
+/* ------------------------------------------------------------------------
+ * Mod access to the minimap state (see minimap_override above and amod.h)
+ * ------------------------------------------------------------------------ */
+
+/* the explored cell map: MAXMAP x MAXMAP bytes, row-major, MINIMAP_CELL_*
+ * values (the MAPPIX_* codes above); cell (x, y) of the current area */
+DLL_EXPORT const unsigned char *minimap_cells(void)
+{
+	return _mmap;
+}
+
+DLL_EXPORT int minimap_cells_edge(void)
+{
+	return MAXMAP;
+}
+
+DLL_EXPORT unsigned int minimap_generation(void)
+{
+	return map_generation;
+}
+
+/* keybind-driven display state: 0 hidden, 1 small round map, 2 big map */
+DLL_EXPORT int minimap_mode(void)
+{
+	if (game_options & GO_NOMAP) {
+		return 0;
+	}
+	return visible;
+}
+
+DLL_EXPORT void minimap_set_mode(int mode)
+{
+	if (mode < 0 || mode > 2) {
+		return;
+	}
+	visible = mode;
+}
+
+DLL_EXPORT int minimap_zoom_level(void)
+{
+	return minimap_zoom;
+}
+
+DLL_EXPORT void minimap_set_zoom(int zoom)
+{
+	if (zoom < MINIMAP_ZOOM_MIN) {
+		zoom = MINIMAP_ZOOM_MIN;
+	}
+	if (zoom > MINIMAP_ZOOM_MAX) {
+		zoom = MINIMAP_ZOOM_MAX;
+	}
+	minimap_zoom = zoom;
+}
+
+/* server key sent with the area id (SV_AREAINFO); 0 while unmanaged */
+DLL_EXPORT int minimap_area_server(void)
+{
+	return map_server;
+}
+
+/* points of interest of the current area (res/config/map_poi<server>_<area>.json) */
+DLL_EXPORT int minimap_poi_count(void)
+{
+	return map_poi_cnt > 1 ? map_poi_cnt - 1 : 0;
+}
+
+DLL_EXPORT int minimap_poi_get(int idx, int *x, int *y, int *type, const char **desc)
+{
+	int i = idx + 1; /* slot 0 is the "no POI" placeholder of map_poi_idx */
+
+	if (idx < 0 || i >= map_poi_cnt || !map_poi) {
+		return 0;
+	}
+	if (x) {
+		*x = map_poi[i].x;
+	}
+	if (y) {
+		*y = map_poi[i].y;
+	}
+	if (type) {
+		*type = map_poi[i].type;
+	}
+	if (desc) {
+		*desc = map_poi[i].desc;
+	}
+	return 1;
 }

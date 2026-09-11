@@ -21,11 +21,11 @@
 #include "modder/mod_registry.h"
 #include "amod/amod_options.h"
 
-#define OPT_WIDTH      360
+#define OPT_WIDTH      420 /* 8 tabs at ~52px; see the tab bar in options_display */
 #define OPT_TITLE_H    16
 #define OPT_TAB_H      16
 #define OPT_SEP        4
-#define OPT_NTABS      7
+#define OPT_NTABS      8
 #define OPT_SLIDER_LBL 90
 #define OPT_SLIDER_VAL 28
 
@@ -122,22 +122,7 @@ static int opt_mod_row_count(int amod_tab)
 	return opt_mod_rows(amod_tab, map);
 }
 
-/* Installed-mods block on the Gameplay tab: a header, one row per discovered
- * mod (disabled ones included - that is how they get switched back on), and a
- * reminder that toggles need a restart. Nothing at all when no mods are
- * installed, so a plain client shows no empty section. */
-static int opt_modlist_rows(void)
-{
-	int n = mod_registry_count();
-
-	return n ? n + 2 : 0;
-}
-
-/* Where the Gameplay tab's mod-provided option rows start. */
-static int opt_gameplay_native(void)
-{
-	return OPT_GAMEPLAY_BASE + opt_modlist_rows();
-}
+static int opt_mods_rows(void); /* Mods tab, defined with the rest of it below */
 
 static int opt_tab_total(void)
 {
@@ -151,11 +136,13 @@ static int opt_tab_total(void)
 	case 3:
 		return OPT_UI_NATIVE + opt_mod_row_count(AMOD_TAB_UI);
 	case 4:
-		return opt_gameplay_native() + opt_mod_row_count(AMOD_TAB_GAMEPLAY);
+		return OPT_GAMEPLAY_BASE + opt_mod_row_count(AMOD_TAB_GAMEPLAY);
 	case 5:
 		return 10;
 	case 6:
 		return 20;
+	case 7:
+		return opt_mods_rows();
 	default:
 		return 0;
 	}
@@ -262,7 +249,51 @@ static void draw_scrollbar(int total)
 	render_rounded_rect_filled_alpha(sx, thumb_y, sx + 4, thumb_y + thumb_h, 2, UI_ACCENT, 220);
 }
 
-/* Draw one mod-provided option at the given row y. */
+/* Draw one mod-provided option row. `x`/`w` let the Mods tab indent a mod's
+ * own rows under it; the themed tabs pass the full content width. */
+static void draw_option_row_at(int x, int ry, int w, const struct amod_option *o)
+{
+	switch (o->type) {
+	case AMOD_OPT_TOGGLE:
+		draw_checkbox(x, ry, o->value != 0, o->label);
+		break;
+	case AMOD_OPT_SLIDER:
+		draw_slider(x, ry, w, o->value, o->min_val, o->max_val, o->label);
+		break;
+	default:
+		draw_section_header(x, ry, w, o->label);
+		break;
+	}
+}
+
+/* Work out the new value for a click at `mx` on an option row, or return the
+ * current one when the click changes nothing. Headers are never interactive. */
+static int option_value_from_click(int x, int w, int mx, const struct amod_option *o)
+{
+	int tx = x + OPT_SLIDER_LBL;
+	int tw = w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
+	int val;
+
+	if (o->type == AMOD_OPT_TOGGLE) {
+		return !o->value;
+	}
+	if (o->type == AMOD_OPT_SLIDER && o->max_val > o->min_val) {
+		if (tw < 10) {
+			tw = 10;
+		}
+		val = o->min_val + (mx - tx) * (o->max_val - o->min_val) / tw;
+		if (val < o->min_val) {
+			val = o->min_val;
+		}
+		if (val > o->max_val) {
+			val = o->max_val;
+		}
+		return val;
+	}
+	return o->value;
+}
+
+/* Draw one system-mod option row (the themed tabs). */
 static void draw_mod_option_row(int ry, int idx)
 {
 	struct amod_option o;
@@ -271,49 +302,26 @@ static void draw_mod_option_row(int ry, int idx)
 		return;
 	}
 	o.label[sizeof(o.label) - 1] = 0;
-	switch (o.type) {
-	case AMOD_OPT_TOGGLE:
-		draw_checkbox(opt_lx, ry, o.value != 0, o.label);
-		break;
-	case AMOD_OPT_SLIDER:
-		draw_slider(opt_lx, ry, opt_content_w, o.value, o.min_val, o.max_val, o.label);
-		break;
-	default:
-		draw_section_header(opt_lx, ry, opt_content_w, o.label);
-		break;
-	}
+	draw_option_row_at(opt_lx, ry, opt_content_w, &o);
 }
 
-/* Handle a click that already hit the given mod option's row. */
+/* Handle a click that already hit the given system-mod option's row. */
 static int click_mod_option_row(int mx, int idx)
 {
 	struct amod_option o;
-	int tx = opt_lx + OPT_SLIDER_LBL;
-	int tw = opt_content_w - OPT_SLIDER_LBL - OPT_SLIDER_VAL;
 	int val;
 
 	if (!amod_option_get(idx, &o)) {
 		return 0;
 	}
-	if (o.type == AMOD_OPT_TOGGLE) {
-		amod_option_set(idx, !o.value);
-		return 1;
+	if (o.type == AMOD_OPT_HEADER) {
+		return 0;
 	}
-	if (o.type == AMOD_OPT_SLIDER && o.max_val > o.min_val) {
-		if (tw < 10) {
-			tw = 10;
-		}
-		val = o.min_val + (mx - tx) * (o.max_val - o.min_val) / tw;
-		if (val < o.min_val) {
-			val = o.min_val;
-		}
-		if (val > o.max_val) {
-			val = o.max_val;
-		}
+	val = option_value_from_click(opt_lx, opt_content_w, mx, &o);
+	if (val != o.value) {
 		amod_option_set(idx, val);
-		return 1;
 	}
-	return 0;
+	return 1;
 }
 
 /* Mod rows tagged for this tab, appended after the native rows. */
@@ -1359,55 +1367,176 @@ static int opt_click_gamepad(int mx, int my)
 	return 0;
 }
 
-/* One row per installed mod: name, version and an enable checkbox. The list
- * comes from the registry rather than from the loaded mods, so a disabled mod
- * is still listed and can be switched back on. */
-static void draw_mod_list(int first_row)
+/* ---------------------------------------------------------------------------
+ * Mods tab
+ *
+ * One collapsible section per installed mod: the enable checkbox, and beneath
+ * it the settings that mod registers through amod_options_count/get/set. The
+ * list comes from the registry rather than from the loaded mods, so a disabled
+ * mod is still listed and can be switched back on.
+ *
+ * The system mod is deliberately absent: it is not in the registry, and its
+ * option rows are game settings (weather, day/night, combat) that belong in
+ * the themed tabs - a player should not have to know it exists to find them.
+ * ------------------------------------------------------------------------- */
+
+#define OPT_TWISTY_W 12 /* the +/- hit area left of a mod's checkbox */
+
+/* Expanded state per registry index, kept across opens. Reset by a rescan,
+ * which only happens at startup and on #lua_reload. */
+static unsigned char opt_mod_open[MOD_MAX];
+
+/* A disabled mod is not loaded, so it has no options to show. */
+static int opt_mod_settings_count(const struct mod_desc *m)
+{
+	return m->enabled ? amod_mod_options_count(m->id) : 0;
+}
+
+static int opt_mods_rows(void)
 {
 	int n = mod_registry_count();
-	int i, ry;
+	int i, rows = 1; /* section header */
 
 	if (!n) {
-		return;
+		return 2; /* header + "none installed" */
 	}
+	for (i = 0; i < n; i++) {
+		rows++;
+		if (opt_mod_open[i]) {
+			rows += opt_mod_settings_count(mod_registry_get(i));
+		}
+	}
+	return rows + 1; /* the restart note */
+}
 
-	ry = opt_row_y(first_row);
+/* Which mod (and which of its options) a row belongs to. Returns the registry
+ * index, with *opt set to the option index or -1 for the mod's own row;
+ * returns -1 for the header, the empty-state row and the restart note. */
+static int opt_mods_locate(int row, int *opt)
+{
+	int n = mod_registry_count();
+	int i, r = 1;
+
+	*opt = -1;
+	for (i = 0; i < n; i++) {
+		if (row == r) {
+			return i;
+		}
+		r++;
+		if (opt_mod_open[i]) {
+			int cnt = opt_mod_settings_count(mod_registry_get(i));
+			if (row >= r && row < r + cnt) {
+				*opt = row - r;
+				return i;
+			}
+			r += cnt;
+		}
+	}
+	return -1;
+}
+
+static void opt_display_mods(void)
+{
+	int n = mod_registry_count();
+	int i, k, ry, row = 1;
+
+	ry = opt_row_y(0);
 	if (ry >= 0) {
 		draw_section_header(opt_lx, ry, opt_content_w, "Installed Mods");
 	}
 
-	for (i = 0; i < n; i++) {
-		const struct mod_desc *m = mod_registry_get(i);
-		char label[MOD_NAME_LEN + MOD_VERSION_LEN + 8];
-
-		ry = opt_row_y(first_row + 1 + i);
-		if (ry < 0) {
-			continue;
+	if (!n) {
+		ry = opt_row_y(1);
+		if (ry >= 0) {
+			render_text(opt_lx, ry, UI_TEXT_MUTED, UI_FONT_BODY, "No mods installed.");
 		}
-		snprintf(label, sizeof(label), "%s  %s", m->name, m->version);
-		draw_checkbox(opt_lx, ry, m->enabled, label);
+		return;
 	}
 
-	ry = opt_row_y(first_row + 1 + n);
+	for (i = 0; i < n; i++) {
+		const struct mod_desc *m = mod_registry_get(i);
+		int cnt = opt_mod_settings_count(m);
+
+		ry = opt_row_y(row);
+		if (ry >= 0) {
+			char label[MOD_NAME_LEN + MOD_VERSION_LEN + 8];
+
+			if (cnt) {
+				render_text(opt_lx, ry, UI_TEXT_LABEL, UI_FONT_BODY, opt_mod_open[i] ? "-" : "+");
+			}
+			snprintf(label, sizeof(label), "%s  %s", m->name, m->version);
+			draw_checkbox(opt_lx + OPT_TWISTY_W, ry, m->enabled, label);
+		}
+		row++;
+
+		if (opt_mod_open[i]) {
+			for (k = 0; k < cnt; k++) {
+				struct amod_option o;
+
+				ry = opt_row_y(row + k);
+				if (ry < 0 || !amod_mod_option_get(m->id, k, &o)) {
+					continue;
+				}
+				o.label[sizeof(o.label) - 1] = 0;
+				draw_option_row_at(opt_lx + OPT_TWISTY_W, ry, opt_content_w - OPT_TWISTY_W, &o);
+			}
+			row += cnt;
+		}
+	}
+
+	ry = opt_row_y(row);
 	if (ry >= 0) {
 		/* Libraries are never unloaded once dlopened, so a toggle cannot
 		 * take effect before the next launch - say so rather than let the
 		 * checkbox imply otherwise. */
-		render_text(opt_lx, ry, UI_TEXT_MUTED, UI_FONT_BODY, "Mod changes take effect at the next launch.");
+		render_text(opt_lx, ry, UI_TEXT_MUTED, UI_FONT_BODY, "Enabling or disabling applies at the next launch.");
 	}
 }
 
-static int click_mod_list(int first_row, int mx, int my)
+static int opt_click_mods(int mx, int my)
 {
-	int n = mod_registry_count();
-	int i, ry;
+	int total = opt_mods_rows();
+	int row, opt;
 
-	for (i = 0; i < n; i++) {
-		const struct mod_desc *m = mod_registry_get(i);
+	for (row = 0; row < total; row++) {
+		int ry = opt_row_y(row);
+		const struct mod_desc *m;
+		int i;
 
-		ry = opt_row_y(first_row + 1 + i);
-		if (ry >= 0 && in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
-			mod_registry_set_enabled(m->id, !m->enabled);
+		if (ry < 0 || !in_rect(mx, my, opt_lx, ry, opt_content_w, UI_ROW_H)) {
+			continue;
+		}
+		if ((i = opt_mods_locate(row, &opt)) < 0) {
+			return 0;
+		}
+		m = mod_registry_get(i);
+
+		if (opt < 0) {
+			/* the mod's own row: the twisty expands, the rest toggles it */
+			if (mx < opt_lx + OPT_TWISTY_W) {
+				if (opt_mod_settings_count(m)) {
+					opt_mod_open[i] = !opt_mod_open[i];
+				}
+			} else {
+				mod_registry_set_enabled(m->id, !m->enabled);
+				if (!m->enabled) {
+					opt_mod_open[i] = 0; /* its settings are gone now */
+				}
+			}
+			return 1;
+		}
+
+		{
+			struct amod_option o;
+			int val;
+
+			if (!amod_mod_option_get(m->id, opt, &o) || o.type == AMOD_OPT_HEADER) {
+				return 0;
+			}
+			val = option_value_from_click(opt_lx + OPT_TWISTY_W, opt_content_w - OPT_TWISTY_W, mx, &o);
+			if (val != o.value) {
+				amod_mod_option_set(m->id, opt, val);
+			}
 			return 1;
 		}
 	}
@@ -1434,8 +1563,7 @@ static void opt_display_gameplay(void)
 		render_text(opt_lx + 100, ry, UI_TEXT, UI_FONT_BODY, cast_names[cm]);
 	}
 
-	draw_mod_list(OPT_GAMEPLAY_BASE);
-	draw_mod_tab_rows(AMOD_TAB_GAMEPLAY, opt_gameplay_native());
+	draw_mod_tab_rows(AMOD_TAB_GAMEPLAY, OPT_GAMEPLAY_BASE);
 }
 
 static int opt_click_gameplay(int mx, int my)
@@ -1449,17 +1577,14 @@ static int opt_click_gameplay(int mx, int my)
 		return 1;
 	}
 
-	if (click_mod_list(OPT_GAMEPLAY_BASE, mx, my)) {
-		return 1;
-	}
-
-	return click_mod_tab_rows(AMOD_TAB_GAMEPLAY, opt_gameplay_native(), mx, my);
+	return click_mod_tab_rows(AMOD_TAB_GAMEPLAY, OPT_GAMEPLAY_BASE, mx, my);
 }
 
 void options_display(void)
 {
 	int total, max_scroll, cx, tab_w, i;
-	static const char *tab_labels[OPT_NTABS] = {"Audio", "Video", "Display", "UI", "Gameplay", "Advanced", "Gamepad"};
+	static const char *tab_labels[OPT_NTABS] = {
+	    "Audio", "Video", "Display", "UI", "Gameplay", "Advanced", "Gamepad", "Mods"};
 
 	if (!opt_open) {
 		return;
@@ -1519,6 +1644,9 @@ void options_display(void)
 		break;
 	case 6:
 		opt_display_gamepad();
+		break;
+	case 7:
+		opt_display_mods();
 		break;
 	default:
 		break;
@@ -1618,6 +1746,9 @@ int options_click(int mx, int my)
 		break;
 	case 6:
 		opt_click_gamepad(mx, my);
+		break;
+	case 7:
+		opt_click_mods(mx, my);
 		break;
 	default:
 		break;

@@ -112,7 +112,7 @@ $(TEST_LOADING_UI): test_loading_ui.c ../src/gui/loading_ui.c
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src -I../include $(shell pkg-config --cflags sdl3) $^ -o $@ $(shell pkg-config --libs sdl3)
 
 # Pointer gesture core (pure C: no SDL, no client globals)
-$(TEST_GESTURE): test_gesture.c
+$(TEST_GESTURE): test_gesture.c ../src/gui/gesture.c
 	@mkdir -p $(BIN_DIR)
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
 

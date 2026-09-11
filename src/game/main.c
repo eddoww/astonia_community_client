@@ -27,9 +27,19 @@
 #include "game/game_private.h"
 #include "game/sprite_config.h"
 #include "sdl/sdl.h"
+#include "sdl/sdl_gpu.h"
+#include "sdl/sdl_gpu_shaderfx.h"
+#include "sdl/font_manager.h"
 #include "gui/gui.h"
+#include "gui/loading_ui.h"
+#include "gui/input_bind.h"
+#include "gui/options_ui.h"
 #include "client/client.h"
+#include "lib/cjson/cJSON.h"
 #include "modder/modder.h"
+#ifdef USE_LUAJIT
+#include "scripting/lua_interface.h"
+#endif
 
 // Forward declarations
 void xlog(FILE *logfp, char *format, ...) __attribute__((format(printf, 2, 3)));
@@ -301,16 +311,23 @@ int parse_args(int argc, char *argv[])
 			continue;
 		}
 
+		// Long flags first: they must not fall through to the single-letter
+		// parser below ("-dev" would otherwise be read as -d "ev").
+		if (!strcmp(arg, "-dev") || !strcmp(arg, "--dev")) {
+			dev_mode = 1;
+			continue;
+		}
+
 		char opt = (char)tolower(arg[1]);
 		char *val = NULL;
 
 		if (arg[2] != '\0') {
 			val = &arg[2];
 		} else if (i + 1 < argc) {
-			val = argv[i + 1];
-			// We only consume the next arg if we use it.
-			// However, in the loop, we need to be careful.
-			// If we define that flags taking args MUST have them, we increment i.
+			// Every option takes a value: consume the next argv entry now so a value
+			// that happens to start with '-' (e.g. a password "-w12") is not re-parsed
+			// as an option on the next iteration.
+			val = argv[++i];
 		}
 
 		switch (opt) {

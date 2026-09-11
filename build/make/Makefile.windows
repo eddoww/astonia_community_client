@@ -302,7 +302,7 @@ OBJS	= \
 
 # Add Lua scripting objects if enabled
 ifeq ($(USE_LUAJIT),1)
-OBJS +=
+OBJS += src/scripting/lua_core.o src/scripting/lua_api.o
 endif
 
 bin/moac.exe lib/moac.a lib/moac.lib:	verify-sdl3-mixer $(OBJS) $(ASTONIA_NET_LIB)
@@ -345,8 +345,10 @@ src/game/sprite_config.o:	src/game/sprite_config.c src/game/sprite_config.h src/
 
 # Lua scripting modules (only compiled when USE_LUAJIT=1)
 ifeq ($(USE_LUAJIT),1)
+src/scripting/lua_core.o: src/scripting/lua_core.c src/astonia.h src/scripting/lua_interface.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+src/scripting/lua_api.o: src/scripting/lua_api.c src/astonia.h src/client/client.h src/game/game.h src/gui/gui.h src/scripting/lua_interface.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 endif
 

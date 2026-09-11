@@ -111,7 +111,7 @@ OBJS	= \
 
 # Add Lua scripting objects if enabled
 ifeq ($(USE_LUAJIT),1)
-OBJS +=
+OBJS += src/scripting/lua_core.o src/scripting/lua_api.o
 endif
 
 bin/moac:	verify-sdl3-mixer $(OBJS) $(ASTONIA_NET_LIB)
@@ -195,8 +195,10 @@ src/game/memory_linux.o: src/game/memory_linux.c
 
 # Lua scripting modules (only compiled when USE_LUAJIT=1)
 ifeq ($(USE_LUAJIT),1)
+src/scripting/lua_core.o: src/scripting/lua_core.c src/astonia.h src/scripting/lua_interface.h
 		$(CC) $(CFLAGS) -c -o $@ $<
 
+src/scripting/lua_api.o: src/scripting/lua_api.c src/astonia.h src/client/client.h src/game/game.h src/gui/gui.h
 		$(CC) $(CFLAGS) -c -o $@ $<
 endif
 

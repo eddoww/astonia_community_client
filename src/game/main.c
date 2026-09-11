@@ -623,9 +623,26 @@ int main(int argc, char *argv[])
 	amod_init();
 	sprite_config_init();
 	amod_sprite_config();
+#ifdef USE_LUAJIT
+	lua_scripting_init();
+	lua_scripting_set_dev_mode(dev_mode != 0);
+#endif
 #ifdef ENABLE_SHAREDMEM
 	sharedmem_init();
 #endif
+
+	/* remember the launcher-provided options before the saved config gets
+	 * a chance to override them (see game_options_record_override) */
+	game_options_note_launch();
+
+	/* an explicit -o GO_GPU bit is a launch-time request that must survive
+	 * the saved extra option (which load_options may set to off). The same
+	 * goes for the shader-effects sub-flag - without this, a saved
+	 * gpu_shader_effects:false silently swallowed an explicit -o bit, so
+	 * the sprite batch could not be turned on from the command line at
+	 * all (it did not even log that it had been asked for). */
+	int launch_gpu = (!(game_options & GO_NOTSET) && (game_options & GO_GPU)) ? 1 : 0;
+	int launch_shaderfx = (!(game_options & GO_NOTSET) && (game_options & GO_SHADERFX)) ? 1 : 0;
 
 	load_options();
 
@@ -657,12 +674,68 @@ int main(int argc, char *argv[])
 	determine_resolution();
 
 	sprintf(buf, "Astonia 3 v%d.%d.%d", (VERSION >> 16) & 255, (VERSION >> 8) & 255, (VERSION) & 255);
+	if (*client_environment_label()) {
+		/* "... [PREPROD]" - the window title names the world too */
+		sprintf(buf + strlen(buf), " [%s]", client_environment_label());
+	}
+	/* SDL_GPU renderer (experimental, opt-in, default OFF): decide BEFORE
+	 * sdl_init creates the renderer. Requested via the saved extra option or
+	 * the GO_GPU -o bit; when neither is set, no GPU code runs at all.
+	 * sdl_init falls back to SDL_Renderer when the GPU path is requested but
+	 * not usable (no device, missing shader pipelines). */
+	/* DEFAULT ON: only an explicit saved false (0) turns it off. -1 means the
+	 * key is absent, which is a fresh config and gets the default. */
+	gpu_rendering_requested = launch_gpu || saved_gpu_rendering != 0 || ((game_options & GO_GPU) != 0);
+	if (strcmp(saved_gpu_driver, "auto") != 0) {
+		/* an explicit backend choice beats the built-in Vulkan preference */
+		SDL_SetHint(SDL_HINT_GPU_DRIVER, saved_gpu_driver);
+	}
+	/* shader-effects sub-flag: only meaningful when the GPU renderer comes
+	 * up; sdl_init ignores it otherwise */
+	/* DEFAULT ON too, and still only meaningful under the GPU renderer */
+	gpu_shaderfx_requested =
+	    gpu_rendering_requested && (launch_shaderfx || saved_gpu_shaderfx != 0 || ((game_options & GO_SHADERFX) != 0));
+
 	if (!sdl_init(want_width, want_height, buf, want_monitor)) {
 		render_exit();
 		return -1;
 	}
 
+	/* TTF text (experimental): needs sdl_scale, which is fixed by sdl_init.
+	 * Re-apply the saved toggle first - sdl_init resets game_options to
+	 * GO_DEFAULTS when the launcher passed no -o. fm_init is harmless when
+	 * SDL3_ttf or the bundled fonts are missing - the option then simply
+	 * stays without effect. */
+	if (saved_ttf_text > 0) {
+		game_options |= GO_TTF;
+	} else if (saved_ttf_text == 0) {
+		game_options &= ~GO_TTF;
+	}
+	fm_init();
+	fm_set_enabled((game_options & GO_TTF) != 0);
+
+	/* re-apply the GPU renderer preference for the same GO_DEFAULTS reason -
+	 * the bit reflects the user's saved choice (shown in Options), while
+	 * use_gpu_rendering reflects what sdl_init actually managed to set up */
+	if (gpu_rendering_requested) {
+		game_options |= GO_GPU;
+	} else {
+		game_options &= ~GO_GPU;
+	}
+	if (gpu_shaderfx_requested) {
+		game_options |= GO_SHADERFX;
+	} else {
+		game_options &= ~GO_SHADERFX;
+	}
+	if (saved_gpu_fancyfx == 0) {
+		game_options |= GO_NOFANCYFX;
+	} else if (saved_gpu_fancyfx > 0) {
+		game_options &= ~GO_NOFANCYFX;
+	}
+
 	render_init();
+	loading_step(LS_SOUND);
+	loading_present();
 	init_sound();
 
 	if (game_options & GO_LARGE) {

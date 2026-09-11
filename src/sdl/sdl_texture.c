@@ -18,6 +18,9 @@
 #include "astonia.h"
 #include "sdl/sdl.h"
 #include "sdl/sdl_private.h"
+#include "sdl/font_manager.h"
+#include "sdl/sdl_gpu.h"
+#include "sdl/sdl_gpu_atlas.h"
 #ifdef DEVELOPER
 extern int sockstate; // Declare early for use in wait logging
 #endif
@@ -365,7 +368,11 @@ static int tex_entry_matches_request(int idx, const struct tex_request *r)
 		if (!(flags & SF_TEXT)) {
 			return 0;
 		}
-		if (!(sdlt[idx].tex)) {
+		/* GPU mode stores the string in gpu_tex (standalone or atlas
+		 * region) and leaves tex NULL - requiring an SDL_Texture here made
+		 * EVERY text lookup miss under the GPU renderer, so each visible
+		 * string was rasterized and uploaded again every frame. */
+		if (!(sdlt[idx].tex) && !(sdlt[idx].gpu_tex)) {
 			return 0;
 		}
 		if (!sdlt[idx].text || strcmp(sdlt[idx].text, r->text) != 0) {
@@ -485,31 +492,67 @@ static void texcache_promote_to_hash_head(int cache_index, int hash)
 // Returns the cache_index on success, or STX_NONE if text creation failed
 static int tex_entry_build_text(int cache_index, const struct tex_request *r, int hash)
 {
-	float w, h;
 	int ntx;
 
-	sdlt[cache_index].tex =
-	    sdl_maketext(r->text, (struct renderfont *)r->text_font, (uint32_t)r->text_color, r->text_flags);
 	sdlt[cache_index].text_color = (uint32_t)r->text_color;
 	sdlt[cache_index].text_flags = (uint16_t)r->text_flags;
 	sdlt[cache_index].text_font = r->text_font;
+	sdlt[cache_index].text_font_gen = r->text_font_gen;
 #ifdef SDL_FAST_MALLOC
 	sdlt[cache_index].text = STRDUP(r->text);
 #else
 	sdlt[cache_index].text = xstrdup(r->text, MEM_TEMP7);
 #endif
-	if (sdlt[cache_index].tex) {
-		SDL_GetTextureSize(sdlt[cache_index].tex, &w, &h);
-		sdlt[cache_index].xres = (uint16_t)w;
-		sdlt[cache_index].yres = (uint16_t)h;
-		// Set flags ONLY if tex creation succeeded
-		uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
-		__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE | SF_DIDTEX, __ATOMIC_RELEASE);
+
+	// GPU path: create GPU texture for text (atlas region when the
+	// shader-effects batcher is active - drawn as one batched quad)
+	if (use_gpu_rendering) {
+		int tex_w, tex_h;
+		int atlas_x = 0, atlas_y = 0;
+		uint8_t atlas_used = 0;
+		sdlt[cache_index].gpu_tex = sdl_maketext_gpu(r->text, (struct renderfont *)r->text_font,
+		    (uint32_t)r->text_color, r->text_flags, &tex_w, &tex_h, &atlas_x, &atlas_y, &atlas_used);
+		sdlt[cache_index].tex = NULL;
+		sdlt[cache_index].atlas_x = (uint16_t)atlas_x;
+		sdlt[cache_index].atlas_y = (uint16_t)atlas_y;
+		sdlt[cache_index].atlas_used = atlas_used;
+
+		if (sdlt[cache_index].gpu_tex) {
+			sdlt[cache_index].xres = (uint16_t)tex_w;
+			sdlt[cache_index].yres = (uint16_t)tex_h;
+			uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
+			__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE | SF_DIDGPUTEX, __ATOMIC_RELEASE);
+			/* keep mem_tex symmetric with eviction, which subtracts
+			 * xres*yres*4 for every SF_DIDGPUTEX/SF_DIDTEX entry - text
+			 * entries used to skip this add, driving mem_tex negative */
+			__atomic_add_fetch(
+			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+		} else {
+			sdlt[cache_index].xres = sdlt[cache_index].yres = 0;
+			uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
+			__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE, __ATOMIC_RELEASE);
+		}
 	} else {
-		sdlt[cache_index].xres = sdlt[cache_index].yres = 0;
-		// Text creation failed - don't set SF_DIDTEX
-		uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
-		__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE, __ATOMIC_RELEASE);
+		// CPU path: create SDL texture for text
+		float w, h;
+		sdlt[cache_index].tex =
+		    sdl_maketext(r->text, (struct renderfont *)r->text_font, (uint32_t)r->text_color, r->text_flags);
+		sdlt[cache_index].gpu_tex = NULL;
+
+		if (sdlt[cache_index].tex) {
+			SDL_GetTextureSize(sdlt[cache_index].tex, &w, &h);
+			sdlt[cache_index].xres = (uint16_t)w;
+			sdlt[cache_index].yres = (uint16_t)h;
+			uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
+			__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE | SF_DIDTEX, __ATOMIC_RELEASE);
+			/* keep mem_tex symmetric with eviction (see GPU branch above) */
+			__atomic_add_fetch(
+			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+		} else {
+			sdlt[cache_index].xres = sdlt[cache_index].yres = 0;
+			uint16_t *flags_ptr = (uint16_t *)&sdlt[cache_index].flags;
+			__atomic_store_n(flags_ptr, SF_USED | SF_TEXT | SF_DIDALLOC | SF_DIDMAKE, __ATOMIC_RELEASE);
+		}
 	}
 
 	// Link into hash chain
@@ -663,12 +706,28 @@ static int texcache_acquire_slot(void)
 		}
 
 		flags = flags_load(&sdlt[cache_index]);
-		if (flags & SF_DIDTEX) {
+		if (flags & SF_DIDGPUTEX) {
+			// GPU texture destruction
+			__atomic_sub_fetch(
+			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
+			if (sdlt[cache_index].gpu_tex) {
+				/* atlas entries reference a SHARED page texture - never
+				 * destroy it, return the region to the page instead */
+				if (sdlt[cache_index].atlas_used) {
+					gpu_atlas_release(sdlt[cache_index].gpu_tex, sdlt[cache_index].atlas_x, sdlt[cache_index].atlas_y);
+				} else {
+					gpu_texture_destroy(sdlt[cache_index].gpu_tex);
+				}
+				sdlt[cache_index].gpu_tex = NULL;
+			}
+			sdlt[cache_index].atlas_used = 0;
+		} else if (flags & SF_DIDTEX) {
+			// SDL texture destruction
 			__atomic_sub_fetch(
 			    &mem_tex, sdlt[cache_index].xres * sdlt[cache_index].yres * sizeof(uint32_t), __ATOMIC_RELAXED);
 			if (sdlt[cache_index].tex) {
 				SDL_DestroyTexture(sdlt[cache_index].tex);
-				sdlt[cache_index].tex = NULL; // Clear pointer after destroying
+				sdlt[cache_index].tex = NULL;
 			}
 		} else if (flags & SF_DIDALLOC) {
 			if (sdlt[cache_index].pixel) {

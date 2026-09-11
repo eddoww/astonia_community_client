@@ -42,6 +42,7 @@ pub fn build(b: *std.Build) void {
         "src/gui/gui_core.c",
         "src/gui/gui_input.c",
         "src/gui/gesture.c",
+        "src/gui/equip_bonus.c",
         "src/gui/gui_display.c",
         "src/gui/gui_inventory.c",
         "src/gui/gui_buttons.c",

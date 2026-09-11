@@ -117,7 +117,7 @@ $(TEST_GESTURE): test_gesture.c ../src/gui/gesture.c
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
 
 # Worn-equipment bonus table (pure C: no SDL, no client globals)
-$(TEST_EQUIP): test_equip_bonus.c
+$(TEST_EQUIP): test_equip_bonus.c ../src/gui/equip_bonus.c
 	@mkdir -p $(BIN_DIR)
 	$(CC) -O2 -g -Wall -Wextra -Wpedantic -Wno-unused-parameter -DUNIT_TEST -I../src $^ -o $@
 

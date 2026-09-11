@@ -629,9 +629,9 @@ int help_link_page_at(int x, int y);
 // int stom(int s, int o, int a, int *xm, int *ym);
 
 void dx_copysprite_emerald(int scrx, int scry, int emx, int emy);
-void display_cmd(void);
 
 void display_wear(void);
+void display_wear_bonus_hover(int mx, int my); /* row tooltip, from hover.c */
 void display_look(void);
 void display_citem(void);
 void display_gold(void);

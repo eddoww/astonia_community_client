@@ -480,10 +480,11 @@ int sdl_init(int width, int height, char *title, int monitor)
 	}
 	if (sdl_scale >= 2) {
 		note("sprite packs: gx1.ugx %s (%u sprites), gx%d.ugx %s (%u sprites)",
-		     sdl_pack_is_open(&sdl_pack1) ? "open" : "absent", sdl_pack1.count, sdl_scale,
-		     sdl_pack_is_open(&sdl_pack2) ? "open" : "absent", sdl_pack2.count);
+		    sdl_pack_is_open(&sdl_pack1) ? "open" : "absent", sdl_pack1.count, sdl_scale,
+		    sdl_pack_is_open(&sdl_pack2) ? "open" : "absent", sdl_pack2.count);
 	} else {
-		note("sprite packs: gx1.ugx %s (%u sprites)", sdl_pack_is_open(&sdl_pack1) ? "open" : "absent", sdl_pack1.count);
+		note(
+		    "sprite packs: gx1.ugx %s (%u sprites)", sdl_pack_is_open(&sdl_pack1) ? "open" : "absent", sdl_pack1.count);
 	}
 
 	sdl_zip1 = zip_open("res/gx1.zip", ZIP_RDONLY, NULL);

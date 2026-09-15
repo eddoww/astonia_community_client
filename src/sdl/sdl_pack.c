@@ -41,7 +41,7 @@
 #include "sdl/sdl_private.h"
 
 #define UGX_HEADER 64
-#define UGX_ENTRY 24
+#define UGX_ENTRY  24
 
 static uint32_t rd32(const unsigned char *p)
 {

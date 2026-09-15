@@ -738,7 +738,8 @@ int sdl_load_image(struct sdl_image *si, int sprite, struct zip_handles *zips)
 		if (zip2p && sdl_load_image_png_(si, filename, zip2p) == 0) {
 			return 0; // check patch archive second
 		}
-		if (sdl_pack_find(&sdl_pack2, (unsigned int)sprite, &data, &len) == 0 && sdl_load_image_mem_(si, data, len) == 0) {
+		if (sdl_pack_find(&sdl_pack2, (unsigned int)sprite, &data, &len) == 0 &&
+		    sdl_load_image_mem_(si, data, len) == 0) {
 			return 0; // sprite pack third
 		}
 		if (zip2 && sdl_load_image_png_(si, filename, zip2) == 0) {
@@ -789,7 +790,8 @@ int sdl_load_image(struct sdl_image *si, int sprite, struct zip_handles *zips)
 		const unsigned char *data;
 		uint32_t len;
 
-		if (sdl_pack_find(&sdl_pack1, 2, &data, &len) == 0 && sdl_load_image_mem(si, data, len, do_smoothify(sprite)) == 0) {
+		if (sdl_pack_find(&sdl_pack1, 2, &data, &len) == 0 &&
+		    sdl_load_image_mem(si, data, len, do_smoothify(sprite)) == 0) {
 			return 0;
 		}
 	}

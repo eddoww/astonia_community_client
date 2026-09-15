@@ -94,9 +94,11 @@ int sdl_init_for_tests(void)
 	sdl_zip2 = zip_open("res/gx2.zip", ZIP_RDONLY, NULL);
 	sdl_zip2p = zip_open("res/gx2_patch.zip", ZIP_RDONLY, NULL);
 	sdl_zip2m = zip_open("res/gx2_mod.zip", ZIP_RDONLY, NULL);
+	sdl_pack_open(&sdl_pack1, "res/gx1.ugx");
+	sdl_pack_open(&sdl_pack2, "res/gx2.ugx");
 
-	if (!sdl_zip1) {
-		fprintf(stderr, "sdl_init_for_tests: Failed to open res/gx1.zip\n");
+	if (!sdl_zip1 && !sdl_pack_is_open(&sdl_pack1)) {
+		fprintf(stderr, "sdl_init_for_tests: Failed to open res/gx1.zip or res/gx1.ugx\n");
 		fprintf(stderr, "Make sure to run tests from repository root!\n");
 		return 0;
 	}

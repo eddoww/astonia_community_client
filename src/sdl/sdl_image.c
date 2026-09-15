@@ -192,6 +192,8 @@ void sdl_smoothify(uint32_t *pixel, int xres, int yres, int scale __attribute__(
 struct png_helper {
 	char *filename;
 	zip_t *zip;
+	const unsigned char *mem; // in-memory PNG (sprite pack entry) when set
+	size_t mem_len;
 	unsigned char **row;
 	int xres;
 	int yres;
@@ -206,13 +208,40 @@ void png_helper_read(png_structp ps, png_bytep buf, png_size_t len)
 	zip_fread(png_get_io_ptr(ps), buf, len);
 }
 
+struct png_mem_cursor {
+	const unsigned char *p;
+	size_t len;
+	size_t pos;
+};
+
+static void png_helper_read_mem(png_structp ps, png_bytep buf, png_size_t len)
+{
+	struct png_mem_cursor *c = png_get_io_ptr(ps);
+	size_t avail = c->len - c->pos;
+
+	if (len > avail) {
+		// A truncated entry: hand libpng zeros and let it fail on the chunk CRC
+		memcpy(buf, c->p + c->pos, avail);
+		memset(buf + avail, 0, len - avail);
+		c->pos = c->len;
+		return;
+	}
+	memcpy(buf, c->p + c->pos, len);
+	c->pos += len;
+}
+
 int png_load_helper(struct png_helper *p)
 {
 	FILE *fp = NULL;
 	zip_file_t *zp = NULL;
+	struct png_mem_cursor cur = {p->mem, p->mem_len, 0};
 	int tmp;
 
-	if (p->zip) {
+	if (p->mem) {
+		if (p->mem_len < 8 || memcmp(p->mem, "\x89PNG\r\n\x1a\n", 8) != 0) {
+			return -1;
+		}
+	} else if (p->zip) {
 		zp = zip_fopen(p->zip, p->filename, 0);
 		if (!zp) {
 			return -1;
@@ -249,7 +278,9 @@ int png_load_helper(struct png_helper *p)
 		return -1;
 	}
 
-	if (p->zip) {
+	if (p->mem) {
+		png_set_read_fn(p->png_ptr, &cur, png_helper_read_mem);
+	} else if (p->zip) {
 		png_set_read_fn(p->png_ptr, zp, png_helper_read);
 	} else {
 		png_init_io(p->png_ptr, fp);
@@ -314,9 +345,10 @@ int png_load_helper(struct png_helper *p)
 		return -1;
 	}
 
-	if (p->zip) {
+	if (zp) {
 		zip_fclose(zp);
-	} else {
+	}
+	if (fp) {
 		fclose(fp);
 	}
 
@@ -329,17 +361,11 @@ void png_load_helper_exit(struct png_helper *p)
 }
 
 // Load high res PNG
-int sdl_load_image_png_(struct sdl_image *si, char *filename, zip_t *zip)
+static int sdl_load_image_png_body_(struct sdl_image *si, const struct png_helper *loaded)
 {
 	int x, y, r, g, b, a, sx, sy, ex, ey;
 	uint32_t c;
-	struct png_helper p;
-
-	p.zip = zip;
-	p.filename = filename;
-	if (png_load_helper(&p)) {
-		return -1;
-	}
+	struct png_helper p = *loaded; // already decoded by png_load_helper()
 
 	// prescan
 	sx = p.xres;
@@ -450,20 +476,40 @@ int sdl_load_image_png_(struct sdl_image *si, char *filename, zip_t *zip)
 	return 0;
 }
 
-// Load and up-scale low res PNG
-// TODO: add support for using a 2X image as a base for 4X
-// and possibly the other way around too
-int sdl_load_image_png(struct sdl_image *si, char *filename, zip_t *zip, int smoothify)
+int sdl_load_image_png_(struct sdl_image *si, char *filename, zip_t *zip)
 {
-	int x, y, r, g, b, a, sx, sy, ex, ey;
-	uint32_t c;
-	struct png_helper p;
+	struct png_helper p = {0};
 
 	p.zip = zip;
 	p.filename = filename;
 	if (png_load_helper(&p)) {
 		return -1;
 	}
+	return sdl_load_image_png_body_(si, &p);
+}
+
+// Same, from an in-memory PNG (a sprite pack entry)
+int sdl_load_image_mem_(struct sdl_image *si, const unsigned char *data, size_t len)
+{
+	struct png_helper p = {0};
+
+	p.filename = (char *)"<pack>";
+	p.mem = data;
+	p.mem_len = len;
+	if (png_load_helper(&p)) {
+		return -1;
+	}
+	return sdl_load_image_png_body_(si, &p);
+}
+
+// Load and up-scale low res PNG
+// TODO: add support for using a 2X image as a base for 4X
+// and possibly the other way around too
+static int sdl_load_image_png_body(struct sdl_image *si, const struct png_helper *loaded, int smoothify)
+{
+	int x, y, r, g, b, a, sx, sy, ex, ey;
+	uint32_t c;
+	struct png_helper p = *loaded; // already decoded by png_load_helper()
 
 	// prescan
 	sx = p.xres;
@@ -607,6 +653,32 @@ int sdl_load_image_png(struct sdl_image *si, char *filename, zip_t *zip, int smo
 	return 0;
 }
 
+int sdl_load_image_png(struct sdl_image *si, char *filename, zip_t *zip, int smoothify)
+{
+	struct png_helper p = {0};
+
+	p.zip = zip;
+	p.filename = filename;
+	if (png_load_helper(&p)) {
+		return -1;
+	}
+	return sdl_load_image_png_body(si, &p, smoothify);
+}
+
+// Same, from an in-memory PNG (a sprite pack entry)
+int sdl_load_image_mem(struct sdl_image *si, const unsigned char *data, size_t len, int smoothify)
+{
+	struct png_helper p = {0};
+
+	p.filename = (char *)"<pack>";
+	p.mem = data;
+	p.mem_len = len;
+	if (png_load_helper(&p)) {
+		return -1;
+	}
+	return sdl_load_image_png_body(si, &p, smoothify);
+}
+
 int do_smoothify(int sprite)
 {
 	if (sprite <= 0) {
@@ -654,8 +726,11 @@ int sdl_load_image(struct sdl_image *si, int sprite, struct zip_handles *zips)
 	if (sdl_load_image_png_(si,filename,NULL)==0) return 0;
 #endif
 
-	// get high res from archive
-	if (zip2 || zip2p || zip2m) {
+	// get high res: mod overlay, patch overlay, sprite pack, base archive
+	if (zip2 || zip2p || zip2m || sdl_pack_is_open(&sdl_pack2)) {
+		const unsigned char *data;
+		uint32_t len;
+
 		sprintf(filename, "%08d.png", sprite);
 		if (zip2m && sdl_load_image_png_(si, filename, zip2m) == 0) {
 			return 0; // check mod archive first
@@ -663,8 +738,11 @@ int sdl_load_image(struct sdl_image *si, int sprite, struct zip_handles *zips)
 		if (zip2p && sdl_load_image_png_(si, filename, zip2p) == 0) {
 			return 0; // check patch archive second
 		}
+		if (sdl_pack_find(&sdl_pack2, (unsigned int)sprite, &data, &len) == 0 && sdl_load_image_mem_(si, data, len) == 0) {
+			return 0; // sprite pack third
+		}
 		if (zip2 && sdl_load_image_png_(si, filename, zip2) == 0) {
-			return 0; // check base archive third
+			return 0; // check base archive last
 		}
 	}
 
@@ -674,13 +752,20 @@ int sdl_load_image(struct sdl_image *si, int sprite, struct zip_handles *zips)
 	if (sdl_load_image_png_(si,filename,NULL)==0) return 0;
 #endif
 
-	// get standard from archive
-	if (zip1 || zip1p || zip1m) {
+	// get standard (1x, upscaled): mod overlay, patch overlay, sprite pack, base archive
+	if (zip1 || zip1p || zip1m || sdl_pack_is_open(&sdl_pack1)) {
+		const unsigned char *data;
+		uint32_t len;
+
 		sprintf(filename, "%08d.png", sprite);
 		if (zip1m && sdl_load_image_png(si, filename, zip1m, do_smoothify(sprite)) == 0) {
 			return 0;
 		}
 		if (zip1p && sdl_load_image_png(si, filename, zip1p, do_smoothify(sprite)) == 0) {
+			return 0;
+		}
+		if (sdl_pack_find(&sdl_pack1, (unsigned int)sprite, &data, &len) == 0 &&
+		    sdl_load_image_mem(si, data, len, do_smoothify(sprite)) == 0) {
 			return 0;
 		}
 		if (zip1 && sdl_load_image_png(si, filename, zip1, do_smoothify(sprite)) == 0) {
@@ -700,12 +785,20 @@ int sdl_load_image(struct sdl_image *si, int sprite, struct zip_handles *zips)
 	warn("%s not found", filename);
 
 	// get unknown sprite image
+	{
+		const unsigned char *data;
+		uint32_t len;
+
+		if (sdl_pack_find(&sdl_pack1, 2, &data, &len) == 0 && sdl_load_image_mem(si, data, len, do_smoothify(sprite)) == 0) {
+			return 0;
+		}
+	}
 	sprintf(filename, "%08d.png", 2);
 	if (zip1 && sdl_load_image_png(si, filename, zip1, do_smoothify(sprite)) == 0) {
 		return 0;
 	}
 
-	char *txt = "The client could not locate the graphics file gx1.zip. "
+	char *txt = "The client could not locate the graphics file gx1.ugx or gx1.zip. "
 	            "Please make sure you start the client from the main folder, "
 	            "not from within the bin-folder.\n\n"
 	            "You can create a shortcut with the working directory set to the main folder.";

@@ -33,6 +33,7 @@ SDL_SRCS = ../src/sdl/sdl_test.c \
            ../src/sdl/sdl_core.c \
            ../src/sdl/sdl_texture.c \
            ../src/sdl/sdl_image.c \
+           ../src/sdl/sdl_pack.c \
            ../src/sdl/sdl_effects.c \
            ../src/sdl/sdl_draw.c \
            ../src/sdl/sdl_text_glyph.c \
@@ -80,8 +81,9 @@ TEST_TEXT = $(BIN_DIR)/test_text_compare
 TEST_GESTURE = $(BIN_DIR)/test_gesture
 TEST_EQUIP = $(BIN_DIR)/test_equip_bonus
 TEST_MOD_REGISTRY = $(BIN_DIR)/test_mod_registry
+TEST_SPRITE_PACK = $(BIN_DIR)/test_sprite_pack
 
-all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT) $(TEST_GESTURE) $(TEST_EQUIP) $(TEST_MOD_REGISTRY)
+all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT) $(TEST_GESTURE) $(TEST_EQUIP) $(TEST_MOD_REGISTRY) $(TEST_SPRITE_PACK)
 test: run
 
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
@@ -188,6 +190,18 @@ test_render_prims: $(TEST_RENDER_PRIMS)
 	@echo "==============================================="
 	cd .. && ./bin/test_render_primitives
 
+# Sprite pack (.ugx) reader: pure file/mmap code, no SDL init
+$(TEST_SPRITE_PACK): test_sprite_pack.c ../src/sdl/sdl_pack.c test_stubs.c
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) $^ -o $@ -lz
+
+test_sprite_pack: $(TEST_SPRITE_PACK)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running sprite pack tests..."
+	@echo "==============================================="
+	cd .. && ./bin/test_sprite_pack
+
 # Run sprite config tests
 test_sprite_config: $(TEST_SPRITE_CONFIG)
 	@echo ""
@@ -222,13 +236,13 @@ test_text: $(TEST_TEXT)
 	cd .. && ./bin/test_text_compare
 
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry test_shaderfx test_text
+run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_pack test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry test_shaderfx test_text
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"
 	@echo "==============================================="
 
 clean:
-	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_GESTURE) $(TEST_EQUIP) $(TEST_MOD_REGISTRY) *.o
+	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_GESTURE) $(TEST_EQUIP) $(TEST_MOD_REGISTRY) $(TEST_SPRITE_PACK) *.o
 
-.PHONY: all clean run test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry
+.PHONY: all clean run test_sprite_pack test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry

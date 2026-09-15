@@ -92,6 +92,7 @@ pub fn build(b: *std.Build) void {
         "src/sdl/sdl_core.c",
         "src/sdl/sdl_texture.c",
         "src/sdl/sdl_image.c",
+        "src/sdl/sdl_pack.c",
         "src/sdl/sdl_effects.c",
         "src/sdl/sdl_draw.c",
         // builds as inert stubs unless -DHAVE_SDL3_TTF and SDL3_ttf are added

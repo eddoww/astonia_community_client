@@ -47,6 +47,9 @@ zip_t *sdl_zip1p = NULL;
 zip_t *sdl_zip2p = NULL;
 zip_t *sdl_zip1m = NULL;
 zip_t *sdl_zip2m = NULL;
+// Indexed sprite packs (ADR-0038); zero = not open, zips are the fallback
+struct sdl_pack sdl_pack1;
+struct sdl_pack sdl_pack2;
 
 // Prefetch threading (shared with sdl_texture.c)
 SDL_Semaphore *prework = NULL;
@@ -466,6 +469,24 @@ int sdl_init(int width, int height, char *title, int monitor)
 
 	sdl_create_cursors();
 
+	// Sprite packs first: one memory-mapped file per tier, shared by every
+	// worker. A gx<N>_mod.zip / gx<N>_patch.zip next to them is still honoured
+	// as an overlay; gx<N>.zip is the fallback when the pack is absent.
+	sdl_pack_open(&sdl_pack1, "res/gx1.ugx");
+	if (sdl_scale >= 2 && sdl_scale <= 4) {
+		char packname[64];
+		snprintf(packname, sizeof(packname), "res/gx%d.ugx", sdl_scale);
+		sdl_pack_open(&sdl_pack2, packname);
+	}
+	if (sdl_scale >= 2) {
+		note("sprite packs: gx1.ugx %s (%u sprites), gx%d.ugx %s (%u sprites)",
+		    sdl_pack_is_open(&sdl_pack1) ? "open" : "absent", sdl_pack1.count, sdl_scale,
+		    sdl_pack_is_open(&sdl_pack2) ? "open" : "absent", sdl_pack2.count);
+	} else {
+		note(
+		    "sprite packs: gx1.ugx %s (%u sprites)", sdl_pack_is_open(&sdl_pack1) ? "open" : "absent", sdl_pack1.count);
+	}
+
 	sdl_zip1 = zip_open("res/gx1.zip", ZIP_RDONLY, NULL);
 	sdl_zip1p = zip_open("res/gx1_patch.zip", ZIP_RDONLY, NULL);
 	sdl_zip1m = zip_open("res/gx1_mod.zip", ZIP_RDONLY, NULL);
@@ -566,7 +587,7 @@ int sdl_init(int width, int height, char *title, int monitor)
 					break;
 				}
 
-				if (!worker_zips[n].zip1) {
+				if (!worker_zips[n].zip1 && !sdl_pack_is_open(&sdl_pack1)) {
 					warn("Worker %d: Failed to open res/gx1.zip - aborting initialization", n);
 					// Clean up already opened zips
 					for (int i = 0; i < n; i++) {
@@ -814,6 +835,8 @@ void sdl_exit(void)
 	if (sdl_zip2p) {
 		zip_close(sdl_zip2p);
 	}
+	sdl_pack_close(&sdl_pack1);
+	sdl_pack_close(&sdl_pack2);
 
 	if (prework) {
 		SDL_DestroySemaphore(prework);

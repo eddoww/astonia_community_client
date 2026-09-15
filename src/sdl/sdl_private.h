@@ -174,6 +174,23 @@ struct zip_handles {
 	zip_t *zip2m;
 };
 
+// Indexed sprite pack (.ugx): memory-mapped, read-only, shared by all threads
+// (ADR-0038, Ugaris_HQ docs/architecture/sprite-pack-format.md). One per tier.
+struct sdl_pack {
+	const unsigned char *base; // whole file, NULL when not open
+	size_t size;
+	const unsigned char *index; // count x 24-byte entries, id ascending
+	uint32_t count;
+	uint32_t tier;
+	void *map_handle; // win32 only
+	void *file_handle; // win32 only
+};
+
+int sdl_pack_open(struct sdl_pack *pk, const char *path); // 0 = open, -1 = missing or invalid
+int sdl_pack_is_open(const struct sdl_pack *pk);
+int sdl_pack_find(const struct sdl_pack *pk, unsigned int id, const unsigned char **data, uint32_t *len);
+void sdl_pack_close(struct sdl_pack *pk);
+
 int sdl_ic_load(unsigned int sprite, struct zip_handles *zips);
 int sdl_pre_backgnd(void *ptr);
 int sdl_create_cursors(void);
@@ -211,6 +228,8 @@ extern zip_t *sdl_zip1p;
 extern zip_t *sdl_zip2p;
 extern zip_t *sdl_zip1m;
 extern zip_t *sdl_zip2m;
+extern struct sdl_pack sdl_pack1; // res/gx1.ugx
+extern struct sdl_pack sdl_pack2; // res/gx<sdl_scale>.ugx
 extern SDL_Mutex *premutex;
 extern int *sdli_state; // Image loading state machine
 extern texture_job_queue_t g_tex_jobs; // Texture job queue
@@ -266,6 +285,8 @@ void sdl_smoothify(uint32_t *pixel, int xres, int yres, int scale);
 void png_helper_read(png_structp ps, png_bytep buf, png_size_t len);
 int sdl_load_image_png_(struct sdl_image *si, char *filename, zip_t *zip);
 int sdl_load_image_png(struct sdl_image *si, char *filename, zip_t *zip, int smoothify);
+int sdl_load_image_mem_(struct sdl_image *si, const unsigned char *data, size_t len);
+int sdl_load_image_mem(struct sdl_image *si, const unsigned char *data, size_t len, int smoothify);
 int do_smoothify(int sprite);
 int sdl_load_image(struct sdl_image *si, int sprite, struct zip_handles *zips);
 int sdl_ic_load(unsigned int sprite, struct zip_handles *zips);

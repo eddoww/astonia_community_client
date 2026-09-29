@@ -189,10 +189,14 @@ def extract_static_values(variant, body):
     if cb_match:
         variant["cb"] = int(cb_match.group(1))
 
-    # light = X
-    light_match = re.search(r'light\s*=\s*(-?\d+)', body)
+    # light = X. An `N*edi` term is the map editor's highlight: edi is 1 only in the editor, 0 in game
+    # (`if (editor) edi=1;`), so it counts nothing - `light=60*edi` is no light, `light=10-40*edi` is 10
+    light_match = re.search(r'light\s*=\s*([^;]+)', body)
     if light_match:
-        variant["light"] = int(light_match.group(1))
+        game_expr = re.sub(r'[+-]?\d+\*edi', '', re.sub(r'\s+', '', light_match.group(1)))
+        game_light = re.match(r'-?\d+', game_expr)
+        if game_light:
+            variant["light"] = int(game_light.group(0))
 
     # sat = X
     sat_match = re.search(r'sat\s*=\s*(-?\d+)', body)

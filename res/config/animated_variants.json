@@ -4922,138 +4922,111 @@
     },
     {
       "id": 59405,
-      "base_sprite": 20815,
-      "light": 60
+      "base_sprite": 20815
     },
     {
       "id": 59406,
-      "base_sprite": 20816,
-      "light": 60
+      "base_sprite": 20816
     },
     {
       "id": 59407,
-      "base_sprite": 20817,
-      "light": 60
+      "base_sprite": 20817
     },
     {
       "id": 59408,
-      "base_sprite": 20818,
-      "light": 60
+      "base_sprite": 20818
     },
     {
       "id": 59409,
-      "base_sprite": 20819,
-      "light": 60
+      "base_sprite": 20819
     },
     {
       "id": 59410,
-      "base_sprite": 20820,
-      "light": 60
+      "base_sprite": 20820
     },
     {
       "id": 59411,
-      "base_sprite": 20821,
-      "light": 60
+      "base_sprite": 20821
     },
     {
       "id": 59412,
-      "base_sprite": 20822,
-      "light": 60
+      "base_sprite": 20822
     },
     {
       "id": 59413,
-      "base_sprite": 20823,
-      "light": 60
+      "base_sprite": 20823
     },
     {
       "id": 59414,
-      "base_sprite": 20815,
-      "light": 40
+      "base_sprite": 20815
     },
     {
       "id": 59415,
-      "base_sprite": 20816,
-      "light": 40
+      "base_sprite": 20816
     },
     {
       "id": 59416,
-      "base_sprite": 20817,
-      "light": 40
+      "base_sprite": 20817
     },
     {
       "id": 59417,
-      "base_sprite": 20818,
-      "light": 40
+      "base_sprite": 20818
     },
     {
       "id": 59418,
-      "base_sprite": 20819,
-      "light": 40
+      "base_sprite": 20819
     },
     {
       "id": 59419,
-      "base_sprite": 20820,
-      "light": 40
+      "base_sprite": 20820
     },
     {
       "id": 59420,
-      "base_sprite": 20821,
-      "light": 40
+      "base_sprite": 20821
     },
     {
       "id": 59421,
-      "base_sprite": 20822,
-      "light": 40
+      "base_sprite": 20822
     },
     {
       "id": 59422,
-      "base_sprite": 20823,
-      "light": 40
+      "base_sprite": 20823
     },
     {
       "id": 59423,
-      "base_sprite": 20815,
-      "light": 20
+      "base_sprite": 20815
     },
     {
       "id": 59424,
-      "base_sprite": 20816,
-      "light": 20
+      "base_sprite": 20816
     },
     {
       "id": 59425,
-      "base_sprite": 20817,
-      "light": 20
+      "base_sprite": 20817
     },
     {
       "id": 59426,
-      "base_sprite": 20818,
-      "light": 20
+      "base_sprite": 20818
     },
     {
       "id": 59427,
-      "base_sprite": 20819,
-      "light": 20
+      "base_sprite": 20819
     },
     {
       "id": 59428,
-      "base_sprite": 20820,
-      "light": 20
+      "base_sprite": 20820
     },
     {
       "id": 59429,
-      "base_sprite": 20821,
-      "light": 20
+      "base_sprite": 20821
     },
     {
       "id": 59430,
-      "base_sprite": 20822,
-      "light": 20
+      "base_sprite": 20822
     },
     {
       "id": 59431,
-      "base_sprite": 20823,
-      "light": 20
+      "base_sprite": 20823
     },
     {
       "id": 59432,

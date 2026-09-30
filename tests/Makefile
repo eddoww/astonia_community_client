@@ -99,6 +99,12 @@ endif
 test_gateway_barrier: ../bin/test_gateway_barrier
 	$<
 
+# The isolated transport harness relies on Unix dead-code stripping. Windows
+# exports the complete client object, so keep it out of the normal Windows suite.
+ifneq ($(PLATFORM),windows)
+GATEWAY_TEST_RUN = test_gateway_barrier
+endif
+
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
 	@mkdir -p $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
@@ -249,7 +255,7 @@ test_text: $(TEST_TEXT)
 	cd .. && ./bin/test_text_compare
 
 # Run all tests in sequence
-run: test_gateway_barrier test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_pack test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry test_shaderfx test_text
+run: $(GATEWAY_TEST_RUN) test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_pack test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry test_shaderfx test_text
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"

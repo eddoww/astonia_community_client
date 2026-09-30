@@ -86,6 +86,19 @@ TEST_SPRITE_PACK = $(BIN_DIR)/test_sprite_pack
 all: $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_SHADERFX) $(TEST_TEXT) $(TEST_GESTURE) $(TEST_EQUIP) $(TEST_MOD_REGISTRY) $(TEST_SPRITE_PACK)
 test: run
 
+ifeq ($(PLATFORM),macos)
+GATEWAY_TEST_GC = -Wl,-dead_strip
+else
+GATEWAY_TEST_GC = -Wl,--gc-sections
+endif
+
+../bin/test_gateway_barrier: test_gateway_barrier.c ../src/client/client.c
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections $< $(GATEWAY_TEST_GC) -o $@
+
+test_gateway_barrier: ../bin/test_gateway_barrier
+	$<
+
 $(TEST_SERIALIZED): test_texture_cache.c $(ALL_SRCS)
 	@mkdir -p $(BIN_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
@@ -236,7 +249,7 @@ test_text: $(TEST_TEXT)
 	cd .. && ./bin/test_text_compare
 
 # Run all tests in sequence
-run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_pack test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry test_shaderfx test_text
+run: test_gateway_barrier test_serialized test_concurrent test_hash_diag test_render_prims test_sprite_pack test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry test_shaderfx test_text
 	@echo ""
 	@echo "==============================================="
 	@echo "All tests passed!"
@@ -245,4 +258,4 @@ run: test_serialized test_concurrent test_hash_diag test_render_prims test_sprit
 clean:
 	rm -f $(TEST_SERIALIZED) $(TEST_CONCURRENT) $(TEST_HASH_DIAG) $(TEST_RENDER_PRIMS) $(TEST_SPRITE_CONFIG) $(TEST_LOADING_UI) $(TEST_GESTURE) $(TEST_EQUIP) $(TEST_MOD_REGISTRY) $(TEST_SPRITE_PACK) *.o
 
-.PHONY: all clean run test_sprite_pack test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry
+.PHONY: all clean run test_gateway_barrier test_sprite_pack test_serialized test_concurrent test_render_prims test_sprite_config test_loading_ui test_gesture test_equip_bonus test_mod_registry

@@ -936,6 +936,7 @@ static void sv_server(unsigned char *buf)
 
 static void sv_logindone(void)
 {
+	client_gateway_resume();
 	login_done = 1;
 	load_character_options();
 	bzero_client(1);
@@ -948,6 +949,10 @@ static void sv_special(unsigned char *buf)
 	type = load_u32(buf + 1);
 	opt1 = load_u32(buf + 5);
 	opt2 = load_u32(buf + 9);
+	if (gateway_enabled && type == 0x31574755) {
+		client_gateway_barrier(opt1, opt2);
+		return;
+	}
 
 	switch (type) {
 	case 0:

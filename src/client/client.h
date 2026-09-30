@@ -617,6 +617,9 @@ int is_char_ceffect(int type);
 
 extern int change_area;
 extern int login_done;
+extern int gateway_enabled;
+void client_gateway_barrier(uint32_t nonce1, uint32_t nonce2);
+void client_gateway_resume(void);
 extern unsigned int unique;
 extern unsigned int usum;
 

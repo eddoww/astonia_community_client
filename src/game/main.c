@@ -289,6 +289,7 @@ void display_usage(void)
 	    "The Astonia Client can only be started from the command line or with a specially created shortcut.\n\n"
 	    "Usage: moac -u playername -p password -d url\n ... [-w width] [-h height]\n"
 	    " ... [-m threads] [-o options]\n ... [-k framespersecond]\n\n"
+	    "--gateway enables seamless area transitions when connecting to a gateway endpoint.\n\n"
 	    "url being, for example, \"server.astonia.com\" or \"192.168.77.132\" (without the quotes).\n\n"
 	    "width and height are the desired window size. If this matches the desktop size the client "
 	    "will start in windowed borderless pseudo-fullscreen mode.\n\n"
@@ -397,6 +398,10 @@ int parse_args(int argc, char *argv[])
 
 		// Long flags first: they must not fall through to the single-letter
 		// parser below ("-dev" would otherwise be read as -d "ev").
+		if (!strcmp(arg, "--gateway")) {
+			gateway_enabled = 1;
+			continue;
+		}
 		if (!strcmp(arg, "-dev") || !strcmp(arg, "--dev")) {
 			dev_mode = 1;
 			continue;

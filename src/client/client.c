@@ -72,6 +72,8 @@ static size_t ticksize;
 static size_t inused;
 static size_t indone;
 int login_done;
+int gateway_enabled;
+static int gateway_waiting;
 static unsigned char inbuf[MAX_INBUF];
 
 static size_t outused;
@@ -154,6 +156,9 @@ DLL_EXPORT const char *client_mods_dir(void)
 
 DLL_EXPORT void client_send(void *buf, size_t len)
 {
+	if (gateway_waiting) {
+		return;
+	}
 	if (len > MAX_OUTBUF - outused) {
 		return;
 	}
@@ -165,6 +170,7 @@ DLL_EXPORT void client_send(void *buf, size_t len)
 void bzero_client(int part)
 {
 	if (part == 0) {
+		gateway_waiting = 0;
 		lasttick = 0;
 		lastticksize = 0;
 
@@ -268,6 +274,23 @@ static void decrypt(const char *name, char *pass_buf)
 	}
 }
 
+void client_gateway_barrier(uint32_t nonce1, uint32_t nonce2)
+{
+	// Drop unsent old-world input and freeze gameplay until the new SV_LOGINDONE.
+	// The gateway consumes this transport acknowledgment; it never reaches an area.
+	gateway_waiting = 1;
+	outused = 16;
+	memcpy(outbuf, "UGW1ACK!", 8);
+	store_u32(outbuf + 8, nonce1);
+	store_u32(outbuf + 12, nonce2);
+	client_flush_output();
+}
+
+void client_gateway_resume(void)
+{
+	gateway_waiting = 0;
+}
+
 static void send_info(astonia_sock *s)
 {
 	char buf[12] = {0};
@@ -292,7 +315,7 @@ int client_flush_output(void)
 {
 	int n;
 
-	if (!outused || sockstate != 4 || !sock) {
+	if (!outused || (sockstate != 4 && !(gateway_waiting && sockstate == 3)) || !sock) {
 		return 0;
 	}
 	n = (int)astonia_net_send(sock, outbuf, outused);
@@ -445,7 +468,7 @@ int poll_network(void)
 		decrypt(username, tmp);
 		astonia_net_send(sock, tmp, 16);
 
-		store_u32(tmp, 0x8fd46100 | CLIENT_PROTOCOL_VERSION); // magic code + version
+		store_u32(tmp, (gateway_enabled ? 0x8fd46200 : 0x8fd46100) | CLIENT_PROTOCOL_VERSION);
 		astonia_net_send(sock, tmp, 4);
 		send_info(sock);
 
